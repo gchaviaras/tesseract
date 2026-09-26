@@ -2,6 +2,7 @@
 
 #include "tk/host.h"
 #include "tk/loading_spinner.h"
+#include "tk/status_icons.h"
 
 #include <tesseract/visual.h>
 
@@ -719,18 +720,9 @@ void CheckButton::paint(PaintCtx& ctx)
     if (checked_)
     {
         ctx.canvas.fill_rounded_rect(box, kCbBoxRad, pal.accent);
-        TextStyle st{};
-        st.role      = FontRole::UiSemibold;
-        st.max_width = box.w;
-        auto lo = ctx.factory.build_text("\xE2\x9C\x93", st); // U+2713 ✓
-        if (lo)
-        {
-            Size sz = lo->measure();
-            ctx.canvas.draw_text(*lo,
-                                 {box.x + (box.w - sz.w) * 0.5f,
-                                  box.y + (box.h - sz.h) * 0.5f},
-                                 pal.text_on_accent);
-        }
+        // Same Lucide check (and size) as the round picker checkboxes.
+        check_icon_.draw(ctx.canvas, ctx.factory, check_icon_svg(), box, 12.0f,
+                         pal.text_on_accent);
     }
     else
     {

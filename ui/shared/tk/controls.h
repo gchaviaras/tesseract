@@ -492,6 +492,7 @@ private:
     std::unique_ptr<TextLayout> label_layout_;
     float cached_max_w_ = -2.0f;
     Size label_size_{};
+    IconCache check_icon_;
 };
 
 // A label + sliding on/off switch (settings-style). The whole row is the hit

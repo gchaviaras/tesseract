@@ -319,14 +319,15 @@ private:
     tk::Button* primary_button_ = nullptr;
     tk::Button* copy_button_    = nullptr;
     tk::Button* save_button_    = nullptr;
+    // ShowKey's "I've saved my recovery key" checkbox; mirrors
+    // key_saved_checked_, which stays the source of truth.
+    tk::CheckButton* key_saved_cb_ = nullptr;
 
     // ── Layout rects computed during paint(), hit-tested in pointer handlers ──
-    // These cover the non-button affordances only (text links and the
-    // "I've saved my recovery key" checkbox).
+    // These cover the non-button affordances only (the text links).
     tk::Rect secondary_link_{};   // "Skip for now"
     tk::Rect passphrase_link_{};  // "Use a passphrase instead"
     tk::Rect back_link_{};
-    tk::Rect checkbox_rect_{};
     tk::Rect device_row_{};       // Choose › Use another device
     tk::Rect key_row_{};          // Choose › Enter recovery key
     tk::Rect lost_link_{};        // Choose › I've lost…
@@ -336,7 +337,6 @@ private:
     // ── Press tracking (mirror ImageViewerOverlay) ──────────────────────────
     bool press_secondary_   = false;
     bool press_back_        = false;
-    bool press_checkbox_    = false;
     bool press_passphrase_  = false;
     bool press_device_row_  = false;
     bool press_key_row_     = false;
@@ -352,6 +352,7 @@ private:
 
     // The "›" on each Choose-step option row (Lucide chevron-right).
     tk::IconCache chevron_icon_;
+    tk::IconCache done_check_icon_;
 
     // Spinner animation clock; reset when the Progress step is entered.
     std::chrono::steady_clock::time_point progress_start_{};

@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- fix(tk): checkboxes, dropdown selections and the encryption "all set" disc draw the Lucide check instead of a ✓ glyph, matching the round checkboxes; the recovery-key "I've saved" box is now a real `tk::CheckButton` (keyboard + accessibility). Qt6 build + ctest; user-verified live. GTK4/Windows/macOS share the code, unbuilt
 - feat(privacy): MSC4095 bundled link previews on sent messages (sends, replies, threads, edits), fetched through the homeserver (on by default); a second, opt-in setting fetches pages directly via a new SSRF-guarded client (`net_guard`, `scraper`-based parser) with homeserver fallback. Previews are generated on the read pool (`generate_url_previews` FFI) so they never block room switches. Windows build + ctest 2000/2000, cargo 747/747; user-verified live. Qt6/GTK4/macOS share the code, unbuilt
 - feat(compose): the send button shows a spinner while a send is still being prepared or sent for more than 200 ms (new `tk::BusyButton`); it stays usable and later sends keep their order via the new per-room `SendPipeline`. Windows build + ctest 2000/2000; user-verified live. Qt6/GTK4/macOS share the code, unbuilt
 - build(ci): Windows jobs install gettext, so NSIS/MSIX builds ship the translation catalogs (without `msgfmt` CMake silently packaged none). YAML-parsed only; unverified in CI

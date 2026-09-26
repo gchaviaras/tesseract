@@ -114,6 +114,16 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
     save_button_->set_on_click(
         [this] { if (on_save_to_file) on_save_to_file(recovery_key_); });
 
+    auto key_saved = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("I've saved my recovery key"));
+    key_saved_cb_ = add_child(std::move(key_saved));
+    key_saved_cb_->set_visible(false);
+    key_saved_cb_->on_change = [this](bool checked)
+    {
+        key_saved_checked_ = checked;
+        if (host()) host()->request_repaint();
+    };
+
     if (host())
     {
         // Typing changes whether Continue / Verify is enabled (and whether
@@ -630,11 +640,12 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
     // action buttons are hidden up front and re-shown by the steps that use
     // them, so a vanished button is skipped by hit-testing too.
     secondary_link_ = passphrase_link_ = back_link_ =
-        checkbox_rect_ = device_row_ = key_row_ = lost_link_ = reject_link_ = {};
+        device_row_ = key_row_ = lost_link_ = reject_link_ = {};
     primary_enabled_ = true;
     if (primary_button_) primary_button_->set_visible(false);
     if (copy_button_) copy_button_->set_visible(false);
     if (save_button_) save_button_->set_visible(false);
+    if (key_saved_cb_) key_saved_cb_->set_visible(false);
     // Unlike the buttons above (stateless canvas widgets — redundant
     // set_visible() is harmless), the text fields wrap a real native OS
     // control. Hiding one that's about to stay the active field for this
@@ -1109,41 +1120,14 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                                 save_failed_ ? pal.destructive : pal.text_muted);
             }
 
-            // "I've saved my recovery key" checkbox.
-            const float cb_box = 18.0f;
-            checkbox_rect_ = {cx, row_y + kEncryptionSetupBtnH + 12.0f, cw, 24.0f};
-            tk::Rect box2{checkbox_rect_.x,
-                          checkbox_rect_.y + (checkbox_rect_.h - cb_box) * 0.5f,
-                          cb_box, cb_box};
-            if (key_saved_checked_)
+            // "I've saved my recovery key" checkbox (a real tk::CheckButton,
+            // synced silently from key_saved_checked_).
+            if (key_saved_cb_)
             {
-                c.fill_rounded_rect(box2, 4.0f, pal.accent);
-                tk::TextStyle st;
-                st.role = tk::FontRole::UiSemibold;
-                auto lo = ctx.factory.build_text("\xE2\x9C\x93", st);
-                if (lo)
-                {
-                    tk::Size sz = lo->measure();
-                    c.draw_text(*lo,
-                                {box2.x + (box2.w - sz.w) * 0.5f,
-                                 box2.y + (box2.h - sz.h) * 0.5f},
-                                pal.text_on_accent);
-                }
-            }
-            else
-            {
-                c.stroke_rounded_rect(box2, 4.0f, pal.border, 1.5f);
-            }
-            {
-                tk::TextStyle st;
-                st.role = tk::FontRole::Body;
-                auto lo = ctx.factory.build_text(tk::tr("I've saved my recovery key"), st);
-                if (lo)
-                    c.draw_text(*lo,
-                                {box2.x + cb_box + 10.0f,
-                                 checkbox_rect_.y +
-                                     (checkbox_rect_.h - lo->measure().h) * 0.5f},
-                                pal.text_primary);
+                key_saved_cb_->set_checked(key_saved_checked_);
+                key_saved_cb_->set_visible(true);
+                key_saved_cb_->arrange(lc, {cx, row_y + kEncryptionSetupBtnH + 12.0f, cw, 24.0f});
+                key_saved_cb_->paint(ctx);
             }
 
             primary_enabled_ = key_saved_checked_;
@@ -1162,19 +1146,8 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             tk::Rect    dr{card.x + (card.w - disc) * 0.5f, card.y + 40.0f,
                         disc, disc};
             c.fill_rounded_rect(dr, disc * 0.5f, pal.accent);
-            {
-                tk::TextStyle st;
-                st.role = tk::FontRole::Title;
-                auto lo = ctx.factory.build_text("\xE2\x9C\x93", st);
-                if (lo)
-                {
-                    tk::Size sz = lo->measure();
-                    c.draw_text(*lo,
-                                {dr.x + (dr.w - sz.w) * 0.5f,
-                                 dr.y + (dr.h - sz.h) * 0.5f},
-                                pal.text_on_accent);
-                }
-            }
+            done_check_icon_.draw(c, ctx.factory, kCheckSvg, dr, 30.0f,
+                                  pal.text_on_accent);
             std::string body;
             switch (done_kind_)
             {
@@ -1296,7 +1269,7 @@ bool EncryptionSetupOverlay::on_pointer_down(tk::Point local)
 
     const tk::Point w{local.x + bounds().x, local.y + bounds().y};
 
-    press_secondary_ = press_back_ = press_checkbox_ =
+    press_secondary_ = press_back_ =
         press_passphrase_ = press_device_row_ = press_key_row_ = press_lost_ =
             press_reject_ = backdrop_press_ = false;
 
@@ -1317,8 +1290,6 @@ bool EncryptionSetupOverlay::on_pointer_down(tk::Point local)
         press_passphrase_ = true;
     else if (rect_contains(back_link_, w))
         press_back_ = true;
-    else if (rect_contains(checkbox_rect_, w))
-        press_checkbox_ = true;
     else if (rect_contains(device_row_, w))
         press_device_row_ = true;
     else if (rect_contains(key_row_, w))
@@ -1366,15 +1337,13 @@ void EncryptionSetupOverlay::on_pointer_up(tk::Point local, bool inside_self)
         advance_step_(Step::LostAccess);
     else if (press_reject_ && hit(reject_link_))
         reject_();
-    else if (press_checkbox_ && hit(checkbox_rect_))
-        key_saved_checked_ = !key_saved_checked_;
     else if (backdrop_press_ && backdrop_closes_() &&
              !rect_contains(card_bounds(), w))
     {
         if (on_close) on_close();
     }
 
-    press_secondary_ = press_back_ = press_checkbox_ =
+    press_secondary_ = press_back_ =
         press_passphrase_ = press_device_row_ = press_key_row_ = press_lost_ =
             press_reject_ = backdrop_press_ = false;
 

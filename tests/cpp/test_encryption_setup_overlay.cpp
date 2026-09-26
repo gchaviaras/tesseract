@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "tk/canvas.h"
+#include "tk/controls.h"
 #include "tk/theme.h"
 #include "views/EncryptionSetupOverlay.h"
 #include "tk_test_host.h"
@@ -190,6 +191,30 @@ TEST_CASE("Fresh: ShowKey Continue disabled until checkbox checked",
     CHECK(ov->step() == EncryptionSetupOverlay::Step::ShowKey);
     // Check box → Continue enabled
     ov->simulate_check_key_saved();
+    ov->simulate_primary_action();
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::Done);
+}
+
+TEST_CASE("Fresh: the saved-key checkbox is a real CheckButton driving Continue",
+          "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(nullptr, EncryptionSetupOverlay::Mode::Fresh);
+    st.run(*ov, {0, 0, 800, 600});
+    ov->simulate_primary_action();
+    ov->advance_progress(4, "KEY", 0, 0);
+    st.run(*ov, {0, 0, 800, 600}); // paint ShowKey so the checkbox is placed
+
+    tk::CheckButton* cb = nullptr;
+    for (auto& c : ov->children())
+        if (auto* b = dynamic_cast<tk::CheckButton*>(c.get()))
+            cb = b;
+    REQUIRE(cb);
+    CHECK(cb->visible());
+    CHECK_FALSE(cb->checked());
+
+    cb->access_default_action(); // same path as a click / Space
+    CHECK(ov->key_saved_checked());
     ov->simulate_primary_action();
     CHECK(ov->step() == EncryptionSetupOverlay::Step::Done);
 }

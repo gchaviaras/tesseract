@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-09-26**. 2001 C++ + 719 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-09-27**. 2009 C++ + 747 Rust tests.
 
 > **Calls: camera failures detected and explained (2026-09-26, unreleased).**
 > A missing, busy or blocked camera is reported by `tk::VideoCapture` and

@@ -770,11 +770,13 @@ static std::string derive_formatted(const std::string& body,
 }
 
 Result Client::send_message(const std::string& room_id, const std::string& body,
-                            const std::string& formatted_body)
+                            const std::string& formatted_body,
+                            const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(impl_->ffi->send_message(
-        room_id, body, derive_formatted(body, formatted_body)));
+        room_id, body, derive_formatted(body, formatted_body),
+        url_previews_json));
 }
 
 Result Client::send_emote(const std::string& room_id, const std::string& body,
@@ -1076,33 +1078,38 @@ Result Client::redact_event(const std::string& room_id,
 
 Result Client::send_reply(const std::string& room_id,
                           const std::string& event_id, const std::string& body,
-                          const std::string& formatted_body)
+                          const std::string& formatted_body,
+                          const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(impl_->ffi->send_reply(
-        room_id, event_id, body, derive_formatted(body, formatted_body)));
+        room_id, event_id, body, derive_formatted(body, formatted_body),
+        url_previews_json));
 }
 
 Result Client::send_thread_message(const std::string& room_id,
                                    const std::string& thread_root,
                                    const std::string& body,
-                                   const std::string& formatted_body)
+                                   const std::string& formatted_body,
+                                   const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(impl_->ffi->send_thread_message(
-        room_id, thread_root, body, derive_formatted(body, formatted_body)));
+        room_id, thread_root, body, derive_formatted(body, formatted_body),
+        url_previews_json));
 }
 
 Result Client::send_thread_reply(const std::string& room_id,
                                  const std::string& thread_root,
                                  const std::string& in_reply_to_event_id,
                                  const std::string& body,
-                                 const std::string& formatted_body)
+                                 const std::string& formatted_body,
+                                 const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(impl_->ffi->send_thread_reply(
         room_id, thread_root, in_reply_to_event_id, body,
-        derive_formatted(body, formatted_body)));
+        derive_formatted(body, formatted_body), url_previews_json));
 }
 
 Result Client::fetch_reply_details(const std::string& room_id,
@@ -1137,12 +1144,14 @@ Result Client::send_location(const std::string& room_id, double lat, double lon,
 Result Client::send_edit(const std::string& room_id,
                          const std::string& event_id,
                          const std::string& new_body,
-                         const std::string& formatted_body)
+                         const std::string& formatted_body,
+                         const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(
         impl_->ffi->send_edit(room_id, event_id, new_body,
-                              derive_formatted(new_body, formatted_body)));
+                              derive_formatted(new_body, formatted_body),
+                              url_previews_json));
 }
 
 Result Client::send_caption_edit(const std::string& room_id,
@@ -3025,6 +3034,19 @@ void Client::set_show_membership_events(bool enabled)
 {
     SH_FFI;
     impl_->ffi->set_show_membership_events(enabled);
+}
+
+void Client::set_bundled_url_previews(bool enabled, bool direct)
+{
+    SH_FFI;
+    impl_->ffi->set_bundled_url_previews(enabled, direct);
+}
+
+std::string Client::generate_url_previews(const std::string& room_id,
+                                          const std::string& body)
+{
+    SH_FFI;
+    return std::string(impl_->ffi->generate_url_previews(room_id, body));
 }
 
 void Client::set_msc2545_legacy_compat(bool enabled)

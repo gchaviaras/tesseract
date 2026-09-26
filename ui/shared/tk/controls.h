@@ -326,6 +326,17 @@ public:
         return enabled_ && static_cast<bool>(on_click_);
     }
 
+protected:
+    // Subclasses that paint their own content over the button's fill (e.g.
+    // BusyButton's spinner) return false to make paint() stop after the
+    // fill, skipping the icon and label.
+    virtual bool paints_content() const
+    {
+        return true;
+    }
+    // The colour paint() uses for the icon / label in the current state.
+    Color content_color(const Theme& theme) const;
+
 private:
     void invalidate_cache()
     {
@@ -352,6 +363,36 @@ private:
 
     std::unique_ptr<TextLayout> cached_;
     Size cached_size_{};
+};
+
+// A Button that can show a busy state: while busy it keeps its fill (and
+// stays clickable) but paints the standard 8-dot loading spinner in place of
+// its icon / label, animating itself via repaint requests. Used for the
+// composer's send button while a send is still being prepared.
+class BusyButton : public Button
+{
+protected:
+    using Button::Button;
+    TK_WIDGET_FACTORY_FRIEND(BusyButton)
+
+public:
+    void set_busy(bool busy);
+    bool busy() const
+    {
+        return busy_;
+    }
+
+    void paint(PaintCtx&) override;
+
+protected:
+    bool paints_content() const override
+    {
+        return !busy_;
+    }
+
+private:
+    bool busy_ = false;
+    std::chrono::steady_clock::time_point busy_start_{};
 };
 
 // A labelled two-state checkbox. Hover and press are tracked internally;

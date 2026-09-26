@@ -4972,3 +4972,23 @@ msgstr "Vídeos"
 #: ui/windows/src/MainWindow.cpp:6520 ui/windows/src/MainWindow.cpp:6535
 msgid "Key files"
 msgstr "Archivos de claves"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Link previews"
+msgstr "Vistas previas de enlaces"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Include link previews in messages I send"
+msgstr "Incluir vistas previas de enlaces en los mensajes que envío"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch link previews directly instead of through my homeserver"
+msgstr "Obtener las vistas previas de enlaces directamente en lugar de a través de mi servidor"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Before sending a message that contains links, ask your homeserver for a preview of each link and attach it to the message, so recipients see it without fetching it themselves. Sending such messages can take a few seconds longer."
+msgstr "Antes de enviar un mensaje que contiene enlaces, pide a tu servidor una vista previa de cada enlace y la adjunta al mensaje, para que los destinatarios la vean sin tener que obtenerla. Enviar estos mensajes puede tardar unos segundos más."
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
+msgstr "Obtiene las páginas enlazadas desde este dispositivo en lugar de pedírselas a tu servidor, y recurre al servidor si falla. Cada sitio que enlaces verá tu dirección IP. Nunca se obtienen direcciones de tu red local."

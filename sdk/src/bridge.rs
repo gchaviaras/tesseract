@@ -2422,11 +2422,16 @@ pub mod ffi {
 
         // ----- Messaging -----
 
+        /// `url_previews_json` is the MSC4095 bundled-preview array returned
+        /// by `generate_url_previews` (empty string for none); the same
+        /// trailing argument on `send_reply` / `send_thread_message` /
+        /// `send_thread_reply` / `send_edit` means the same thing.
         fn send_message(
             self: &ClientFfi,
             room_id: &str,
             body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Send an `m.emote` message (the `/me` slash command). Same arguments
@@ -2461,6 +2466,7 @@ pub mod ffi {
             event_id: &str,
             body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Send `body` as a message into the thread rooted at `thread_root`
@@ -2471,6 +2477,7 @@ pub mod ffi {
             thread_root: &str,
             body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Send `body` as a reply to `in_reply_to_event_id` *within* the thread
@@ -2482,6 +2489,7 @@ pub mod ffi {
             in_reply_to_event_id: &str,
             body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Trigger an async fetch of the details of the event referenced by
@@ -2721,6 +2729,7 @@ pub mod ffi {
             event_id: &str,
             new_body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Edit the caption of an image/file/video/audio/voice `event_id` in
@@ -3662,6 +3671,24 @@ pub mod ffi {
         /// currently-subscribed rooms — callers should re-`subscribe_room`
         /// the active room after toggling to refresh it immediately.
         fn set_show_membership_events(self: &ClientFfi, enabled: bool);
+
+        /// Configure sender-side MSC4095 bundled URL previews. `enabled`
+        /// previews http(s) links in outgoing `m.text` messages (sends,
+        /// replies, thread messages, edits) via the homeserver's
+        /// `/preview_url` and bundles them into the event; `direct` (only
+        /// honoured with `enabled`) fetches the page from Tesseract itself
+        /// through an SSRF-guarded client first, falling back to the
+        /// homeserver. Thread-safe; takes effect on the next send.
+        fn set_bundled_url_previews(self: &ClientFfi, enabled: bool, direct: bool);
+
+        /// Generate MSC4095 bundled previews for the http(s) links in `body`
+        /// (an outgoing `m.text` body for `room_id`), per the
+        /// `set_bundled_url_previews` opt-ins. Returns the preview array as
+        /// JSON for the send calls' `url_previews_json` argument, or an empty
+        /// string when the opt-in is off, the body has no links, or nothing
+        /// could be previewed. Blocks for up to ~8 s; call it on a worker
+        /// thread, not the one serialising `&mut` FFI calls.
+        fn generate_url_previews(self: &ClientFfi, room_id: &str, body: &str) -> String;
 
         /// Enable/disable MSC2545 "historical compatibility": when true
         /// (default), room image-pack state and the emote-rooms

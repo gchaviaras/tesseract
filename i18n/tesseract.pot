@@ -1769,3 +1769,23 @@ msgstr ""
 #: ui/windows/src/Win32Taskbar.cpp
 msgid "Recent rooms"
 msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Link previews"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Include link previews in messages I send"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch link previews directly instead of through my homeserver"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Before sending a message that contains links, ask your homeserver for a preview of each link and attach it to the message, so recipients see it without fetching it themselves. Sending such messages can take a few seconds longer."
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
+msgstr ""

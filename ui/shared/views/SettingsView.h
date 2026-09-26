@@ -174,6 +174,9 @@ public:
     // persisted settings.
     void set_send_maps_urls_as_location_pref(bool enabled);
 
+    // Silently initialise the two bundled-URL-preview checkboxes.
+    void set_bundled_url_previews_pref(bool enabled, bool direct);
+
     // Silently initialise the "index messages for search" checkbox.
     void set_index_messages_pref(bool enabled);
 
@@ -384,6 +387,11 @@ public:
     // Fired when the user toggles "Send Google Maps / OpenStreetMap links as
     // locations".
     std::function<void(bool)> on_send_maps_urls_as_location_changed;
+
+    // Fired when the user toggles either "Include link previews in messages I
+    // send" or "Fetch link previews directly…". The shell persists both and
+    // calls Client::set_bundled_url_previews() on every account.
+    std::function<void(bool enabled, bool direct)> on_bundled_url_previews_changed;
 
     // Fired when the user toggles "Index messages for search". The shell
     // persists the setting and calls Client::set_search_indexing_enabled().

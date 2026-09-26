@@ -100,6 +100,64 @@ PrivacySection::PrivacySection()
         if (host_) host_->hide_tooltip(send_maps_urls_as_location_cb_);
     };
 
+    // ── Link previews ─────────────────────────────────────────────────────────
+    auto* previews_group = add_group(tk::tr("Link previews"));
+
+    auto bundled_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Include link previews in messages I send"),
+        s.send_bundled_url_previews);
+    bundled_url_previews_cb_ = previews_group->add_widget(std::move(bundled_cb));
+    auto direct_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Fetch link previews directly instead of through my homeserver"),
+        s.fetch_url_previews_directly);
+    url_previews_direct_cb_ = previews_group->add_widget(std::move(direct_cb));
+    url_previews_direct_cb_->set_enabled(s.send_bundled_url_previews);
+
+    auto fire_previews_changed = [this]
+    {
+        if (on_bundled_url_previews_changed)
+            on_bundled_url_previews_changed(bundled_url_previews_cb_->checked(),
+                                            url_previews_direct_cb_->checked());
+    };
+    bundled_url_previews_cb_->on_change = [this, fire_previews_changed](bool v)
+    {
+        url_previews_direct_cb_->set_enabled(v);
+        fire_previews_changed();
+    };
+    url_previews_direct_cb_->on_change = [fire_previews_changed](bool)
+    { fire_previews_changed(); };
+
+    bundled_url_previews_cb_->on_hover_enter = [this]
+    {
+        if (host_)
+            host_->show_tooltip(
+                bundled_url_previews_cb_,
+                tk::tr("Before sending a message that contains links, ask your "
+                       "homeserver for a preview of each link and attach it to the "
+                       "message, so recipients see it without fetching it themselves. "
+                       "Sending such messages can take a few seconds longer."),
+                bundled_url_previews_cb_->bounds());
+    };
+    bundled_url_previews_cb_->on_hover_leave = [this]
+    {
+        if (host_) host_->hide_tooltip(bundled_url_previews_cb_);
+    };
+    url_previews_direct_cb_->on_hover_enter = [this]
+    {
+        if (host_)
+            host_->show_tooltip(
+                url_previews_direct_cb_,
+                tk::tr("Fetch the linked pages from this device instead of asking "
+                       "your homeserver, falling back to the homeserver if that fails. "
+                       "Every site you link will see your IP address. Addresses on "
+                       "your local network are never fetched."),
+                url_previews_direct_cb_->bounds());
+    };
+    url_previews_direct_cb_->on_hover_leave = [this]
+    {
+        if (host_) host_->hide_tooltip(url_previews_direct_cb_);
+    };
+
     // ── Search ────────────────────────────────────────────────────────────────
     auto* search_group = add_group(tk::tr("Search"));
 
@@ -181,6 +239,13 @@ void PrivacySection::set_send_presence(bool enabled)
 void PrivacySection::set_send_maps_urls_as_location(bool enabled)
 {
     send_maps_urls_as_location_cb_->set_checked(enabled);
+}
+
+void PrivacySection::set_bundled_url_previews(bool enabled, bool direct)
+{
+    bundled_url_previews_cb_->set_checked(enabled);
+    url_previews_direct_cb_->set_checked(direct);
+    url_previews_direct_cb_->set_enabled(enabled);
 }
 
 void PrivacySection::set_index_messages(bool enabled)

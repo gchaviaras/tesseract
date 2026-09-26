@@ -5,6 +5,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- feat(privacy): MSC4095 bundled link previews on sent messages (sends, replies, threads, edits), fetched through the homeserver (on by default); a second, opt-in setting fetches pages directly via a new SSRF-guarded client (`net_guard`, `scraper`-based parser) with homeserver fallback. Previews are generated on the read pool (`generate_url_previews` FFI) so they never block room switches. Windows build + ctest 2000/2000, cargo 747/747; user-verified live. Qt6/GTK4/macOS share the code, unbuilt
+- feat(compose): the send button shows a spinner while a send is still being prepared or sent for more than 200 ms (new `tk::BusyButton`); it stays usable and later sends keep their order via the new per-room `SendPipeline`. Windows build + ctest 2000/2000; user-verified live. Qt6/GTK4/macOS share the code, unbuilt
 - build(ci): Windows jobs install gettext, so NSIS/MSIX builds ship the translation catalogs (without `msgfmt` CMake silently packaged none). YAML-parsed only; unverified in CI
 - fix(i18n): the whole UI now translates. Qt6/GTK4 shells used `QObject::tr`/unbound `gettext` (always English) and ~150 shared strings were unwrapped; added `tk::N_`, `tk::format_date`, `tk::format_size` and an `i18n_catalogs_complete` ctest. Qt6 build + ctest 2001/2001; unverified live. GTK4/Windows/macOS unbuilt
 - fix(settings): the chosen language is saved again (the picker's callback was never wired). Qt6 build + ctest; unverified live

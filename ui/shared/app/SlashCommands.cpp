@@ -204,7 +204,8 @@ const std::vector<SlashCommandDescriptor>& available_commands()
 Result dispatch_compose_send(Client& client,
                              const std::string& room_id,
                              const std::string& body,
-                             const std::string& formatted_body)
+                             const std::string& formatted_body,
+                             const std::string& url_previews_json)
 {
     // `/shrug` (no args) — append the shrug emoticon to whatever the user
     // typed in front of the slash. With no leading text it sends just the
@@ -315,7 +316,7 @@ Result dispatch_compose_send(Client& client,
         }
     }
 
-    return client.send_message(room_id, body, formatted_body);
+    return client.send_message(room_id, body, formatted_body, url_previews_json);
 }
 
 // ---------------------------------------------------------------------------

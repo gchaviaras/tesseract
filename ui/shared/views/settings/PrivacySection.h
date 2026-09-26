@@ -42,6 +42,15 @@ public:
     // checkbox is toggled.
     std::function<void(bool)> on_send_maps_urls_as_location_changed;
 
+    // Silently update the two bundled-URL-preview checkboxes without firing
+    // the callback. The "fetch directly" box is disabled while `enabled` is
+    // false.
+    void set_bundled_url_previews(bool enabled, bool direct);
+
+    // Fired with both checkbox states when either bundled-URL-preview
+    // checkbox is toggled.
+    std::function<void(bool enabled, bool direct)> on_bundled_url_previews_changed;
+
     // Silently update the message-search-index checkbox without firing.
     void set_index_messages(bool enabled);
 
@@ -79,6 +88,8 @@ public:
 private:
     tk::CheckButton* presence_cb_ = nullptr;
     tk::CheckButton* send_maps_urls_as_location_cb_ = nullptr;
+    tk::CheckButton* bundled_url_previews_cb_ = nullptr;
+    tk::CheckButton* url_previews_direct_cb_ = nullptr;
     tk::CheckButton* search_index_cb_ = nullptr;
     tk::Label* search_stats_label_ = nullptr; // counts + status
     tk::Label* search_date_label_ = nullptr;  // "covers messages since …"

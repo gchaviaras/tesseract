@@ -4513,8 +4513,12 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
             auto shortlink = cls.shortlink_url;
             bool needs_resolve = cls.needs_resolve;
             double lat = cls.lat, lon = cls.lon;
-            run_async_mut_([sess, rid, needs_resolve, lat, lon, shortlink,
-                            body_copy, fmt_copy, trimmed_copy]() mutable {
+            // Through the pipeline (no prepare step) so it keeps its place
+            // among this room's sends and a slow shortlink resolve shows the
+            // send-button spinner.
+            submit_room_send_(sess, rid, std::string{},
+                              [sess, rid, needs_resolve, lat, lon, shortlink,
+                               body_copy, fmt_copy, trimmed_copy](const std::string&) mutable {
                 if (!sess || !sess->client) return;
                 if (needs_resolve)
                 {
@@ -4546,17 +4550,63 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
     // per-message ◷→⚠/retry indicator rather than a status-bar message. Report
     // success so the caller clears the composer immediately (matching the
     // optimistic clear the popout RoomWindow already does).
+    //
+    // Routed through send_pipeline_: bundled URL previews (when enabled) are
+    // generated on the read pool first, so they never hold up mut_pool_.
     auto sess = active_account_;
     auto rid = room_id;
     auto body_copy = body;
     auto fmt_copy = formatted_body;
-    run_async_mut_([sess, rid, body_copy, fmt_copy]() mutable {
+    submit_room_send_(sess, rid, body,
+                      [sess, rid, body_copy, fmt_copy](const std::string& previews) mutable {
         if (!sess || !sess->client) return;
         tesseract::dispatch_compose_send(*sess->client, rid, body_copy,
-                                         fmt_copy);
+                                         fmt_copy, previews);
     });
     out.send_result = tesseract::Result{true, ""};
     return out;
+}
+
+void ShellBase::submit_room_send_(const std::shared_ptr<AccountSession>& sess,
+                                  const std::string& room_id,
+                                  const std::string& preview_body,
+                                  SendPipeline::Send send)
+{
+    // Cheap UI-thread pre-filter so plain sends skip the read-pool hop; the
+    // Rust side re-checks the opt-in and does the real link detection.
+    // Slash-command bodies are skipped: their sent text differs from what
+    // was typed (e.g. /spoiler), so a preview could leak hidden content.
+    SendPipeline::Prepare prepare;
+    if (tesseract::Settings::instance().send_bundled_url_previews && sess &&
+        !preview_body.empty() && preview_body[0] != '/' &&
+        preview_body.find("http") != std::string::npos)
+    {
+        prepare = [sess, room_id, preview_body]() -> std::string
+        {
+            if (!sess || !sess->client)
+                return {};
+            return sess->client->generate_url_previews(room_id, preview_body);
+        };
+    }
+    send_pipeline_.submit(room_id, std::move(prepare), std::move(send));
+}
+
+void ShellBase::refresh_send_busy_ui_()
+{
+    auto apply = [this](const std::string& room_id, views::RoomView* rv)
+    {
+        if (!rv || !rv->compose_bar())
+            return;
+        rv->compose_bar()->set_send_busy(!room_id.empty() &&
+                                         send_pipeline_.is_busy(room_id));
+    };
+    if (main_room_pane_)
+        apply(main_room_pane_->room_id(), main_room_pane_->room_view());
+    for (const auto& [rid, w] : secondary_windows_)
+    {
+        if (w)
+            apply(rid, w->room_view());
+    }
 }
 
 void ShellBase::update_space_children_cache_()
@@ -5027,6 +5077,10 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     view->on_send_maps_urls_as_location_changed = [this](bool enabled)
     {
         handle_send_maps_urls_as_location_toggle_(enabled);
+    };
+    view->on_bundled_url_previews_changed = [this](bool enabled, bool direct)
+    {
+        handle_bundled_url_previews_toggle_(enabled, direct);
     };
     view->on_media_previews_changed =
         [this](tesseract::Settings::MediaPreviews mode)
@@ -7920,6 +7974,7 @@ ShellBase::RestoreIOResult ShellBase::restore_all_accounts_blocking_(bool networ
         // assumed.
         apply_search_indexing_pref_(*acc.client);
         apply_membership_events_pref_(*acc.client);
+        apply_bundled_url_previews_pref_(*acc.client);
         apply_msc2545_legacy_compat_pref_(*acc.client);
         apply_low_power_pref_(*acc.client);
 
@@ -8169,6 +8224,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     }
     apply_search_indexing_pref_(*session->client);
     apply_membership_events_pref_(*session->client);
+    apply_bundled_url_previews_pref_(*session->client);
     apply_msc2545_legacy_compat_pref_(*session->client);
     apply_low_power_pref_(*session->client);
 
@@ -10917,6 +10973,22 @@ void ShellBase::handle_send_maps_urls_as_location_toggle_(bool enabled)
     s.save_to_disk(tesseract::config_dir());
 }
 
+void ShellBase::handle_bundled_url_previews_toggle_(bool enabled, bool direct)
+{
+    auto& s = tesseract::Settings::instance();
+    s.send_bundled_url_previews = enabled;
+    s.fetch_url_previews_directly = direct;
+    s.save_to_disk(tesseract::config_dir());
+
+    // Global preference, per-account flag: push to every logged-in client.
+    // A plain atomic store on the Rust side — safe on the UI thread.
+    for (const auto& sess : account_manager_.accounts())
+    {
+        if (sess && sess->client)
+            sess->client->set_bundled_url_previews(enabled, direct);
+    }
+}
+
 #ifdef TESSERACT_UPDATE_CHECKS
 void ShellBase::handle_check_for_updates_toggle_(bool enabled)
 {
@@ -10945,6 +11017,15 @@ void ShellBase::apply_membership_events_pref_(tesseract::Client& client)
     // the Rust side — non-blocking.
     if (tesseract::Settings::instance().show_room_join_leave_events)
         client.set_show_membership_events(true);
+}
+
+void ShellBase::apply_bundled_url_previews_pref_(tesseract::Client& client)
+{
+    // Rust-side flags default to off; push only when the preference is on.
+    // Plain atomic stores — non-blocking.
+    const auto& s = tesseract::Settings::instance();
+    if (s.send_bundled_url_previews)
+        client.set_bundled_url_previews(true, s.fetch_url_previews_directly);
 }
 
 void ShellBase::apply_low_power_pref_(tesseract::Client& client)
@@ -14389,10 +14470,13 @@ void ShellBase::send_notification_reply_(std::string user_id,
         return;
     }
 
-    run_async_mut_([this, sess, room_id, event_id, text]() mutable {
+    // Through the pipeline so a quick-reply keeps its order among this
+    // room's sends and gets bundled URL previews like a composer send.
+    submit_room_send_(sess, room_id, text,
+                      [this, sess, room_id, event_id, text](const std::string& previews) mutable {
         auto res = event_id.empty()
-            ? sess->client->send_message(room_id, text, "")
-            : sess->client->send_reply(room_id, event_id, text, "");
+            ? sess->client->send_message(room_id, text, "", previews)
+            : sess->client->send_reply(room_id, event_id, text, "", previews);
         if (res)
             return;
         post_to_ui_(guarded([this, uid = sess->user_id, room_id]() mutable {

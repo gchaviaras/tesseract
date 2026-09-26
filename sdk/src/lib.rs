@@ -19,11 +19,13 @@ mod maps_link;
 mod markdown;
 mod matrix_uri;
 mod media_preview;
+mod net_guard;
 mod oauth;
 #[cfg(feature = "legacy_login")]
 mod password_login;
 mod recent_emoji;
 mod text_utils;
+mod url_preview;
 mod waveform;
 mod waveform_store;
 

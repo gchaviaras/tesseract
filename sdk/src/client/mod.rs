@@ -46,6 +46,7 @@ mod thread;
 mod timeline;
 mod timeline_convert;
 mod update;
+mod url_preview_gen;
 mod verification;
 
 #[cfg(not(test))]
@@ -750,6 +751,14 @@ pub struct ClientFfi {
     /// visibility is decided (see `filter_membership` in `client::timeline`).
     /// Controlled by `set_show_membership_events`.
     pub(super) show_membership_events: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Sender-side MSC4095 bundled URL previews opt-in (via the homeserver's
+    /// `/preview_url`). Set by `set_bundled_url_previews`; see
+    /// `client::url_preview_gen`.
+    pub(super) bundled_url_previews: std::sync::atomic::AtomicBool,
+    /// Second opt-in: fetch previewed pages directly from Tesseract (SSRF-
+    /// guarded), falling back to the homeserver. Only ever `true` while
+    /// `bundled_url_previews` is.
+    pub(super) bundled_url_previews_direct: std::sync::atomic::AtomicBool,
     /// When `true`, "low power mode" is active: the per-room warm-check
     /// auto-pagination task, the search-index backfill crawl and proactive
     /// image-pack rebuilds bail out / pause. Controlled by
@@ -1223,6 +1232,8 @@ impl ClientFfi {
                 .unwrap_or_else(|_| reqwest::Client::new()),
             presence_polling_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             show_membership_events: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            bundled_url_previews: std::sync::atomic::AtomicBool::new(false),
+            bundled_url_previews_direct: std::sync::atomic::AtomicBool::new(false),
             low_power_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             msc2545_legacy_compat: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             #[cfg(not(test))]
@@ -1332,6 +1343,8 @@ impl ClientFfi {
             http_client: reqwest::Client::new(),
             presence_polling_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             show_membership_events: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            bundled_url_previews: std::sync::atomic::AtomicBool::new(false),
+            bundled_url_previews_direct: std::sync::atomic::AtomicBool::new(false),
             low_power_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             msc2545_legacy_compat: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             profile_fields_prefix: std::sync::Arc::new(std::sync::RwLock::new(None)),
@@ -3841,7 +3854,7 @@ mod tests {
     #[test]
     fn send_message_fails_when_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_message("!room:example.com", "hello", "");
+        let r = c.send_message("!room:example.com", "hello", "", "");
         assert!(!r.ok);
         assert_eq!(r.message, "not logged in");
     }
@@ -4211,14 +4224,14 @@ mod tests {
     #[test]
     fn send_reply_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_reply("!room:example.com", "$event:example.com", "reply body", "");
+        let r = c.send_reply("!room:example.com", "$event:example.com", "reply body", "", "");
         assert!(!r.ok);
     }
 
     #[test]
     fn send_reply_invalid_room_id() {
         let c = ClientFfi::new();
-        let r = c.send_reply("not-a-room-id", "$event:example.com", "reply body", "");
+        let r = c.send_reply("not-a-room-id", "$event:example.com", "reply body", "", "");
         assert!(!r.ok);
     }
 
@@ -4259,28 +4272,28 @@ mod tests {
     #[test]
     fn send_thread_message_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_thread_message("!room:server", "$root:server", "hi", "");
+        let r = c.send_thread_message("!room:server", "$root:server", "hi", "", "");
         assert!(!r.ok);
     }
 
     #[test]
     fn send_thread_reply_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_thread_reply("!room:server", "$root:server", "$reply:server", "hi", "");
+        let r = c.send_thread_reply("!room:server", "$root:server", "$reply:server", "hi", "", "");
         assert!(!r.ok);
     }
 
     #[test]
     fn send_edit_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_edit("!room:example.com", "$event:example.com", "new body", "");
+        let r = c.send_edit("!room:example.com", "$event:example.com", "new body", "", "");
         assert!(!r.ok);
     }
 
     #[test]
     fn send_edit_invalid_room_id() {
         let c = ClientFfi::new();
-        let r = c.send_edit("not-a-room-id", "$event:example.com", "new body", "");
+        let r = c.send_edit("not-a-room-id", "$event:example.com", "new body", "", "");
         assert!(!r.ok);
     }
 

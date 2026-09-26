@@ -59,6 +59,13 @@ rusqlite      = "0.40"
 syntect       = { version = "5", default-features = false, features = ["default-fancy"] }
 pulldown-cmark = { version = "0.13", features = ["html"] }
 linkify        = "0.11"
+# Sender-side MSC4095 bundled URL previews fetched directly by Tesseract
+# (opt-in): `scraper` parses the page's OpenGraph/Twitter-card/<title>
+# metadata on html5ever (same version ruma-html already pulls in, so no
+# second parser); `encoding_rs` decodes non-UTF-8 pages per the HTML
+# encoding-sniffing order (see sdk/src/url_preview.rs).
+scraper        = { version = "0.27", default-features = false }
+encoding_rs    = "0.8"
 # Optional "package the export as a single .zip" mode for room-history export
 # (sdk/src/client/history_export/zip.rs). Deflate only — no need for the
 # heavier bzip2/zstd/lzma codecs this crate also supports.

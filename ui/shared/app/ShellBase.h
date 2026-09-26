@@ -43,6 +43,7 @@
 #include "tk/theme.h"
 #include "tk/weak_self.h"
 #include "app/RoomWindowBase.h"
+#include "app/SendPipeline.h"
 #include "views/ComposeBar.h"
 #include "views/EncryptionSetupOverlay.h"
 #include "views/MessageListView.h"
@@ -1518,6 +1519,18 @@ protected:
     WorkerPool pool_{pool_thread_count()};
     WorkerPool mut_pool_{1};
     WorkerPool media_prefetch_pool_{2};
+
+    // Ordered per-room text sends with an optional read-pool "prepare" step
+    // (bundled URL previews), and the per-room busy state behind the send
+    // button's spinner. Declared after the pools so it is destroyed first;
+    // its worker closures only use copies plus liveness-guarded UI posts.
+    SendPipeline send_pipeline_{SendPipeline::Hooks{
+        [this](std::function<void()> fn) { run_async_("send/prepare", std::move(fn)); },
+        [this](std::function<void()> fn) { run_async_mut_(std::move(fn)); },
+        [this](std::function<void()> fn) { post_to_ui_alive_(std::move(fn)); },
+        [this](int ms, std::function<void()> fn) { post_to_ui_after_(ms, guarded(std::move(fn))); },
+        [this](const std::string&, bool) { refresh_send_busy_ui_(); },
+    }};
 
     // MediaKind and MediaPrefetchKey are public (stateless descriptors) so
     // views/*.h's collect_prefetchable_media_keys() methods — implemented
@@ -3819,6 +3832,20 @@ protected:
     // notify_reply_failed_), not show_status_message_, since the triggering
     // notification may belong to a different account/window than whichever
     // one is currently focused.
+    // Queue a text send for `room_id` through send_pipeline_. When bundled
+    // URL previews are enabled and `preview_body` may contain a link, the
+    // previews are generated on the read pool first and handed to `send` as
+    // JSON; otherwise `send` gets an empty string. Sends for one room keep
+    // their submission order either way. UI thread only.
+    void submit_room_send_(const std::shared_ptr<AccountSession>& sess,
+                           const std::string& room_id,
+                           const std::string& preview_body,
+                           SendPipeline::Send send);
+
+    // Push send_pipeline_'s per-room busy state to every visible composer
+    // (main pane + pop-outs), keyed by the room each one currently shows.
+    void refresh_send_busy_ui_();
+
     void send_notification_reply_(std::string user_id, std::string room_id,
                                   std::string event_id, std::string text);
 
@@ -4237,6 +4264,10 @@ protected:
     // send time.
     void handle_send_maps_urls_as_location_toggle_(bool enabled);
 
+    // Toggle handler for the two "Link previews" Privacy settings. Persists
+    // both and pushes them to every logged-in account's client.
+    void handle_bundled_url_previews_toggle_(bool enabled, bool direct);
+
     // Resume live search indexing for a freshly-restored account's client if
     // the global "index messages for search" preference is enabled. Called
     // right after restore_session/start_sync, on whichever thread is doing
@@ -4250,6 +4281,10 @@ protected:
     // reflects the setting instead of defaulting to the Rust-side AtomicBool's
     // off default. A plain atomic store on the Rust side — non-blocking.
     void apply_membership_events_pref_(tesseract::Client& client);
+
+    // Apply the persisted "Link previews" preferences to a freshly-restored
+    // account's Rust client, alongside apply_membership_events_pref_.
+    void apply_bundled_url_previews_pref_(tesseract::Client& client);
 
     // Apply the persisted "Use historical MSC2545 compatibility" preference
     // to a freshly-restored account's Rust client. Called right after

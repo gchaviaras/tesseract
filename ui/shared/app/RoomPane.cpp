@@ -69,6 +69,10 @@ void RoomPane::retarget(const std::string& new_room_id)
     visible_media_prepped_.clear();
     displayed_once_ = false;
     room_id_ = new_room_id;
+    // The send-button spinner tracks the room this pane shows, not the
+    // composer: a link sent in the previous room must not spin here.
+    if (shell_)
+        shell_->refresh_send_busy_ui_();
 }
 
 void RoomPane::save_compose_draft_(const std::string& room_id)
@@ -1374,10 +1378,11 @@ void RoomPane::wire_room_view_()
         auto sess = shell_->active_account_;
         auto rid  = room_id_;
         auto root = thread_root_;
-        run_async_mut_([sess, rid, root, msg]() mutable {
+        shell_->submit_room_send_(sess, rid, msg.body,
+                                  [sess, rid, root, msg](const std::string& previews) mutable {
             if (!sess || !sess->client) return;
             sess->client->send_thread_message(rid, root, msg.body,
-                                              msg.formatted_body);
+                                              msg.formatted_body, previews);
         });
         if (auto* ta = compose_text_area_())
             ta->set_text("");
@@ -1394,10 +1399,11 @@ void RoomPane::wire_room_view_()
         auto sess = shell_->active_account_;
         auto rid  = room_id_;
         auto root = thread_root_;
-        run_async_mut_([sess, rid, root, reply_id, msg]() mutable {
+        shell_->submit_room_send_(sess, rid, msg.body,
+                                  [sess, rid, root, reply_id, msg](const std::string& previews) mutable {
             if (!sess || !sess->client) return;
             sess->client->send_thread_reply(rid, root, reply_id, msg.body,
-                                            msg.formatted_body);
+                                            msg.formatted_body, previews);
         });
         if (auto* ta = compose_text_area_())
             ta->set_text("");
@@ -2212,9 +2218,10 @@ void RoomPane::send_reply_(const std::string& reply_event_id,
     auto rid = room_id_;
     auto reply_id = reply_event_id;
     auto body_copy = body;
-    run_async_mut_(guarded([this, sess, rid, reply_id, body_copy]() mutable {
+    shell_->submit_room_send_(sess, rid, body_copy,
+                              guarded([this, sess, rid, reply_id, body_copy](const std::string& previews) mutable {
         if (!sess || !sess->client) return;
-        auto res = sess->client->send_reply(rid, reply_id, body_copy);
+        auto res = sess->client->send_reply(rid, reply_id, body_copy, "", previews);
         if (res)
             return;
         post_to_ui_(guarded([this, message = res.message]() mutable {
@@ -2260,11 +2267,14 @@ void RoomPane::send_edit_(const std::string& event_id,
     auto rid = room_id_;
     auto eid = event_id;
     auto body_copy = new_body;
-    run_async_mut_(guarded([this, sess, rid, eid, body_copy, is_caption]() mutable {
+    // Caption edits carry no text previews, so they skip the prepare step
+    // (empty preview body) but still keep their place in the room's order.
+    shell_->submit_room_send_(sess, rid, is_caption ? std::string{} : body_copy,
+                              guarded([this, sess, rid, eid, body_copy, is_caption](const std::string& previews) mutable {
         if (!sess || !sess->client) return;
         auto res = is_caption
             ? sess->client->send_caption_edit(rid, eid, body_copy)
-            : sess->client->send_edit(rid, eid, body_copy);
+            : sess->client->send_edit(rid, eid, body_copy, "", previews);
         if (res)
             return;
         post_to_ui_(guarded([this, message = res.message]() mutable {

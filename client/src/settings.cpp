@@ -67,6 +67,8 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
     notification_hide_content    = j.value("notification_hide_content",    false);
     prefetch_full_media          = j.value("prefetch_full_media",          false);
     send_maps_urls_as_location  = j.value("send_maps_urls_as_location",   false);
+    send_bundled_url_previews    = j.value("send_bundled_url_previews",    true);
+    fetch_url_previews_directly  = j.value("fetch_url_previews_directly",  false);
     group_inactive_rooms         = j.value("group_inactive_rooms",         false);
     group_unread_rooms            = j.value("group_unread_rooms",            false);
     inactive_room_threshold_days = j.value("inactive_room_threshold_days", 30);
@@ -213,6 +215,8 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         {"notification_hide_content",        notification_hide_content},
         {"prefetch_full_media",              prefetch_full_media},
         {"send_maps_urls_as_location",       send_maps_urls_as_location},
+        {"send_bundled_url_previews",        send_bundled_url_previews},
+        {"fetch_url_previews_directly",      fetch_url_previews_directly},
         {"group_inactive_rooms",             group_inactive_rooms},
         {"group_unread_rooms",            group_unread_rooms},
         {"inactive_room_threshold_days",     inactive_room_threshold_days},

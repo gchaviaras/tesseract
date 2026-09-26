@@ -4828,3 +4828,23 @@ msgstr "Vidéos"
 #: ui/windows/src/MainWindow.cpp:6520 ui/windows/src/MainWindow.cpp:6535
 msgid "Key files"
 msgstr "Fichiers de clés"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Link previews"
+msgstr "Aperçus des liens"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Include link previews in messages I send"
+msgstr "Inclure des aperçus des liens dans les messages que j'envoie"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch link previews directly instead of through my homeserver"
+msgstr "Récupérer les aperçus des liens directement plutôt que via mon serveur d'accueil"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Before sending a message that contains links, ask your homeserver for a preview of each link and attach it to the message, so recipients see it without fetching it themselves. Sending such messages can take a few seconds longer."
+msgstr "Avant d'envoyer un message contenant des liens, demande à votre serveur d'accueil un aperçu de chaque lien et le joint au message, afin que les destinataires le voient sans avoir à le récupérer eux-mêmes. L'envoi de ces messages peut prendre quelques secondes de plus."
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
+msgstr "Récupère les pages liées depuis cet appareil plutôt que de les demander à votre serveur d'accueil, et se rabat sur le serveur en cas d'échec. Chaque site que vous liez verra votre adresse IP. Les adresses de votre réseau local ne sont jamais récupérées."

@@ -43,6 +43,7 @@ set(_tk_sources
     app/MediaPlaybackHub.h
     app/MediaPlaybackHub.cpp
     app/SlashCommands.h
+    app/SendPipeline.cpp
     app/SlashCommands.cpp
     app/status_links.h
     app/status_links.cpp

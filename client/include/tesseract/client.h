@@ -601,8 +601,14 @@ public:
     // Messaging
     // ------------------------------------------------------------------
 
+    ///
+    /// `url_previews_json` is the MSC4095 bundled-preview array from
+    /// `generate_url_previews` (empty for none); `send_reply`,
+    /// `send_thread_message`, `send_thread_reply` and `send_edit` take the
+    /// same trailing argument.
     Result send_message(const std::string& room_id, const std::string& body,
-                        const std::string& formatted_body = "");
+                        const std::string& formatted_body = "",
+                        const std::string& url_previews_json = "");
 
     /// Send an `m.emote` message (the `/me` slash command). Same arguments
     /// and semantics as `send_message` but the event carries an `m.emote`
@@ -868,14 +874,16 @@ public:
     /// the `m.in_reply_to` relation. Does not require `subscribe_room`.
     Result send_reply(const std::string& room_id, const std::string& event_id,
                       const std::string& body,
-                      const std::string& formatted_body = "");
+                      const std::string& formatted_body = "",
+                      const std::string& url_previews_json = "");
 
     /// Send `body` into the thread rooted at `thread_root` (MSC3440). Does not
     /// require subscribe_room.
     Result send_thread_message(const std::string& room_id,
                                const std::string& thread_root,
                                const std::string& body,
-                               const std::string& formatted_body);
+                               const std::string& formatted_body,
+                               const std::string& url_previews_json = "");
 
     /// Reply to `in_reply_to_event_id` within the thread rooted at
     /// `thread_root`. Does not require subscribe_room.
@@ -883,7 +891,8 @@ public:
                              const std::string& thread_root,
                              const std::string& in_reply_to_event_id,
                              const std::string& body,
-                             const std::string& formatted_body);
+                             const std::string& formatted_body,
+                             const std::string& url_previews_json = "");
 
     /// Follow `url`'s HTTP redirects (best-effort, `timeout_ms` budget) to
     /// resolve a maps shortlink (goo.gl/maps, maps.app.goo.gl, osm.org/go) to
@@ -916,7 +925,8 @@ public:
     /// Only works on own `m.text` events. Does not require `subscribe_room`.
     Result send_edit(const std::string& room_id, const std::string& event_id,
                      const std::string& new_body,
-                     const std::string& formatted_body = "");
+                     const std::string& formatted_body = "",
+                     const std::string& url_previews_json = "");
 
     /// Edit the caption of an image/file/video/audio/voice `event_id` in
     /// `room_id`. Preserves the original media content; only patches the
@@ -2133,6 +2143,22 @@ public:
     /// `subscribe_room_at`/re-subscribe the active room after toggling to
     /// refresh it immediately.
     void set_show_membership_events(bool enabled);
+
+    /// Configure sender-side MSC4095 bundled URL previews. `enabled` bundles
+    /// previews of http(s) links into outgoing text messages, fetched via the
+    /// homeserver's `/preview_url`; `direct` (only honoured with `enabled`)
+    /// fetches pages from Tesseract itself first, falling back to the
+    /// homeserver. Thread-safe; takes effect on the next send.
+    void set_bundled_url_previews(bool enabled, bool direct);
+
+    /// Generate MSC4095 bundled previews for the links in `body` (an
+    /// outgoing text body for `room_id`) per the opt-ins above, returned as
+    /// JSON for the send calls' `url_previews_json`. Empty when the opt-in
+    /// is off, there are no links, or nothing could be previewed. Blocks for
+    /// up to ~8 s and takes only the shared FFI lock: run it on the read
+    /// pool, never on the `&mut` worker (it would stall room switches).
+    std::string generate_url_previews(const std::string& room_id,
+                                      const std::string& body);
 
     /// Enable/disable MSC2545 "historical compatibility" — see
     /// Settings::msc2545_legacy_compat's doc comment for the full contract.

@@ -1,6 +1,7 @@
 #include "controls.h"
 
 #include "tk/host.h"
+#include "tk/loading_spinner.h"
 
 #include <tesseract/visual.h>
 
@@ -275,6 +276,10 @@ void Button::paint(PaintCtx& ctx)
     }
     ctx.canvas.fill_rounded_rect(bounds_, kControlsBtnRadius, fill);
 
+    if (!paints_content())
+    {
+        return;
+    }
     if (!icon_svg_.empty() && !icon_leading_)
     {
         // Any variant may self-paint an icon over its fill (Primary/
@@ -322,6 +327,51 @@ void Button::paint(PaintCtx& ctx)
         tx += icon_w;
     }
     ctx.canvas.draw_text(*cached_, {tx, ty}, text_color);
+}
+
+Color Button::content_color(const Theme& theme) const
+{
+    return icon_color_override_.value_or(button_text(variant_, theme, enabled_));
+}
+
+void BusyButton::set_busy(bool busy)
+{
+    if (busy == busy_)
+    {
+        return;
+    }
+    busy_ = busy;
+    if (busy_)
+    {
+        busy_start_ = std::chrono::steady_clock::now();
+    }
+    if (auto* h = host())
+    {
+        h->request_repaint();
+    }
+}
+
+void BusyButton::paint(PaintCtx& ctx)
+{
+    Button::paint(ctx);
+    if (!busy_)
+    {
+        return;
+    }
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - busy_start_)
+                                .count();
+    const float phase = static_cast<float>(elapsed_ms % 1000) / 1000.0f;
+    const float side = std::min(bounds_.w, bounds_.h);
+    const float radius = side * 0.22f;
+    const float dot_r = std::max(1.5f, side * 0.05f);
+    draw_spinner_dots(ctx.canvas,
+                      {bounds_.x + bounds_.w * 0.5f, bounds_.y + bounds_.h * 0.5f},
+                      phase, radius, dot_r, content_color(ctx.theme));
+    if (auto* h = host())
+    {
+        h->request_repaint();
+    }
 }
 
 void Button::click()

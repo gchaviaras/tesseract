@@ -83,12 +83,17 @@ std::optional<SpoilerMessage> build_spoiler_message(std::string_view args);
 // them as literal text, matching what other Matrix clients do for unknown
 // slash commands.
 //
+// `url_previews_json` (MSC4095 bundled previews from
+// `Client::generate_url_previews`) is attached only to the final verbatim
+// `send_message` fallthrough; command-transformed bodies never carry it.
+//
 // The returned `Result` is the underlying `Client` call's result, so callers
 // can clear the composer on success.
 Result dispatch_compose_send(Client& client,
                              const std::string& room_id,
                              const std::string& body,
-                             const std::string& formatted_body);
+                             const std::string& formatted_body,
+                             const std::string& url_previews_json = "");
 
 // ---------------------------------------------------------------------------
 // MSC4391 in-room bot commands

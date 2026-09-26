@@ -5020,3 +5020,23 @@ msgstr "[Vïdéösx]"
 #: ui/windows/src/MainWindow.cpp:6520 ui/windows/src/MainWindow.cpp:6535
 msgid "Key files"
 msgstr "[Kéy fïlésx]"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Link previews"
+msgstr "[Lïñk prévïéwsxx]"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Include link previews in messages I send"
+msgstr "[Ïñçlùdé lïñk prévïéws ïñ méssàgés Ï séñdxxxxxxxx]"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch link previews directly instead of through my homeserver"
+msgstr "[Fétçh lïñk prévïéws dïréçtly ïñstéàd öf thröùgh my hömésérvérxxxxxxxxxxxx]"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Before sending a message that contains links, ask your homeserver for a preview of each link and attach it to the message, so recipients see it without fetching it themselves. Sending such messages can take a few seconds longer."
+msgstr "[Béföré séñdïñg à méssàgé thàt çöñtàïñs lïñks, àsk yöùr hömésérvér för à prévïéw öf éàçh lïñk àñd àttàçh ït tö thé méssàgé, sö réçïpïéñts séé ït wïthöùt fétçhïñg ït thémsélvés. Séñdïñg sùçh méssàgés çàñ tàké à féw séçöñds löñgér.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
+msgstr "[Fétçh thé lïñkéd pàgés fröm thïs dévïçé ïñstéàd öf àskïñg yöùr hömésérvér, fàllïñg bàçk tö thé hömésérvér ïf thàt fàïls. Évéry sïté yöù lïñk wïll séé yöùr ÏP àddréss. Àddréssés öñ yöùr löçàl ñétwörk àré ñévér fétçhéd.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"

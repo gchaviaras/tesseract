@@ -191,6 +191,20 @@ public:
     // user hasn't explicitly initiated.
     bool send_maps_urls_as_location = false;
 
+    // When true, outgoing text messages (sends, replies, thread messages,
+    // edits) carry MSC4095 bundled previews of their http(s) links, fetched
+    // via the homeserver's /preview_url before send. On by default: the
+    // homeserver already previews the user's own links for display, and
+    // bundling spares recipients' homeservers from learning the URL. Can
+    // delay sends that contain links by a few seconds.
+    bool send_bundled_url_previews = true;
+
+    // Only honoured with send_bundled_url_previews: fetch the linked pages
+    // from Tesseract itself (SSRF-guarded) instead of the homeserver,
+    // falling back to the homeserver on failure. Off by default since it
+    // exposes the user's IP address to every site they link.
+    bool fetch_url_previews_directly = false;
+
     // ── MSC4278 media-preview controls ────────────────────────────────
     // In-memory mirror of the active account's global `m.media_preview_config`
     // account-data event. NOT persisted to app_settings.json — account_data is

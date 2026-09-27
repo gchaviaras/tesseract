@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- fix(profile): the sidebar account strip no longer shows "Click to set status" when the server can't store a status (no MSC4133 profile fields); clicking that line then opens the account picker, and the strip keeps its height. Windows build; user-verified live. Qt6/GTK4/macOS share the code, unbuilt
 - fix(accounts): on Qt6, the account picker's rows no longer stack above its top edge after adding an account; the shell now re-lays out the picker after updating its rows, like the other shells. Qt6 build; user-verified live
 - feat(calls): participant tiles now fit the call view's shape: one row when it's wide, one column when it's tall, a balanced grid otherwise (new `call_tile_layout`). A pinned participant's strip moves below it when the view is taller than 16:9. Windows build + ctest (all pass); user-verified live. Qt6/GTK4/macOS share the code, unbuilt
 - fix(tk): checkboxes, dropdown selections and the encryption "all set" disc draw the Lucide check instead of a ✓ glyph, matching the round checkboxes; the recovery-key "I've saved" box is now a real `tk::CheckButton` (keyboard + accessibility). Qt6 build + ctest; user-verified live. GTK4/Windows/macOS share the code, unbuilt

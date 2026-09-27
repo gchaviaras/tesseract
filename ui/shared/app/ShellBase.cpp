@@ -2003,10 +2003,15 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
 
     // MSC4426: the sidebar strip (not AccountPicker rows) shows a third line
     // for the user's own status, with a "Click to set status" placeholder
-    // when unset. A click on that line opens Settings → Account.
+    // when unset. A click on that line opens Settings → Account. The
+    // placeholder and click are suppressed until server_info_ confirms
+    // MSC4133 profile-field support (push_own_status_to_strip_()).
     app->user_info()->set_status_line_enabled(true);
     app->user_info()->on_status_clicked = [this]
     { open_settings_to_account_tab_(); };
+    app->user_info()->set_status_editable(
+        server_info_.supports_profile_fields &&
+        server_info_.profile_fields_enabled);
     app->user_info()->set_status(own_extended_profile_.status_emoji,
                                  own_extended_profile_.status_text);
 
@@ -4868,6 +4873,7 @@ void ShellBase::handle_server_info_async_ready_ui_(std::uint64_t /*request_id*/,
                                                     std::string info_json)
 {
     server_info_ = tesseract::ServerInfo::from_json(info_json);
+    push_own_status_to_strip_(); // profile-field support gates the placeholder
     on_server_info_ready_ui_();
     for (auto& [rid, w] : secondary_windows_)
     {
@@ -5628,8 +5634,13 @@ void ShellBase::fetch_own_extended_profile_async_()
 void ShellBase::push_own_status_to_strip_()
 {
     if (main_app_ && main_app_->user_info())
+    {
+        main_app_->user_info()->set_status_editable(
+            server_info_.supports_profile_fields &&
+            server_info_.profile_fields_enabled);
         main_app_->user_info()->set_status(own_extended_profile_.status_emoji,
                                            own_extended_profile_.status_text);
+    }
 }
 
 void ShellBase::restart_app_()

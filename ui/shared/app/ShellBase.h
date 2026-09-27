@@ -3968,7 +3968,8 @@ protected:
         push_own_status_to_strip_();
         on_own_extended_profile_ready_ui_();
     }
-    /// Push `own_extended_profile_`'s status into the sidebar `UserInfo`.
+    /// Push `own_extended_profile_`'s status into the sidebar `UserInfo`,
+    /// along with whether the server can store one (hides the placeholder).
     /// Shared — no per-shell code needed. Safe before `main_app_` is set.
     void push_own_status_to_strip_();
 

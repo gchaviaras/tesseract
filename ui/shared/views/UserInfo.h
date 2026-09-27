@@ -30,10 +30,14 @@ public:
     // MSC4426 status — a third text line below the Matrix ID. Only rendered
     // when set_status_line_enabled(true) (the sidebar strip; NOT AccountPicker
     // rows). With both parts empty the line shows a "Click to set status"
-    // placeholder. A pointer-up inside the status line fires on_status_clicked
+    // placeholder — unless set_status_editable(false) (server lacks MSC4133
+    // profile fields), which drops the placeholder and routes status-line
+    // clicks to on_primary; the row keeps its height either way. A pointer-up
+    // inside the status line fires on_status_clicked
     // instead of on_primary.
     void set_status(std::string emoji, std::string text);
     void set_status_line_enabled(bool enabled);
+    void set_status_editable(bool editable);
 
     // Host hook: given an mxc:// URL, return a decoded image or null. The
     // shell typically reads a `tk_avatars_` cache and kicks off an async
@@ -169,6 +173,7 @@ private:
     std::string status_emoji_;
     std::string status_text_;
     bool status_line_enabled_ = false;
+    bool status_editable_ = true;
     bool active_indicator_ = false;
     bool notification_dot_ = false;
     bool warning_dot_ = false;

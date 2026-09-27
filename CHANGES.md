@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- fix(accounts): on Qt6, the account picker's rows no longer stack above its top edge after adding an account; the shell now re-lays out the picker after updating its rows, like the other shells. Qt6 build; user-verified live
 - feat(calls): participant tiles now fit the call view's shape: one row when it's wide, one column when it's tall, a balanced grid otherwise (new `call_tile_layout`). A pinned participant's strip moves below it when the view is taller than 16:9. Windows build + ctest (all pass); user-verified live. Qt6/GTK4/macOS share the code, unbuilt
 - fix(tk): checkboxes, dropdown selections and the encryption "all set" disc draw the Lucide check instead of a ✓ glyph, matching the round checkboxes; the recovery-key "I've saved" box is now a real `tk::CheckButton` (keyboard + accessibility). Qt6 build + ctest; user-verified live. GTK4/Windows/macOS share the code, unbuilt
 - feat(privacy): MSC4095 bundled link previews on sent messages (sends, replies, threads, edits), fetched through the homeserver (on by default); a second, opt-in setting fetches pages directly via a new SSRF-guarded client (`net_guard`, `scraper`-based parser) with homeserver fallback. Previews are generated on the read pool (`generate_url_previews` FFI) so they never block room switches. Windows build + ctest 2000/2000, cargo 747/747; user-verified live. Qt6/GTK4/macOS share the code, unbuilt

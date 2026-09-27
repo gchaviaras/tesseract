@@ -4760,6 +4760,9 @@ void MainWindow::rebuildAccountPicker()
         }
     }
     accountPicker_->set_entries(std::move(entries));
+    // A changed account count rebuilds the rows with empty bounds; arrange
+    // them now rather than relying on a later resizeEvent.
+    accountPickerSurface_->relayout();
 }
 
 void MainWindow::openAccountPicker(const QPoint& global_anchor)
@@ -4809,6 +4812,11 @@ void MainWindow::openAccountPicker(const QPoint& global_anchor)
             ->measure(lc, {static_cast<float>(kPickerWidth), 0.0f})
             .h));
     accountPickerPopover_->resize(kPickerWidth, height);
+    // Apply the popover's layout now so the Surface has its final size, then
+    // arrange at that size: a hidden popup only resizes the Surface on show,
+    // and not at all if its geometry is unchanged.
+    accountPickerPopover_->layout()->activate();
+    accountPickerSurface_->relayout();
 
     // Anchor above the strip (popover hangs down from the user-strip top
     // edge on most desktops; if it would clip the screen bottom Qt::Popup

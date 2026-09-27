@@ -156,6 +156,8 @@ set(_tk_sources
     views/html_spans.cpp
     views/table_layout.h
     views/table_layout.cpp
+    views/call_tile_layout.h
+    views/call_tile_layout.cpp
     views/TabbedGridPicker.h
     views/TabbedGridPicker.cpp
     views/ReceiptGridPopup.h

@@ -83,6 +83,7 @@ add_executable(tesseract_tests
     cpp/test_tk_quick_switcher.cpp
     cpp/test_html_spans.cpp
     cpp/test_table_layout.cpp
+    cpp/test_call_tile_layout.cpp
     cpp/test_prefs.cpp
     cpp/test_settings.cpp
     cpp/test_cli.cpp

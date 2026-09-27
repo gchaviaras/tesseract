@@ -1,5 +1,7 @@
 #include "CallOverlayWidget.h"
 
+#include "call_tile_layout.h"
+
 #include "icons.h"
 #include "tk/i18n.h"
 
@@ -22,7 +24,7 @@ constexpr float kCallOverlayBtnGap       = 16.0f;
 constexpr float kExpandSz     = 28.0f;
 constexpr float kExpandMargin = 4.0f;
 constexpr float kDragHeaderH  = 32.0f;
-constexpr float kPinnedFrac   = 0.70f; // width fraction for the pinned tile
+constexpr float kPinnedFrac   = 0.70f; // long-axis fraction for the pinned tile
 
 constexpr tk::Color kOverlayBg{  0,   0,   0, 220};
 constexpr tk::Color kCtrlBg   {  0,   0,   0, 180};
@@ -547,42 +549,40 @@ void CallOverlayWidget::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
 
         if (valid_pin && n > 1)
         {
-            // Pinned tile takes kPinnedFrac of the width; sidebar takes the rest.
-            const float main_w    = grid_rect_.w * kPinnedFrac;
-            const float sidebar_w = grid_rect_.w - main_w;
+            // Pinned tile takes kPinnedFrac of the long axis; the others share
+            // a strip beside it (area wider than a tile) or below it (taller).
+            const bool side = grid_rect_.w > grid_rect_.h * kCallTileAspect;
+            tk::Rect pinned = grid_rect_;
+            tk::Rect strip  = grid_rect_;
+            if (side)
+            {
+                pinned.w = grid_rect_.w * kPinnedFrac;
+                strip.x += pinned.w;
+                strip.w -= pinned.w;
+            }
+            else
+            {
+                pinned.h = grid_rect_.h * kPinnedFrac;
+                strip.y += pinned.h;
+                strip.h -= pinned.h;
+            }
+            tiles_[pin_idx]->arrange(ctx, pinned);
 
-            tiles_[pin_idx]->arrange(ctx, {grid_rect_.x, grid_rect_.y,
-                                           main_w, grid_rect_.h});
-
-            // Remaining tiles stacked vertically in the right column.
-            const int rest = n - 1;
-            const float cell_h = rest > 0 ? grid_rect_.h / static_cast<float>(rest) : grid_rect_.h;
-            int row = 0;
+            const auto cells = layout_tiles(n - 1, strip);
+            size_t k = 0;
             for (int i = 0; i < n; ++i)
             {
                 if (i == pin_idx) continue;
-                tiles_[i]->arrange(ctx, {grid_rect_.x + main_w,
-                                         grid_rect_.y + row * cell_h,
-                                         sidebar_w, cell_h});
-                ++row;
+                tiles_[i]->arrange(ctx, cells[k++]);
             }
         }
         else
         {
-            // Standard multi-column grid.
-            const int cols = (n == 1) ? 1 : (n <= 4) ? 2 : 3;
-            const int rows = (n + cols - 1) / cols;
-            const float cw = grid_rect_.w / static_cast<float>(cols);
-            const float ch = grid_rect_.h / static_cast<float>(rows);
-
+            // Grid shape follows the area: one row when wide, one column when
+            // tall, a balanced grid otherwise.
+            const auto cells = layout_tiles(n, grid_rect_);
             for (int i = 0; i < n; ++i)
-            {
-                const int col = i % cols;
-                const int row = i / cols;
-                tiles_[i]->arrange(ctx, {grid_rect_.x + col * cw,
-                                          grid_rect_.y + row * ch,
-                                          cw, ch});
-            }
+                tiles_[i]->arrange(ctx, cells[static_cast<size_t>(i)]);
         }
     }
 

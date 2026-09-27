@@ -3018,7 +3018,7 @@ void MacShell::apply_window_title_ui_(const std::string& title)
         MainWindowController* strong = weakSelf;
         if (!strong)
             std::exit(EXIT_FAILURE);
-        NSString* light = [directory stringByAppendingPathComponent:@"appkit-light.png"];
+        NSString* light = [directory stringByAppendingPathComponent:@"mac-light.png"];
         if (![strong _saveScreenshotToPath:light])
         {
             NSLog(@"Could not save screenshot: %@", light);
@@ -3031,7 +3031,7 @@ void MacShell::apply_window_title_ui_(const std::string& title)
             MainWindowController* current = weakSelf;
             if (!current)
                 std::exit(EXIT_FAILURE);
-            NSString* dark = [directory stringByAppendingPathComponent:@"appkit-dark.png"];
+            NSString* dark = [directory stringByAppendingPathComponent:@"mac-dark.png"];
             if (![current _saveScreenshotToPath:dark])
             {
                 NSLog(@"Could not save screenshot: %@", dark);

@@ -2,6 +2,14 @@
 
 Snapshot of every feature that has landed on `main`. Last updated **2026-09-28**. 2032 C++ + 763 Rust tests.
 
+> **German translation (2026-09-28, v0.9.0).**
+> A German catalog (`i18n/de.po`) covers the whole UI, using Element
+> Web's German terminology (room → "Chat", session → "Gerät") and its
+> informal "du". It is selectable in Settings → Language. `msgfmt -c`
+> clean; pending review by a native speaker.
+
+<!-- -->
+
 > **User verification (2026-09-28, v0.9.0).**
 > A user's profile shows whether you've verified them, with a "Verify"
 > button that runs SAS verification in the encryption dialog (requests go
@@ -2473,7 +2481,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 ## Internationalisation
 
-- One mechanism on every platform: `tk::tr` / `trn` / `trf` look strings up in gettext `.mo` catalogs compiled from `i18n/*.po` (English, Spanish, French, plus a pseudo-locale for QA). Shared views and all four shells use it; macOS wraps it as `TkTr()`. Qt's `QObject::tr` and GTK's `gettext` are not used.
+- One mechanism on every platform: `tk::tr` / `trn` / `trf` look strings up in gettext `.mo` catalogs compiled from `i18n/*.po` (English, Spanish, French, German, plus a pseudo-locale for QA). Shared views and all four shells use it; macOS wraps it as `TkTr()`. Qt's `QObject::tr` and GTK's `gettext` are not used.
 - Language picked in Settings → Language (Auto follows the OS); "Restart now" relaunches into it.
 - `tk::N_` marks literal tables translated at display time; `tk::format_date` formats dates from a translatable strftime-style pattern (so locales can reorder day and month) with catalog month/weekday names; `tk::format_size` gives translated byte units.
 - The `i18n_catalogs_complete` ctest (`i18n/check_i18n.py`) fails when a marked string is missing from any `.po`, or when a shell calls a bare `tr()` / `_()`.

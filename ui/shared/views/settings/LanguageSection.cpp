@@ -19,6 +19,7 @@ LanguageSection::LanguageSection()
         {tk::tr("English"), "en"},
         {tk::tr("Spanish"), "es"},
         {tk::tr("French"),  "fr"},
+        {tk::tr("German"),  "de"},
     });
     combo->set_selected_value(tesseract::Settings::instance().language);
     combo_ = group->add_widget(std::move(combo));

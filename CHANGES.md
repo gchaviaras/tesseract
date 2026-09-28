@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- feat(i18n): German translation (`i18n/de.po`, Element Web terminology and informal "du"), selectable in Settings → Language. `msgfmt -c` clean, Windows build + ctest; pending native-speaker review
 - feat(security): verify other users from their profile (a "Verify" button next to their trust state, "Withdraw verification" after a verified identity is reset); requests go in-room via the DM, and in-room requests from other users are now received. The trust row updates when the verification signature arrives. Windows build + ctest 2032/2032, cargo 763/763; user-verified live. Qt6/GTK4/macOS unbuilt
 - fix(timeline): Retry and ✕ on a failed message now work in the main window; they were only wired for pop-out windows. Windows build; user-verified live. Qt6/GTK4/macOS unbuilt
 - feat(security): MSC4153 "Exclude insecure devices" option (Settings → Privacy, off by default, applies after restart) shares room keys only with cross-signed devices and hides messages from unsigned ones. Encrypted rooms now show a banner when a member's identity is reset ("OK" / "Withdraw verification"), and messages blocked by an encryption check offer Retry. Windows release build + ctest 2032/2032, cargo 763/763; user-verified live. Qt6/GTK4/macOS unbuilt

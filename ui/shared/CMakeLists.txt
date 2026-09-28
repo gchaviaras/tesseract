@@ -366,6 +366,7 @@ if(TESSERACT_UI STREQUAL "qt6" OR TESSERACT_UI STREQUAL "gtk" OR TESSERACT_UI ST
     list(APPEND _tk_sources
         tk/video_decode_gst.cpp
         tk/gst_hw_probe.cpp
+        tk/gst_device_listing.cpp
     )
 endif()
 

@@ -205,6 +205,14 @@ add_executable(tesseract_tests
     cpp/test_call_room_navigation.cpp
 )
 
+# tk::clean_device_display_name() lives in tk/gst_device_listing.cpp, which is
+# a Linux-only source in tesseract_tk (see the guard in ui/shared/CMakeLists.txt).
+# Keep the test with it: listed unconditionally above, the Win32 and macOS test
+# binaries would reference a symbol that isn't defined there.
+if(TESSERACT_UI STREQUAL "qt6" OR TESSERACT_UI STREQUAL "gtk" OR TESSERACT_UI STREQUAL "linux")
+    target_sources(tesseract_tests PRIVATE cpp/test_tk_gst_device_listing.cpp)
+endif()
+
 # tk_test_surface implementation is per-backend; only the one matching
 # the active TESSERACT_UI is compiled in so the test binary has exactly
 # one TestSurface::create symbol. TESSERACT_UI=linux (dual gtk+qt6 dev

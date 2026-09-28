@@ -63,8 +63,7 @@
 #include <QAudioDevice>
 #include <QtNetwork/QNetworkInformation>
 
-#include "gst_hw_probe.h"
-#include <gst/gst.h>
+#include "gst_device_listing.h"
 
 namespace tk::qt6
 {
@@ -3329,51 +3328,9 @@ std::vector<tk::DeviceListing> Host::enumerate_audio_outputs() const
 
 std::vector<tk::DeviceListing> Host::enumerate_cameras() const
 {
-    tk::gst::ensure_gst_init();
-
-    std::vector<tk::DeviceListing> result;
-    GstDeviceMonitor* monitor = gst_device_monitor_new();
-    GstCaps* caps = gst_caps_new_empty_simple("video/x-raw");
-    gst_device_monitor_add_filter(monitor, "Video/Source", caps);
-    gst_caps_unref(caps);
-
-    if (!gst_device_monitor_start(monitor))
-    {
-        gst_object_unref(monitor);
-        return result;
-    }
-
-    GList* devices = gst_device_monitor_get_devices(monitor);
-    for (GList* l = devices; l; l = l->next)
-    {
-        GstDevice* dev = GST_DEVICE(l->data);
-
-        // Create a temporary element to read the "device" property
-        // (the /dev/videoN path suitable for injection into the pipeline).
-        GstElement* elem = gst_device_create_element(dev, nullptr);
-        if (!elem) { gst_object_unref(dev); continue; }
-
-        gchar* dev_path = nullptr;
-        g_object_get(elem, "device", &dev_path, nullptr);
-        gst_object_unref(elem);
-
-        if (!dev_path) { gst_object_unref(dev); continue; }
-
-        gchar* display = gst_device_get_display_name(dev);
-        tk::DeviceListing entry;
-        entry.id           = dev_path;
-        entry.display_name = display ? display : dev_path;
-        result.push_back(std::move(entry));
-
-        g_free(dev_path);
-        g_free(display);
-        gst_object_unref(dev);
-    }
-    g_list_free(devices);
-
-    gst_device_monitor_stop(monitor);
-    gst_object_unref(monitor);
-    return result;
+    // Enumeration is shared with the GTK4 shell — see
+    // ui/shared/tk/gst_device_listing.cpp.
+    return tk::enumerate_gst_devices("Video/Source", "video/x-raw");
 }
 
 QString build_menu_qss(const Theme& t)

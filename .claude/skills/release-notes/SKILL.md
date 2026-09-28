@@ -46,7 +46,7 @@ Stop there. Never pull from `### Details` (per-day prose) or from any older
 
 | Keep as candidates | Why |
 |---|---|
-| `feat(...)` | New capability |
+| `feat(...)` | User-visible change (section decided in step 4, not by the prefix) |
 | `fix(...)` not in the drop list above, **and** fixing a previously-released feature (see below) | User-visible bug fix |
 | `perf(...)` describing a perceptible speed/responsiveness change | User-perceptible |
 | `refactor(...)` **only if** its own text names a resulting user-visible fix (e.g. "...fixing several fields the old list missed entirely") | Extract the visible effect; drop the mechanism |
@@ -76,20 +76,21 @@ narrow the rewritten note to the surface(s) that predate this version.
 ## 3. Rewrite Each Survivor
 
 - **Strip the prefix.** No `type(scope):` tag may appear in the output, ever.
-- **Translate jargon — except a New Feature's own MSC number.** No
+- **Translate jargon — except a `feat(...)` bullet's own MSC number.** No
   library/protocol/internal names — no `ruma`, FFI, SDK internals,
   class/function/file names. Describe what the user actually sees or
   experiences instead.
   **Exception:** if a `feat(...)` bullet's source text names a specific MSC
-  (Matrix Spec Change) number, that number is REQUIRED in the rewritten New
-  Features line — e.g. "Added inline link preview cards for shared URLs
-  (MSC4095)." MSC numbers are the one piece of protocol jargon release notes
-  must surface, so spec-literate users and other Matrix clients can identify
-  interoperable functionality. Keep only the MSC number from that bullet —
-  still strip `ruma`, FFI, and other implementation details from the same
-  text. This applies to New Features only: a Fix or Improvement bullet never
-  gets an MSC number appended, even if its source text happens to mention
-  one.
+  (Matrix Spec Change) number, that number is REQUIRED in the rewritten line,
+  whichever section step 4 puts it in — e.g. "Added inline link preview cards
+  for shared URLs (MSC4095)." MSC numbers are the one piece of protocol jargon
+  release notes must surface, so spec-literate users and other Matrix clients
+  can identify interoperable functionality. Keep only the MSC number from that
+  bullet — still strip `ruma`, FFI, and other implementation details from the
+  same text. The exception follows the source prefix, not the output section:
+  a `feat(...)` bullet keeps its MSC number even when it lands under
+  Improvements or Fixes, and a `fix(...)`/`perf(...)`/`refactor(...)` bullet
+  never gets one, even if its source text happens to mention one.
 - **Merge duplicates.** Several bullets about the same user-facing capability
   (e.g. five separate image-pack commits) become one or two release-note
   lines, not five.
@@ -121,10 +122,39 @@ Only emit headers that have content:
 - ...
 ```
 
-- **New Features** — `feat`-derived bullets.
-- **Improvements** — `perf`-derived and UX-polish bullets (things that were
-  already possible but now feel better/faster).
-- **Fixes** — `fix`-derived and qualifying `refactor`-derived bullets.
+Pick the section from what the change means to a user of the **previous
+release**, not from the commit prefix. The prefix records how the developer
+thought about the code; it is only a starting guess. Ask of every survivor:
+
+- **New Features** — the user can now do something they could not do at all
+  in the last release: a new action, screen, setting, or protocol capability.
+- **Improvements** — something they could already do now works better,
+  faster, or more clearly: a redesigned flow, extra detail on something that
+  was already shown, a shortcut for a step they already did by hand, polish.
+- **Fixes** — something that shipped in an earlier release behaved wrongly
+  (broke, crashed, lost data, showed the wrong thing) and now doesn't.
+
+Default mapping, to override whenever the test above says otherwise:
+`feat` → New Features, `perf` → Improvements, `fix`/qualifying `refactor` →
+Fixes. Common overrides:
+
+- A `feat(...)` that makes existing functionality *keep working* in a case
+  where it used to break (e.g. "pop-outs keep working after switching
+  accounts") is a **Fix** — the pop-outs already existed; they were broken.
+- A `feat(...)` that redesigns or consolidates an existing flow (e.g. "one
+  dialog now handles all of encryption", when setup and verification already
+  existed) is an **Improvement**.
+- A `feat(...)` that adds detail to something already displayed (e.g. "kick
+  lines show the reason") or automates a step users already did by hand
+  (e.g. a "Restart now" button after a setting that already needed a
+  restart) is an **Improvement**.
+- A `feat(...)` that adds a genuinely new capability *and* incidentally fixes
+  a symptom stays a **New Feature**; the fixed symptom can be a clause in the
+  same line rather than a separate Fixes bullet.
+
+The "Fixes require a previously-released feature" rule in step 2 still
+applies to anything that lands under Fixes, including a `feat(...)` moved
+there: the broken behavior must have shipped in a prior release.
 
 ## 5. Before You Finish — Run the Verifier, Don't Hand-Write the Check
 
@@ -198,6 +228,10 @@ Source (`### Summary`, abridged):
 - perf(compose): first (superseded) attempt at the slow local echo
 - fix(build): exclude CG test surface files from the unity build to fix
   `macos-appkit-x86_64-release`
+- feat(accounts): pop-out room windows keep working for the account that
+  opened them after switching accounts (previously they sent as the newly
+  active account)
+- feat(settings): "Restart now" relaunches the app after a language change
 ```
 
 Release notes:
@@ -208,10 +242,12 @@ Release notes:
 
 ### Improvements
 - Added consistent tooltips throughout the app.
+- After changing the language, "Restart now" relaunches the app in the new language.
 
 ### Fixes
 - Fixed several settings dialogs not updating their colors when switching themes.
 - Fixed unreadable (black-on-dark) text in the quick switcher and other search fields.
+- Pop-out room windows keep working for the account that opened them after you switch accounts.
 ```
 
 (`build:` and `fix(build)` are dropped outright; the superseded `perf(compose)`
@@ -219,7 +255,11 @@ attempt is dropped in favor of whatever later bullet actually fixed it. The
 poll-overflow fix is dropped too — its own text says "newly-added," and the
 `feat(compose)` bullet two lines above it introduced that exact poll option
 list in this same unreleased batch, so no user ever saw it overflow; the new
-poll feature's own bullet already covers what actually shipped.)
+poll feature's own bullet already covers what actually shipped. The two
+trailing `feat` bullets are re-sectioned by the step 4 test: pop-outs already
+existed and broke on account switch, so that is a Fix; changing the language
+already worked and "Restart now" only saves a manual restart, so that is an
+Improvement. Only the poll flow is something users could not do before.)
 
 ## Common Mistakes
 
@@ -234,5 +274,6 @@ poll feature's own bullet already covers what actually shipped.)
   in the same list before keeping any `fix(...)`.
 - Inventing an empty category header just to show all three sections.
 - Naming internal classes/files/protocols (`apply_theme()`, `ruma`) instead of describing the user-visible effect.
-- Dropping a New Feature's MSC number when the source bullet names one — it's the one exception to the no-protocol-jargon rule and is required, not optional.
-- Appending an MSC number to a Fix or Improvement bullet — the requirement is New Features only.
+- Filing a bullet under New Features only because its prefix is `feat` — apply the step 4 test; a `feat` that repairs, redesigns, or adds detail to something that already shipped belongs under Fixes or Improvements.
+- Dropping a `feat(...)` bullet's MSC number when the source names one — required whichever section the bullet lands in; it's the one exception to the no-protocol-jargon rule.
+- Appending an MSC number to a line derived from a `fix`/`perf`/`refactor` bullet — the exception follows the `feat` source prefix, not the output section.

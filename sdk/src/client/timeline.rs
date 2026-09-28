@@ -1003,6 +1003,13 @@ impl ClientFfi {
                         Arc::clone(&self.thread_chip_overrides),
                     );
                     existing.abort_tasks = vec![abort, fetch_abort];
+                    existing.abort_tasks.extend(super::identity::spawn_identity_watcher(
+                        &room,
+                        room_id.to_string(),
+                        &handler,
+                        &self.rt,
+                        Arc::clone(&new_cancelled),
+                    ));
                     existing.cancelled = new_cancelled;
                     drop(guard);
                     self.sync_room_subscriptions();
@@ -1142,7 +1149,14 @@ impl ClientFfi {
                 }
             }
         });
-        let abort_tasks = vec![abort, fetch_abort, warm_check.abort_handle()];
+        let mut abort_tasks = vec![abort, fetch_abort, warm_check.abort_handle()];
+        abort_tasks.extend(super::identity::spawn_identity_watcher(
+            &room,
+            room_id.to_string(),
+            &handler,
+            &self.rt,
+            Arc::clone(&cancelled),
+        ));
 
         self.timelines.write().insert(
             room_id.clone(),
@@ -1781,11 +1795,19 @@ impl ClientFfi {
             Arc::clone(&self.thread_chip_overrides),
         );
 
+        let mut abort_tasks = vec![abort, fetch_abort];
+        abort_tasks.extend(super::identity::spawn_identity_watcher(
+            &room,
+            room_id.to_string(),
+            &handler,
+            &self.rt,
+            Arc::clone(&cancelled),
+        ));
         self.timelines.write().insert(
             room_id,
             TimelineHandle {
                 timeline,
-                abort_tasks: vec![abort, fetch_abort],
+                abort_tasks,
                 is_focused: true,
                 cancelled,
             },

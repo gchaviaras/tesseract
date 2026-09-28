@@ -34,6 +34,12 @@ pub fn set_rust_crash_reporting_enabled(enabled: bool) {
     super::crash_reporter::set_enabled(enabled);
 }
 
+/// MSC4153 "exclude insecure devices" mode. Process-wide; read when each
+/// matrix-sdk client is built, so call it before restoring/logging in.
+pub fn set_exclude_insecure_devices(enabled: bool) {
+    super::client::identity::set_exclude_insecure_devices(enabled);
+}
+
 pub fn compute_waveform_from_ogg(bytes: &[u8]) -> Vec<u16> {
     super::waveform::compute_waveform_from_ogg(bytes)
 }
@@ -1538,6 +1544,25 @@ pub mod ffi {
             typing_user_ids: &Vec<String>,
         );
 
+        /// Fired when the stored cross-signing identity of these users changed
+        /// (keys downloaded, a verification signature arrived, a reset), so
+        /// the UI can re-read `get_user_trust` for any it is showing.
+        fn on_user_identities_changed(self: &EventHandlerBridge, user_ids: &Vec<String>);
+
+        /// Fired while `room_id` (an encrypted room) is subscribed, with the
+        /// room's full current set of members whose cryptographic identity
+        /// changed: parallel vecs of user id, display name (may be empty) and
+        /// kind (1 = changed since first seen, 2 = changed after being
+        /// verified). An empty set means no warning. The first call after
+        /// subscribing is only made when the set is non-empty.
+        fn on_identity_status_changed(
+            self: &EventHandlerBridge,
+            room_id: &str,
+            user_ids: &Vec<String>,
+            display_names: &Vec<String>,
+            kinds: &Vec<u8>,
+        );
+
         /// Fired when a presence event arrives for `user_id`. `state` encodes:
         ///   1 = Online  2 = Unavailable  3 = Offline
         fn on_presence_changed(self: &EventHandlerBridge, user_id: &str, state: u8);
@@ -1891,6 +1916,13 @@ pub mod ffi {
 
         fn install_rust_panic_hook(crash_file: &str, enabled: bool);
         fn set_rust_crash_reporting_enabled(enabled: bool);
+
+        // ----- MSC4153 exclude-insecure-devices mode -----
+
+        /// Share room keys only with cross-signed devices and hide messages
+        /// from devices that aren't. Process-wide, read when a client is
+        /// built: call before `restore_session` / `oauth_begin`.
+        fn set_exclude_insecure_devices(enabled: bool);
 
         // ----- Local waveform generation -----
 
@@ -2458,8 +2490,11 @@ pub mod ffi {
         ) -> OpResult;
 
         /// Re-enable the send queue for `room_id` after a recoverable failure.
-        /// The SDK automatically retries all pending sends.
-        fn retry_send(self: &ClientFfi, room_id: &str) -> OpResult;
+        /// The SDK automatically retries all pending sends. When `txn_id` is
+        /// non-empty that local echo is also unwedged first, which is what a
+        /// send blocked by an encryption check (see `pending_error`) needs
+        /// once the user has resolved it.
+        fn retry_send(self: &ClientFfi, room_id: &str, txn_id: &str) -> OpResult;
 
         /// Abort a pending local echo identified by `txn_id` in `room_id`.
         fn abort_send(self: &ClientFfi, room_id: &str, txn_id: &str) -> OpResult;
@@ -3924,6 +3959,26 @@ pub mod ffi {
         /// When one accepts, `on_verification_request` fires with
         /// `incoming = false` and the UI should call `start_sas`.
         fn request_self_verification(self: &ClientFfi) -> OpResult;
+
+        /// Request verification of another user's cross-signing identity,
+        /// sent in the DM shared with them (created if missing). On success
+        /// `message` is the flow id; `on_verification_request` fires with
+        /// `incoming = false` once they accept. Blocks — worker thread.
+        fn request_user_verification(self: &ClientFfi, user_id: &str) -> OpResult;
+
+        /// Trust in `user_id`'s identity: 0 = unknown (no identity), 1 = not
+        /// verified, 2 = verified, 3 = verified but reset since. Blocks —
+        /// worker thread.
+        fn get_user_trust(self: &ClientFfi, user_id: &str) -> u8;
+
+        /// Accept `user_id`'s changed identity (pin the new one) after the
+        /// identity-change warning. Blocks — worker thread.
+        fn pin_user_identity(self: &ClientFfi, user_id: &str) -> OpResult;
+
+        /// Withdraw verification of `user_id` whose identity changed after
+        /// being verified; the new identity becomes pinned. Blocks — worker
+        /// thread.
+        fn withdraw_user_verification(self: &ClientFfi, user_id: &str) -> OpResult;
 
         /// Accept an incoming verification request identified by `flow_id`.
         /// Call after receiving `on_verification_request(incoming=true)`.

@@ -215,6 +215,13 @@ public:
     void on_typing_changed(rust::Str room_id,
                            const rust::Vec<rust::String>& user_ids) const;
 
+    void on_user_identities_changed(const rust::Vec<rust::String>& user_ids) const;
+
+    void on_identity_status_changed(rust::Str room_id,
+                                    const rust::Vec<rust::String>& user_ids,
+                                    const rust::Vec<rust::String>& display_names,
+                                    const rust::Vec<std::uint8_t>& kinds) const;
+
     void on_presence_changed(rust::Str user_id, std::uint8_t state) const;
 
     /// Thread-timeline callbacks — mirror of the four room-timeline callbacks

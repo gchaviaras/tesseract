@@ -101,6 +101,12 @@ public:
     {
         pane_->on_typing_changed(text, visible);
     }
+    void on_identity_status_changed(
+        const std::string& room_id,
+        const std::vector<tesseract::IdentityWarning>& warnings)
+    {
+        pane_->on_identity_status_changed(room_id, warnings);
+    }
 
     // Thread view delivery — called by ShellBase when SDK events arrive for
     // the thread this pop-out has open (popout_thread_root() matches).

@@ -1232,4 +1232,35 @@ enum class RoomListState : uint8_t
     Terminated = 5,
 };
 
+/// How far another user's cross-signing identity is trusted
+/// (`Client::get_user_trust`). Mirrors the u8 codes in sdk/src/client/identity.rs.
+enum class UserTrust : uint8_t
+{
+    Unknown = 0,               ///< no cross-signing identity known
+    NotVerified = 1,
+    Verified = 2,
+    VerificationViolation = 3, ///< was verified; identity reset since
+};
+
+/// A room member whose cryptographic identity changed (MSC4153 identity
+/// pinning). Delivered as a room's full current set via
+/// `IEventHandler::on_identity_status_changed`.
+struct IdentityWarning
+{
+    enum class Kind : uint8_t
+    {
+        /// The identity differs from the one first seen for this user.
+        /// Acknowledge with `Client::pin_user_identity`.
+        Changed = 1,
+        /// The identity changed after this user was verified. Blocks
+        /// sending in exclude-insecure-devices mode until resolved with
+        /// `Client::withdraw_user_verification`.
+        VerificationBroken = 2,
+    };
+
+    std::string user_id;
+    std::string display_name; // may be empty
+    Kind        kind = Kind::Changed;
+};
+
 } // namespace tesseract

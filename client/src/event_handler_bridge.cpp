@@ -1037,6 +1037,45 @@ void EventHandlerBridge::on_typing_changed(
           });
 }
 
+void EventHandlerBridge::on_user_identities_changed(
+    const rust::Vec<rust::String>& user_ids) const
+{
+    with_handler("on_user_identities_changed", slot_,
+          [&](tesseract::IEventHandler* handler_)
+          {
+              std::vector<std::string> ids;
+              ids.reserve(user_ids.size());
+              for (const auto& uid : user_ids)
+                  ids.push_back(std::string(uid));
+              handler_->on_user_identities_changed(ids);
+          });
+}
+
+void EventHandlerBridge::on_identity_status_changed(
+    rust::Str room_id, const rust::Vec<rust::String>& user_ids,
+    const rust::Vec<rust::String>& display_names,
+    const rust::Vec<std::uint8_t>& kinds) const
+{
+    with_handler("on_identity_status_changed", slot_,
+          [&](tesseract::IEventHandler* handler_)
+          {
+              std::vector<tesseract::IdentityWarning> warnings;
+              warnings.reserve(user_ids.size());
+              for (std::size_t i = 0; i < user_ids.size(); ++i)
+              {
+                  tesseract::IdentityWarning w;
+                  w.user_id = std::string(user_ids[i]);
+                  if (i < display_names.size())
+                      w.display_name = std::string(display_names[i]);
+                  if (i < kinds.size() && kinds[i] == 2)
+                      w.kind = tesseract::IdentityWarning::Kind::VerificationBroken;
+                  warnings.push_back(std::move(w));
+              }
+              handler_->on_identity_status_changed(std::string(room_id),
+                                                   warnings);
+          });
+}
+
 void EventHandlerBridge::on_presence_changed(rust::Str user_id,
                                              std::uint8_t state) const
 {

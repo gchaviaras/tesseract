@@ -538,6 +538,25 @@ public:
     {
     }
 
+    /// Fired when the stored cross-signing identity of these users changed
+    /// (keys downloaded, a verification signature arrived, a reset). Re-read
+    /// `Client::get_user_trust` for any user being shown. Called on a
+    /// background thread.
+    virtual void on_user_identities_changed(const std::vector<std::string>& /*user_ids*/)
+    {
+    }
+
+    /// Fired while an encrypted room is subscribed, with the room's full
+    /// current set of members whose identity changed. Empty means no
+    /// warning. The first call after subscribing only happens when the set
+    /// is non-empty, so clear any shown warning on room switch. Called on a
+    /// background thread.
+    virtual void on_identity_status_changed(
+        const std::string& /*room_id*/,
+        const std::vector<IdentityWarning>& /*warnings*/)
+    {
+    }
+
     /// Called when a presence event is received for `user_id`.
     /// `state` reflects the user's current presence state.
     /// Called on a background thread.

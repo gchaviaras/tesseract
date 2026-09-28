@@ -41,6 +41,12 @@ public:
     bool awaiting_outgoing() const { return awaiting_outgoing_; }
     void set_awaiting_outgoing(bool v) { awaiting_outgoing_ = v; }
 
+    // Who our last outgoing request went to: empty for our own devices,
+    // otherwise another user. Survives clear() so "Try again" after a
+    // cancel re-asks the same party.
+    const std::string& outgoing_target() const { return outgoing_target_; }
+    void set_outgoing_target(std::string user_id) { outgoing_target_ = std::move(user_id); }
+
     // ── Incoming requests ───────────────────────────────────────────────────
     enum class IncomingAction
     {
@@ -73,6 +79,7 @@ public:
 private:
     Flow flow_;
     bool awaiting_outgoing_ = false;
+    std::string outgoing_target_;
 };
 
 } // namespace tesseract

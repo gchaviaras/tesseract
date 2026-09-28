@@ -295,6 +295,16 @@ pub(crate) async fn build_configured_client(
             auto_enable_backups: true,
             ..Default::default()
         })
+        // MSC4153 "exclude insecure devices" (opt-in, Settings → Privacy):
+        // share room keys only with cross-signed devices and hide messages
+        // from devices that aren't. Read once here, so a toggle applies from
+        // the next account start.
+        .with_room_key_recipient_strategy(crate::client::identity::room_key_recipient_strategy(
+            crate::client::identity::exclude_insecure_devices(),
+        ))
+        .with_decryption_settings(crate::client::identity::decryption_settings(
+            crate::client::identity::exclude_insecure_devices(),
+        ))
         // matrix-sdk's room event cache only routes sync'd thread events to
         // per-thread linked chunks (which our focused thread Timeline
         // subscribes to) when threading support is enabled. Without this,

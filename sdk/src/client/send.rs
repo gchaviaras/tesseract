@@ -652,17 +652,43 @@ impl ClientFfi {
     }
 
     #[cfg(not(test))]
-    pub fn retry_send(&self, room_id: &str) -> OpResult {
+    pub fn retry_send(&self, room_id: &str, txn_id: &str) -> OpResult {
         let Some(client) = self.client.clone() else {
             return err("not logged in");
         };
-        let (_, room) = try_op!(require_room(&client, room_id));
+        let (parsed_room_id, room) = try_op!(require_room(&client, room_id));
+        if !txn_id.is_empty() {
+            let timeline = self
+                .timelines
+                .read()
+                .get(&parsed_room_id)
+                .map(|h| Arc::clone(&h.timeline));
+            if let Some(timeline) = timeline {
+                let txn_id = txn_id.to_owned();
+                let unwedged = self.rt.block_on(async move {
+                    let items = timeline.items().await;
+                    let handle = items.iter().find_map(|it| {
+                        let ev = it.as_event()?;
+                        (ev.transaction_id().map(|t| t.as_str()) == Some(txn_id.as_str()))
+                            .then(|| ev.local_echo_send_handle())
+                            .flatten()
+                    });
+                    match handle {
+                        Some(h) => h.unwedge().await.map_err(|e| e.to_string()),
+                        None => Ok(()),
+                    }
+                });
+                if let Err(e) = unwedged {
+                    return err(e);
+                }
+            }
+        }
         room.send_queue().set_enabled(true);
         ok("")
     }
 
     #[cfg(test)]
-    pub fn retry_send(&self, _room_id: &str) -> OpResult {
+    pub fn retry_send(&self, _room_id: &str, _txn_id: &str) -> OpResult {
         ok("")
     }
 

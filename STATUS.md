@@ -1,6 +1,30 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-09-28**. 2031 C++ + 756 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-09-28**. 2032 C++ + 763 Rust tests.
+
+> **User verification (2026-09-28, v0.9.0).**
+> A user's profile shows whether you've verified them, with a "Verify"
+> button that runs SAS verification in the encryption dialog (requests go
+> in-room through the DM, created if needed) and "Withdraw verification"
+> once a verified identity was reset. In-room verification requests from
+> other users are now received. The button is disabled until this device
+> is verified, and the row updates as the user's identity changes. Windows
+> build; ctest 2032/2032, cargo 763/763; user-verified live on Windows.
+> Qt6/GTK4/macOS unbuilt.
+
+<!-- -->
+
+> **Exclude insecure devices (MSC4153) (2026-09-28, v0.9.0).**
+> An opt-in setting (Settings → Privacy → Encryption, applies after
+> restart) shares room keys, including call keys, only with devices their
+> owner cross-signed, and hides messages from devices that aren't. In
+> encrypted rooms, a banner warns when a member's identity is reset ("OK"
+> accepts it, "Withdraw verification" for a verified user), and messages
+> held back by an encryption check offer Retry. Windows build; ctest
+> 2030/2032, cargo 758/759 (failures in unrelated tests); user-verified
+> live on Windows. Qt6/GTK4/macOS unbuilt.
+
+<!-- -->
 
 > **SAS decimal verification (MSC4405) (2026-09-28, v0.9.0).**
 > The verification step shows the spec's `decimal` numbers first, since

@@ -2580,6 +2580,14 @@ protected:
     void refresh_other_device_availability_();
     // Broadcast a self-verification request to our other devices (async).
     void start_self_verification_();
+    // Ask another user to verify (their identity, via the DM; async), opening
+    // the encryption dialog on its waiting step. `name` is shown in it.
+    void start_user_verification_(const std::string& user_id, const std::string& name);
+    // Send the request to encryption_flow_.outgoing_target() (async); the
+    // shared body of the two above and of "Try again".
+    void start_outgoing_verification_();
+    // Read `user_id`'s trust (async) into `panel` if it still shows them.
+    void refresh_profile_trust_(views::UserProfilePanel* panel, const std::string& user_id);
     // Cancel the in-progress interactive verification, if any (async).
     void cancel_active_verification_();
     // Wall-clock seconds since the epoch, for the reminder snooze. Virtual so
@@ -4397,6 +4405,16 @@ protected:
     // formats the display text, and calls update_typing_bar_.
     void handle_typing_changed_ui_(std::string room_id,
                                    std::vector<std::string> names);
+
+    // Routes a room's identity-change warnings (MSC4153 pinning) to every
+    // pane showing that room. UI thread, called by EventHandlerBase.
+    void handle_identity_status_changed_ui_(
+        std::string room_id, std::vector<tesseract::IdentityWarning> warnings);
+
+    // Re-reads the open profile's trust row when its user's identity changed
+    // (e.g. the signature from a just-finished verification arrived). UI
+    // thread, called by EventHandlerBase.
+    void handle_user_identities_changed_ui_(std::vector<std::string> user_ids);
     // Override in each shell to push text into the platform typing-bar widget.
     // text is empty when no one is typing.
     virtual void update_typing_bar_(const std::string& /*text*/,

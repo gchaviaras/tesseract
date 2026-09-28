@@ -187,6 +187,10 @@ public:
     void on_recovery_state_changed(std::uint8_t state) override;
     void on_typing_changed(const std::string& room_id,
                            const std::vector<std::string>& names) override;
+    void on_identity_status_changed(
+        const std::string& room_id,
+        const std::vector<IdentityWarning>& warnings) override;
+    void on_user_identities_changed(const std::vector<std::string>& user_ids) override;
     void on_presence_changed(const std::string& user_id,
                              PresenceState state) override;
 

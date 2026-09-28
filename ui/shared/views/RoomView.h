@@ -40,6 +40,7 @@
 #include "media_drop.h"
 #include "CallOverlayWidget.h"
 #include "CallBanner.h"
+#include "IdentityChangeBanner.h"
 #include "CallLobbyView.h"
 
 #include "tk/audio.h"
@@ -407,6 +408,13 @@ public:
     void set_call_banner_avatar_provider(CallBanner::AvatarProvider p);
     // Returns true while the call banner is visible.
     bool call_banner_visible() const;
+
+    // Identity-change warnings (MSC4153 pinning) for the shown room. An empty
+    // set hides the strip. The shell clears it on room switch.
+    void set_identity_warnings(std::vector<tesseract::IdentityWarning> warnings);
+    // Fired when the user clicks the strip's button for `w`: pin the new
+    // identity (Kind::Changed) or withdraw verification (VerificationBroken).
+    std::function<void(const tesseract::IdentityWarning& w)> on_resolve_identity_warning;
 
     // Fired when the user answers (banner or header button). The shell calls
     // ShellBase::start_call(room_id, slot_id, audio_only).
@@ -899,6 +907,9 @@ private:
     // Call-in-progress banner — created in constructor (hidden), driven by
     // set_call_banner() / clear_call_banner().
     CallBanner* call_banner_ = nullptr;
+    // Identity-change strip — created in constructor (hidden), driven by
+    // set_identity_warnings().
+    IdentityChangeBanner* identity_banner_ = nullptr;
     // Docked call panel — lazily created by mount_call_panel(), removed by
     // unmount_call_panel(). nullptr when no call is active.
     views::CallOverlayWidget* call_panel_ = nullptr;

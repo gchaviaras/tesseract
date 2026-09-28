@@ -93,7 +93,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 
 ### Security & privacy
 
-- End-to-end encryption with SAS device verification (numbers, plus emoji when the other device offers them)
+- End-to-end encryption with SAS verification of your own devices and of other users (numbers, plus emoji when the other side offers them)
 - Key backup recovery and room-key export / import
 - Initial encryption setup for new accounts
 - OS-native secure credential storage on every platform
@@ -179,6 +179,7 @@ Change proposals where the homeserver advertises support for them:
 - [MSC4133](https://github.com/matrix-org/matrix-spec-proposals/pull/4133) — extended profile fields: pronouns ([MSC4247](https://github.com/matrix-org/matrix-spec-proposals/pull/4247), multi-language), timezone ([MSC4175](https://github.com/matrix-org/matrix-spec-proposals/pull/4175)), and biography ([MSC4440](https://github.com/matrix-org/matrix-spec-proposals/pull/4440)); your own profile updates live when edited on another device via the [MSC4262](https://github.com/matrix-org/matrix-spec-proposals/pull/4262) sliding-sync profiles extension (Synapse: enable `include_profile_updates_in_sync`)
 - [MSC4426](https://github.com/matrix-org/matrix-spec-proposals/pull/4426) — user status profile fields: a self-set emoji + text status, plus an automatic "in a call" indicator published while you're in a MatrixRTC call
 - [MSC4108](https://github.com/matrix-org/matrix-spec-proposals/pull/4108) — QR-code login
+- [MSC4153](https://github.com/matrix-org/matrix-spec-proposals/pull/4153) — "exclude insecure devices" *(opt-in setting)*: room keys go only to cross-signed devices, messages from devices that aren't cross-signed are hidden, and encrypted rooms warn when a member's identity is reset
 - [MSC4405](https://github.com/matrix-org/matrix-spec-proposals/pull/4405) — SAS verification compares the `decimal` numbers first; emoji are shown only as a secondary check, and a decimal-only peer works
 - [MSC4391](https://github.com/matrix-org/matrix-spec-proposals/pull/4391) — in-room bot commands
 - [MSC4278](https://github.com/matrix-org/matrix-spec-proposals/pull/4278) — media preview gating

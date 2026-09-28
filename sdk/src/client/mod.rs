@@ -16,6 +16,7 @@ mod bot_commands;
 mod crypto_reset;
 pub(crate) mod gif;
 mod history_export;
+pub(crate) mod identity;
 mod image_packs;
 mod knock;
 pub(crate) mod legacy_login_ffi;

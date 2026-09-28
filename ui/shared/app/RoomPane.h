@@ -256,6 +256,11 @@ public:
     void on_message_updated(std::size_t idx, views::MessageRowData row);
     void on_message_removed(std::size_t idx);
     void on_typing_changed(const std::string& text, bool visible);
+    // The room's current identity-change warnings (MSC4153 pinning); ignored
+    // unless `room_id` is the room this pane shows.
+    void on_identity_status_changed(
+        const std::string& room_id,
+        const std::vector<tesseract::IdentityWarning>& warnings);
 
     // Thread view delivery — called by the owner when SDK events arrive for
     // the thread this pane has open (thread_root() matches).
@@ -457,6 +462,8 @@ public:
     void send_typing_notice_(bool typing);
     void retry_send_(const std::string& txn_id);
     void abort_send_(const std::string& txn_id);
+    // Pin the changed identity or withdraw verification, per `w.kind`.
+    void resolve_identity_warning_(const tesseract::IdentityWarning& w);
     void pin_event_(const std::string& event_id);
     void unpin_event_(const std::string& event_id);
     // Resolve/create a DM with user_id, then open (or focus) a SEPARATE

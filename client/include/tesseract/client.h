@@ -292,6 +292,12 @@ public:
 
     static bool open_in_browser(const std::string& url);
 
+    /// MSC4153 "exclude insecure devices" mode, process-wide: share room
+    /// keys only with cross-signed devices and hide messages from devices
+    /// that aren't. Read when a client restores or logs in, so set it from
+    /// the persisted setting before any account starts.
+    static void set_exclude_insecure_devices(bool enabled);
+
     /// Parsed representation of a `https://matrix.to/#/…` URL or a
     /// `matrix:` URI (MSC2312).  `kind == Unknown` for unrecognised input.
     struct MatrixLink
@@ -636,7 +642,10 @@ public:
                             const std::string& arguments_json);
 
     /// Re-enable the send queue for `room_id` after a recoverable failure.
-    Result retry_send(const std::string& room_id);
+    /// A non-empty `txn_id` also unwedges that local echo, for a send that
+    /// an encryption check blocked (`pending_error` "identity_violation" /
+    /// "insecure_devices" / "own_verification_required").
+    Result retry_send(const std::string& room_id, const std::string& txn_id);
 
     /// Abort the pending local echo with `txn_id` in `room_id`.
     Result abort_send(const std::string& room_id, const std::string& txn_id);
@@ -2183,6 +2192,27 @@ public:
     // On success, `message` is the new flow id (so a decline / timeout before
     // any device accepts can be matched to it).
     Result request_self_verification();
+
+    /// Request verification of another user's identity. The request goes to
+    /// the DM shared with them (created if missing). On success `message` is
+    /// the flow id; `IEventHandler::on_verification_request(incoming=false)`
+    /// fires once they accept. Needs this device verified (it signs their
+    /// key). Blocks — worker thread.
+    Result request_user_verification(const std::string& user_id);
+
+    /// Trust in `user_id`'s cross-signing identity. Reads the local crypto
+    /// store, downloading the user's keys once when not yet tracked.
+    /// Blocks — worker thread.
+    UserTrust get_user_trust(const std::string& user_id);
+
+    /// Accept `user_id`'s changed identity (IdentityWarning::Kind::Changed).
+    /// Blocks — worker thread.
+    Result pin_user_identity(const std::string& user_id);
+
+    /// Withdraw verification of `user_id` after their identity changed while
+    /// verified (IdentityWarning::Kind::VerificationBroken). Blocks — worker
+    /// thread.
+    Result withdraw_user_verification(const std::string& user_id);
 
     /// Accept an incoming verification request identified by `flow_id`.
     /// Call this when the UI is in IncomingRequest state and the user taps

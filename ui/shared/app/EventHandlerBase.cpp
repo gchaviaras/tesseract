@@ -890,6 +890,27 @@ void EventHandlerBase::on_typing_changed(const std::string& room_id,
         });
 }
 
+void EventHandlerBase::on_user_identities_changed(const std::vector<std::string>& user_ids)
+{
+    shell()->post_to_ui_(
+        [shell = shell(), uid = user_id_, ids = user_ids]() mutable
+        {
+            ShellBase::EventAccountScope scope(*shell, uid);
+            shell->handle_user_identities_changed_ui_(std::move(ids));
+        });
+}
+
+void EventHandlerBase::on_identity_status_changed(
+    const std::string& room_id, const std::vector<IdentityWarning>& warnings)
+{
+    shell()->post_to_ui_(
+        [shell = shell(), uid = user_id_, rid = room_id, ws = warnings]() mutable
+        {
+            ShellBase::EventAccountScope scope(*shell, uid);
+            shell->handle_identity_status_changed_ui_(std::move(rid), std::move(ws));
+        });
+}
+
 void EventHandlerBase::on_upload_complete(std::uint64_t request_id, bool ok,
                                            const std::string& message)
 {

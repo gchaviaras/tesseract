@@ -1932,10 +1932,11 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
         ml->set_sticker_image_provider(make_sticker_image_provider_());
     // MSC4278: gate inline media behind the media-preview config + reveal set.
     wire_media_preview_gating_(app->room_view()->message_list());
-    // Retry/abort a failed outgoing message's hover actions are wired by
-    // main_room_pane_->attach() (RoomPane::wire_room_view_), called before
-    // this function on every shell — do not re-wire on_retry_send/
-    // on_abort_send here, it would silently clobber RoomPane's handlers.
+    // Retry/abort a failed outgoing message's hover actions (and the
+    // identity-change banner) are wired by main_room_pane_->attach()
+    // (RoomPane::wire_room_view_), called before this function on every
+    // shell — do not re-wire on_retry_send/on_abort_send here, it would
+    // silently clobber RoomPane's handlers.
     if (auto* ml = app->room_view()->message_list())
     {
         ml->on_video_thumbnail_needed =
@@ -5218,6 +5219,14 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     {
         handle_send_maps_urls_as_location_toggle_(enabled);
     };
+    view->on_exclude_insecure_devices_changed = [](bool enabled)
+    {
+        // Persist only: the mode is read when a client is built, so it
+        // applies from the next launch (see Settings::exclude_insecure_devices).
+        auto& s = tesseract::Settings::instance();
+        s.exclude_insecure_devices = enabled;
+        s.save_to_disk(tesseract::config_dir());
+    };
     view->on_bundled_url_previews_changed = [this](bool enabled, bool direct)
     {
         handle_bundled_url_previews_toggle_(enabled, direct);
@@ -5699,7 +5708,49 @@ void ShellBase::setup_dm_callbacks()
         {
             ensure_viewer_fullres_(mxc);
         };
+
+        // Encryption trust row (user verification).
+        panel->on_trust_requested = [this, panel](std::string user_id)
+        {
+            refresh_profile_trust_(panel, user_id);
+        };
+        panel->on_verify_user = [this](std::string user_id, std::string name)
+        {
+            start_user_verification_(user_id, name);
+        };
+        panel->on_withdraw_verification = [this, panel](std::string user_id)
+        {
+            auto sess = active_account_;
+            run_async_mut_([this, sess, panel, user_id]() {
+                if (!sess || !sess->client) return;
+                auto r = sess->client->withdraw_user_verification(user_id);
+                post_to_ui_alive_([this, panel, user_id, ok = r.ok, msg = r.message]() {
+                    if (!ok)
+                        show_status_message_(tk::trf(
+                            tk::tr("Couldn't update the identity: {0}"), {msg}));
+                    refresh_profile_trust_(panel, user_id);
+                });
+            });
+        };
     }
+}
+
+void ShellBase::refresh_profile_trust_(views::UserProfilePanel* panel,
+                                       const std::string& user_id)
+{
+    auto sess = active_account_;
+    if (!panel || !sess || user_id.empty()) return;
+    run_async_([this, sess, panel, user_id]() {
+        if (!sess || !sess->client) return;
+        const auto trust = sess->client->get_user_trust(user_id);
+        post_to_ui_alive_([this, panel, user_id, trust]() {
+            // The panel lives as long as room_view_; it may have moved on to
+            // another user (or closed) while the store was read.
+            if (!panel->is_open() || panel->user_id() != user_id) return;
+            panel->set_trust(trust, read_device_verified_());
+            request_relayout_();
+        });
+    });
 }
 
 void ShellBase::handle_open_dm_(const std::string& user_id, const std::string& reason)
@@ -10892,6 +10943,30 @@ void ShellBase::handle_typing_changed_ui_(std::string room_id,
                                    });
 }
 
+void ShellBase::handle_identity_status_changed_ui_(
+    std::string room_id, std::vector<tesseract::IdentityWarning> warnings)
+{
+    if (main_window_shows_(room_id) && main_room_pane_)
+    {
+        main_room_pane_->on_identity_status_changed(room_id, warnings);
+    }
+    dispatch_to_secondary_windows_(room_id,
+                                   [&](RoomWindowBase* w)
+                                   {
+                                       w->on_identity_status_changed(room_id,
+                                                                     warnings);
+                                   });
+}
+
+void ShellBase::handle_user_identities_changed_ui_(std::vector<std::string> user_ids)
+{
+    if (!event_is_for_active_account_() || !room_view_) return;
+    auto* panel = room_view_->user_profile_panel();
+    if (!panel || !panel->is_open()) return;
+    if (std::find(user_ids.begin(), user_ids.end(), panel->user_id()) != user_ids.end())
+        refresh_profile_trust_(panel, panel->user_id());
+}
+
 void ShellBase::handle_presence_changed_ui_(const std::string& user_id,
                                             PresenceState state)
 {
@@ -13693,7 +13768,7 @@ void ShellBase::wire_encryption_setup_callbacks_(
     // its waiting step. A gated first sync stays gated — the encryption-only
     // presync (Client::start_encryption_sync) carries the to-device traffic.
     ov.on_request_sas = [this]() { start_self_verification_(); };
-    ov.on_retry_verification = [this]() { start_self_verification_(); };
+    ov.on_retry_verification = [this]() { start_outgoing_verification_(); };
 
     ov.on_cancel_verification = [this]() { cancel_active_verification_(); };
 
@@ -14006,13 +14081,40 @@ void ShellBase::refresh_other_device_availability_()
 
 void ShellBase::start_self_verification_()
 {
+    encryption_flow_.set_outgoing_target({});
+    start_outgoing_verification_();
+}
+
+void ShellBase::start_user_verification_(const std::string& user_id,
+                                         const std::string& name)
+{
+    if (user_id.empty() || !main_app_) return;
+    auto* ov = main_app_->encryption_setup();
+    if (!ov) return;
+    if (encryption_flow_.has_flow() || (ov->visible() && ov->busy()))
+    {
+        show_status_message_(tk::tr("Finish the current verification first."));
+        return;
+    }
+    if (!ov->visible())
+        show_encryption_setup_overlay_(views::EncryptionSetupOverlay::Mode::Verify);
+    ov->show_outgoing_user_request(name.empty() ? user_id : name);
+    request_relayout_();
+    encryption_flow_.set_outgoing_target(user_id);
+    start_outgoing_verification_();
+}
+
+void ShellBase::start_outgoing_verification_()
+{
+    const std::string target = encryption_flow_.outgoing_target();
     encryption_flow_.clear();
     encryption_flow_.set_awaiting_outgoing(true);
     auto sess = active_account_;
-    run_async_mut_([this, sess]() {
+    run_async_mut_([this, sess, target]() {
         if (!sess || !sess->client) return;
-        auto r = sess->client->request_self_verification();
-        post_to_ui_alive_([this, sess, ok = r.ok, msg = std::string(r.message)]() {
+        auto r = target.empty() ? sess->client->request_self_verification()
+                                : sess->client->request_user_verification(target);
+        post_to_ui_alive_([this, sess, target, ok = r.ok, msg = std::string(r.message)]() {
             if (sess != active_account_)
             {
                 // Switched away while it was being sent: don't leave it
@@ -14042,8 +14144,9 @@ void ShellBase::start_self_verification_()
             // Track the request from now on, not only once a device accepts:
             // a decline or timeout arrives as a cancel for this id before any
             // Ready does.
-            encryption_flow_.begin({.id = msg, .user_id = my_user_id_,
-                                    .incoming = false, .own_user = true,
+            encryption_flow_.begin({.id = msg,
+                                    .user_id = target.empty() ? my_user_id_ : target,
+                                    .incoming = false, .own_user = target.empty(),
                                     .this_device_unverified = !read_device_verified_()});
         });
     });
@@ -14187,6 +14290,11 @@ void ShellBase::handle_verification_done_ui_(std::string flow_id)
 
     if (auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr; ov && ov->visible())
         ov->verification_done(kind);
+    // A just-verified user's open profile should say so.
+    if (!flow.own_user && room_view_)
+        if (auto* panel = room_view_->user_profile_panel();
+            panel && panel->is_open() && panel->user_id() == flow.user_id)
+            refresh_profile_trust_(panel, flow.user_id);
     refresh_encryption_reminder_();
     request_relayout_();
 }

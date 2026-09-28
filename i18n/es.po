@@ -5010,3 +5010,59 @@ msgstr "Mensaje no enviado: {0}"
 #: ui/shared/app/RoomPane.cpp
 msgid "Command failed: {0}"
 msgstr "Error en el comando: {0}"
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0} ({1})"
+msgstr "{0} ({1})"
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0}'s verified identity was reset."
+msgstr "Se restableció la identidad verificada de {0}."
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0}'s identity was reset."
+msgstr "Se restableció la identidad de {0}."
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "Withdraw verification"
+msgstr "Retirar la verificación"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't update the identity: {0}"
+msgstr "No se pudo actualizar la identidad: {0}"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Exclude insecure devices (takes effect after restart)"
+msgstr "Excluir dispositivos inseguros (se aplica tras reiniciar)"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Only send encrypted messages to devices their owner has verified, and hide messages sent from devices that aren't. This device must be verified to send, and people whose clients don't verify their devices won't see your messages."
+msgstr "Envía mensajes cifrados solo a los dispositivos que su propietario haya verificado y oculta los mensajes enviados desde dispositivos que no lo estén. Este dispositivo debe estar verificado para enviar, y las personas cuyos clientes no verifican sus dispositivos no verán tus mensajes."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Check that {0} sees the same numbers in the same order."
+msgstr "Comprueba que {0} ve los mismos números en el mismo orden."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Finish the current verification first."
+msgstr "Termina primero la verificación en curso."
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Not verified"
+msgstr "No verificado"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Not verified · verify this device first"
+msgstr "No verificado · verifica primero este dispositivo"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Verified identity was reset"
+msgstr "Se restableció la identidad verificada"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Waiting for {0}"
+msgstr "Esperando a {0}"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "{0} needs to accept the verification request in their Matrix app."
+msgstr "{0} tiene que aceptar la solicitud de verificación en su aplicación de Matrix."

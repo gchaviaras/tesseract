@@ -231,6 +231,31 @@ impl ClientFfi {
     /// when one device accepts; the UI should then call `start_sas(flow_id)`.
     #[cfg(not(test))]
     pub fn request_self_verification(&self) -> OpResult {
+        self.request_verification_of(None)
+    }
+
+    /// Request verification of another user's cross-signing identity.
+    /// matrix-sdk sends the request in the DM shared with them, creating the
+    /// DM when there is none. On success the result's message is the flow id
+    /// (the request event's id); `on_verification_request(incoming=false)`
+    /// fires once they accept.
+    #[cfg(not(test))]
+    pub fn request_user_verification(&self, user_id: &str) -> OpResult {
+        if user_id.is_empty() {
+            return err("empty user id");
+        }
+        self.request_verification_of(Some(user_id))
+    }
+
+    #[cfg(test)]
+    pub fn request_user_verification(&self, _user_id: &str) -> OpResult {
+        err("not logged in")
+    }
+
+    /// Shared body of the two request functions: `target` is the other user,
+    /// or `None` for our own identity (every other device of ours).
+    #[cfg(not(test))]
+    fn request_verification_of(&self, target: Option<&str>) -> OpResult {
         let Some(client) = self.client.clone() else {
             return err("not logged in");
         };
@@ -249,23 +274,28 @@ impl ClientFfi {
             "verification/start".to_string(),
         );
 
+        let target = target.map(str::to_owned);
         match self.rt.block_on(async move {
-            let user_id = client
-                .user_id()
-                .ok_or_else(|| anyhow::anyhow!("not logged in"))?
-                .to_owned();
-            // Use the user identity (not the own device) so the request is
+            let user_id = match target {
+                Some(t) => matrix_sdk::ruma::OwnedUserId::try_from(t.as_str())?,
+                None => client
+                    .user_id()
+                    .ok_or_else(|| anyhow::anyhow!("not logged in"))?
+                    .to_owned(),
+            };
+            // Use the user identity (not a device) so a self-request is
             // broadcast to all other E2EE sessions — not looped back to this
-            // device, which would show an unwanted incoming-request banner.
+            // device, which would show an unwanted incoming-request banner —
+            // and another user's goes to the DM we share with them.
             let identity = client
                 .encryption()
                 .get_user_identity(&user_id)
                 .await?
-                .ok_or_else(|| anyhow::anyhow!("own identity not found"))?;
+                .ok_or_else(|| anyhow::anyhow!("no cross-signing identity for this user"))?;
             let req = identity.request_verification().await?;
 
             let flow_id = req.flow_id().to_owned();
-            let user_id = req.own_user_id().as_str().to_owned();
+            let user_id = req.other_user_id().as_str().to_owned();
             lock_or_recover(&flow_users).insert(flow_id.clone(), user_id);
             let reported_flow_id = flow_id.clone();
 
@@ -520,5 +550,49 @@ mod tests {
             .map(|e| (e.symbol.as_str(), e.description.as_str()))
             .collect();
         assert_eq!(got, vec![("🐶", "Dog"), ("🐱", "Cat")]);
+    }
+}
+
+/// matrix-sdk ignores verification requests older than this (spec: 10 min).
+const VERIFICATION_REQUEST_MAX_AGE_SECS: u64 = 10 * 60;
+
+/// Whether an in-room m.key.verification.request should be surfaced: sent
+/// to us by someone else, and recent enough to still be answerable (sync
+/// also replays old requests from room history).
+pub(super) fn is_live_in_room_request_for(
+    me: &matrix_sdk::ruma::UserId,
+    sender: &matrix_sdk::ruma::UserId,
+    to: &matrix_sdk::ruma::UserId,
+    sent_secs: u64,
+    now_secs: u64,
+) -> bool {
+    to == me
+        && sender != me
+        && now_secs.saturating_sub(sent_secs) < VERIFICATION_REQUEST_MAX_AGE_SECS
+}
+
+#[cfg(test)]
+mod in_room_request_tests {
+    use super::is_live_in_room_request_for;
+    use matrix_sdk::ruma::user_id;
+
+    #[test]
+    fn accepts_recent_request_addressed_to_us() {
+        let me = user_id!("@me:x.org");
+        assert!(is_live_in_room_request_for(me, user_id!("@a:x.org"), me, 1_000, 1_060));
+    }
+
+    #[test]
+    fn rejects_request_for_someone_else_or_from_us() {
+        let me = user_id!("@me:x.org");
+        let other = user_id!("@a:x.org");
+        assert!(!is_live_in_room_request_for(me, other, user_id!("@b:x.org"), 1_000, 1_000));
+        assert!(!is_live_in_room_request_for(me, me, me, 1_000, 1_000));
+    }
+
+    #[test]
+    fn rejects_expired_request() {
+        let me = user_id!("@me:x.org");
+        assert!(!is_live_in_room_request_for(me, user_id!("@a:x.org"), me, 0, 601));
     }
 }

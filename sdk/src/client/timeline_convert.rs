@@ -132,6 +132,20 @@ pub(crate) fn utd_message_for_cause(
     }
 }
 
+/// Machine-readable `pending_error` for a local echo that matrix-sdk parked
+/// because of an MSC4153 encryption check, or `None` for any other failure.
+/// The C++ side translates these codes.
+#[cfg(not(test))]
+fn crypto_send_block_code(error: &matrix_sdk::Error) -> Option<&'static str> {
+    use matrix_sdk_base::store::QueueWedgeError;
+    match QueueWedgeError::from(error) {
+        QueueWedgeError::IdentityViolations { .. } => Some("identity_violation"),
+        QueueWedgeError::InsecureDevices { .. } => Some("insecure_devices"),
+        QueueWedgeError::CrossVerificationRequired => Some("own_verification_required"),
+        _ => None,
+    }
+}
+
 #[cfg(not(test))]
 pub(super) async fn collect_reactions(
     event_item: &matrix_sdk_ui::timeline::EventTimelineItem,
@@ -783,7 +797,13 @@ pub(super) async fn timeline_item_to_ffi(
                 Some(EventSendState::SendingFailed {
                     error,
                     is_recoverable,
-                }) => ("failed".to_owned(), error.to_string(), *is_recoverable, txn),
+                }) => match crypto_send_block_code(error) {
+                    // Parked by an encryption check the user can resolve
+                    // (identity-change warning, verifying this device):
+                    // offer Retry, which unwedges it (`retry_send`).
+                    Some(code) => ("failed".to_owned(), code.to_owned(), true, txn),
+                    None => ("failed".to_owned(), error.to_string(), *is_recoverable, txn),
+                },
                 _ => (String::new(), String::new(), false, txn),
             }
         } else {

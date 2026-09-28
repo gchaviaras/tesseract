@@ -402,6 +402,16 @@ void EncryptionSetupOverlay::show_incoming_request(std::string peer, bool own_de
     advance_step_(Step::IncomingRequest);
 }
 
+void EncryptionSetupOverlay::show_outgoing_user_request(std::string peer)
+{
+    peer_                = std::move(peer);
+    incoming_own_device_ = false;
+    can_retry_           = true;
+    if (!in_verification_step() && step_ != Step::VerifyFailed)
+        resume_step_ = step_;
+    advance_step_(Step::WaitingForOtherDevice);
+}
+
 void EncryptionSetupOverlay::show_sas(VerificationSas sas)
 {
     sas_ = std::move(sas);
@@ -823,14 +833,26 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         case Step::WaitingForOtherDevice:
         {
             const bool we_asked = mode_ == Mode::Recover || can_retry_;
-            draw_title(we_asked ? tk::tr("Check your other device")
-                                : tk::tr("Starting verification\xe2\x80\xa6"));
-            if (we_asked)
+            if (we_asked && !incoming_own_device_)
+            {
+                draw_title(tk::trf(tk::tr("Waiting for {0}"), {peer_}));
                 paint_paragraph(ctx, {cx, content_y, cw, 0},
-                                tk::tr("Open Tesseract (or another Matrix app) on a "
-                                       "device where you're signed in and accept "
-                                       "the request."),
+                                tk::trf(tk::tr("{0} needs to accept the verification "
+                                               "request in their Matrix app."),
+                                        {peer_}),
                                 tk::FontRole::Body, pal.text_secondary);
+            }
+            else
+            {
+                draw_title(we_asked ? tk::tr("Check your other device")
+                                    : tk::tr("Starting verification\xe2\x80\xa6"));
+                if (we_asked)
+                    paint_paragraph(ctx, {cx, content_y, cw, 0},
+                                    tk::tr("Open Tesseract (or another Matrix app) on a "
+                                           "device where you're signed in and accept "
+                                           "the request."),
+                                    tk::FontRole::Body, pal.text_secondary);
+            }
             draw_spinner(by - 40.0f);
             place_right_primary(tk::tr("Cancel"), true);
             break;
@@ -867,8 +889,12 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             draw_title(tk::tr("Compare numbers"));
             content_y += paint_paragraph(
                 ctx, {cx, content_y, cw, 0},
-                tk::tr("Check that the other device shows the same numbers in the "
-                       "same order."),
+                incoming_own_device_
+                    ? tk::tr("Check that the other device shows the same numbers in "
+                             "the same order.")
+                    : tk::trf(tk::tr("Check that {0} sees the same numbers in the same "
+                                     "order."),
+                              {peer_}),
                 tk::FontRole::Body, pal.text_secondary);
             content_y += 14.0f;
             paint_sas_decimal_row(ctx, {cx, content_y, cw, sas_decimal_row_height()},

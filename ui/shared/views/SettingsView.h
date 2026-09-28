@@ -174,6 +174,9 @@ public:
     // persisted settings.
     void set_send_maps_urls_as_location_pref(bool enabled);
 
+    // Silently initialise the "exclude insecure devices" checkbox.
+    void set_exclude_insecure_devices_pref(bool enabled);
+
     // Silently initialise the two bundled-URL-preview checkboxes.
     void set_bundled_url_previews_pref(bool enabled, bool direct);
 
@@ -387,6 +390,9 @@ public:
     // Fired when the user toggles "Send Google Maps / OpenStreetMap links as
     // locations".
     std::function<void(bool)> on_send_maps_urls_as_location_changed;
+
+    // Fired when the user toggles "Exclude insecure devices" (MSC4153).
+    std::function<void(bool)> on_exclude_insecure_devices_changed;
 
     // Fired when the user toggles either "Include link previews in messages I
     // send" or "Fetch link previews directly…". The shell persists both and

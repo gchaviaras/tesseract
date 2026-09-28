@@ -178,6 +178,8 @@ set(_tk_sources
     views/ThreadView.cpp
     views/EncryptionReminderBanner.h
     views/EncryptionReminderBanner.cpp
+    views/IdentityChangeBanner.h
+    views/IdentityChangeBanner.cpp
     views/sas_emoji_tiles.h
     views/sas_emoji_tiles.cpp
     views/DatePickerView.h

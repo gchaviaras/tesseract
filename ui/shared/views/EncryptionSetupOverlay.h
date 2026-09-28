@@ -137,6 +137,9 @@ public:
     // `peer` is the requesting device's name (own_device) or user's name.
     void show_incoming_request(std::string peer, bool own_device);
     void show_waiting()   { advance_step_(Step::WaitingForOtherDevice); }
+    // We asked another user (`peer`, their display name) to verify: wait for
+    // them to accept. A failure then offers Try again.
+    void show_outgoing_user_request(std::string peer);
     // Late-arriving friendlier name for the IncomingRequest peer.
     void set_peer(std::string peer) { peer_ = std::move(peer); }
     // Back to where an incoming request interrupted the user, if it did;
@@ -304,6 +307,8 @@ private:
     bool        has_other_device_   = false;
     VerificationSas sas_;
     std::string peer_;
+    // The flow's other party is one of our own devices (not another user),
+    // whichever side started it.
     bool        incoming_own_device_ = true;
     bool        can_retry_           = false;
     std::string reset_account_;      // ResetApproving: whose reset this is

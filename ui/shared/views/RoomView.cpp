@@ -275,6 +275,12 @@ RoomView::RoomView()
     auto banner = std::make_unique<CallBanner>();
     call_banner_ = add_child(std::move(banner));
 
+    identity_banner_ = add_child(std::make_unique<IdentityChangeBanner>());
+    identity_banner_->on_resolve = [this](const tesseract::IdentityWarning& w)
+    {
+        if (on_resolve_identity_warning) on_resolve_identity_warning(w);
+    };
+
     if (header_)
         header_->on_call_requested = [this](tk::Rect btn_rect)
         {
@@ -1541,6 +1547,16 @@ bool RoomView::call_banner_visible() const
     return call_banner_ && call_banner_->visible();
 }
 
+void RoomView::set_identity_warnings(std::vector<tesseract::IdentityWarning> warnings)
+{
+    if (!identity_banner_) return;
+    const bool was_visible = identity_banner_->visible();
+    if (!was_visible && warnings.empty()) return;
+    identity_banner_->set_warnings(std::move(warnings));
+    // Relayout (and repaint): the strip's height or its text changed.
+    if (on_layout_changed) on_layout_changed();
+}
+
 views::CallOverlayWidget*
 RoomView::mount_call_panel(
     views::CallOverlayWidget::Mode initial_mode,
@@ -2204,6 +2220,14 @@ void RoomView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
         list_top += CallBanner::kBannerH;
     }
 
+    // Identity-change strip — below the call banner, same full-width strip.
+    if (identity_banner_ && identity_banner_->visible())
+    {
+        identity_banner_->arrange(ctx, {bounds.x, list_top, bounds.w,
+                                        IdentityChangeBanner::kHeight});
+        list_top += IdentityChangeBanner::kHeight;
+    }
+
     // Docked call panel — occupies kDockedH between banners and message list.
     // DockedExpanded collapses the message area entirely.
     if (call_panel_ && call_panel_->visible())
@@ -2387,6 +2411,8 @@ void RoomView::paint(tk::PaintCtx& ctx)
     }
     if (call_banner_ && call_banner_->visible())
         call_banner_->paint(ctx);
+    if (identity_banner_ && identity_banner_->visible())
+        identity_banner_->paint(ctx);
     if (room_search_bar_ && room_search_bar_->is_open())
         room_search_bar_->paint(ctx);
     if (message_list_)

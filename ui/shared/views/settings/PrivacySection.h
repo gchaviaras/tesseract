@@ -6,7 +6,8 @@
 //   "Presence"   — checkbox to enable/disable sending and polling presence
 //   "Location"   — checkbox to send composed Google Maps / OpenStreetMap
 //                   links as interactive m.location events
-//   "Encryption" — "Export room keys…" and "Import room keys…" buttons
+//   "Encryption" — "Exclude insecure devices" (MSC4153) checkbox, and
+//                   "Export room keys…" / "Import room keys…" buttons
 //
 // Reads initial presence state from Settings::instance(). The export/import
 // flows are orchestrated by SettingsController (called from SettingsView).
@@ -80,6 +81,13 @@ public:
     std::function<void(bool)> on_check_for_updates_changed;
 #endif
 
+    // Silently update the "exclude insecure devices" checkbox without firing.
+    void set_exclude_insecure_devices(bool enabled);
+
+    // Fired with the new state when "exclude insecure devices" is toggled.
+    // Takes effect after restart.
+    std::function<void(bool)> on_exclude_insecure_devices_changed;
+
     // Fired when the user clicks "Export room keys…".
     std::function<void()> on_export_keys;
 
@@ -96,6 +104,7 @@ private:
     tk::CheckButton* url_previews_direct_cb_ = nullptr;
     tk::Label* previews_unavailable_label_ = nullptr;
     tk::CheckButton* search_index_cb_ = nullptr;
+    tk::CheckButton* exclude_insecure_cb_ = nullptr;
     tk::Label* search_stats_label_ = nullptr; // counts + status
     tk::Label* search_date_label_ = nullptr;  // "covers messages since …"
 #ifdef TESSERACT_UPDATE_CHECKS

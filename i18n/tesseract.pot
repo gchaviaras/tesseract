@@ -1803,3 +1803,59 @@ msgstr ""
 #: ui/shared/app/RoomPane.cpp
 msgid "Command failed: {0}"
 msgstr ""
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0} ({1})"
+msgstr ""
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0}'s verified identity was reset."
+msgstr ""
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0}'s identity was reset."
+msgstr ""
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "Withdraw verification"
+msgstr ""
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't update the identity: {0}"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Exclude insecure devices (takes effect after restart)"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Only send encrypted messages to devices their owner has verified, and hide messages sent from devices that aren't. This device must be verified to send, and people whose clients don't verify their devices won't see your messages."
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Check that {0} sees the same numbers in the same order."
+msgstr ""
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Finish the current verification first."
+msgstr ""
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Not verified"
+msgstr ""
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Not verified · verify this device first"
+msgstr ""
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Verified identity was reset"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Waiting for {0}"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "{0} needs to accept the verification request in their Matrix app."
+msgstr ""

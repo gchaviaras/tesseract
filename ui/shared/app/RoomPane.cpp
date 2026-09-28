@@ -78,6 +78,9 @@ void RoomPane::retarget(const std::string& new_room_id)
     cached_members_room_.clear();
     visible_media_prepped_.clear();
     displayed_once_ = false;
+    // The new room's watcher only reports when it has warnings to show.
+    if (room_view_)
+        room_view_->set_identity_warnings({});
     room_id_ = new_room_id;
     // The send-button spinner tracks the room this pane shows, not the
     // composer: a link sent in the previous room must not spin here.
@@ -278,16 +281,6 @@ void RoomPane::finish_init()
     }
     if (room_view_ && room_view_->message_list())
     {
-        room_view_->message_list()->on_retry_send =
-            [this](const std::string& txn_id)
-        {
-            retry_send_(txn_id);
-        };
-        room_view_->message_list()->on_abort_send =
-            [this](const std::string& txn_id)
-        {
-            abort_send_(txn_id);
-        };
         room_view_->message_list()->on_tile_needed = [this](int z, int x, int y)
         {
             shell_->ensure_tile_async(z, x, y);
@@ -331,6 +324,19 @@ void RoomPane::wire_room_view_()
     // after main_room_pane_->attach()) re-enables it there when a capture
     // device is available.
     rv->compose_bar()->set_mic_available(false);
+
+    // Failed-send hover actions and the identity-change banner: wired here
+    // (not in finish_init, which only pop-outs call) so the main window gets
+    // them too.
+    if (auto* ml = rv->message_list())
+    {
+        ml->on_retry_send = [this](const std::string& txn_id) { retry_send_(txn_id); };
+        ml->on_abort_send = [this](const std::string& txn_id) { abort_send_(txn_id); };
+    }
+    rv->on_resolve_identity_warning = [this](const tesseract::IdentityWarning& w)
+    {
+        resolve_identity_warning_(w);
+    };
 
     // ── RoomView providers ────────────────────────────────────────────────
     rv->set_avatar_provider(
@@ -2491,18 +2497,52 @@ void RoomPane::send_typing_notice_(bool typing)
     pane_client_()->send_typing_notice(room_id_, typing);
 }
 
-void RoomPane::retry_send_(const std::string& /*txn_id*/)
+void RoomPane::retry_send_(const std::string& txn_id)
 {
     if (room_id_.empty() || !pane_client_())
     {
         return;
     }
-    auto res = pane_client_()->retry_send(room_id_);
+    auto res = pane_client_()->retry_send(room_id_, txn_id);
     if (!res.ok)
     {
         shell_show_status_message_(
             tk::trf(tk::tr("Failed to retry sending: {0}"), {res.message}));
     }
+}
+
+void RoomPane::on_identity_status_changed(
+    const std::string& room_id,
+    const std::vector<tesseract::IdentityWarning>& warnings)
+{
+    if (room_id != room_id_ || !room_view_)
+        return;
+    room_view_->set_identity_warnings(warnings);
+}
+
+void RoomPane::resolve_identity_warning_(const tesseract::IdentityWarning& w)
+{
+    if (!shell_ || !pane_client_())
+        return;
+    // The SDK then reports the warning gone via on_identity_status_changed,
+    // which is what hides it; only a failure needs handling here.
+    run_async_mut_(
+        [this, shell = shell_, sess = session_(), w, alive = weak_flag()]
+        {
+            if (!sess || !sess->client) return;
+            const bool withdraw =
+                w.kind == tesseract::IdentityWarning::Kind::VerificationBroken;
+            auto res = withdraw ? sess->client->withdraw_user_verification(w.user_id)
+                                : sess->client->pin_user_identity(w.user_id);
+            if (res.ok) return;
+            shell->post_to_ui_(
+                [this, alive, msg = res.message]
+                {
+                    if (!alive.lock()) return;
+                    shell_show_status_message_(tk::trf(
+                        tk::tr("Couldn't update the identity: {0}"), {msg}));
+                });
+        });
 }
 
 void RoomPane::abort_send_(const std::string& txn_id)

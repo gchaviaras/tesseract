@@ -247,6 +247,11 @@ void Client::cancel_qr_grant()
     impl_->ffi->qr_grant_cancel();
 }
 
+void Client::set_exclude_insecure_devices(bool enabled)
+{
+    tesseract_ffi::set_exclude_insecure_devices(enabled);
+}
+
 bool Client::open_in_browser(const std::string& url)
 {
 #if defined(_WIN32)
@@ -804,10 +809,10 @@ Result Client::send_bot_command(const std::string& room_id,
         arguments_json));
 }
 
-Result Client::retry_send(const std::string& room_id)
+Result Client::retry_send(const std::string& room_id, const std::string& txn_id)
 {
     SH_FFI;
-    return from_ffi(impl_->ffi->retry_send(room_id));
+    return from_ffi(impl_->ffi->retry_send(room_id, txn_id));
 }
 
 Result Client::abort_send(const std::string& room_id, const std::string& txn_id)
@@ -3066,6 +3071,31 @@ Result Client::request_self_verification()
 {
     SH_FFI;
     return from_ffi(impl_->ffi->request_self_verification());
+}
+
+Result Client::request_user_verification(const std::string& user_id)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->request_user_verification(user_id));
+}
+
+UserTrust Client::get_user_trust(const std::string& user_id)
+{
+    SH_FFI;
+    const std::uint8_t code = impl_->ffi->get_user_trust(user_id);
+    return code <= 3 ? static_cast<UserTrust>(code) : UserTrust::Unknown;
+}
+
+Result Client::pin_user_identity(const std::string& user_id)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->pin_user_identity(user_id));
+}
+
+Result Client::withdraw_user_verification(const std::string& user_id)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->withdraw_user_verification(user_id));
 }
 
 Result Client::accept_verification(const std::string& flow_id)

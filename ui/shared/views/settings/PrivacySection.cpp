@@ -221,6 +221,30 @@ PrivacySection::PrivacySection()
     // ── Encryption ────────────────────────────────────────────────────────────
     auto* enc_group = add_group(tk::tr("Encryption"));
 
+    auto exclude_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Exclude insecure devices (takes effect after restart)"),
+        s.exclude_insecure_devices);
+    exclude_insecure_cb_ = enc_group->add_widget(std::move(exclude_cb));
+    exclude_insecure_cb_->on_change = [this](bool v)
+    {
+        if (on_exclude_insecure_devices_changed) on_exclude_insecure_devices_changed(v);
+    };
+    exclude_insecure_cb_->on_hover_enter = [this]
+    {
+        if (host_)
+            host_->show_tooltip(
+                exclude_insecure_cb_,
+                tk::tr("Only send encrypted messages to devices their owner has "
+                       "verified, and hide messages sent from devices that aren't. "
+                       "This device must be verified to send, and people whose "
+                       "clients don't verify their devices won't see your messages."),
+                exclude_insecure_cb_->bounds());
+    };
+    exclude_insecure_cb_->on_hover_leave = [this]
+    {
+        if (host_) host_->hide_tooltip(exclude_insecure_cb_);
+    };
+
     enc_group->add_widget(tk::create_widget<tk::Button>(
         this, tk::tr("Export room keys…"),
         [this] { if (on_export_keys) on_export_keys(); }));
@@ -261,6 +285,11 @@ void PrivacySection::set_bundled_url_previews(bool enabled, bool direct)
 void PrivacySection::set_homeserver_previews_available(bool available)
 {
     previews_unavailable_label_->set_visible(!available);
+}
+
+void PrivacySection::set_exclude_insecure_devices(bool enabled)
+{
+    exclude_insecure_cb_->set_checked(enabled);
 }
 
 void PrivacySection::set_index_messages(bool enabled)

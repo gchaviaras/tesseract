@@ -149,6 +149,8 @@ LaunchPlan prepare_launch(const std::vector<std::string>& args,
     // preference is available when choosing the locale.
     Settings::instance().load_from_disk(config_dir());
     install_crash_handler(Settings::instance().crash_reporting_enabled);
+    // Before any account restores: the mode is read when each client is built.
+    Client::set_exclude_insecure_devices(Settings::instance().exclude_insecure_devices);
     {
         std::string lang = Settings::instance().language;
         g_launch_language = lang;

@@ -117,7 +117,6 @@ pub async fn send_frame_key_to_user(
 ) -> anyhow::Result<()> {
     use matrix_sdk::encryption::identities::Device;
     use matrix_sdk::ruma::{events::AnyToDeviceEventContent, UserId};
-    use matrix_sdk_base::crypto::CollectStrategy;
 
     let uid: &UserId = matrix_user_id
         .try_into()
@@ -183,7 +182,9 @@ pub async fn send_frame_key_to_user(
             refs,
             "io.element.call.encryption_keys",
             raw_content,
-            CollectStrategy::AllDevices,
+            crate::client::identity::room_key_recipient_strategy(
+                crate::client::identity::exclude_insecure_devices(),
+            ),
         )
         .await
         .context("send Olm-encrypted to-device key")?;

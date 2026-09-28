@@ -107,54 +107,60 @@ impl ClientFfi {
                             return;
                         }
 
-                        // The OlmMachine processes the to-device event and
-                        // adds the request to its internal map asynchronously.
-                        // A single fixed sleep silently drops the request on
-                        // slow hardware / under sync load, so poll with a
-                        // bounded backoff (≈ 50+100+200+400+800+1600 ≈ 3.15s
-                        // total) instead.
-                        let mut req = None;
-                        let mut delay_ms = 50u64;
-                        for _ in 0..6 {
-                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                            req = client
-                                .encryption()
-                                .get_verification_request(&ev.sender, &flow_id)
-                                .await;
-                            if req.is_some() {
-                                break;
-                            }
-                            delay_ms *= 2;
+                        adopt_incoming_verification_request(
+                            client, h, flow_users, sas_cache, tasks, ev.sender, flow_id,
+                            device_id,
+                        )
+                        .await;
+                    }
+                },
+            ));
+        }
+        {
+            // Verification of *users* (not our own devices) is requested
+            // in-room: an m.room.message with msgtype m.key.verification.request
+            // in the DM, whose event id is the flow id.
+            use matrix_sdk::ruma::events::room::message::{
+                MessageType, OriginalSyncRoomMessageEvent,
+            };
+            let h = Arc::clone(handler);
+            let flow_users = Arc::clone(&self.verification_flow_users);
+            let sas_cache = Arc::clone(&self.sas_cache);
+            let tasks = Arc::clone(&self.verification_tasks);
+
+            self.event_handler_handles.push(client.add_event_handler(
+                move |ev: OriginalSyncRoomMessageEvent, client: Client| {
+                    let h = Arc::clone(&h);
+                    let flow_users = Arc::clone(&flow_users);
+                    let sas_cache = Arc::clone(&sas_cache);
+                    let tasks = Arc::clone(&tasks);
+                    async move {
+                        let MessageType::VerificationRequest(content) = &ev.content.msgtype
+                        else {
+                            return;
+                        };
+                        let Some(me) = client.user_id() else { return };
+                        if !verification::is_live_in_room_request_for(
+                            me,
+                            &ev.sender,
+                            &content.to,
+                            ev.origin_server_ts.as_secs().into(),
+                            now_secs(),
+                        ) {
+                            return;
                         }
-                        if let Some(req) = req {
-                            lock_or_recover(&flow_users).insert(flow_id.clone(), user_id.clone());
-                            {
-                                let guard = h.lock();
-                                guard.on_verification_request(&flow_id, &user_id, &device_id, true);
-                            }
-                            // Spawn a watcher so we can surface request-level
-                            // transitions (Done / Cancelled) that occur before
-                            // start_sas is called.
-                            let h2 = Arc::clone(&h);
-                            let flow_users2 = Arc::clone(&flow_users);
-                            let sas_cache2 = Arc::clone(&sas_cache);
-                            let flow_id2 = flow_id.clone();
-                            let tasks2 = Arc::clone(&tasks);
-                            let handle = tokio::spawn(verification::watch_verification_request(
-                                req,
-                                flow_id2,
-                                h2,
-                                flow_users2,
-                                sas_cache2,
-                                tasks,
-                            ));
-                            lock_or_recover(&tasks2).push(handle.abort_handle());
-                        } else {
-                            tracing::warn!(
-                                "verification request {flow_id} from {user_id} \
-                                 not visible after retries; dropped",
-                            );
-                        }
+                        let device_id = content.from_device.as_str().to_owned();
+                        adopt_incoming_verification_request(
+                            client,
+                            h,
+                            flow_users,
+                            sas_cache,
+                            tasks,
+                            ev.sender.clone(),
+                            ev.event_id.to_string(),
+                            device_id,
+                        )
+                        .await;
                     }
                 },
             ));
@@ -1034,6 +1040,20 @@ impl ClientFfi {
             let stop_rx = stop_rx.clone();
 
             self.spawn_tracked("verification-state-watcher", watch_verification_state(h, client_clone, stop_rx));
+        }
+
+        // User identity watcher: reports whose cross-signing identity changed
+        // in the crypto store (downloaded keys, a signature we just uploaded
+        // after verifying someone, a reset), so an open profile can re-read
+        // its trust state.
+        {
+            let h = Arc::clone(&handler);
+            let client_clone = client.clone();
+            let stop_rx = stop_rx.clone();
+            self.spawn_tracked(
+                "user-identity-watcher",
+                watch_user_identities(h, client_clone, stop_rx),
+            );
         }
 
         // Incoming verification request handler (no-op when the
@@ -2053,6 +2073,42 @@ async fn watch_room_list_state(
 
 /// Verification-state watcher: emit an initial snapshot, then notify the UI
 /// whenever the cross-signing verified status of this account changes.
+async fn watch_user_identities(
+    h: Arc<Mutex<SendHandler>>,
+    client: Client,
+    mut stop_rx: watch::Receiver<bool>,
+) {
+    use futures_util::StreamExt;
+    let stream = match client.encryption().user_identities_stream().await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("user identity watcher not started: {e}");
+            return;
+        }
+    };
+    let mut stream = std::pin::pin!(stream);
+    loop {
+        tokio::select! {
+            _ = stop_rx.changed() => {
+                if *stop_rx.borrow() { break; }
+            }
+            Some(updates) = stream.next() => {
+                let user_ids: Vec<String> = updates
+                    .new
+                    .keys()
+                    .chain(updates.changed.keys())
+                    .map(|u| u.to_string())
+                    .collect();
+                if !user_ids.is_empty() {
+                    let guard = h.lock();
+                    guard.on_user_identities_changed(&user_ids);
+                }
+            }
+            else => break,
+        }
+    }
+}
+
 async fn watch_verification_state(
     h: Arc<Mutex<SendHandler>>,
     client: Client,
@@ -2085,4 +2141,60 @@ async fn watch_verification_state(
             else => break,
         }
     }
+}
+
+/// Seconds since the Unix epoch, for request-age checks.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Wait for matrix-sdk to register an incoming verification request, then
+/// record the flow, tell the UI, and watch it. Shared by the to-device (own
+/// devices) and in-room (other users) request handlers.
+async fn adopt_incoming_verification_request(
+    client: Client,
+    h: Arc<Mutex<SendHandler>>,
+    flow_users: Arc<Mutex<HashMap<String, String>>>,
+    sas_cache: verification::SasCache,
+    tasks: Arc<Mutex<Vec<tokio::task::AbortHandle>>>,
+    sender: matrix_sdk::ruma::OwnedUserId,
+    flow_id: String,
+    device_id: String,
+) {
+    let user_id = sender.as_str().to_owned();
+    // The OlmMachine processes the event and adds the request to its
+    // internal map asynchronously. A single fixed sleep silently drops the
+    // request on slow hardware / under sync load, so poll with a bounded
+    // backoff (≈ 50+100+200+400+800+1600 ≈ 3.15s total) instead.
+    let mut req = None;
+    let mut delay_ms = 50u64;
+    for _ in 0..6 {
+        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+        req = client.encryption().get_verification_request(&sender, &flow_id).await;
+        if req.is_some() {
+            break;
+        }
+        delay_ms *= 2;
+    }
+    let Some(req) = req else {
+        tracing::warn!(
+            "verification request {flow_id} from {user_id} not visible after retries; dropped",
+        );
+        return;
+    };
+    lock_or_recover(&flow_users).insert(flow_id.clone(), user_id.clone());
+    {
+        let guard = h.lock();
+        guard.on_verification_request(&flow_id, &user_id, &device_id, true);
+    }
+    // Spawn a watcher so we can surface request-level transitions (Done /
+    // Cancelled) that occur before start_sas is called.
+    let tasks_for_register = Arc::clone(&tasks);
+    let handle = tokio::spawn(verification::watch_verification_request(
+        req, flow_id, h, flow_users, sas_cache, tasks,
+    ));
+    lock_or_recover(&tasks_for_register).push(handle.abort_handle());
 }

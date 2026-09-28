@@ -33,6 +33,11 @@ and in-progress work, as a single backlog ordered by priority/urgency.
   self-mention emphasis, device rename, new-device warnings, edit history
   viewer, GIF picker.
 - Room upgrades, alias management beyond viewing.
+- **MSC4153 follow-ups.** Verifying other users (only self-verification
+  exists; user-to-user SAS should target the master key), the MSC4350
+  bridge-bot annotation, a reason tooltip on sends blocked by an encryption
+  check, and translating the Rust-side UTD reason strings
+  (`utd_message_for_cause`).
 - **MSC2545 pack management — manual order/sort.** List/subscribe UI, pack
   creation/removal, and sticker delete/rename inside the user pack all
   shipped 2026-07-11 (global "Emojis & Stickers" settings tab +

@@ -205,6 +205,13 @@ public:
     // exposes the user's IP address to every site they link.
     bool fetch_url_previews_directly = false;
 
+    // MSC4153 "exclude insecure devices": share room keys only with devices
+    // their owner cross-signed, and hide messages sent from devices that
+    // aren't. Off by default while other clients catch up on cross-signing.
+    // Applied via Client::set_exclude_insecure_devices at launch; a change
+    // takes effect after restart.
+    bool exclude_insecure_devices = false;
+
     // ── MSC4278 media-preview controls ────────────────────────────────
     // In-memory mirror of the active account's global `m.media_preview_config`
     // account-data event. NOT persisted to app_settings.json — account_data is

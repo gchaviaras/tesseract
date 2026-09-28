@@ -192,6 +192,11 @@ SettingsView::SettingsView()
     {
         if (on_send_presence_changed) on_send_presence_changed(v);
     };
+    privacy->on_exclude_insecure_devices_changed = [this](bool v)
+    {
+        if (on_exclude_insecure_devices_changed)
+            on_exclude_insecure_devices_changed(v);
+    };
     privacy->on_send_maps_urls_as_location_changed = [this](bool v)
     {
         if (on_send_maps_urls_as_location_changed)
@@ -571,6 +576,14 @@ void SettingsView::set_prefetch_enabled(bool enabled)
     }
 }
 
+void SettingsView::set_exclude_insecure_devices_pref(bool enabled)
+{
+    if (privacy_)
+    {
+        privacy_->set_exclude_insecure_devices(enabled);
+    }
+}
+
 void SettingsView::set_send_maps_urls_as_location_pref(bool enabled)
 {
     if (privacy_)
@@ -729,6 +742,7 @@ void SettingsView::load_persisted_settings()
     set_image_previews_enabled(s.notification_image_previews);
     set_prefetch_enabled(s.prefetch_full_media);
     set_send_maps_urls_as_location_pref(s.send_maps_urls_as_location);
+    set_exclude_insecure_devices_pref(s.exclude_insecure_devices);
     set_bundled_url_previews_pref(s.send_bundled_url_previews, s.fetch_url_previews_directly);
     set_group_inactive_pref(s.group_inactive_rooms);
     set_group_unread_pref(s.group_unread_rooms);

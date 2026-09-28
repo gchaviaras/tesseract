@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -1036,6 +1037,18 @@ struct VerificationEmoji
 {
     std::string symbol;      // UTF-8 emoji glyph, e.g. "🐶"
     std::string description; // English label, e.g. "Dog"
+};
+
+/// The short authentication string for one SAS flow, delivered via
+/// `IEventHandler::on_sas_ready`. Mirrors `VerificationSas` in the Rust FFI
+/// bridge. `decimals` (the spec's `decimal` method, three numbers in
+/// 1000..=9191) is always set. `emojis` holds the 7 emoji when the `emoji`
+/// method was also agreed and is empty when the other device offered decimal
+/// only (MSC4405 deprecates emoji SAS).
+struct VerificationSas
+{
+    std::vector<VerificationEmoji> emojis;
+    std::array<uint16_t, 3>        decimals{};
 };
 
 /// One GIF search result, surfaced via `IEventHandler::on_gif_results`. URLs

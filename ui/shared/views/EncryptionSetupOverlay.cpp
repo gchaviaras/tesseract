@@ -356,7 +356,7 @@ void EncryptionSetupOverlay::fire_primary_()
             if (on_accept_request) on_accept_request();
             break;
 
-        case Step::CompareEmoji:
+        case Step::CompareCodes:
             advance_step_(Step::Confirming);
             if (on_sas_match) on_sas_match();
             break;
@@ -402,10 +402,10 @@ void EncryptionSetupOverlay::show_incoming_request(std::string peer, bool own_de
     advance_step_(Step::IncomingRequest);
 }
 
-void EncryptionSetupOverlay::show_emojis(std::vector<VerificationEmoji> emojis)
+void EncryptionSetupOverlay::show_sas(VerificationSas sas)
 {
-    emojis_ = std::move(emojis);
-    advance_step_(Step::CompareEmoji);
+    sas_ = std::move(sas);
+    advance_step_(Step::CompareCodes);
 }
 
 void EncryptionSetupOverlay::verification_done(DoneKind kind)
@@ -431,7 +431,7 @@ bool EncryptionSetupOverlay::in_verification_step() const
     {
         case Step::WaitingForOtherDevice:
         case Step::IncomingRequest:
-        case Step::CompareEmoji:
+        case Step::CompareCodes:
         case Step::Confirming:
             return true;
         default:
@@ -501,11 +501,11 @@ void EncryptionSetupOverlay::reject_()
     {
         if (on_decline_request) on_decline_request();
     }
-    else if (step_ == Step::CompareEmoji)
+    else if (step_ == Step::CompareCodes)
     {
         if (on_sas_mismatch) on_sas_mismatch();
         verification_failed(
-            tk::tr("The emoji didn't match, so nothing was confirmed. If you "
+            tk::tr("The codes didn't match, so nothing was confirmed. If you "
                    "didn't start this, someone else may be trying to get into "
                    "your account."),
             can_retry_);
@@ -596,7 +596,8 @@ float EncryptionSetupOverlay::step_card_height_() const
         case Step::LostAccess:   return 300.0f;
         case Step::WaitingForOtherDevice: return 270.0f;
         case Step::IncomingRequest: return 250.0f;
-        case Step::CompareEmoji: return 390.0f;
+        // The emoji grid is only there when the peer also offered `emoji`.
+        case Step::CompareCodes: return sas_.emojis.empty() ? 300.0f : 490.0f;
         case Step::Confirming:   return 220.0f;
         case Step::VerifyFailed: return 270.0f;
     }
@@ -846,9 +847,9 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                                      "confirm it's you so it can read your "
                                      "encrypted messages."),
                               {peer_})
-                    : tk::trf(tk::tr("{0} wants to verify you. You'll compare emoji "
-                                     "to make sure you're talking to the right "
-                                     "person."),
+                    : tk::trf(tk::tr("{0} wants to verify you. You'll compare a "
+                                     "few numbers to make sure you're talking to "
+                                     "the right person."),
                               {peer_});
             paint_paragraph(ctx, {cx, content_y, cw, 0}, body, tk::FontRole::Body,
                             pal.text_secondary);
@@ -858,17 +859,32 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             break;
         }
 
-        // ── CompareEmoji ─────────────────────────────────────────────────────
-        case Step::CompareEmoji:
+        // ── CompareCodes ─────────────────────────────────────────────────────
+        // The decimal numbers are the primary comparison (MSC4405 deprecates
+        // emoji SAS); the emoji grid follows when the peer still offers it.
+        case Step::CompareCodes:
         {
-            draw_title(tk::tr("Compare emoji"));
+            draw_title(tk::tr("Compare numbers"));
             content_y += paint_paragraph(
                 ctx, {cx, content_y, cw, 0},
-                tk::tr("Check that the other device shows the same emoji in the "
+                tk::tr("Check that the other device shows the same numbers in the "
                        "same order."),
                 tk::FontRole::Body, pal.text_secondary);
-            paint_sas_emoji_grid(ctx, {cx, content_y + 14.0f, cw, sas_emoji_grid_height()},
-                                 emojis_);
+            content_y += 14.0f;
+            paint_sas_decimal_row(ctx, {cx, content_y, cw, sas_decimal_row_height()},
+                                  sas_.decimals);
+            content_y += sas_decimal_row_height();
+            if (!sas_.emojis.empty())
+            {
+                content_y += 18.0f;
+                content_y += paint_paragraph(
+                    ctx, {cx, content_y, cw, 0},
+                    tk::tr("Or compare these emoji:"),
+                    tk::FontRole::Caption, pal.text_secondary);
+                paint_sas_emoji_grid(ctx,
+                                     {cx, content_y + 10.0f, cw, sas_emoji_grid_height()},
+                                     sas_.emojis);
+            }
             place_right_primary(tk::tr("They match"), true);
             reject_link_ = left_link(by, tk::tr("They don't match"));
             break;

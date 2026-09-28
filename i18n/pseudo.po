@@ -3163,8 +3163,8 @@ msgid "The request was cancelled or timed out."
 msgstr "[Thé réqùést wàs çàñçélléd ör tïméd öùt.xxxxxxx]"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "The emoji didn't match, so nothing was confirmed. If you didn't start this, someone else may be trying to get into your account."
-msgstr "[Thé émöjï dïdñ't màtçh, sö ñöthïñg wàs çöñfïrméd. Ïf yöù dïdñ't stàrt thïs, söméöñé élsé mày bé tryïñg tö gét ïñtö yöùr àççöùñt.xxxxxxxxxxxxxxxxxxxxxxxxx]"
+msgid "The codes didn't match, so nothing was confirmed. If you didn't start this, someone else may be trying to get into your account."
+msgstr "[Thé çödés dïdñ't màtçh, sö ñöthïñg wàs çöñfïrméd. Ïf yöù dïdñ't stàrt thïs, söméöñé élsé mày bé tryïñg tö gét ïñtö yöùr àççöùñt.xxxxxxxxxxxxxxxxxxxxxxxxx]"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Choose how to unlock your encrypted messages on this device."
@@ -3225,20 +3225,24 @@ msgstr "[Yöùr dévïçé “{0}” wàñts tö çöñfïrm ït's yöù sö ït
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 #, c++-format
-msgid "{0} wants to verify you. You'll compare emoji to make sure you're talking to the right person."
-msgstr "[{0} wàñts tö vérïfy yöù. Yöù'll çömpàré émöjï tö màké sùré yöù'ré tàlkïñg tö thé rïght pérsöñ.xxxxxxxxxxxxxxxxxx]"
+msgid "{0} wants to verify you. You'll compare a few numbers to make sure you're talking to the right person."
+msgstr "[{0} wàñts tö vérïfy yöù. Yöù'll çömpàré à féw ñùmbérs tö màké sùré yöù'ré tàlkïñg tö thé rïght pérsöñ.xxxxxxxxxxxxxxxxxxxx]"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Not me"
 msgstr "[Ñöt méx]"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Compare emoji"
-msgstr "[Çömpàré émöjïxx]"
+msgid "Compare numbers"
+msgstr "[Çömpàré ñùmbérsxxx]"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Check that the other device shows the same emoji in the same order."
-msgstr "[Çhéçk thàt thé öthér dévïçé shöws thé sàmé émöjï ïñ thé sàmé ördér.xxxxxxxxxxxxx]"
+msgid "Check that the other device shows the same numbers in the same order."
+msgstr "[Çhéçk thàt thé öthér dévïçé shöws thé sàmé ñùmbérs ïñ thé sàmé ördér.xxxxxxxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Or compare these emoji:"
+msgstr "[Ör çömpàré thésé émöjï:xxxx]"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "They match"

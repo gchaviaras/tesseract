@@ -1,18 +1,15 @@
 //! SAS device verification (request, accept, start, confirm, cancel, get
-//! emojis) plus the background watchers that observe verification request
+//! codes) plus the background watchers that observe verification request
 //! and SAS state streams.
 //!
 //! Split out of `client.rs` in the modularization refactor; behavior unchanged.
 
 use super::{err, ok, ClientFfi};
 
-use crate::ffi::OpResult;
+use crate::ffi::{OpResult, VerificationEmoji, VerificationSas};
 
 #[cfg(not(test))]
 use super::{lock_or_recover, SendHandler};
-
-#[cfg(not(test))]
-use crate::ffi::VerificationEmoji;
 
 #[cfg(not(test))]
 use std::collections::HashMap;
@@ -24,6 +21,27 @@ use std::sync::Arc;
 
 #[cfg(not(test))]
 use matrix_sdk::encryption::verification::SasVerification;
+
+/// Per-flow SAS codes, filled by `watch_sas` and read by `get_sas`.
+#[cfg(not(test))]
+pub(super) type SasCache = Arc<Mutex<HashMap<String, VerificationSas>>>;
+
+/// Build the FFI payload from a `KeysExchanged` state. The decimals are
+/// always present; `emojis` is `None` when only the `decimal` method was
+/// agreed, which leaves the emoji list empty.
+fn sas_payload(emojis: Option<&[(&str, &str)]>, decimals: (u16, u16, u16)) -> VerificationSas {
+    VerificationSas {
+        emojis: emojis
+            .unwrap_or_default()
+            .iter()
+            .map(|(symbol, description)| VerificationEmoji {
+                symbol: (*symbol).to_owned(),
+                description: (*description).to_owned(),
+            })
+            .collect(),
+        decimals: [decimals.0, decimals.1, decimals.2],
+    }
+}
 
 #[cfg(not(test))]
 const VERIFICATION_LOOKUP_ATTEMPTS: usize = 7;
@@ -90,7 +108,7 @@ pub(super) async fn watch_verification_request(
     flow_id: String,
     handler: Arc<Mutex<SendHandler>>,
     flow_users: Arc<Mutex<HashMap<String, String>>>,
-    emoji_cache: Arc<Mutex<HashMap<String, Vec<(String, String)>>>>,
+    sas_cache: SasCache,
     tasks: Arc<Mutex<Vec<tokio::task::AbortHandle>>>,
 ) {
     use futures_util::StreamExt;
@@ -120,8 +138,8 @@ pub(super) async fn watch_verification_request(
                 if let Verification::SasV1(sas) = verification {
                     let h2 = Arc::clone(&handler);
                     let flow_id2 = flow_id.clone();
-                    let emoji_cache2 = Arc::clone(&emoji_cache);
-                    let handle = tokio::spawn(watch_sas(sas, flow_id2, h2, emoji_cache2));
+                    let sas_cache2 = Arc::clone(&sas_cache);
+                    let handle = tokio::spawn(watch_sas(sas, flow_id2, h2, sas_cache2));
                     lock_or_recover(&tasks).push(handle.abort_handle());
                 }
                 break;
@@ -148,14 +166,14 @@ pub(super) async fn watch_verification_request(
 }
 
 /// Watch a `SasVerification`'s state stream. Fires `on_sas_ready` when the
-/// 7 emoji are available, `on_verification_done` on success, and
+/// SAS codes are available (decimals always, emoji when negotiated), `on_verification_done` on success, and
 /// `on_verification_cancelled` on mismatch or cancel.
 #[cfg(not(test))]
 pub(super) async fn watch_sas(
     sas: SasVerification,
     flow_id: String,
     handler: Arc<Mutex<SendHandler>>,
-    emoji_cache: Arc<Mutex<HashMap<String, Vec<(String, String)>>>>,
+    sas_cache: SasCache,
 ) {
     use futures_util::StreamExt;
     use matrix_sdk::encryption::verification::SasState;
@@ -164,25 +182,20 @@ pub(super) async fn watch_sas(
 
     while let Some(state) = changes.next().await {
         match state {
-            SasState::KeysExchanged { emojis, .. } => {
-                if let Some(emojis) = emojis {
-                    let pairs: Vec<(String, String)> = emojis
-                        .emojis
+            SasState::KeysExchanged { emojis, decimals } => {
+                // A peer that only offers `decimal` (MSC4405) leaves `emojis`
+                // unset; the decimals are always there.
+                let pairs: Option<Vec<(&str, &str)>> = emojis.map(|e| {
+                    e.emojis
                         .iter()
-                        .map(|e| (e.symbol.to_owned(), e.description.to_owned()))
-                        .collect();
-                    lock_or_recover(&emoji_cache).insert(flow_id.clone(), pairs.clone());
-                    let ve: Vec<VerificationEmoji> = pairs
-                        .into_iter()
-                        .map(|(sym, desc)| VerificationEmoji {
-                            symbol: sym,
-                            description: desc,
-                        })
-                        .collect();
-                    {
-                        let guard = handler.lock();
-                        guard.on_sas_ready(&flow_id, &ve);
-                    }
+                        .map(|e| (e.symbol, e.description))
+                        .collect()
+                });
+                let payload = sas_payload(pairs.as_deref(), decimals);
+                lock_or_recover(&sas_cache).insert(flow_id.clone(), payload.clone());
+                {
+                    let guard = handler.lock();
+                    guard.on_sas_ready(&flow_id, &payload);
                 }
             }
             SasState::Done { .. } => {
@@ -190,7 +203,7 @@ pub(super) async fn watch_sas(
                     let guard = handler.lock();
                     guard.on_verification_done(&flow_id);
                 }
-                lock_or_recover(&emoji_cache).remove(&flow_id);
+                lock_or_recover(&sas_cache).remove(&flow_id);
                 break;
             }
             SasState::Cancelled(info) => {
@@ -198,7 +211,7 @@ pub(super) async fn watch_sas(
                     let guard = handler.lock();
                     guard.on_verification_cancelled(&flow_id, &info.reason().to_string());
                 }
-                lock_or_recover(&emoji_cache).remove(&flow_id);
+                lock_or_recover(&sas_cache).remove(&flow_id);
                 break;
             }
             _ => {}
@@ -225,7 +238,7 @@ impl ClientFfi {
             return err("not syncing");
         };
         let flow_users = Arc::clone(&self.verification_flow_users);
-        let emoji_cache = Arc::clone(&self.sas_emoji_cache);
+        let sas_cache = Arc::clone(&self.sas_cache);
         let tasks = Arc::clone(&self.verification_tasks);
         let _guard = super::InFlightGuard::new(
             &self.in_flight,
@@ -262,7 +275,7 @@ impl ClientFfi {
                 flow_id,
                 handler,
                 flow_users,
-                emoji_cache,
+                sas_cache,
                 tasks,
             ));
             lock_or_recover(&tasks_for_register).push(handle.abort_handle());
@@ -320,8 +333,8 @@ impl ClientFfi {
         err("not logged in")
     }
 
-    /// Start the SAS key exchange. `on_sas_ready` fires when the 7 emoji are
-    /// computed. Call after `accept_verification` (incoming) or after
+    /// Start the SAS key exchange. `on_sas_ready` fires when the SAS codes
+    /// are computed. Call after `accept_verification` (incoming) or after
     /// `on_verification_request(incoming=false)` (outgoing).
     #[cfg(not(test))]
     pub fn start_sas(&self, flow_id: &str) -> OpResult {
@@ -339,7 +352,7 @@ impl ClientFfi {
         let Some(handler) = self.handler.clone() else {
             return err("not syncing");
         };
-        let emoji_cache = Arc::clone(&self.sas_emoji_cache);
+        let sas_cache = Arc::clone(&self.sas_cache);
         let tasks = Arc::clone(&self.verification_tasks);
         let _guard = super::InFlightGuard::new(
             &self.in_flight,
@@ -369,7 +382,7 @@ impl ClientFfi {
                     }
                 }
             };
-            let handle = tokio::spawn(watch_sas(sas, flow_id_str, handler, emoji_cache));
+            let handle = tokio::spawn(watch_sas(sas, flow_id_str, handler, sas_cache));
             lock_or_recover(&tasks).push(handle.abort_handle());
             Ok::<(), anyhow::Error>(())
         }) {
@@ -383,7 +396,7 @@ impl ClientFfi {
         err("not logged in")
     }
 
-    /// Confirm that the SAS emoji match. Fires `on_verification_done` when
+    /// Confirm that the SAS codes match. Fires `on_verification_done` when
     /// both sides confirm. Call from the "They Match" button handler.
     #[cfg(not(test))]
     pub fn confirm_sas(&self, flow_id: &str) -> OpResult {
@@ -475,20 +488,37 @@ impl ClientFfi {
         err("not logged in")
     }
 
-    /// Return the 7 SAS emoji for `flow_id` after `on_sas_ready` has fired.
+    /// Return the SAS codes for `flow_id` after `on_sas_ready` has fired.
     #[cfg(not(test))]
-    pub fn get_sas_emojis(&self, flow_id: &str) -> Vec<VerificationEmoji> {
-        lock_or_recover(&self.sas_emoji_cache)
+    pub fn get_sas(&self, flow_id: &str) -> VerificationSas {
+        lock_or_recover(&self.sas_cache)
             .get(flow_id)
-            .map(|pairs| {
-                pairs
-                    .iter()
-                    .map(|(sym, desc)| VerificationEmoji {
-                        symbol: sym.clone(),
-                        description: desc.clone(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
+            .cloned()
+            .unwrap_or_else(|| sas_payload(None, (0, 0, 0)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sas_payload;
+
+    #[test]
+    fn sas_payload_decimal_only_has_no_emoji() {
+        let sas = sas_payload(None, (1234, 5678, 9191));
+        assert!(sas.emojis.is_empty());
+        assert_eq!(sas.decimals, [1234, 5678, 9191]);
+    }
+
+    #[test]
+    fn sas_payload_keeps_emoji_order_and_decimals() {
+        let emojis = [("🐶", "Dog"), ("🐱", "Cat")];
+        let sas = sas_payload(Some(&emojis), (1000, 2000, 3000));
+        assert_eq!(sas.decimals, [1000, 2000, 3000]);
+        let got: Vec<(&str, &str)> = sas
+            .emojis
+            .iter()
+            .map(|e| (e.symbol.as_str(), e.description.as_str()))
+            .collect();
+        assert_eq!(got, vec![("🐶", "Dog"), ("🐱", "Cat")]);
     }
 }

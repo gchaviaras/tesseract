@@ -46,10 +46,10 @@ public:
         // their browser. On success the overlay advances into the Fresh
         // recovery-key flow (Intro → …).
         ResetApproving,
-        // ── Interactive (SAS emoji) verification ──
+        // ── Interactive (SAS) verification ──
         WaitingForOtherDevice, // request sent / accepted, waiting for keys
         IncomingRequest,       // "Was this you?"
-        CompareEmoji,
+        CompareCodes,          // decimals, plus emoji when negotiated
         Confirming,            // "They match" pressed, waiting for the SDK
         VerifyFailed,
     };
@@ -88,8 +88,8 @@ public:
     // ── Interactive verification ──────────────────────────────────────────
     std::function<void()>              on_accept_request;      // IncomingRequest › Continue
     std::function<void()>              on_decline_request;     // IncomingRequest › Not me
-    std::function<void()>              on_sas_match;           // CompareEmoji › They match
-    std::function<void()>              on_sas_mismatch;        // CompareEmoji › They don't match
+    std::function<void()>              on_sas_match;           // CompareCodes › They match
+    std::function<void()>              on_sas_mismatch;        // CompareCodes › They don't match
     std::function<void()>              on_cancel_verification; // WaitingForOtherDevice › Cancel
     std::function<void()>              on_retry_verification;  // VerifyFailed › Try again
 
@@ -143,7 +143,7 @@ public:
     // otherwise to the mode's first step (Recover: Choose, Fresh: Intro). In
     // Verify mode there is nothing to go back to, so fire on_close.
     void return_to_start();
-    void show_emojis(std::vector<VerificationEmoji> emojis);
+    void show_sas(VerificationSas sas);
     void verification_done(DoneKind kind);
     // No-op once already on VerifyFailed (a local "don't match" already
     // explained it; the SDK's own cancel echo follows).
@@ -173,7 +173,7 @@ public:
     std::string error_msg()     const { return error_msg_; }
     std::string progress_label()const { return progress_label_; }
     DoneKind    done_kind()     const { return done_kind_; }
-    const std::vector<VerificationEmoji>& emojis() const { return emojis_; }
+    const VerificationSas& sas() const { return sas_; }
     // Key-backup upload progress in [0, 1], or < 0 when there is no count to
     // show (every stage except "backing up keys").
     float       progress_fraction() const { return progress_fraction_; }
@@ -210,7 +210,7 @@ public:
         step_                = initial_step_(mode);
         done_kind_           = initial_done_kind_(mode);
         has_other_device_    = false;
-        emojis_.clear();
+        sas_ = {};
         peer_.clear();
         incoming_own_device_ = true;
         can_retry_           = false;
@@ -259,7 +259,7 @@ public:
     void simulate_sas_link();
     void simulate_choose_recovery_key();
     void simulate_choose_lost_access();
-    // The secondary link on IncomingRequest / CompareEmoji (Not me / They
+    // The secondary link on IncomingRequest / CompareCodes (Not me / They
     // don't match).
     void simulate_secondary();
 
@@ -302,7 +302,7 @@ private:
     bool        passphrase_mode_    = false;
     DoneKind    done_kind_          = DoneKind::Protected;
     bool        has_other_device_   = false;
-    std::vector<VerificationEmoji> emojis_;
+    VerificationSas sas_;
     std::string peer_;
     bool        incoming_own_device_ = true;
     bool        can_retry_           = false;

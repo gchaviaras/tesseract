@@ -3092,18 +3092,10 @@ Result Client::cancel_verification(const std::string& flow_id)
     return from_ffi(impl_->ffi->cancel_verification(flow_id));
 }
 
-std::vector<VerificationEmoji>
-Client::get_sas_emojis(const std::string& flow_id) const
+VerificationSas Client::get_sas(const std::string& flow_id) const
 {
     SH_FFI;
-    auto ffi_vec = impl_->ffi->get_sas_emojis(flow_id);
-    std::vector<VerificationEmoji> result;
-    result.reserve(ffi_vec.size());
-    for (const auto& e : ffi_vec)
-    {
-        result.push_back({std::string(e.symbol), std::string(e.description)});
-    }
-    return result;
+    return from_ffi(impl_->ffi->get_sas(flow_id));
 }
 
 Result Client::register_pusher(const std::string& pushkey,

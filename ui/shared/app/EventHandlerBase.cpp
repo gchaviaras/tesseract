@@ -799,19 +799,19 @@ void EventHandlerBase::on_verification_request(const std::string& flow_id,
 }
 
 void EventHandlerBase::on_sas_ready(const std::string& flow_id,
-                                    std::vector<VerificationEmoji> emojis)
+                                    VerificationSas sas)
 {
     struct Payload
     {
         std::string fid;
-        std::vector<VerificationEmoji> em;
+        VerificationSas sas;
     };
-    auto p = std::make_shared<Payload>(Payload{flow_id, std::move(emojis)});
+    auto p = std::make_shared<Payload>(Payload{flow_id, std::move(sas)});
     shell()->post_to_ui_(
         [shell = shell(), uid = user_id_, p]() mutable
         {
             ShellBase::EventAccountScope scope(*shell, uid);
-            shell->handle_sas_ready_ui_(std::move(p->fid), std::move(p->em));
+            shell->handle_sas_ready_ui_(std::move(p->fid), std::move(p->sas));
         });
 }
 

@@ -14163,13 +14163,12 @@ void ShellBase::handle_verification_request_ui_(std::string account_uid, std::st
     }
 }
 
-void ShellBase::handle_sas_ready_ui_(std::string flow_id,
-                                     std::vector<VerificationEmoji> emojis)
+void ShellBase::handle_sas_ready_ui_(std::string flow_id, VerificationSas sas)
 {
     if (!encryption_flow_.is_flow(flow_id)) return;
     auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr;
     if (!ov || !ov->visible()) return;
-    ov->show_emojis(std::move(emojis));
+    ov->show_sas(std::move(sas));
     request_relayout_();
 }
 

@@ -521,12 +521,20 @@ TEST_CASE("Recover: Progress error returns to EnterKey with message",
 
 namespace
 {
-std::vector<tesseract::VerificationEmoji> seven_emojis()
+// Both methods agreed: the decimals plus the 7 emoji.
+tesseract::VerificationSas emoji_and_decimal_sas()
 {
-    return {{"\xf0\x9f\x90\xb6", "Dog"},   {"\xf0\x9f\x90\xb1", "Cat"},
-            {"\xf0\x9f\xa6\x81", "Lion"},  {"\xf0\x9f\x90\xbb", "Bear"},
-            {"\xf0\x9f\x90\xbc", "Panda"}, {"\xf0\x9f\x90\xa8", "Koala"},
-            {"\xf0\x9f\x90\xaf", "Tiger"}};
+    return {{{"\xf0\x9f\x90\xb6", "Dog"},   {"\xf0\x9f\x90\xb1", "Cat"},
+             {"\xf0\x9f\xa6\x81", "Lion"},  {"\xf0\x9f\x90\xbb", "Bear"},
+             {"\xf0\x9f\x90\xbc", "Panda"}, {"\xf0\x9f\x90\xa8", "Koala"},
+             {"\xf0\x9f\x90\xaf", "Tiger"}},
+            {1234, 5678, 9012}};
+}
+
+// The peer offered only `decimal` (MSC4405).
+tesseract::VerificationSas decimal_only_sas()
+{
+    return {{}, {1000, 4242, 9191}};
 }
 } // namespace
 
@@ -557,17 +565,18 @@ TEST_CASE("Verify: 'Not me' fires on_decline_request", "[encryption][overlay]")
     CHECK(declined);
 }
 
-TEST_CASE("Verify: emoji → They match → Confirming → Done",
+TEST_CASE("Verify: emoji + decimal → They match → Confirming → Done",
           "[encryption][overlay]")
 {
     EncryptionSetupOverlayStage st;
     auto ov = tk::create_root_widget<EncryptionSetupOverlay>(nullptr, EncryptionSetupOverlay::Mode::Verify);
     ov->show_incoming_request("Phone", true);
     ov->simulate_primary_action(); // Continue
-    ov->show_emojis(seven_emojis());
-    st.run(*ov, {0, 0, 800, 600}); // paints the grid
-    CHECK(ov->step() == EncryptionSetupOverlay::Step::CompareEmoji);
-    CHECK(ov->emojis().size() == 7);
+    ov->show_sas(emoji_and_decimal_sas());
+    st.run(*ov, {0, 0, 800, 600}); // paints the numbers and the grid
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::CompareCodes);
+    CHECK(ov->sas().emojis.size() == 7);
+    CHECK(ov->sas().decimals[2] == 9012);
 
     bool matched = false;
     ov->on_sas_match = [&] { matched = true; };
@@ -581,6 +590,27 @@ TEST_CASE("Verify: emoji → They match → Confirming → Done",
     CHECK(ov->done_kind() == EncryptionSetupOverlay::DoneKind::OtherDeviceConfirmed);
 }
 
+TEST_CASE("Verify: decimal-only SAS → CompareCodes → They match → Confirming",
+          "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(nullptr, EncryptionSetupOverlay::Mode::Verify);
+    ov->show_incoming_request("Phone", true);
+    ov->simulate_primary_action(); // Continue
+    ov->show_sas(decimal_only_sas());
+    st.run(*ov, {0, 0, 800, 600}); // paints the numbers, no emoji grid
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::CompareCodes);
+    CHECK(ov->sas().emojis.empty());
+    CHECK(ov->sas().decimals[0] == 1000);
+    CHECK(ov->sas().decimals[2] == 9191);
+
+    bool matched = false;
+    ov->on_sas_match = [&] { matched = true; };
+    ov->simulate_primary_action();
+    CHECK(matched);
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::Confirming);
+}
+
 TEST_CASE("Verify: They don't match → VerifyFailed; the SDK echo keeps the "
           "local explanation",
           "[encryption][overlay]")
@@ -589,7 +619,7 @@ TEST_CASE("Verify: They don't match → VerifyFailed; the SDK echo keeps the "
     auto ov = tk::create_root_widget<EncryptionSetupOverlay>(nullptr, EncryptionSetupOverlay::Mode::Verify);
     ov->show_incoming_request("Phone", true);
     ov->simulate_primary_action();
-    ov->show_emojis(seven_emojis());
+    ov->show_sas(emoji_and_decimal_sas());
     bool mismatch = false;
     ov->on_sas_mismatch = [&] { mismatch = true; };
     ov->simulate_secondary();
@@ -739,7 +769,7 @@ TEST_CASE("Verify: a failed incoming request never offers a retry, even after "
 
     ov->show_incoming_request("Phone", true);
     ov->simulate_primary_action(); // Continue
-    ov->show_emojis(seven_emojis());
+    ov->show_sas(emoji_and_decimal_sas());
     ov->simulate_secondary();      // They don't match
     REQUIRE(ov->step() == EncryptionSetupOverlay::Step::VerifyFailed);
 

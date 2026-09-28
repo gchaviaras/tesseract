@@ -2192,10 +2192,10 @@ public:
     /// Begin the SAS key exchange for `flow_id`. Call after accepting an
     /// incoming request (or immediately after the remote accepts an outgoing
     /// one via `on_verification_request(incoming=false)`). When the keys are
-    /// exchanged `IEventHandler::on_sas_ready` fires with the 7 emoji.
+    /// exchanged `IEventHandler::on_sas_ready` fires with the SAS codes.
     Result start_sas(const std::string& flow_id);
 
-    /// Confirm that the 7 SAS emoji match what the other device shows.
+    /// Confirm that the SAS codes match what the other device shows.
     /// Both sides must call this for verification to complete.
     Result confirm_sas(const std::string& flow_id);
 
@@ -2203,11 +2203,10 @@ public:
     /// Covers both the request phase and the SAS phase.
     Result cancel_verification(const std::string& flow_id);
 
-    /// Return the cached 7 SAS emoji for `flow_id` after
-    /// `IEventHandler::on_sas_ready` has fired. Returns an empty vector
-    /// if the flow has no emoji yet (call too early) or is unknown.
-    std::vector<VerificationEmoji>
-    get_sas_emojis(const std::string& flow_id) const;
+    /// Return the cached SAS codes for `flow_id` after
+    /// `IEventHandler::on_sas_ready` has fired. Returns no emoji and all-zero
+    /// decimals if the key exchange hasn't finished or the flow is unknown.
+    VerificationSas get_sas(const std::string& flow_id) const;
 
     // ------------------------------------------------------------------
     // Server pushers (Step 12)

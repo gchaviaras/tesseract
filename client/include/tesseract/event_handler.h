@@ -492,10 +492,11 @@ public:
     {
     }
 
-    /// The 7 SAS emoji are ready for display. Called after both devices
-    /// have exchanged keys; the UI switches to ShowEmojis state.
+    /// The SAS codes are ready for display. Called after both devices have
+    /// exchanged keys; the UI switches to its compare step. The decimals are
+    /// always set; `sas.emojis` is empty when only `decimal` was agreed.
     virtual void on_sas_ready(const std::string& /*flow_id*/,
-                              std::vector<VerificationEmoji> /*emojis*/)
+                              VerificationSas /*sas*/)
     {
     }
 

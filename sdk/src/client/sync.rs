@@ -70,7 +70,7 @@ impl ClientFfi {
             };
             let h = Arc::clone(handler);
             let flow_users = Arc::clone(&self.verification_flow_users);
-            let emoji_cache = Arc::clone(&self.sas_emoji_cache);
+            let sas_cache = Arc::clone(&self.sas_cache);
             let tasks = Arc::clone(&self.verification_tasks);
 
             self.event_handler_handles.push(client.add_event_handler(
@@ -78,7 +78,7 @@ impl ClientFfi {
                       client: Client| {
                     let h = Arc::clone(&h);
                     let flow_users = Arc::clone(&flow_users);
-                    let emoji_cache = Arc::clone(&emoji_cache);
+                    let sas_cache = Arc::clone(&sas_cache);
                     let tasks = Arc::clone(&tasks);
                     async move {
                         let flow_id = ev.content.transaction_id.to_string();
@@ -137,7 +137,7 @@ impl ClientFfi {
                             // start_sas is called.
                             let h2 = Arc::clone(&h);
                             let flow_users2 = Arc::clone(&flow_users);
-                            let emoji_cache2 = Arc::clone(&emoji_cache);
+                            let sas_cache2 = Arc::clone(&sas_cache);
                             let flow_id2 = flow_id.clone();
                             let tasks2 = Arc::clone(&tasks);
                             let handle = tokio::spawn(verification::watch_verification_request(
@@ -145,7 +145,7 @@ impl ClientFfi {
                                 flow_id2,
                                 h2,
                                 flow_users2,
-                                emoji_cache2,
+                                sas_cache2,
                                 tasks,
                             ));
                             lock_or_recover(&tasks2).push(handle.abort_handle());

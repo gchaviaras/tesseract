@@ -3089,8 +3089,8 @@ msgid "The request was cancelled or timed out."
 msgstr "La solicitud se canceló o caducó."
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "The emoji didn't match, so nothing was confirmed. If you didn't start this, someone else may be trying to get into your account."
-msgstr "Los emoji no coincidían, así que no se confirmó nada. Si no iniciaste esto, puede que otra persona esté intentando acceder a tu cuenta."
+msgid "The codes didn't match, so nothing was confirmed. If you didn't start this, someone else may be trying to get into your account."
+msgstr "Los códigos no coincidían, así que no se confirmó nada. Si no iniciaste esto, puede que otra persona esté intentando acceder a tu cuenta."
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Choose how to unlock your encrypted messages on this device."
@@ -3151,20 +3151,24 @@ msgstr "Tu dispositivo «{0}» quiere confirmar que eres tú para poder leer tus
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 #, c++-format
-msgid "{0} wants to verify you. You'll compare emoji to make sure you're talking to the right person."
-msgstr "{0} quiere verificarte. Compararéis emoji para aseguraros de que habláis con la persona correcta."
+msgid "{0} wants to verify you. You'll compare a few numbers to make sure you're talking to the right person."
+msgstr "{0} quiere verificarte. Compararéis unos números para aseguraros de que habláis con la persona correcta."
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Not me"
 msgstr "No he sido yo"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Compare emoji"
-msgstr "Compara los emoji"
+msgid "Compare numbers"
+msgstr "Compara los números"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Check that the other device shows the same emoji in the same order."
-msgstr "Comprueba que el otro dispositivo muestra los mismos emoji en el mismo orden."
+msgid "Check that the other device shows the same numbers in the same order."
+msgstr "Comprueba que el otro dispositivo muestra los mismos números en el mismo orden."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Or compare these emoji:"
+msgstr "O compara estos emoji:"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "They match"

@@ -806,11 +806,11 @@ pub struct ClientFfi {
     /// SDK's internal map using (user_id, flow_id).
     #[cfg(not(test))]
     pub(super) verification_flow_users: Arc<Mutex<HashMap<String, String>>>,
-    /// Most-recently-computed SAS emoji per `flow_id`. Populated by the SAS
+    /// Most-recently-computed SAS codes per `flow_id`. Populated by the SAS
     /// watcher task when `KeysExchanged` fires; read synchronously by
-    /// `get_sas_emojis()`.
+    /// `get_sas()`.
     #[cfg(not(test))]
-    pub(super) sas_emoji_cache: Arc<Mutex<HashMap<String, Vec<(String, String)>>>>,
+    pub(super) sas_cache: verification::SasCache,
     /// Abort handles for every verification/SAS watcher task. These spawns
     /// outlive their initiating method, hold cloned `Arc<SendHandler>`
     /// references, and would otherwise call back into a destroyed C++
@@ -1255,7 +1255,7 @@ impl ClientFfi {
             #[cfg(not(test))]
             verification_flow_users: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(not(test))]
-            sas_emoji_cache: Arc::new(Mutex::new(HashMap::new())),
+            sas_cache: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(not(test))]
             verification_tasks: Arc::new(Mutex::new(Vec::new())),
             // Per-origin ceiling = 2× per-origin base: lets one origin's queue

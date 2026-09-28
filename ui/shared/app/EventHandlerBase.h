@@ -179,8 +179,7 @@ public:
                                  const std::string& user_id,
                                  const std::string& device_id,
                                  bool incoming) override;
-    void on_sas_ready(const std::string& flow_id,
-                      std::vector<VerificationEmoji> emojis) override;
+    void on_sas_ready(const std::string& flow_id, VerificationSas sas) override;
     void on_verification_done(const std::string& flow_id) override;
     void on_verification_cancelled(const std::string& flow_id,
                                    const std::string& reason) override;

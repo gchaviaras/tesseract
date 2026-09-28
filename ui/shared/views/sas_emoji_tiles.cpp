@@ -3,6 +3,7 @@
 #include "tk/theme.h"
 
 #include <algorithm>
+#include <string>
 
 namespace tesseract::views
 {
@@ -14,7 +15,39 @@ constexpr float kTileH       = 72.0f;
 constexpr float kTileGap     = 8.0f;
 constexpr float kGlyphH      = 46.0f;
 constexpr float kTileRadius  = 6.0f;
+constexpr float kDecimalH    = 56.0f;
 } // namespace
+
+float sas_decimal_row_height()
+{
+    return kDecimalH;
+}
+
+void paint_sas_decimal_row(tk::PaintCtx& ctx, tk::Rect area,
+                           const std::array<uint16_t, 3>& decimals)
+{
+    const auto& pal = ctx.theme.palette;
+    const int   n      = static_cast<int>(decimals.size());
+    const float tile_w = (area.w - kTileGap * (n - 1)) / n;
+
+    tk::TextStyle st;
+    st.role      = tk::FontRole::Title;
+    st.monospace = true; // equal-width digits, easier to compare
+
+    for (int i = 0; i < n; ++i)
+    {
+        tk::Rect r{area.x + i * (tile_w + kTileGap), area.y, tile_w, kDecimalH};
+        ctx.canvas.fill_rounded_rect(r, kTileRadius, pal.bg);
+        ctx.canvas.stroke_rounded_rect(r, kTileRadius, pal.border, 1.0f);
+        if (auto lo = ctx.factory.build_text(std::to_string(decimals[i]), st))
+        {
+            const tk::Size sz = lo->measure();
+            ctx.canvas.draw_text(*lo, {r.x + (r.w - sz.w) * 0.5f,
+                                       r.y + (r.h - sz.h) * 0.5f},
+                                 pal.text_primary);
+        }
+    }
+}
 
 float sas_emoji_grid_height()
 {

@@ -689,9 +689,21 @@ pub mod ffi {
     /// `description` is the English label from the Matrix spec table (e.g. "Dog").
     /// The UI renders both side-by-side for each of the 7 tiles so the user
     /// can compare them with the other device's display.
+    #[derive(Clone)]
     struct VerificationEmoji {
         symbol: String,
         description: String,
+    }
+
+    /// The short authentication string for one SAS flow, delivered via
+    /// `on_sas_ready`. `decimals` is always set: three numbers in 1000..=9191,
+    /// the spec's `decimal` method (MSC4405 makes it the preferred one).
+    /// `emojis` holds the 7 emoji when the `emoji` method was also agreed and
+    /// is empty when the other device offered decimal only.
+    #[derive(Clone)]
+    struct VerificationSas {
+        emojis: Vec<VerificationEmoji>,
+        decimals: [u16; 3],
     }
 
     /// One GIF search result delivered to C++ via `on_gif_results`. URLs point
@@ -1489,10 +1501,10 @@ pub mod ffi {
         );
 
         /// Fired when the SAS short-auth-string key exchange completes and the
-        /// 7 emoji are ready to compare. The UI should transition to its
-        /// ShowEmojis state and render the tiles. `flow_id` matches the one
-        /// supplied by `on_verification_request`.
-        fn on_sas_ready(self: &EventHandlerBridge, flow_id: &str, emojis: &Vec<VerificationEmoji>);
+        /// codes are ready to compare. The UI should show the decimals, plus
+        /// the emoji tiles when `sas.emojis` is non-empty. `flow_id` matches
+        /// the one supplied by `on_verification_request`.
+        fn on_sas_ready(self: &EventHandlerBridge, flow_id: &str, sas: &VerificationSas);
 
         /// Fired after both sides called `confirm_sas` — the device is now
         /// cross-signing verified. The UI should transition to Done state and
@@ -3918,20 +3930,21 @@ pub mod ffi {
         fn accept_verification(self: &ClientFfi, flow_id: &str) -> OpResult;
 
         /// Start the SAS key-exchange on a ready request. The SDK will fire
-        /// `on_sas_ready` with the 7 emoji once both sides have exchanged keys.
+        /// `on_sas_ready` with the SAS codes once both sides have exchanged keys.
         fn start_sas(self: &ClientFfi, flow_id: &str) -> OpResult;
 
-        /// Confirm that the emoji shown on this device match the other device's
+        /// Confirm that the SAS codes shown on this device match the other device's
         /// display. Fires `on_verification_done` when both sides confirm.
         fn confirm_sas(self: &ClientFfi, flow_id: &str) -> OpResult;
 
-        /// Cancel or decline a verification flow (e.g. emoji mismatch or user
+        /// Cancel or decline a verification flow (e.g. SAS mismatch or user
         /// dismissed). Fires `on_verification_cancelled` on both sides.
         fn cancel_verification(self: &ClientFfi, flow_id: &str) -> OpResult;
 
-        /// Return the 7 SAS emoji for `flow_id` after `on_sas_ready` has fired.
-        /// Returns an empty Vec before the key exchange completes.
-        fn get_sas_emojis(self: &ClientFfi, flow_id: &str) -> Vec<VerificationEmoji>;
+        /// Return the SAS codes for `flow_id` after `on_sas_ready` has fired.
+        /// Before the key exchange completes, `emojis` is empty and
+        /// `decimals` is all zeros.
+        fn get_sas(self: &ClientFfi, flow_id: &str) -> VerificationSas;
 
         // ----- Server pushers (Step 12) -----
 

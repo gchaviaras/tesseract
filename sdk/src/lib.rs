@@ -534,6 +534,18 @@ pub mod ffi {
         pub verification_uri: String,
     }
 
+    #[derive(Debug, PartialEq, Default, Clone)]
+    pub struct VerificationEmoji {
+        pub symbol: String,
+        pub description: String,
+    }
+
+    #[derive(Debug, PartialEq, Default, Clone)]
+    pub struct VerificationSas {
+        pub emojis: Vec<VerificationEmoji>,
+        pub decimals: [u16; 3],
+    }
+
     pub struct EventHandlerBridge;
     impl EventHandlerBridge {
         pub fn on_timeline_reset(&self, _room_id: &str, _snapshot: &Vec<TimelineEvent>) {}

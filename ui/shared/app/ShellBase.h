@@ -4202,8 +4202,7 @@ protected:
     void handle_verification_request_ui_(std::string account_uid, std::string flow_id,
                                          std::string user_id, std::string device_id,
                                          bool incoming);
-    void handle_sas_ready_ui_(std::string flow_id,
-                              std::vector<VerificationEmoji> emojis);
+    void handle_sas_ready_ui_(std::string flow_id, VerificationSas sas);
     void handle_verification_done_ui_(std::string flow_id);
     void handle_verification_cancelled_ui_(std::string flow_id, std::string reason);
     // Updates the avatar warning dot and the reminder strip.

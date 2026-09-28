@@ -972,21 +972,14 @@ void EventHandlerBridge::on_verification_request(rust::Str flow_id,
           });
 }
 
-void EventHandlerBridge::on_sas_ready(
-    rust::Str flow_id, const rust::Vec<VerificationEmoji>& emojis) const
+void EventHandlerBridge::on_sas_ready(rust::Str flow_id,
+                                      const VerificationSas& sas) const
 {
     with_handler("on_sas_ready", slot_,
           [&](tesseract::IEventHandler* handler_)
           {
-              std::vector<tesseract::VerificationEmoji> cpp_emojis;
-              cpp_emojis.reserve(emojis.size());
-              for (const auto& e : emojis)
-              {
-                  cpp_emojis.push_back(
-                      {std::string(e.symbol), std::string(e.description)});
-              }
               handler_->on_sas_ready(std::string(flow_id),
-                                     std::move(cpp_emojis));
+                                     tesseract::from_ffi(sas));
           });
 }
 

@@ -3881,7 +3881,7 @@ mod tests {
 
     #[test]
     fn oauth_cancel_is_noop_without_flow() {
-        let mut c = ClientFfi::new();
+        let c = ClientFfi::new();
         c.oauth_cancel();
     }
 

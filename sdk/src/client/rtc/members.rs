@@ -246,8 +246,12 @@ mod tests {
 
     use super::*;
 
+    /// A minute ago plus `ms`. The base is read once, so equal arguments give
+    /// equal timestamps even when the clock ticks between calls (ties must
+    /// stay ties for the state-key tie-break tests).
     fn ts(ms: u32) -> MilliSecondsSinceUnixEpoch {
-        let base = MilliSecondsSinceUnixEpoch::now().0 - UInt::from(60_000u32);
+        static BASE: std::sync::OnceLock<UInt> = std::sync::OnceLock::new();
+        let base = *BASE.get_or_init(|| MilliSecondsSinceUnixEpoch::now().0 - UInt::from(60_000u32));
         MilliSecondsSinceUnixEpoch(base + UInt::from(ms))
     }
 

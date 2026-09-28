@@ -21,8 +21,8 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-28**
 > encrypted rooms, a banner warns when a member's identity is reset ("OK"
 > accepts it, "Withdraw verification" for a verified user), and messages
 > held back by an encryption check offer Retry. Windows build; ctest
-> 2030/2032, cargo 758/759 (failures in unrelated tests); user-verified
-> live on Windows. Qt6/GTK4/macOS unbuilt.
+> 2032/2032, cargo 763/763; user-verified live on Windows. Qt6/GTK4/macOS
+> unbuilt.
 
 <!-- -->
 

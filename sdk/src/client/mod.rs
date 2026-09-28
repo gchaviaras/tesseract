@@ -759,6 +759,11 @@ pub struct ClientFfi {
     /// guarded), falling back to the homeserver. Only ever `true` while
     /// `bundled_url_previews` is.
     pub(super) bundled_url_previews_direct: std::sync::atomic::AtomicBool,
+    /// MSC4452: whether the homeserver's `/preview_url` is available to this
+    /// user (`m.preview_url.enabled` capability, unstable
+    /// `io.element.msc4452.preview_url`). Populated by `get_server_info`;
+    /// `true` until the capabilities response says otherwise.
+    pub(super) homeserver_preview_url_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// When `true`, "low power mode" is active: the per-room warm-check
     /// auto-pagination task, the search-index backfill crawl and proactive
     /// image-pack rebuilds bail out / pause. Controlled by
@@ -1234,6 +1239,9 @@ impl ClientFfi {
             show_membership_events: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             bundled_url_previews: std::sync::atomic::AtomicBool::new(false),
             bundled_url_previews_direct: std::sync::atomic::AtomicBool::new(false),
+            homeserver_preview_url_enabled: std::sync::Arc::new(
+                std::sync::atomic::AtomicBool::new(true),
+            ),
             low_power_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             msc2545_legacy_compat: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             #[cfg(not(test))]
@@ -1345,6 +1353,9 @@ impl ClientFfi {
             show_membership_events: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             bundled_url_previews: std::sync::atomic::AtomicBool::new(false),
             bundled_url_previews_direct: std::sync::atomic::AtomicBool::new(false),
+            homeserver_preview_url_enabled: std::sync::Arc::new(
+                std::sync::atomic::AtomicBool::new(true),
+            ),
             low_power_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             msc2545_legacy_compat: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             profile_fields_prefix: std::sync::Arc::new(std::sync::RwLock::new(None)),

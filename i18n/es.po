@@ -4986,6 +4986,12 @@ msgid "Fetch link previews directly instead of through my homeserver"
 msgstr "Obtener las vistas previas de enlaces directamente en lugar de a través de mi servidor"
 
 #: ui/shared/views/settings/PrivacySection.cpp
+msgid ""
+"Your homeserver doesn't provide link previews, so links you receive "
+"won't show a preview."
+msgstr "Tu servidor no ofrece vistas previas de enlaces, así que los enlaces que recibas no mostrarán ninguna vista previa."
+
+#: ui/shared/views/settings/PrivacySection.cpp
 msgid "Before sending a message that contains links, ask your homeserver for a preview of each link and attach it to the message, so recipients see it without fetching it themselves. Sending such messages can take a few seconds longer."
 msgstr "Antes de enviar un mensaje que contiene enlaces, pide a tu servidor una vista previa de cada enlace y la adjunta al mensaje, para que los destinatarios la vean sin tener que obtenerla. Enviar estos mensajes puede tardar unos segundos más."
 

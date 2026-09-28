@@ -51,6 +51,10 @@ public:
     // checkbox is toggled.
     std::function<void(bool enabled, bool direct)> on_bundled_url_previews_changed;
 
+    // Show the "homeserver doesn't provide link previews" note (MSC4452
+    // m.preview_url capability) when `available` is false.
+    void set_homeserver_previews_available(bool available);
+
     // Silently update the message-search-index checkbox without firing.
     void set_index_messages(bool enabled);
 
@@ -90,6 +94,7 @@ private:
     tk::CheckButton* send_maps_urls_as_location_cb_ = nullptr;
     tk::CheckButton* bundled_url_previews_cb_ = nullptr;
     tk::CheckButton* url_previews_direct_cb_ = nullptr;
+    tk::Label* previews_unavailable_label_ = nullptr;
     tk::CheckButton* search_index_cb_ = nullptr;
     tk::Label* search_stats_label_ = nullptr; // counts + status
     tk::Label* search_date_label_ = nullptr;  // "covers messages since …"

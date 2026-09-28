@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- feat(previews): MSC4452 `m.preview_url` capability (and the unstable `io.element.msc4452.preview_url`); when the homeserver has link previews off, Settings → Privacy says so and Tesseract stops calling `/preview_url`, though direct fetches for sent messages still run. Windows build; user-verified. Qt6/GTK4/macOS share the code, unbuilt
 - feat(accounts): pop-outs keep working for the account that opened them after switching accounts (sending, replies, reactions, moderation, settings, receipts, subscriptions all use that account), and each account can have its own pop-out of the same room. Logging out closes only that account's pop-outs. Media downloads still go through the active account. Unbuilt; pending user test
 - feat(tk): an object destroyed from inside one of its own `guarded()` callbacks is now logged (`tk::detail::report_destroyed_in_own_callback`, a breakpoint target), since the rest of that callback runs on freed memory. Unbuilt; pending user test
 - fix(settings): background settings jobs (devices, avatar, notifications, image packs, key export) now keep their account's client alive while they run, so logging out mid-job can't destroy it underneath them. Unbuilt; pending user test

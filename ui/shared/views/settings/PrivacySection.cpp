@@ -103,6 +103,16 @@ PrivacySection::PrivacySection()
     // ── Link previews ─────────────────────────────────────────────────────────
     auto* previews_group = add_group(tk::tr("Link previews"));
 
+    // Hidden until server info says the homeserver has /preview_url off.
+    auto unavailable_lbl = tk::create_widget<tk::Label>(
+        this,
+        tk::tr("Your homeserver doesn't provide link previews, so links you "
+               "receive won't show a preview."),
+        tk::FontRole::Small);
+    unavailable_lbl->set_wrap(true);
+    previews_unavailable_label_ = previews_group->add_widget(std::move(unavailable_lbl));
+    previews_unavailable_label_->set_visible(false);
+
     auto bundled_cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Include link previews in messages I send"),
         s.send_bundled_url_previews);
@@ -246,6 +256,11 @@ void PrivacySection::set_bundled_url_previews(bool enabled, bool direct)
     bundled_url_previews_cb_->set_checked(enabled);
     url_previews_direct_cb_->set_checked(direct);
     url_previews_direct_cb_->set_enabled(enabled);
+}
+
+void PrivacySection::set_homeserver_previews_available(bool available)
+{
+    previews_unavailable_label_->set_visible(!available);
 }
 
 void PrivacySection::set_index_messages(bool enabled)

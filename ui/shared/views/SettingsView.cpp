@@ -772,6 +772,10 @@ void SettingsView::set_server_info(const tesseract::ServerInfo& info)
         account_->set_profile_fields_editable(
             info.supports_profile_fields && info.profile_fields_enabled);
     }
+    if (privacy_)
+    {
+        privacy_->set_homeserver_previews_available(info.preview_url_enabled);
+    }
     // Toggling profile-fields editability now also shows/hides the whole
     // ExtendedFields block, which changes AccountSection's measured height —
     // needs a repaint/relayout if server info arrives after Settings is

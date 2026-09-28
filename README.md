@@ -162,6 +162,7 @@ Change proposals where the homeserver advertises support for them:
 - [MSC3952](https://github.com/matrix-org/matrix-spec-proposals/pull/3952) — intentional mentions
 - [MSC2530](https://github.com/matrix-org/matrix-spec-proposals/pull/2530) — media captions
 - [MSC4095](https://github.com/matrix-org/matrix-spec-proposals/pull/4095) — sender-bundled URL previews, shown directly (including in encrypted rooms), with a homeserver-generated preview as the fallback
+- [MSC4452](https://github.com/matrix-org/matrix-spec-proposals/pull/4452) — the `m.preview_url` capability: when the homeserver turns link previews off, Settings says so and Tesseract stops asking it for previews
 - [MSC2448](https://github.com/matrix-org/matrix-spec-proposals/pull/2448) — BlurHash media placeholders
 - [MSC2705](https://github.com/matrix-org/matrix-spec-proposals/pull/2705) — animated thumbnails
 - [MSC3916](https://github.com/matrix-org/matrix-spec-proposals/pull/3916) — authenticated media downloads

@@ -10,6 +10,9 @@
 //!    Sender-side only — previews for received links always go through the
 //!    homeserver (`get_url_preview_async`).
 //!
+//! The homeserver is skipped entirely when it advertises MSC4452's
+//! `m.preview_url` capability as disabled (`homeserver_preview_url_enabled`).
+//!
 //! Generation is its own FFI call (`generate_url_previews`, returning JSON)
 //! rather than part of the send, so the shell can run the slow fetch on its
 //! read pool and pass the result to the send calls' `url_previews_json`
@@ -223,6 +226,12 @@ mod net {
             } else {
                 None
             };
+            // MSC4452: a homeserver that turned `/preview_url` off would only
+            // answer 403, so don't ask it; direct fetches still run.
+            let homeserver_ok = self.homeserver_preview_url_enabled.load(Ordering::Relaxed);
+            if direct_http.is_none() && !homeserver_ok {
+                return String::new();
+            }
             let encrypted = room.encryption_state().is_encrypted();
             let previews: Vec<UrlPreview> = self
                 .block_on_cancellable(async move {
@@ -232,7 +241,7 @@ mod net {
                         async move {
                             tokio::time::timeout(
                                 PREVIEW_BUDGET,
-                                preview_one(&client, encrypted, http.as_ref(), url),
+                                preview_one(&client, encrypted, http.as_ref(), homeserver_ok, url),
                             )
                             .await
                             .ok()
@@ -254,6 +263,7 @@ mod net {
         client: &Client,
         encrypted: bool,
         direct_http: Option<&reqwest::Client>,
+        homeserver_ok: bool,
         url: String,
     ) -> Option<UrlPreview> {
         if let Some(http) = direct_http {
@@ -266,6 +276,9 @@ mod net {
             .flatten();
             if direct.is_some() {
                 return direct;
+            }
+            if !homeserver_ok {
+                return None;
             }
             tracing::debug!("url preview: direct fetch failed for {url}; falling back to homeserver");
         }

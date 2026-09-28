@@ -19,6 +19,19 @@ use std::sync::atomic::Ordering;
 #[cfg(not(test))]
 use super::BACKUP_STATE_UNKNOWN;
 
+/// MSC4452: whether `/preview_url` is available to this user, from a
+/// `/capabilities` response. Prefers the stable `m.preview_url` key over the
+/// unstable `io.element.msc4452.preview_url`; absent means available.
+pub(super) fn preview_url_enabled(caps: &serde_json::Value) -> bool {
+    ["m.preview_url", "io.element.msc4452.preview_url"]
+        .iter()
+        .find_map(|key| {
+            caps.pointer(&format!("/capabilities/{key}/enabled"))
+                .and_then(|v| v.as_bool())
+        })
+        .unwrap_or(true)
+}
+
 /// Tagged JSON envelope for a persisted session. The `auth` tag records which
 /// mechanism authenticated the underlying `Client` (OAuth/MAS vs. native
 /// `m.login.password`), so `restore_session`/`export_session`/`logout` and
@@ -406,6 +419,7 @@ impl ClientFfi {
         let http = self.http_client.clone();
         let prefix_slot = self.profile_fields_prefix.clone();
         let invite_reason_slot = self.supports_invite_reason.clone();
+        let preview_url_slot = self.homeserver_preview_url_enabled.clone();
 
         self.rt.block_on(async move {
             let base = {
@@ -495,6 +509,8 @@ impl ClientFfi {
                 .pointer("/capabilities/m.profile_fields/enabled")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
+            let preview_url_enabled = preview_url_enabled(&caps);
+            preview_url_slot.store(preview_url_enabled, Ordering::Relaxed);
 
             let supports_calls = crate::client::rtc::transport::probe_livekit_support(
                 &http,
@@ -514,6 +530,7 @@ impl ClientFfi {
                 "default_room_version": default_room_ver,
                 "supports_profile_fields": supports_msc4133,
                 "profile_fields_enabled": profile_fields_enabled,
+                "preview_url_enabled": preview_url_enabled,
                 "supports_qr_grant": supports_qr_grant,
                 "supports_calls": supports_calls
             })
@@ -537,6 +554,7 @@ impl ClientFfi {
         let http = self.http_client.clone();
         let prefix_slot = self.profile_fields_prefix.clone();
         let invite_reason_slot = self.supports_invite_reason.clone();
+        let preview_url_slot = self.homeserver_preview_url_enabled.clone();
 
         self.rt.spawn(async move {
             let base = {
@@ -626,6 +644,8 @@ impl ClientFfi {
                 .pointer("/capabilities/m.profile_fields/enabled")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
+            let preview_url_enabled = preview_url_enabled(&caps);
+            preview_url_slot.store(preview_url_enabled, Ordering::Relaxed);
 
             let supports_calls = crate::client::rtc::transport::probe_livekit_support(
                 &http,
@@ -645,6 +665,7 @@ impl ClientFfi {
                 "default_room_version": default_room_ver,
                 "supports_profile_fields": supports_msc4133,
                 "profile_fields_enabled": profile_fields_enabled,
+                "preview_url_enabled": preview_url_enabled,
                 "supports_qr_grant": supports_qr_grant,
                 "supports_calls": supports_calls
             })
@@ -1144,5 +1165,36 @@ mod envelope_tests {
             }
             SessionEnvelope::Native { .. } => panic!("expected OAuth variant"),
         }
+    }
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::preview_url_enabled;
+    use serde_json::json;
+
+    #[test]
+    fn preview_url_capability_defaults_to_enabled() {
+        assert!(preview_url_enabled(&serde_json::Value::Null));
+        assert!(preview_url_enabled(&json!({ "capabilities": {} })));
+    }
+
+    #[test]
+    fn preview_url_capability_reads_stable_and_unstable_keys() {
+        let stable = json!({ "capabilities": { "m.preview_url": { "enabled": false } } });
+        assert!(!preview_url_enabled(&stable));
+        let unstable = json!({
+            "capabilities": { "io.element.msc4452.preview_url": { "enabled": false } }
+        });
+        assert!(!preview_url_enabled(&unstable));
+    }
+
+    #[test]
+    fn preview_url_capability_prefers_stable_key() {
+        let both = json!({ "capabilities": {
+            "m.preview_url": { "enabled": true },
+            "io.element.msc4452.preview_url": { "enabled": false }
+        } });
+        assert!(preview_url_enabled(&both));
     }
 }

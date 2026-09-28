@@ -2526,6 +2526,11 @@ void ShellBase::ensure_url_preview_(const std::string& url)
     {
         return;
     }
+    // MSC4452: the homeserver turned /preview_url off, so it would only 403.
+    if (!server_info_.preview_url_enabled)
+    {
+        return;
+    }
     if (!url_preview_in_flight_.insert(url).second)
     {
         return;

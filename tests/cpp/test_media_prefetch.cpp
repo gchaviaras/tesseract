@@ -43,21 +43,53 @@ struct MediaPrefetchTestShell : MediaPrefetchWithAccountManager, ShellBase
 {
     MediaPrefetchTestShell() : ShellBase(am_) {}
 
+    // Workers post into ui_queue_ until they finish, and ui_queue_ is part of
+    // this derived object, so let them finish before it goes away.
+    ~MediaPrefetchTestShell() override
+    {
+        media_prefetch_pool_.wait_idle(std::chrono::seconds(5));
+    }
+
     void post_to_ui_(std::function<void()> fn) override
     {
-        // Real production code posts to the UI thread; here we just run it
-        // inline on whichever thread calls post_to_ui_ (a media_prefetch_pool_
-        // worker thread, for the straggler path). The callback only touches
-        // account_manager_'s caches, which are internally synchronised.
-        // Signalling completion AFTER fn() runs (not from decode_image_
-        // below) is what lets a test wait for the straggler's actual cache
-        // store to have happened, not just for decode_image_ to have
-        // returned — those are two different points in time.
-        fn();
+        // Queue only: the test thread plays the UI thread and runs these via
+        // pump_ui_until(). The callbacks touch UI-thread-only shell state
+        // (media_prefetch_in_flight_, media_decode_pending_until_ms_), so
+        // running them inline on the calling media_prefetch_pool_ worker, as
+        // this used to, raced the other worker and the test thread on those
+        // containers and could corrupt the heap.
         {
             std::lock_guard<std::mutex> lock(post_to_ui_done_mu);
-            ++post_to_ui_calls;
-            post_to_ui_done_cv.notify_all();
+            ui_queue_.push_back(std::move(fn));
+        }
+        post_to_ui_done_cv.notify_all();
+    }
+
+    // Run posted UI callbacks on the calling (test) thread until `done()`
+    // holds or `timeout` passes. post_to_ui_calls counts callbacks that have
+    // finished running, so waiting on it means the straggler's cache store
+    // has actually happened, not just its decode.
+    template <typename Pred>
+    bool pump_ui_until(Pred done, std::chrono::milliseconds timeout)
+    {
+        const auto end = std::chrono::steady_clock::now() + timeout;
+        for (;;)
+        {
+            std::vector<std::function<void()>> batch;
+            {
+                std::unique_lock<std::mutex> lock(post_to_ui_done_mu);
+                if (done())
+                    return true;
+                if (!post_to_ui_done_cv.wait_until(lock, end,
+                                                   [this] { return !ui_queue_.empty(); }))
+                    return done();
+                batch.swap(ui_queue_);
+            }
+            for (auto& fn : batch)
+            {
+                fn();
+                ++post_to_ui_calls;
+            }
         }
     }
     void post_to_ui_after_(int, std::function<void()> fn) override
@@ -120,13 +152,11 @@ struct MediaPrefetchTestShell : MediaPrefetchWithAccountManager, ShellBase
     std::atomic<int> decode_calls{0};
     std::chrono::milliseconds decode_delay{0};
 
-    // Signalled from post_to_ui_ (possibly on a media_prefetch_pool_ worker
-    // thread, for the straggler path) after its callback — which includes
-    // the actual store_decoded_media_ call — has finished running. Lets a
-    // test wait for a straggler's cache store to have genuinely happened,
-    // without a fixed sleep+poll.
+    // Guards ui_queue_; the cv is signalled whenever a callback is queued.
+    // post_to_ui_calls is only touched by the test thread (pump_ui_until).
     std::mutex post_to_ui_done_mu;
     std::condition_variable post_to_ui_done_cv;
+    std::vector<std::function<void()>> ui_queue_;
     int post_to_ui_calls = 0;
 
     tk::PixmapCache&        image_cache()     { return am_.image_cache(); }
@@ -449,16 +479,14 @@ TEST_CASE("run_media_prefetch_impl_ never blocks past its deadline even when dec
     // waiting for it.
     CHECK_FALSE(s.image_cache().contains(tk::CacheKey::media("mxc://b/5")));
 
-    // The straggler is still running on a media_prefetch_pool_ worker thread
-    // (decode, then its post_to_ui_ callback, which is what actually calls
-    // store_decoded_media_); wait for that callback to finish — bounded, a
-    // safety net against a hung test, not the thing under test — before
-    // asserting the result landed, exactly once.
-    {
-        std::unique_lock<std::mutex> lock(s.post_to_ui_done_mu);
-        REQUIRE(s.post_to_ui_done_cv.wait_for(lock, std::chrono::seconds(2), [&s]
-        { return s.post_to_ui_calls >= 1; }));
-    }
+    // The straggler is still decoding on a media_prefetch_pool_ worker
+    // thread; it then posts the callback that actually calls
+    // store_decoded_media_. Run that callback here, on the test thread
+    // standing in for the UI thread — bounded, a safety net against a hung
+    // test, not the thing under test — before asserting the result landed,
+    // exactly once.
+    REQUIRE(s.pump_ui_until([&s] { return s.post_to_ui_calls >= 1; },
+                            std::chrono::seconds(2)));
     CHECK(s.image_cache().contains(tk::CacheKey::media("mxc://b/5")));
     CHECK(s.decode_calls == 1);
     // >= 1, not == 1: the straggler's own post_to_ui_ call is one of them,
@@ -502,11 +530,8 @@ TEST_CASE("run_media_prefetch_impl_ never marks a key in media_fetches_in_flight
     CHECK(s.media_fetches_in_flight().count(disk_key) == 0);
     CHECK(s.media_prefetch_in_flight().count(disk_key) == 1);
 
-    {
-        std::unique_lock<std::mutex> lock(s.post_to_ui_done_mu);
-        REQUIRE(s.post_to_ui_done_cv.wait_for(lock, std::chrono::seconds(2), [&s]
-        { return s.post_to_ui_calls >= 1; }));
-    }
+    REQUIRE(s.pump_ui_until([&s] { return s.post_to_ui_calls >= 1; },
+                            std::chrono::seconds(2)));
     // Slot freed once the straggler finished, so the next paint pass can
     // redispatch if still needed.
     CHECK(s.media_prefetch_in_flight().count(disk_key) == 0);

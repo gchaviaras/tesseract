@@ -495,6 +495,98 @@ TEST_CASE("save_index does not clobber a corrupt accounts.json on the same run",
 }
 
 // ---------------------------------------------------------------------------
+// sweep_orphaned_account_dirs: never deletes without a readable index
+// ---------------------------------------------------------------------------
+
+namespace
+{
+// Plants <data>/accounts/<folder>/matrix-store/marker and returns the marker.
+fs::path plant_account_folder(const std::string& folder)
+{
+    const fs::path marker =
+        tesseract::data_dir() / "accounts" / folder / "matrix-store" / "marker";
+    fs::create_directories(marker.parent_path());
+    std::ofstream(marker, std::ios::binary) << "keys";
+    return marker;
+}
+} // namespace
+
+TEST_CASE("an empty accounts.json is corrupt and the sweep keeps every folder",
+          "[session_store][accounts]")
+{
+    SessionFixture f;
+    tesseract::SessionStore::AccountIndex idx;
+    idx.user_ids = {"@alice:example.org"};
+    REQUIRE(tesseract::SessionStore::save_index(idx));
+    const fs::path marker = plant_account_folder(
+        tesseract::SessionStore::sanitize_user_id("@alice:example.org"));
+
+    // Truncate the index to zero bytes.
+    { std::ofstream(tesseract::data_dir() / "accounts.json",
+                    std::ios::binary | std::ios::trunc); }
+
+    CHECK(tesseract::SessionStore::load_index().corrupt);
+    tesseract::SessionStore::sweep_orphaned_account_dirs();
+    CHECK(fs::exists(marker));
+}
+
+TEST_CASE("a missing accounts.json leaves existing account folders alone",
+          "[session_store][accounts]")
+{
+    SessionFixture f;
+    const fs::path marker = plant_account_folder("_alice_example.org");
+    REQUIRE_FALSE(fs::exists(tesseract::data_dir() / "accounts.json"));
+
+    tesseract::SessionStore::sweep_orphaned_account_dirs();
+    CHECK(fs::exists(marker));
+}
+
+TEST_CASE("load_index recovers accounts.json from its .bak and the sweep keeps it",
+          "[session_store][accounts]")
+{
+    SessionFixture f;
+    tesseract::SessionStore::AccountIndex idx;
+    idx.active_user_id = "@alice:example.org";
+    idx.user_ids = {"@alice:example.org"};
+    REQUIRE(tesseract::SessionStore::save_index(idx));
+    const fs::path marker = plant_account_folder(
+        tesseract::SessionStore::sanitize_user_id("@alice:example.org"));
+
+    // Crash inside atomic_write's replace fallback: the old index was moved
+    // to .bak and the new one never got renamed into place.
+    const fs::path p = tesseract::data_dir() / "accounts.json";
+    fs::path bak = p;
+    bak += ".bak";
+    fs::rename(p, bak);
+
+    auto loaded = tesseract::SessionStore::load_index();
+    CHECK_FALSE(loaded.corrupt);
+    CHECK(loaded.present);
+    REQUIRE(loaded.user_ids.size() == 1);
+    CHECK(loaded.user_ids[0] == "@alice:example.org");
+    CHECK(fs::exists(p));
+
+    tesseract::SessionStore::sweep_orphaned_account_dirs();
+    CHECK(fs::exists(marker));
+}
+
+TEST_CASE("the sweep still removes an orphan when the index is valid",
+          "[session_store][accounts]")
+{
+    SessionFixture f;
+    tesseract::SessionStore::AccountIndex idx;
+    idx.user_ids = {"@alice:example.org"};
+    REQUIRE(tesseract::SessionStore::save_index(idx));
+    const fs::path kept = plant_account_folder(
+        tesseract::SessionStore::sanitize_user_id("@alice:example.org"));
+    const fs::path orphan = plant_account_folder("leftover-2");
+
+    tesseract::SessionStore::sweep_orphaned_account_dirs();
+    CHECK(fs::exists(kept));
+    CHECK_FALSE(fs::exists(orphan.parent_path().parent_path()));
+}
+
+// ---------------------------------------------------------------------------
 // migrate_legacy_layout: every branch from the plan's state machine
 // ---------------------------------------------------------------------------
 

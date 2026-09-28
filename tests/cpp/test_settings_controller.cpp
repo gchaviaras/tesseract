@@ -158,3 +158,33 @@ TEST_CASE("SettingsController: delete_device + confirm reports failure when not 
     CHECK(deleted_calls == 2);
     CHECK_FALSE(deleted_ok);
 }
+
+TEST_CASE("SettingsController: a background job keeps the client's owner alive",
+          "[settings][controller]")
+{
+    // Jobs are queued, not run: only the reference they hold is under test,
+    // so the (never-logged-in) client is never called.
+    std::vector<std::function<void()>> jobs;
+    auto post_inline = [](std::function<void()> fn) { fn(); };
+    auto run_queued  = [&](std::function<void()> fn) { jobs.push_back(std::move(fn)); };
+    auto picker_noop = [](std::function<void(std::vector<uint8_t>, std::string)>) {};
+    auto decode_noop = [](const std::vector<uint8_t>&) { return std::shared_ptr<tk::Image>(); };
+
+    tesseract::Client client;
+    auto owner = std::make_shared<int>(0); // stands in for the AccountSession
+    tesseract::SettingsController ctrl(&client, post_inline, run_queued, picker_noop,
+                                       decode_noop, owner);
+    REQUIRE(owner.use_count() == 2); // test + controller
+
+    ctrl.set_mentions_enabled(true);
+    REQUIRE(jobs.size() == 1);
+
+    // Logout: the controller lets go, but the queued job still holds the
+    // owner, which is what logout's drain waits on before destroying the
+    // Client.
+    ctrl.set_client(nullptr);
+    CHECK(owner.use_count() == 2); // test + queued job
+
+    jobs.clear();
+    CHECK(owner.use_count() == 1);
+}

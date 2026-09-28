@@ -4848,3 +4848,11 @@ msgstr "Avant d'envoyer un message contenant des liens, demande à votre serveur
 #: ui/shared/views/settings/PrivacySection.cpp
 msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
 msgstr "Récupère les pages liées depuis cet appareil plutôt que de les demander à votre serveur d'accueil, et se rabat sur le serveur en cas d'échec. Chaque site que vous liez verra votre adresse IP. Les adresses de votre réseau local ne sont jamais récupérées."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Message not sent: {0}"
+msgstr "Message non envoyé : {0}"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Command failed: {0}"
+msgstr "Échec de la commande : {0}"

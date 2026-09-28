@@ -65,6 +65,7 @@ void SessionPersistQueue::run()
         Job job = std::move(queue_.front());
         queue_.pop_front();
         busy_ = true;
+        busy_user_ = job.user_id;
         lk.unlock();
 
         // The write itself may block (credential store / fsync); that's the
@@ -91,7 +92,8 @@ void SessionPersistQueue::run()
 
         lk.lock();
         busy_ = false;
-        cv_.notify_all(); // wake any drain() waiters
+        busy_user_.clear();
+        cv_.notify_all(); // wake any drain() / discard() waiters
     }
 }
 
@@ -100,6 +102,25 @@ void SessionPersistQueue::drain()
     std::unique_lock<std::mutex> lk(mutex_);
     cv_.notify_all();
     cv_.wait(lk, [this] { return queue_.empty() && !busy_; });
+}
+
+std::size_t SessionPersistQueue::pending()
+{
+    std::lock_guard<std::mutex> lk(mutex_);
+    return queue_.size();
+}
+
+void SessionPersistQueue::discard(const std::string& user_id)
+{
+    std::unique_lock<std::mutex> lk(mutex_);
+    for (auto it = queue_.begin(); it != queue_.end();)
+    {
+        if (it->user_id == user_id)
+            it = queue_.erase(it);
+        else
+            ++it;
+    }
+    cv_.wait(lk, [this, &user_id] { return !(busy_ && busy_user_ == user_id); });
 }
 
 namespace

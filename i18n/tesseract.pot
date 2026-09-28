@@ -1789,3 +1789,11 @@ msgstr ""
 #: ui/shared/views/settings/PrivacySection.cpp
 msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
 msgstr ""
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Message not sent: {0}"
+msgstr ""
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Command failed: {0}"
+msgstr ""

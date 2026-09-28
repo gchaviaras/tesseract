@@ -71,8 +71,15 @@ struct SendShell : ShellDispatchRoomSendWithAccountManager, ShellBase
     void apply_thread_message_remove_(const std::string&,
                                       std::size_t) override {}
 
+    void on_show_status_message_ui_(const std::string& msg) override
+    {
+        status_messages.push_back(msg);
+    }
+    std::vector<std::string> status_messages;
+
     using ShellBase::client_;
     using ShellBase::dispatch_room_send_;
+    using ShellBase::report_unsent_message_;
     using ShellBase::pending_room_actions_;
     using ShellBase::RoomActionKind;
 };
@@ -132,4 +139,21 @@ TEST_CASE("dispatch_room_send_ falls through to a normal send for plain text",
     CHECK_FALSE(out.handled_as_command);
     CHECK(s.avatar_picker_opened == false);
     CHECK(s.pending_room_actions_.empty());
+}
+
+TEST_CASE("report_unsent_message_ surfaces a failed send and ignores success "
+          "and cancellation",
+          "[shell][dispatch_room_send]")
+{
+    SendShell s;
+
+    s.report_unsent_message_("@a:x", "!r:x", "hello", tesseract::Result{true, ""});
+    s.report_unsent_message_("@a:x", "!r:x", "hello",
+                             tesseract::Result{false, "cancelled"});
+    CHECK(s.status_messages.empty());
+
+    s.report_unsent_message_("@a:x", "!r:x", "hello",
+                             tesseract::Result{false, "boom"});
+    REQUIRE_FALSE(s.status_messages.empty());
+    CHECK(s.status_messages.front() == "Message not sent: boom");
 }

@@ -8,6 +8,7 @@
 #include "views/SlashCommandController.h"
 #include "tk/host.h"
 #include "tk/weak_self.h"
+#include <tesseract/account_session.h>
 #include <tesseract/image_pack.h>
 #include <tesseract/mentions.h>
 #include <tesseract/settings.h>
@@ -76,6 +77,10 @@ public:
     struct Deps
     {
         ShellBase* shell = nullptr;
+        // The account this pane acts for. Pop-outs set their owner here;
+        // the main window leaves it empty, and the pane then follows
+        // whichever account is active.
+        std::weak_ptr<AccountSession> owner;
         tk::Host* host = nullptr; // encode_for_send/clipboard/toast/popup-surface
         std::function<void()> repaint;
         std::function<void()> relayout;
@@ -187,6 +192,14 @@ public:
     void apply_compose_draft_(const std::string& room_id);
     // Drop every saved draft — call on account switch/logout.
     void clear_compose_drafts_() { room_compose_drafts_.clear(); }
+    // Put the text of a send that failed before reaching the SDK's send
+    // queue back into this pane's composer. Returns false (and changes
+    // nothing) if the composer already holds new text or isn't available.
+    bool restore_unsent_text_(const std::string& text);
+    // Same, for a room this pane isn't showing: saves `text` as that room's
+    // draft unless one already exists, so apply_compose_draft_ brings it
+    // back when the user returns.
+    void stash_unsent_draft_(const std::string& room_id, const std::string& text);
 
     const std::string& room_id() const { return room_id_; }
     views::RoomView* room_view() const { return room_view_; }
@@ -267,8 +280,9 @@ public:
     void paginate_threads_();
 
     // ── MSC3030 (focused-timeline / jump-to-date) ────────────────────────
-    // begin/request/return operate on shell_->pagination_[room_id] — shared
-    // per-room state, not this pane's own — so room_id need not be this
+    // begin/request/return operate on shell_->pagination_for_(this pane's
+    // account, room_id) — shared per-room state, not this pane's own — so
+    // room_id need not be this
     // pane's own room_id_ (mirrors ensure_reply_details_'s general form:
     // any live RoomPane can serve as the call's entry point for a room
     // other than the one it displays, e.g. ShellBase's room-media-gallery
@@ -293,9 +307,10 @@ public:
     // — thread_root non-empty resolves within that thread's own timeline
     // instead, and room_id can be any room (e.g. when building rows destined
     // for a different pane's room, or a pinned-open gallery on a room this
-    // pane no longer displays). Only touches shared ShellBase state
-    // (shell_->client_/shell_->reply_details_requested_), never this pane's
-    // own room_id_, so any live RoomPane can serve as the call's entry point.
+    // pane no longer displays). Fetches through this pane's own account
+    // (pane_client_()) and dedups in shell_->reply_details_requested_ under
+    // that account; never touches this pane's own room_id_, so any live
+    // RoomPane of the right account can serve as the call's entry point.
     void ensure_reply_details_(const std::string& room_id,
                                const std::string& event_id,
                                const std::string& thread_root);
@@ -303,7 +318,7 @@ public:
     // ensure_reply_details_() only ever resolves a reply preview against
     // whatever's locally loaded (or reachable over the network) at the
     // moment it's called, and shell_->reply_details_requested_ dedups it to
-    // at most one attempt per event_id for the rest of the session —
+    // at most one attempt per (account, event_id) for the rest of the session —
     // matrix-sdk-ui never re-resolves an in-reply-to preview on its own once
     // that attempt has run (see InReplyToDetails::new /
     // fetch_in_reply_to_details upstream). So if the quoted event wasn't
@@ -412,9 +427,18 @@ public:
     // Look up a cached URL-preview card for `url`, or nullptr.
     const views::UrlPreviewData* preview_lookup_(const std::string& url);
 
-    // SDK operation helpers — forward to shell_->client_. All must be called
-    // on the UI thread.
-    tesseract::Client* shell_client_() const;
+    // The session / client this pane acts through: its pop-out's owner, or
+    // the active account for the main window. Every SDK call from the pane
+    // goes through these, never shell_->client_, so a pop-out keeps working
+    // for its own account after the main window switches to another. All
+    // must be called on the UI thread.
+    std::shared_ptr<AccountSession> session_() const;
+    tesseract::Client* pane_client_() const;
+    tesseract::Client* shell_client_() const { return pane_client_(); }
+    // That account's user id and room list.
+    std::string pane_user_id_() const;
+    const std::vector<tesseract::RoomInfo>& pane_rooms_() const;
+    const tesseract::RoomInfo* pane_room_by_id_(const std::string& room_id) const;
 
     void send_message_(const std::string& body);
     void send_message_(const std::string& body,
@@ -544,6 +568,10 @@ public:
     void run_async_mut_(std::function<void()> fn);
     // Post a callback to the UI thread (from any thread).
     void post_to_ui_(std::function<void()> fn);
+    // The shell's UI-thread executor as a standalone callable, for
+    // ui_poster(): it holds only the shell pointer (the shell outlives every
+    // pane), so a worker can post results without touching this pane.
+    static std::function<void(std::function<void()>)> shell_poster(ShellBase* shell);
 
     // Fetch source_json bytes on a background thread and write them to
     // dest_path on the UI thread. No-op if bytes are empty (fetch failed).
@@ -617,6 +645,8 @@ private:
     views::VideoViewerOverlay* vid_viewer_ = nullptr;
 
     std::string room_id_;
+    std::weak_ptr<AccountSession> owner_; // see Deps::owner
+    bool has_owner_ = false;              // false: follows the active account
     // See save_compose_draft_/apply_compose_draft_ above.
     struct RoomComposeDraft
     {

@@ -90,15 +90,18 @@ impl SfuSet {
     }
 
     /// Store a peer's frame key and apply it to every connection.
-    pub fn apply_key(&self, sender_user_id: &str, index: i32, raw_key: Vec<u8>) {
-        self.keys.store(sender_user_id, index, raw_key.clone());
-        let mut applied = self.primary.apply_peer_key(sender_user_id, index, &raw_key);
+    pub fn apply_key(&self, sender_user_id: &str, sender_device_id: &str, index: i32, raw_key: Vec<u8>) {
+        self.keys.store(sender_user_id, sender_device_id, index, raw_key.clone());
+        let mut applied =
+            self.primary.apply_peer_key(sender_user_id, sender_device_id, index, &raw_key);
         for remote in self.remotes.lock().values() {
-            applied += remote.room.apply_peer_key(sender_user_id, index, &raw_key);
+            applied +=
+                remote.room.apply_peer_key(sender_user_id, sender_device_id, index, &raw_key);
         }
         if applied == 0 {
             info!(
-                "e2ee: queued key for {sender_user_id} index={index} (participant not yet connected)"
+                "e2ee: queued key for {sender_user_id}/{sender_device_id} index={index} \
+                 (participant not yet connected)"
             );
         }
     }

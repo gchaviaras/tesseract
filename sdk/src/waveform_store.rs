@@ -6,19 +6,49 @@ use std::sync::OnceLock;
 static DB: OnceLock<Mutex<Connection>> = OnceLock::new();
 const MAX_ROWS: i64 = 2000;
 
+const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS voice_waveforms (
+    mxc_uri   TEXT PRIMARY KEY,
+    waveform  BLOB NOT NULL,
+    stored_at INTEGER NOT NULL
+);";
+
+/// Opens the on-disk cache, falling back to an in-memory one when the file
+/// can't be opened or initialised. This is only a cache, so a failure here
+/// (unwritable or missing directory, corrupt file) must never take the app
+/// down — a panic in the FFI entry point aborts the whole process.
+fn open_db(path: &Path) -> Option<Connection> {
+    if let Some(parent) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            tracing::warn!("waveforms.db: cannot create {}: {e}", parent.display());
+        }
+    }
+    let on_disk = Connection::open(path)
+        .map_err(|e| e.to_string())
+        .and_then(|conn| conn.execute_batch(SCHEMA).map(|_| conn).map_err(|e| e.to_string()));
+    match on_disk {
+        Ok(conn) => return Some(conn),
+        Err(e) => tracing::warn!(
+            "waveforms.db: cannot open {} ({e}); using an in-memory cache",
+            path.display()
+        ),
+    }
+    match Connection::open_in_memory().and_then(|conn| conn.execute_batch(SCHEMA).map(|_| conn)) {
+        Ok(conn) => Some(conn),
+        Err(e) => {
+            tracing::warn!("waveforms.db: in-memory fallback failed ({e}); cache disabled");
+            None
+        }
+    }
+}
+
 pub fn init(path: &Path) {
-    DB.get_or_init(|| {
-        let conn = Connection::open(path).expect("waveforms.db open");
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS voice_waveforms (
-                mxc_uri   TEXT PRIMARY KEY,
-                waveform  BLOB NOT NULL,
-                stored_at INTEGER NOT NULL
-            );",
-        )
-        .expect("waveforms schema");
-        Mutex::new(conn)
-    });
+    if DB.get().is_some() {
+        return;
+    }
+    if let Some(conn) = open_db(path) {
+        // A concurrent init may have won the race; either connection is fine.
+        let _ = DB.set(Mutex::new(conn));
+    }
 }
 
 fn waveform_to_bytes(waveform: &[u16]) -> Vec<u8> {
@@ -119,6 +149,25 @@ mod tests {
         )
         .map(bytes_to_waveform)
         .unwrap_or_default()
+    }
+
+    #[test]
+    fn open_db_falls_back_when_path_is_unusable() {
+        // A regular file where the parent directory should be: neither
+        // create_dir_all nor Connection::open can succeed.
+        let dir = std::env::temp_dir().join(format!(
+            "tesseract-waveform-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocker = dir.join("not-a-dir");
+        std::fs::write(&blocker, b"x").unwrap();
+
+        let conn = open_db(&blocker.join("waveforms.db")).expect("in-memory fallback");
+        insert(&conn, "mxc://example.org/a.ogg", &[1, 2, 3], 1);
+        assert_eq!(fetch(&conn, "mxc://example.org/a.ogg"), vec![1, 2, 3]);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

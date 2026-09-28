@@ -10,6 +10,17 @@ namespace tesseract
 RoomWindowBase::RoomWindowBase(ShellBase* shell, std::string room_id)
     : shell_(shell), room_id_(std::move(room_id))
 {
+    if (shell_)
+    {
+        // The account this pop-out acts for, for its whole lifetime.
+        auto owner = shell_->pending_popout_owner_ ? shell_->pending_popout_owner_
+                                                   : shell_->active_account_;
+        if (owner)
+        {
+            owner_user_id_ = owner->user_id;
+            owner_ = owner;
+        }
+    }
 }
 
 RoomWindowBase::~RoomWindowBase()
@@ -18,7 +29,7 @@ RoomWindowBase::~RoomWindowBase()
     {
         remove_popout_from_settings_();
         shell_->unregister_room_window_(this);
-        shell_->release_room_subscription_(room_id_);
+        shell_->release_room_subscription_(owner_.lock(), room_id_);
     }
 }
 
@@ -27,6 +38,7 @@ void RoomWindowBase::init_pane_(tk::Host* host)
     RoomPane::Deps deps;
     deps.shell = shell_;
     deps.host = host;
+    deps.owner = owner_;
     deps.repaint = [this] { surface_repaint_(); };
     deps.relayout = [this] { request_relayout(); };
     deps.update_window_title = [this](const std::string& name)
@@ -45,7 +57,7 @@ void RoomWindowBase::init_pane_(tk::Host* host)
 void RoomWindowBase::finish_init_()
 {
     shell_->register_room_window_(this);
-    shell_->acquire_room_subscription_(room_id_);
+    shell_->acquire_room_subscription_(owner_.lock(), room_id_);
     pane_->finish_init();
 }
 
@@ -75,7 +87,10 @@ Settings::WindowGeometry RoomWindowBase::get_saved_popout_geometry_(
     const auto& pops = Settings::instance().popout_windows;
     auto it = std::find_if(pops.begin(), pops.end(),
                            [this](const Settings::PopoutEntry& e)
-                           { return e.room_id == room_id_; });
+                           {
+                               return e.room_id == room_id_ &&
+                                      (e.user_id.empty() || e.user_id == owner_user_id_);
+                           });
     if (it == pops.end())
         return {};
     return ShellBase::clamp_to_screens_(it->geometry, default_w, default_h,
@@ -88,7 +103,10 @@ Settings::WindowGeometry RoomWindowBase::get_saved_popout_geometry_(
     const auto& pops = Settings::instance().popout_windows;
     auto it = std::find_if(pops.begin(), pops.end(),
                            [this](const Settings::PopoutEntry& e)
-                           { return e.room_id == room_id_; });
+                           {
+                               return e.room_id == room_id_ &&
+                                      (e.user_id.empty() || e.user_id == owner_user_id_);
+                           });
     if (it == pops.end())
         return {};
     Settings::WindowGeometry g = it->geometry;
@@ -107,7 +125,10 @@ void RoomWindowBase::save_popout_geometry_(int x, int y, int w, int h, int dpi)
     auto& pops = Settings::instance().popout_windows;
     auto it = std::find_if(pops.begin(), pops.end(),
                            [this](const Settings::PopoutEntry& e)
-                           { return e.room_id == room_id_; });
+                           {
+                               return e.room_id == room_id_ &&
+                                      (e.user_id.empty() || e.user_id == owner_user_id_);
+                           });
     Settings::WindowGeometry geom;
     geom.x = x; geom.y = y; geom.w = w; geom.h = h;
     geom.dpi = dpi;
@@ -130,7 +151,10 @@ void RoomWindowBase::remove_popout_from_settings_()
     auto& pops = Settings::instance().popout_windows;
     auto it = std::find_if(pops.begin(), pops.end(),
                            [this](const Settings::PopoutEntry& e)
-                           { return e.room_id == room_id_; });
+                           {
+                               return e.room_id == room_id_ &&
+                                      (e.user_id.empty() || e.user_id == owner_user_id_);
+                           });
     if (it != pops.end())
     {
         pops.erase(it);

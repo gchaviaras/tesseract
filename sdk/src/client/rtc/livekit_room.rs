@@ -37,13 +37,15 @@ use livekit::{
 };
 
 /// E2EE state shared by every LiveKit connection of one call: LiveKit's
-/// frame-key store and the peer keys received so far (Matrix user id ->
-/// key index -> raw key), which are applied to a participant when it appears
-/// on any SFU we are connected to.
+/// frame-key store and the peer keys received so far ((Matrix user id,
+/// device id) -> key index -> raw key), which are applied to a participant
+/// when it appears on any SFU we are connected to. Keys are per device: one
+/// account in the call from two devices sends two different keys for the
+/// same index, and each must only reach that device's participant.
 #[derive(Clone)]
 pub struct SharedKeys {
     pub key_provider: KeyProvider,
-    pending: Arc<StdMutex<HashMap<String, HashMap<i32, Vec<u8>>>>>,
+    pending: Arc<StdMutex<HashMap<(String, String), HashMap<i32, Vec<u8>>>>>,
 }
 
 impl SharedKeys {
@@ -66,11 +68,13 @@ impl SharedKeys {
 
     /// Remember a peer key (all indices are kept so frames encrypted before a
     /// rotation can still be decrypted when the participant first appears).
-    pub fn store(&self, sender_user_id: &str, index: i32, raw_key: Vec<u8>) {
+    /// `sender_device_id` may be empty when the event didn't name one; the
+    /// key then applies to every device of the sender (see `key_owner_matches`).
+    pub fn store(&self, sender_user_id: &str, sender_device_id: &str, index: i32, raw_key: Vec<u8>) {
         self.pending
             .lock()
             .unwrap()
-            .entry(sender_user_id.to_owned())
+            .entry((sender_user_id.to_owned(), sender_device_id.to_owned()))
             .or_default()
             .insert(index, raw_key);
     }
@@ -84,13 +88,22 @@ impl SharedKeys {
     }
 
     /// Apply one key to the matching participants currently in `room`.
-    fn apply_one_to(&self, room: &Room, sender_user_id: &str, index: i32, raw_key: &[u8]) -> usize {
-        let prefix = format!("{sender_user_id}:");
+    fn apply_one_to(
+        &self,
+        room: &Room,
+        sender_user_id: &str,
+        sender_device_id: &str,
+        index: i32,
+        raw_key: &[u8],
+    ) -> usize {
         let mut applied = 0usize;
         for (identity, _) in room.remote_participants() {
             let id_str = identity.as_str();
-            if id_str.starts_with(&prefix) || id_str == sender_user_id {
-                info!("e2ee: set_key for participant {id_str} (from {sender_user_id} index={index})");
+            if key_owner_matches(id_str, sender_user_id, sender_device_id) {
+                info!(
+                    "e2ee: set_key for participant {id_str} \
+                     (from {sender_user_id}/{sender_device_id} index={index})"
+                );
                 self.key_provider.set_key(&identity, index, raw_key.to_vec());
                 applied += 1;
             }
@@ -99,15 +112,31 @@ impl SharedKeys {
     }
 }
 
+/// Whether a key sent by `(user_id, device_id)` belongs to the LiveKit
+/// participant `identity` (`{user_id}:{device}`, or a bare `{user_id}` from
+/// older clients). Matched against the sender's own user id rather than
+/// parsed with `split_identity`, which cuts at the second `:` and so breaks
+/// for a server name with a port (`@bob:example.org:8448:PHONE`). Without a
+/// device the key can't be told apart, so it goes to every device of the user.
+fn key_owner_matches(identity: &str, user_id: &str, device_id: &str) -> bool {
+    if identity == user_id {
+        return true;
+    }
+    match identity.strip_prefix(user_id).and_then(|rest| rest.strip_prefix(':')) {
+        Some(id_device) => device_id.is_empty() || id_device == device_id,
+        None => false,
+    }
+}
+
 /// Set every stored key that belongs to `identity` (`{user_id}:{device}`).
 fn apply_pending_for(
     key_provider: &KeyProvider,
-    pending: &HashMap<String, HashMap<i32, Vec<u8>>>,
+    pending: &HashMap<(String, String), HashMap<i32, Vec<u8>>>,
     identity: &ParticipantIdentity,
 ) {
     let id_str = identity.as_str();
-    for (user_id, keys_by_index) in pending {
-        if id_str.starts_with(&format!("{user_id}:")) || id_str == user_id.as_str() {
+    for ((user_id, device_id), keys_by_index) in pending {
+        if key_owner_matches(id_str, user_id, device_id) {
             for (idx, raw_key) in keys_by_index {
                 key_provider.set_key(identity, *idx, raw_key.clone());
             }
@@ -639,8 +668,15 @@ impl LiveKitRoom {
     }
 
     /// Apply a peer's key to the matching participants of this connection.
-    pub fn apply_peer_key(&self, sender_user_id: &str, index: i32, raw_key: &[u8]) -> usize {
-        self.shared.apply_one_to(&self.room, sender_user_id, index, raw_key)
+    pub fn apply_peer_key(
+        &self,
+        sender_user_id: &str,
+        sender_device_id: &str,
+        index: i32,
+        raw_key: &[u8],
+    ) -> usize {
+        self.shared
+            .apply_one_to(&self.room, sender_user_id, sender_device_id, index, raw_key)
     }
 
     /// Apply every stored peer key to this connection's current participants.
@@ -700,8 +736,15 @@ impl RemoteSfuRoom {
         Ok(Self { room, session_id, sink, shared, event_task })
     }
 
-    pub fn apply_peer_key(&self, sender_user_id: &str, index: i32, raw_key: &[u8]) -> usize {
-        self.shared.apply_one_to(&self.room, sender_user_id, index, raw_key)
+    pub fn apply_peer_key(
+        &self,
+        sender_user_id: &str,
+        sender_device_id: &str,
+        index: i32,
+        raw_key: &[u8],
+    ) -> usize {
+        self.shared
+            .apply_one_to(&self.room, sender_user_id, sender_device_id, index, raw_key)
     }
 
     pub fn apply_all_peer_keys(&self) {
@@ -1153,5 +1196,29 @@ mod participant_filter_tests {
     #[test]
     fn unknown_member_with_matrix_identity_is_allowed() {
         assert!(members(&[]).allows("https://sfu.a", "@c:x.org:DEV"));
+    }
+
+    #[test]
+    fn a_device_key_only_matches_that_device() {
+        assert!(key_owner_matches("@b:x.org:PHONE", "@b:x.org", "PHONE"));
+        assert!(!key_owner_matches("@b:x.org:LAPTOP", "@b:x.org", "PHONE"));
+        assert!(!key_owner_matches("@c:x.org:PHONE", "@b:x.org", "PHONE"));
+    }
+
+    #[test]
+    fn a_key_without_a_device_matches_every_device_of_the_user() {
+        assert!(key_owner_matches("@b:x.org:PHONE", "@b:x.org", ""));
+        assert!(key_owner_matches("@b:x.org:LAPTOP", "@b:x.org", ""));
+        assert!(key_owner_matches("@b:x.org", "@b:x.org", "PHONE"));
+        assert!(!key_owner_matches("@bob:x.org:PHONE", "@b:x.org", ""));
+    }
+
+    #[test]
+    fn a_server_name_with_a_port_still_matches_its_device() {
+        assert!(key_owner_matches("@b:x.org:8448:PHONE", "@b:x.org:8448", "PHONE"));
+        assert!(!key_owner_matches("@b:x.org:8448:LAPTOP", "@b:x.org:8448", "PHONE"));
+        assert!(key_owner_matches("@b:x.org:8448:PHONE", "@b:x.org:8448", ""));
+        // A different user, whose id is this one's without the port.
+        assert!(!key_owner_matches("@b:x.org:8448:PHONE", "@b:x.org", "PHONE"));
     }
 }

@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- fix(profile): the timezone picker now writes both `m.tz` and `us.cloke.msc4175.tz`, so a stale `m.tz` left by another client (Element writes both) no longer hides the zone picked in Tesseract. Windows build; user-verified live. Qt6/GTK4/macOS share the code, unbuilt
 - feat(security): SAS verification now shows the spec's `decimal` numbers first (MSC4405 deprecates emoji), with the emoji grid beneath when the other device offers it. A peer that offers only `decimal` no longer leaves the dialog stuck waiting. Windows release build + ctest 2031/2031, cargo 756/756; user-verified live against Element (emoji path; a decimal-only peer is covered by tests only). Qt6/GTK4/macOS share the code, unbuilt
 - feat(previews): MSC4452 `m.preview_url` capability (and the unstable `io.element.msc4452.preview_url`); when the homeserver has link previews off, Settings → Privacy says so and Tesseract stops calling `/preview_url`, though direct fetches for sent messages still run. Windows build; user-verified. Qt6/GTK4/macOS share the code, unbuilt
 - feat(accounts): pop-outs keep working for the account that opened them after switching accounts (sending, replies, reactions, moderation, settings, receipts, subscriptions all use that account), and each account can have its own pop-out of the same room. Logging out closes only that account's pop-outs. Media downloads still go through the active account. Unbuilt; pending user test

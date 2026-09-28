@@ -58,6 +58,21 @@ TEST_CASE("ExtendedProfile::apply_field sets then clears m.status",
     CHECK(ep.status_emoji.empty());
 }
 
+TEST_CASE("ExtendedProfile::apply_field accepts both timezone keys",
+          "[profile][msc4175]")
+{
+    ExtendedProfile ep;
+
+    ep.apply_field("m.tz", R"("Europe/Oslo")");
+    CHECK(ep.tz == "Europe/Oslo");
+
+    ep.apply_field("us.cloke.msc4175.tz", R"("Europe/Madrid")");
+    CHECK(ep.tz == "Europe/Madrid");
+
+    ep.apply_field("m.tz", "null");
+    CHECK(ep.tz.empty());
+}
+
 TEST_CASE("ExtendedProfile::apply_field leaves siblings untouched on status write",
           "[profile][msc4426]")
 {

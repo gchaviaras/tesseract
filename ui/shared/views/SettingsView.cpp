@@ -1103,17 +1103,23 @@ void SettingsView::set_controller(tesseract::SettingsController* ctrl)
     // Timezone: on_changed only fires for a real committed pick or an
     // exact-match Enter (see TimezonePicker/tk::SearchablePicker), so unlike
     // the old free-text field this never saves a string that isn't a known
-    // IANA zone id.
+    // IANA zone id. Both the stable and unstable keys are written because
+    // reads prefer m.tz: a stale m.tz left by another client (Element writes
+    // both) would otherwise mask this write. Busy/error track the unstable
+    // key only; an m.tz failure on a server without stable MSC4133 is benign.
     if (auto* tz = account_->tz_field())
     {
-        static constexpr const char* kTzKey = "us.cloke.msc4175.tz";
+        static constexpr const char* kTzKey       = "us.cloke.msc4175.tz";
+        static constexpr const char* kStableTzKey = "m.tz";
         tz->on_changed = [this](std::string value)
         {
             account_->set_profile_field_busy(kTzKey, true);
             if (on_profile_field_changed)
             {
-                on_profile_field_changed(
-                    kTzKey, value.empty() ? "null" : json_quote(value));
+                const std::string json =
+                    value.empty() ? "null" : json_quote(value);
+                on_profile_field_changed(kStableTzKey, json);
+                on_profile_field_changed(kTzKey, json);
             }
             if (request_repaint_) request_repaint_();
         };

@@ -2572,7 +2572,7 @@ void ExtendedProfile::apply_field(const std::string& key, const std::string& val
         return;
     }
 
-    if (key == "us.cloke.msc4175.tz")
+    if (key == "m.tz" || key == "us.cloke.msc4175.tz")
     {
         tz = v.is_string() ? v.get<std::string>() : std::string();
     }

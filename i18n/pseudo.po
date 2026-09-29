@@ -3920,6 +3920,37 @@ msgstr "[Stàrtùpx]"
 msgid "Launch Tesseract when you log in"
 msgstr "[Làùñçh Tésséràçt whéñ yöù lög ïñxxxxxx]"
 
+msgid "Start minimized to system tray"
+msgstr "[Stàrt mïñïmïzéd tö systém tràyxxxxxx]"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "When I close the window"
+msgstr "[Whéñ Ï çlösé thé wïñdöwxxxx]"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Minimize to taskbar"
+msgstr "[Mïñïmïzé tö tàskbàrxxx]"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Hide to system tray"
+msgstr "[Hïdé tö systém tràyxxx]"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window quits Tesseract."
+msgstr "[Çlösïñg thé wïñdöw qùïts Tésséràçt.xxxxxxx]"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window minimizes Tesseract to the taskbar."
+msgstr "[Çlösïñg thé wïñdöw mïñïmïzés Tésséràçt tö thé tàskbàr.xxxxxxxxxx]"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window hides it to the system tray. Tesseract keeps running — use the tray icon's Quit menu item to exit."
+msgstr "[Çlösïñg thé wïñdöw hïdés ït tö thé systém trày. Tésséràçt kééps rùññïñg — ùsé thé trày ïçöñ's Qùït méñù ïtém tö éxït.xxxxxxxxxxxxxxxxxxxxxxx]"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "No system tray icon is available on this system, so closing the window always quits Tesseract."
+msgstr "[Ñö systém trày ïçöñ ïs àvàïlàblé öñ thïs systém, sö çlösïñg thé wïñdöw àlwàys qùïts Tésséràçt.xxxxxxxxxxxxxxxxxx]"
+
 #: ui/shared/views/settings/GeneralSection.cpp:74
 msgid "Power"
 msgstr "[Pöwérx]"

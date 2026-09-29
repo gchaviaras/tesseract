@@ -5209,6 +5209,14 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     {
         handle_launch_at_login_toggle_(enabled);
     };
+    view->on_start_minimized_changed = [this](bool enabled)
+    {
+        handle_start_minimized_toggle_(enabled);
+    };
+    view->on_close_action_changed = [this](tesseract::Settings::CloseAction action)
+    {
+        handle_close_action_toggle_(action);
+    };
     view->on_send_presence_changed = [this](bool enabled)
     {
         handle_send_presence_toggle_(enabled);

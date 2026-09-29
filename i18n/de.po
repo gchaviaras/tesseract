@@ -1492,6 +1492,38 @@ msgstr "Systemstart"
 msgid "Launch Tesseract when you log in"
 msgstr "Tesseract bei der Anmeldung starten"
 
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Start minimized to system tray"
+msgstr ""
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "When I close the window"
+msgstr ""
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Minimize to taskbar"
+msgstr ""
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Hide to system tray"
+msgstr ""
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window quits Tesseract."
+msgstr ""
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window minimizes Tesseract to the taskbar."
+msgstr ""
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window hides it to the system tray. Tesseract keeps running — use the tray icon's Quit menu item to exit."
+msgstr ""
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "No system tray icon is available on this system, so closing the window always quits Tesseract."
+msgstr ""
+
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Name"
 msgstr "Name"

@@ -169,14 +169,14 @@ std::optional<SpoilerMessage> build_spoiler_message(std::string_view args)
     const std::string inner = markdown_inline_to_html(args);
     if (has_reason)
     {
-        msg.body = "(Spoiler: " + reason + ") " + std::string(args);
+        msg.body = tk::trf(tk::tr("(Spoiler: {0})"), {reason}) + " " + std::string(args);
         msg.formatted_body =
             "<span data-mx-spoiler=\"" + attr_escape(reason) + "\">" + inner +
             "</span>";
     }
     else
     {
-        msg.body = "(Spoiler) " + std::string(args);
+        msg.body = tk::tr("(Spoiler)") + " " + std::string(args);
         msg.formatted_body = "<span data-mx-spoiler>" + inner + "</span>";
     }
     return msg;
@@ -204,7 +204,8 @@ const std::vector<SlashCommandDescriptor>& available_commands()
 Result dispatch_compose_send(Client& client,
                              const std::string& room_id,
                              const std::string& body,
-                             const std::string& formatted_body)
+                             const std::string& formatted_body,
+                             const std::string& url_previews_json)
 {
     // `/shrug` (no args) — append the shrug emoticon to whatever the user
     // typed in front of the slash. With no leading text it sends just the
@@ -275,7 +276,7 @@ Result dispatch_compose_send(Client& client,
         name = name.substr(first, last - first + 1);
 
         std::string emote_body =
-            "slaps " + name + " around a bit with a large trout";
+            tk::trf(tk::tr("slaps {0} around a bit with a large trout"), {name});
         return client.send_emote(room_id, emote_body, "");
     }
 
@@ -309,13 +310,13 @@ Result dispatch_compose_send(Client& client,
         {
             while (*sfx == ' ' || *sfx == '\t') ++sfx; // skip separator
             if (*sfx == '\0')
-                return Result{false, "no mxc_uri provided; use /myroomavatar "
-                                     "alone to open the image picker"};
+                return Result{false, tk::tr("no mxc_uri provided; use /myroomavatar "
+                                            "alone to open the image picker")};
             return client.set_user_room_avatar(room_id, sfx);
         }
     }
 
-    return client.send_message(room_id, body, formatted_body);
+    return client.send_message(room_id, body, formatted_body, url_previews_json);
 }
 
 // ---------------------------------------------------------------------------

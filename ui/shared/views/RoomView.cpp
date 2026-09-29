@@ -275,6 +275,12 @@ RoomView::RoomView()
     auto banner = std::make_unique<CallBanner>();
     call_banner_ = add_child(std::move(banner));
 
+    identity_banner_ = add_child(std::make_unique<IdentityChangeBanner>());
+    identity_banner_->on_resolve = [this](const tesseract::IdentityWarning& w)
+    {
+        if (on_resolve_identity_warning) on_resolve_identity_warning(w);
+    };
+
     if (header_)
         header_->on_call_requested = [this](tk::Rect btn_rect)
         {
@@ -282,14 +288,14 @@ RoomView::RoomView()
             const std::string rid = current_room_info_.id;
             PopupMenu::Item audio;
             audio.svg_icon    = kPhoneSvg;
-            audio.label       = "Audio call";
+            audio.label       = tk::tr("Audio call");
             audio.on_selected = [this, rid]
             {
                 if (on_start_call) on_start_call(rid, "call#default", true);
             };
             PopupMenu::Item video;
             video.svg_icon    = kVideoSvg;
-            video.label       = "Video call";
+            video.label       = tk::tr("Video call");
             video.on_selected = [this, rid]
             {
                 if (on_start_call) on_start_call(rid, "call#default", false);
@@ -303,6 +309,19 @@ RoomView::RoomView()
     auto rmv = std::make_unique<RoomMediaView>();
     room_media_view_ = add_child(std::move(rmv));
     room_media_view_->set_visible(false);
+
+    // Invite dialog — above the gallery (they never coexist; the gallery
+    // closes RoomInfoPanel, which is the only way in). Hidden until open().
+    invite_dialog_ = add_child(tk::create_widget<InviteDialog>(this));
+    invite_dialog_->on_layout_changed = [this]()
+    {
+        if (on_layout_changed) on_layout_changed();
+    };
+    invite_dialog_->on_close = [this]()
+    {
+        if (on_layout_changed) on_layout_changed();
+        if (repaint_requester_) repaint_requester_();
+    };
 
     // Added last of all so it dispatches/paints above the whole room,
     // including room_media_view_ — see call_lobby()'s doc comment. Hidden
@@ -842,6 +861,22 @@ void RoomView::wire_internal_callbacks()
     {
         show_knock_requests();
     };
+    room_info_panel_->on_invite_requested = [this](std::string)
+    {
+        show_invite_dialog();
+    };
+    room_info_panel_->on_kick_member =
+        [this](std::string room_id, std::string user_id, std::string name)
+    {
+        confirm_and_moderate_member_(false, std::move(room_id), std::move(user_id),
+                                     std::move(name));
+    };
+    room_info_panel_->on_ban_member =
+        [this](std::string room_id, std::string user_id, std::string name)
+    {
+        confirm_and_moderate_member_(true, std::move(room_id), std::move(user_id),
+                                     std::move(name));
+    };
 
     // Wire knock-requests panel callbacks.
     knock_requests_panel_->on_layout_changed = [this]()
@@ -917,6 +952,12 @@ void RoomView::wire_internal_callbacks()
         confirm_and_leave_room_(
             [this]() { if (room_settings_view_) room_settings_view_->close(); },
             std::move(room_id));
+    };
+    room_settings_view_->on_unban_requested =
+        [this](std::string room_id, std::string user_id, std::string name)
+    {
+        if (on_unban_member)
+            on_unban_member(std::move(room_id), std::move(user_id), std::move(name));
     };
     room_settings_view_->on_bridge_override_changed =
         [this](std::string room_id, bool not_bridged)
@@ -1007,6 +1048,57 @@ void RoomView::confirm_and_leave_room_(std::function<void()> close_panel,
     if (on_leave_room) on_leave_room(std::move(room_id));
 }
 
+void RoomView::confirm_and_moderate_member_(bool ban, std::string room_id,
+                                            std::string user_id,
+                                            std::string display_name)
+{
+    auto forward = [this, ban](const std::string& rid, const std::string& uid,
+                               const std::string& name, std::string reason)
+    {
+        auto& cb = ban ? on_ban_member : on_kick_member;
+        if (cb) cb(rid, uid, name, std::move(reason));
+    };
+    if (!confirm_provider_)
+    {
+        forward(room_id, user_id, display_name, {});
+        return;
+    }
+
+    const std::string who = display_name.empty() ? user_id : display_name;
+    ConfirmDialog::Options opts;
+    if (ban)
+    {
+        opts.title         = tk::trf(tk::tr("Ban {0}?"), {who});
+        opts.body          = tk::tr("They will be removed from the room and unable "
+                                    "to rejoin unless unbanned.");
+        opts.confirm_label = tk::tr("Ban");
+    }
+    else
+    {
+        opts.title         = tk::trf(tk::tr("Remove {0} from the room?"), {who});
+        opts.body          = tk::tr("They can rejoin if the room allows it.");
+        opts.confirm_label = tk::tr("Kick");
+    }
+    opts.cancel_label       = tk::tr("Cancel");
+    opts.destructive        = true;
+    opts.reason_field       = true;
+    opts.reason_placeholder = tk::tr("Reason (optional)");
+    // on_reason fires immediately before the confirm callback; stash the text
+    // for it to forward.
+    auto reason = std::make_shared<std::string>();
+    opts.on_reason = [reason](std::string r) { *reason = std::move(r); };
+
+    // Close the panel so the prompt doesn't stack on top of its backdrop.
+    if (room_info_panel_) room_info_panel_->close();
+    if (on_layout_changed) on_layout_changed();
+
+    confirm_provider_(std::move(opts),
+                      [forward, reason, room_id = std::move(room_id),
+                       user_id = std::move(user_id),
+                       display_name = std::move(display_name)]()
+                      { forward(room_id, user_id, display_name, std::move(*reason)); });
+}
+
 void RoomView::show_room_info()
 {
     if (!room_info_panel_ || !has_room_)
@@ -1054,6 +1146,20 @@ void RoomView::show_knock_requests()
         user_profile_panel_->close();
     knock_requests_panel_->open(current_room_info_.id);
     if (on_knock_requests_opened) on_knock_requests_opened(current_room_info_.id);
+    if (repaint_requester_) repaint_requester_();
+}
+
+void RoomView::show_invite_dialog()
+{
+    if (!invite_dialog_ || !has_room_)
+        return;
+    if (room_info_panel_ && room_info_panel_->is_open())
+        room_info_panel_->close();
+    if (user_profile_panel_ && user_profile_panel_->is_open())
+        user_profile_panel_->close();
+    invite_dialog_->open(current_room_info_.id, current_room_info_.name);
+    if (on_invite_dialog_opened) on_invite_dialog_opened(current_room_info_.id);
+    if (on_layout_changed) on_layout_changed();
     if (repaint_requester_) repaint_requester_();
 }
 
@@ -1343,6 +1449,9 @@ void RoomView::set_post_delayed(
     std::function<void(int, std::function<void()>)> f)
 {
     post_delayed_ = f;
+    if (thread_view_)
+        if (auto* ml = thread_view_->message_list())
+            ml->set_post_delayed(f);
     if (message_list_)
     {
         message_list_->set_post_delayed(std::move(f));
@@ -1365,6 +1474,7 @@ bool RoomView::is_overlay_open() const
            (room_info_panel_    && room_info_panel_->is_open()) ||
            (user_profile_panel_ && user_profile_panel_->is_open()) ||
            (room_media_view_    && room_media_view_->is_open()) ||
+           (invite_dialog_      && invite_dialog_->is_open()) ||
            (call_lobby_         && call_lobby_->is_open());
 }
 
@@ -1435,6 +1545,22 @@ void RoomView::set_call_banner_avatar_provider(CallBanner::AvatarProvider p)
 bool RoomView::call_banner_visible() const
 {
     return call_banner_ && call_banner_->visible();
+}
+
+bool RoomView::identity_warning_shown() const
+{
+    return identity_banner_ && identity_banner_->has_warning();
+}
+
+void RoomView::set_identity_warnings(std::vector<tesseract::IdentityWarning> warnings)
+{
+    if (!identity_banner_) return;
+    // has_warning(), not visible(): the latter is false while RoomView itself
+    // is hidden, and skipping the clear then would resurface a stale warning.
+    if (!identity_banner_->has_warning() && warnings.empty()) return;
+    identity_banner_->set_warnings(std::move(warnings));
+    // Relayout (and repaint): the strip's height or its text changed.
+    if (on_layout_changed) on_layout_changed();
 }
 
 views::CallOverlayWidget*
@@ -1581,6 +1707,8 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
             user_profile_panel_->close();
         if (room_media_view_ && room_media_view_->is_open())
             room_media_view_->close();
+        if (invite_dialog_ && invite_dialog_->is_open())
+            invite_dialog_->close();
         close_room_search();
         // The action-pill "more" submenu and the call-type popup are backdrop
         // overlays that only close via their own click-outside handling
@@ -1905,6 +2033,11 @@ void RoomView::set_thread_panel(ThreadPanelState state,
                 ml->set_avatar_provider(stored_avatar_provider_);
             if (stored_image_provider_)
                 ml->set_image_provider(stored_image_provider_);
+            // Without this the room-switch gate armed by each thread reset
+            // has no timeout fallback, so one unresolved dependency holds
+            // the thread list invisible forever.
+            if (post_delayed_)
+                ml->set_post_delayed(post_delayed_);
             // Wire the same hover-action / media / reaction callbacks as the
             // main timeline so reply / edit / redact (and friends) work
             // inside the thread panel. Reply sends are routed through the
@@ -2093,6 +2226,14 @@ void RoomView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
         list_top += CallBanner::kBannerH;
     }
 
+    // Identity-change strip — below the call banner, same full-width strip.
+    if (identity_banner_ && identity_banner_->visible())
+    {
+        identity_banner_->arrange(ctx, {bounds.x, list_top, bounds.w,
+                                        IdentityChangeBanner::kHeight});
+        list_top += IdentityChangeBanner::kHeight;
+    }
+
     // Docked call panel — occupies kDockedH between banners and message list.
     // DockedExpanded collapses the message area entirely.
     if (call_panel_ && call_panel_->visible())
@@ -2276,6 +2417,8 @@ void RoomView::paint(tk::PaintCtx& ctx)
     }
     if (call_banner_ && call_banner_->visible())
         call_banner_->paint(ctx);
+    if (identity_banner_ && identity_banner_->visible())
+        identity_banner_->paint(ctx);
     if (room_search_bar_ && room_search_bar_->is_open())
         room_search_bar_->paint(ctx);
     if (message_list_)
@@ -2379,11 +2522,11 @@ void RoomView::on_theme_changed(const tk::Theme& t)
         receipt_popup_->apply_theme(t);
 }
 
-std::array<tk::Widget*, 7> RoomView::overlay_panels_() const
+std::array<tk::Widget*, 8> RoomView::overlay_panels_() const
 {
     return {room_info_panel_, user_profile_panel_, overflow_menu_,
             call_popup_, room_media_view_, header_overflow_menu_,
-            knock_requests_panel_};
+            knock_requests_panel_, invite_dialog_};
 }
 
 // ── Pointer/hit-test routing ────────────────────────────────────────────────
@@ -2414,6 +2557,8 @@ tk::Widget* RoomView::active_overlay_panel_() const
     // hover/right-click in RoomView while one is open instead of just
     // dismissing it. Host::register_popup()'s click-anywhere-dismiss (see
     // on_popup_dismiss()) is what closes them now, independent of this path.
+    if (invite_dialog_ && invite_dialog_->is_open())
+        return invite_dialog_;
     if (room_media_view_ && room_media_view_->is_open())
         return room_media_view_;
     if (room_settings_view_ && room_settings_view_->is_open())

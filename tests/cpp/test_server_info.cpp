@@ -61,7 +61,16 @@ TEST_CASE("ServerInfo::from_json: missing caps default to true, msc3030 defaults
     CHECK(info.can_change_password == true);
     CHECK(info.can_set_displayname == true);
     CHECK(info.can_set_avatar == true);
+    CHECK(info.preview_url_enabled == true);
     CHECK(info.default_room_version.empty());
+}
+
+TEST_CASE("ServerInfo::from_json: preview_url_enabled (MSC4452)", "[server][info]")
+{
+    CHECK(ServerInfo::from_json(R"({"preview_url_enabled":false})").preview_url_enabled
+          == false);
+    CHECK(ServerInfo::from_json(R"({"preview_url_enabled":true})").preview_url_enabled
+          == true);
 }
 
 TEST_CASE("ServerInfo::from_json: empty string returns default-constructed", "[server][info]")

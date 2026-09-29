@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -48,10 +49,18 @@ public:
     HistoryExportController(
         tesseract::Client* client,
         std::function<void(std::function<void()>)> post_to_ui,
-        std::function<void(std::function<void()>)> run_async);
+        std::function<void(std::function<void()>)> run_async,
+        std::shared_ptr<void> client_owner = {});
     ~HistoryExportController();
 
-    void set_client(tesseract::Client* client);
+    /// Rebind to another account's client (or nullptr on logout).
+    /// `client_owner` is whatever keeps `client` alive (the shell's
+    /// AccountSession); worker jobs hold a copy so the client can't be
+    /// destroyed under a blocking call. Switching to a different client
+    /// cancels any export running on the old one and reports it via
+    /// `on_finished(cancelled=true)`, so its late progress/completion
+    /// events are ignored.
+    void set_client(tesseract::Client* client, std::shared_ptr<void> client_owner = {});
 
     // Native folder-picker, wired by each shell exactly like
     // `SettingsController::show_save_file_dialog`. Invoked with a
@@ -110,6 +119,7 @@ public:
 
 private:
     tesseract::Client* client_ = nullptr;
+    std::shared_ptr<void> client_owner_;
     std::function<void(std::function<void()>)> post_to_ui_;
     std::function<void(std::function<void()>)> run_async_;
 

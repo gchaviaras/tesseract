@@ -18,6 +18,7 @@
 /// among themselves.
 
 #include <condition_variable>
+#include <cstddef>
 #include <deque>
 #include <mutex>
 #include <string>
@@ -46,9 +47,20 @@ public:
     /// otherwise a new job is appended. Never blocks on I/O.
     void enqueue(std::string user_id, std::string json);
 
-    /// Block until every currently-pending job has been written. Test-only seam
-    /// (the production singleton is leaked); also used by the destructor.
+    /// Block until every currently-pending job has been written. Used by
+    /// SessionStore::flush_session_updates() for the synchronous
+    /// (refresh / shutdown) path, and by tests.
     void drain();
+
+    /// Drop every pending job for `user_id` and, if one is being written
+    /// right now, wait for it to finish. Called before an account's
+    /// credentials are cleared on logout, so a queued write can't land
+    /// afterwards and recreate them.
+    void discard(const std::string& user_id);
+
+    /// Number of jobs waiting to be picked up (excludes one in flight).
+    /// Test seam.
+    std::size_t pending();
 
 private:
     struct Job
@@ -65,6 +77,7 @@ private:
     std::condition_variable cv_;
     std::deque<Job> queue_;       // distinct user_ids, FIFO among themselves
     bool busy_ = false;           // a job is currently being written
+    std::string busy_user_;       // user_id of that job, when busy_
     bool stop_ = false;
     std::thread thread_;
 };

@@ -554,6 +554,7 @@ MessageRowData make_row_data(const tesseract::Event& ev,
         row.membership_target_user_id = mem.target_user_id;
         row.membership_target_name = mem.target_display_name;
         row.membership_target_avatar_url = mem.target_avatar_url;
+        row.membership_reason = mem.reason;
         break;
     }
     case tesseract::EventType::RoomName:
@@ -791,19 +792,7 @@ std::string format_mmss(std::uint64_t ms)
 // label, rather than that helper's one-decimal MB/GB precision.
 std::string format_size_terse(std::uint64_t bytes)
 {
-    if (bytes < 1024)
-    {
-        return std::to_string(bytes) + " B";
-    }
-    if (bytes < 1024 * 1024)
-    {
-        return std::to_string(bytes / 1024) + " KB";
-    }
-    if (bytes < 1024ull * 1024 * 1024)
-    {
-        return std::to_string(bytes / (1024 * 1024)) + " MB";
-    }
-    return std::to_string(bytes / (1024ull * 1024 * 1024)) + " GB";
+    return tk::format_size(bytes);
 }
 
 struct FileIconInfo
@@ -980,19 +969,10 @@ std::string format_day_label(std::uint64_t timestamp_ms)
     }
     if (now_t > t && static_cast<std::uint64_t>(now_t - t) < 7u * 86400u)
     {
-        constexpr const char* kDays[] = {"Sunday",    "Monday",   "Tuesday",
-                                         "Wednesday", "Thursday", "Friday",
-                                         "Saturday"};
-        return tk::tr(kDays[sep_tm.tm_wday]);
+        return tk::format_date(sep_tm, "%A");
     }
-    constexpr const char* kMonths[] = {
-        "January", "February", "March",     "April",   "May",      "June",
-        "July",    "August",   "September", "October", "November", "December"};
-    std::string month_str = tk::tr(kMonths[sep_tm.tm_mon]);
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%s %d, %d", month_str.c_str(),
-                  sep_tm.tm_mday, sep_tm.tm_year + 1900);
-    return std::string(buf);
+    // TRANSLATORS: date separator pattern, see tk::format_date.
+    return tk::format_date(sep_tm, tk::tr("%B %-d, %Y"));
 }
 
 // Per-event expanded-line phrase for a single m.room.member row, e.g.
@@ -1003,7 +983,14 @@ std::string format_day_label(std::uint64_t timestamp_ms)
 // Rust never sends English prose here (see membership_action_str in
 // sdk/src/client/timeline_convert.rs) — this is the sole place that
 // composes the display string, entirely through tk::tr()/tk::trf().
+std::string membership_expanded_phrase_base(const MessageRowData& m);
+
 std::string membership_expanded_phrase(const MessageRowData& m)
+{
+    return with_membership_reason(membership_expanded_phrase_base(m), m);
+}
+
+std::string membership_expanded_phrase_base(const MessageRowData& m)
 {
     using A = tesseract::MembershipAction;
     const std::string t = m.membership_target_name.empty()
@@ -2696,7 +2683,7 @@ public:
             nat = body_text_natural_width_(m, ctx, w);
             if (m.is_edited)
             {
-                if (auto lo = ctx.factory.build_text("(edited)", body_style(w, false)))
+                if (auto lo = ctx.factory.build_text(tk::tr("(edited)"), body_style(w, false)))
                     nat = std::max(nat, lo->measure().w);
             }
             break;
@@ -2720,7 +2707,7 @@ public:
             }
             if (m.is_edited)
             {
-                if (auto lo = ctx.factory.build_text("(edited)", body_style(w, false)))
+                if (auto lo = ctx.factory.build_text(tk::tr("(edited)"), body_style(w, false)))
                     nat = std::max(nat, lo->measure().w);
             }
             break;
@@ -3124,9 +3111,11 @@ public:
                                             ? mm.membership_target_user_id
                                             : mm.membership_target_name);
                     }
-                    return membership_summary_phrase(
+                    std::string phrase = membership_summary_phrase(
                         m.membership_action, names,
                         names.size() == 1 ? m.target_pronoun : "their");
+                    return names.size() == 1 ? with_membership_reason(std::move(phrase), m)
+                                             : phrase;
                 }
                 return membership_expanded_phrase(m);
             }
@@ -3340,10 +3329,10 @@ public:
 
         // Right-side reply-count label ("N replies") — measured first so the
         // left-side preview knows how much room it has left.
-        char count_buf[48];
-        std::snprintf(count_buf, sizeof(count_buf),
-                      m.thread_reply_count == 1 ? "%llu reply" : "%llu replies",
-                      static_cast<unsigned long long>(m.thread_reply_count));
+        const std::string count_buf = tk::trf(
+            tk::trn("{0} reply", "{0} replies",
+                    static_cast<long>(m.thread_reply_count)),
+            {std::to_string(m.thread_reply_count)});
         tk::TextStyle cs{};
         cs.role = tk::FontRole::Small;
         cs.wrap = false;
@@ -3968,11 +3957,13 @@ private:
         {
             owner_.on_member_pronoun_needed(msgs[start].membership_target_user_id);
         }
-        auto lo = ctx.factory.build_text(
+        std::string phrase =
             membership_summary_phrase(msgs[start].membership_action, names,
                                       total == 1 ? msgs[start].target_pronoun
-                                                 : "their"),
-            st);
+                                                 : "their");
+        if (total == 1)
+            phrase = with_membership_reason(std::move(phrase), msgs[start]);
+        auto lo = ctx.factory.build_text(phrase, st);
         if (lo)
         {
             tk::Size sz = lo->measure();
@@ -4092,7 +4083,7 @@ private:
             if (m.is_edited)
             {
                 badge_h = kEditedBadgeGap +
-                          measure_text_height("(edited)", ctx, col_w);
+                          measure_text_height(tk::tr("(edited)"), ctx, col_w);
             }
             float preview_h = 0.0f;
             if (float sh = owner_.previews_.stack_height(m, ctx.factory, col_w);
@@ -4105,7 +4096,7 @@ private:
         case MessageRowData::Kind::Redacted:
             return quote_h +
                    measure_text_height(
-                       m.body.empty() ? std::string("(empty message)") : m.body,
+                       m.body.empty() ? tk::tr("(empty message)") : m.body,
                        ctx, col_w);
 
         case MessageRowData::Kind::Utd:
@@ -4149,7 +4140,7 @@ private:
                 if (m.is_edited)
                 {
                     h += kEditedBadgeGap +
-                         measure_text_height("(edited)", ctx, col_w);
+                         measure_text_height(tk::tr("(edited)"), ctx, col_w);
                 }
             }
             return quote_h + h;
@@ -4180,7 +4171,7 @@ private:
                 if (m.is_edited)
                 {
                     h += kEditedBadgeGap +
-                         measure_text_height("(edited)", ctx, col_w);
+                         measure_text_height(tk::tr("(edited)"), ctx, col_w);
                 }
             }
             return quote_h + h;
@@ -4211,7 +4202,7 @@ private:
                 if (m.is_edited)
                 {
                     h += kEditedBadgeGap +
-                         measure_text_height("(edited)", ctx, col_w);
+                         measure_text_height(tk::tr("(edited)"), ctx, col_w);
                 }
             }
             return quote_h + h;
@@ -4233,7 +4224,7 @@ private:
             }
             float badge_h =
                 m.is_edited ? kEditedBadgeGap +
-                                  measure_text_height("(edited)", ctx, col_w)
+                                  measure_text_height(tk::tr("(edited)"), ctx, col_w)
                             : 0.0f;
             float preview_h = 0.0f;
             if (float sh = owner_.previews_.stack_height(m, ctx.factory, col_w);
@@ -4288,7 +4279,7 @@ private:
                 st.role = tk::FontRole::Small;
                 st.trim = tk::TextTrim::Ellipsis;
                 st.max_width = col_w;
-                auto lo = ctx.factory.build_text("(edited)", st);
+                auto lo = ctx.factory.build_text(tk::tr("(edited)"), st);
                 if (lo)
                 {
                     ctx.canvas.draw_text(*lo, {x, end_y + kEditedBadgeGap},
@@ -4316,7 +4307,7 @@ private:
                 st.role = tk::FontRole::Small;
                 st.trim = tk::TextTrim::Ellipsis;
                 st.max_width = col_w;
-                auto lo = ctx.factory.build_text("(edited)", st);
+                auto lo = ctx.factory.build_text(tk::tr("(edited)"), st);
                 if (lo)
                 {
                     ctx.canvas.draw_text(*lo, {x, end_y + kEditedBadgeGap},
@@ -4369,7 +4360,7 @@ private:
                 st.role = tk::FontRole::Small;
                 st.trim = tk::TextTrim::Ellipsis;
                 st.max_width = col_w;
-                auto lo = ctx.factory.build_text("(edited)", st);
+                auto lo = ctx.factory.build_text(tk::tr("(edited)"), st);
                 if (lo)
                 {
                     ctx.canvas.draw_text(*lo, {x, end_y + kEditedBadgeGap},
@@ -4480,7 +4471,7 @@ private:
                     st.role = tk::FontRole::Small;
                     st.trim = tk::TextTrim::Ellipsis;
                     st.max_width = col_w;
-                    auto lo = ctx.factory.build_text("(edited)", st);
+                    auto lo = ctx.factory.build_text(tk::tr("(edited)"), st);
                     if (lo)
                     {
                         ctx.canvas.draw_text(*lo, {x, cursor + kEditedBadgeGap},
@@ -4558,7 +4549,7 @@ private:
                     st.role = tk::FontRole::Small;
                     st.trim = tk::TextTrim::Ellipsis;
                     st.max_width = col_w;
-                    auto lo = ctx.factory.build_text("(edited)", st);
+                    auto lo = ctx.factory.build_text(tk::tr("(edited)"), st);
                     if (lo)
                     {
                         ctx.canvas.draw_text(*lo, {x, cursor + kEditedBadgeGap},
@@ -4630,7 +4621,7 @@ private:
                     st.role = tk::FontRole::Small;
                     st.trim = tk::TextTrim::Ellipsis;
                     st.max_width = col_w;
-                    auto lo = ctx.factory.build_text("(edited)", st);
+                    auto lo = ctx.factory.build_text(tk::tr("(edited)"), st);
                     if (lo)
                     {
                         ctx.canvas.draw_text(*lo, {x, cursor + kEditedBadgeGap},
@@ -4788,7 +4779,19 @@ private:
                 body_lo = ctx.factory.build_rich_text(spans, body_st);
             }
             if (!body_lo && !sbody.empty())
-                body_lo = ctx.factory.build_text(sbody, body_st);
+            {
+                // Plain-text reply target (no formatted_body): still
+                // pill-ify a literal "@room", matching the main body's
+                // plain-text fallback (see split_room_mentions's doc
+                // comment / assemble_emote_spans_()).
+                tk::TextSpan whole;
+                whole.text = sbody;
+                spans = split_room_mentions({std::move(whole)}, dark);
+                substitute_image_placeholders(spans);
+                body_lo = ctx.factory.build_rich_text(spans, body_st);
+                if (!body_lo)
+                    body_lo = ctx.factory.build_text(sbody, body_st);
+            }
 
             constexpr float kLineGap = 2.0f;
             float name_h  = name_lo ? name_lo->measure().h : 0.0f;
@@ -4804,7 +4807,7 @@ private:
                 ctx.canvas.draw_text(*body_lo, {tx, text_y + name_h + kLineGap},
                                      ctx.theme.palette.text_muted);
                 paint_span_images(spans, *body_lo, ctx, tx,
-                                  text_y + name_h + kLineGap);
+                                  text_y + name_h + kLineGap, tx + tw);
             }
         }
 
@@ -4897,8 +4900,8 @@ private:
                     continue;
                 }
                 sp.text = sp.spoiler_reason.empty()
-                              ? "[Spoiler]"
-                              : "[Spoiler: " + sp.spoiler_reason + "]";
+                              ? tk::tr("[Spoiler]")
+                              : tk::trf(tk::tr("[Spoiler: {0}]"), {sp.spoiler_reason});
                 sp.bold = true;
                 sp.italic = false;
                 sp.strikethrough = false;
@@ -4956,8 +4959,9 @@ private:
                     if (!sp.spoiler)
                         continue;
                     sp.text = sp.spoiler_reason.empty()
-                                  ? "[Spoiler]"
-                                  : "[Spoiler: " + sp.spoiler_reason + "]";
+                                  ? tk::tr("[Spoiler]")
+                                  : tk::trf(tk::tr("[Spoiler: {0}]"),
+                                            {sp.spoiler_reason});
                     sp.bold          = true;
                     sp.italic        = false;
                     sp.strikethrough = false;
@@ -5023,7 +5027,7 @@ private:
             // A plain m.text @room mention (no formatted_body) still needs
             // to pill-ify, same as the formatted_body branch above.
             tk::TextSpan body_sp;
-            body_sp.text = m.body.empty() ? "(empty message)" : m.body;
+            body_sp.text = m.body.empty() ? tk::tr("(empty message)") : m.body;
             auto mentioned = split_room_mentions({std::move(body_sp)}, dark);
             substitute_image_placeholders(mentioned);
             for (auto& s : mentioned)
@@ -5242,7 +5246,7 @@ private:
                 if (!slot.layout && slot.sections.empty())
                 {
                     std::string plain_text =
-                        m.body.empty() ? std::string("(empty message)")
+                        m.body.empty() ? tk::tr("(empty message)")
                                        : m.body;
                     if (!eo && !plain_text.empty())
                     {
@@ -5306,7 +5310,7 @@ private:
                     {
                         tk::TextSpan body_sp;
                         body_sp.text = slot.plain.empty()
-                                           ? std::string("(empty message)")
+                                           ? tk::tr("(empty message)")
                                            : slot.plain;
                         combined.push_back(std::move(body_sp));
                     }
@@ -5449,8 +5453,13 @@ private:
     // glyph), so there's nothing to paint over here.
     void paint_span_images(const std::vector<tk::TextSpan>& spans,
                            tk::TextLayout& layout, tk::PaintCtx& ctx,
-                           float ox, float oy) const
+                           float ox, float oy, float max_right = 0.0f) const
     {
+        // max_right > 0: skip any inline image whose box would end past this
+        // x — backstop for elided single-line layouts (reply quote card) on a
+        // backend that still reports rects for text hidden by the ellipsis.
+        auto past_right = [&](float x, float w)
+        { return max_right > 0.0f && x + w > max_right + 0.5f; };
         // Deliberately NOT layout.ascent(): for a wrapped (multi-line) body
         // — the common case — TextLayout::ascent() has no single "this
         // line's ascent" to report and instead returns the *whole layout's*
@@ -5611,6 +5620,8 @@ private:
                                 scale > 0.0f
                                     ? std::round((r.y + oy + dy) * scale) / scale
                                     : r.y + oy + dy;
+                            if (past_right(dst_x, dst_w))
+                                continue;
                             ctx.canvas.draw_image(
                                 *bmp, {dst_x, dst_y, dst_w, dst_h});
                         }
@@ -5628,6 +5639,8 @@ private:
                         for (const tk::Rect& r :
                              layout.selection_rects(boff, boff + len))
                         {
+                            if (past_right(r.x + ox, r.w))
+                                continue;
                             ctx.canvas.draw_image(
                                 *img, {r.x + ox, r.y + oy, r.w, r.h});
                         }
@@ -6490,9 +6503,13 @@ public:
             ctx, bounds, kPinnedEventH,
             msgirc::timestamp_part(format_hhmm(msgs[start].timestamp_ms)) +
                 "* " +
-                membership_summary_phrase(
-                    msgs[start].membership_action, names,
-                    (end - start) == 1 ? msgs[start].target_pronoun : "their"),
+                ((end - start) == 1
+                     ? with_membership_reason(
+                           membership_summary_phrase(msgs[start].membership_action,
+                                                     names, msgs[start].target_pronoun),
+                           msgs[start])
+                     : membership_summary_phrase(msgs[start].membership_action,
+                                                 names, "their")),
             ctx.theme.palette.text_muted, /*rule=*/false);
         return true;
     }
@@ -7023,6 +7040,15 @@ void MessageListView::update_message(std::size_t index, MessageRowData msg)
     if (msg.kind == MessageRowData::Kind::ReadMarker)
     {
         suppress_read_marker_ = false;
+    }
+    // A resolved quote releases this row's room-switch-gate entry (keyed by
+    // the reply row's own event_id). Done here rather than by each caller so
+    // every list — main timeline, thread panel, pop-outs — gets it; the
+    // thread paths never called notify_reply_ready, so a thread with a reply
+    // in view always waited out the gate's full timeout.
+    if (!msg.in_reply_to_id.empty() && !msg.in_reply_to_sender_name.empty())
+    {
+        room_switch_gate_.notify_loaded(msg.event_id);
     }
     // Copy, not reference: messages_[index] is reassigned below.
     const std::string old_eid = messages_[index].event_id;
@@ -8156,11 +8182,11 @@ bool MessageListView::on_pointer_move(tk::Point local)
             if (next != ActionTooltip::None && host_)
             {
                 const char* src =
-                    next == ActionTooltip::React  ? "Add reaction"
-                    : next == ActionTooltip::Reply  ? "Reply"
-                    : next == ActionTooltip::Thread ? "Reply in thread"
-                    : next == ActionTooltip::Edit   ? "Edit"
-                    :                                 "More";
+                    next == ActionTooltip::React  ? tk::N_("Add reaction")
+                    : next == ActionTooltip::Reply  ? tk::N_("Reply")
+                    : next == ActionTooltip::Thread ? tk::N_("Reply in thread")
+                    : next == ActionTooltip::Edit   ? tk::N_("Edit")
+                    :                                 tk::N_("More");
                 host_->show_tooltip(this, tk::tr(src), tip_anchor);
             }
         }
@@ -10657,6 +10683,22 @@ void MessageListView::paint(tk::PaintCtx& ctx)
         ctx.canvas.draw_text(*line.layout, {panel.x + kTipPadX, y},
                              ctx.theme.palette.text_primary);
         y += line.size.h;
+    }
+}
+
+std::string with_membership_reason(std::string phrase, const MessageRowData& m)
+{
+    using A = tesseract::MembershipAction;
+    if (m.membership_reason.empty())
+        return phrase;
+    switch (m.membership_action)
+    {
+    case A::Kicked:
+    case A::Banned:
+    case A::KickedAndBanned:
+        return tk::trf(tk::tr("{0}. Reason: {1}"), {phrase, m.membership_reason});
+    default:
+        return phrase;
     }
 }
 

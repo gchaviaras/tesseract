@@ -158,11 +158,11 @@ msgstr "Buscar salas…"
 
 #: ui/linux-qt/src/MainWindow.cpp:1632
 msgid "Already in Saved Stickers"
-msgstr "Ya está en pegatinas guardadas"
+msgstr "Ya está en stickers guardados"
 
 #: ui/linux-qt/src/MainWindow.cpp:1633
 msgid "Add to Saved Stickers"
-msgstr "Añadir a pegatinas guardadas"
+msgstr "Añadir a stickers guardados"
 
 #: ui/linux-qt/src/MainWindow.cpp:1750
 #: ui/linux-qt/src/MainWindow.cpp:2132
@@ -252,7 +252,7 @@ msgstr "Añadir cuenta…"
 
 #: ui/linux-qt/src/MainWindow.cpp:3685
 msgid "Settings…"
-msgstr "Ajustes…"
+msgstr "Configuración…"
 
 #: ui/shared/app/ShellBase.cpp:7484
 msgid "Verify this session…"
@@ -304,7 +304,7 @@ msgstr "Sesión de %1 cerrada"
 
 #: ui/shared/views/StickerPicker.cpp:43
 msgid "Search stickers"
-msgstr "Buscar pegatinas"
+msgstr "Buscar stickers"
 
 #: ui/shared/views/StickerPicker.cpp:308
 msgid "Favorites"
@@ -406,7 +406,7 @@ msgstr "Pública"
 
 #: ui/shared/views/JoinRoomView.cpp:58 ui/shared/views/settings/RoomSecuritySection.cpp
 msgid "Knock"
-msgstr "Llamar"
+msgstr "Solicitar unirse"
 
 #: ui/shared/views/JoinRoomView.cpp:62 ui/shared/views/settings/RoomSecuritySection.cpp
 msgid "Restricted"
@@ -414,7 +414,7 @@ msgstr "Restringida"
 
 #: ui/shared/views/JoinRoomView.cpp:66 ui/shared/views/settings/RoomSecuritySection.cpp
 msgid "Knock+Restricted"
-msgstr "Llamar+Restringida"
+msgstr "Solicitar unirse+Restringida"
 
 #: ui/shared/views/JoinRoomView.cpp:70 ui/shared/views/settings/RoomSecuritySection.cpp
 msgid "Invite only"
@@ -430,7 +430,7 @@ msgstr "Desconocida"
 
 #: ui/shared/views/JoinRoomView.cpp:83
 msgid "#room:server.org"
-msgstr "#sala:servidor.org"
+msgstr "#sala:server.org"
 
 #: ui/shared/views/JoinRoomView.cpp:84
 msgid "Look up"
@@ -567,12 +567,7 @@ msgid ""
 "Private: invite-only, unlisted. Public: anyone can join, listed. "
 "Fine-grained options (Knock, Restricted) can be set afterward in Room "
 "Settings → Security & Privacy."
-msgstr ""
-"Define la regla de acceso inicial, la visibilidad del historial y si "
-"aparece en el directorio. Privada: solo por invitación, no aparece en el "
-"directorio. Pública: cualquiera puede unirse, aparece en el directorio. "
-"Las opciones más detalladas (Llamar, Restringida) se pueden configurar "
-"después en Ajustes de la sala → Seguridad y privacidad."
+msgstr "Define la regla de acceso inicial, la visibilidad del historial y si aparece en el directorio. Privada: solo por invitación, no aparece en el directorio. Pública: cualquiera puede unirse, aparece en el directorio. Las opciones más detalladas (Solicitar unirse, Restringida) se pueden configurar después en Configuración de la sala → Seguridad y privacidad."
 
 #: ui/shared/views/CreateRoomView.cpp:175
 msgid "Creating room…"
@@ -641,7 +636,7 @@ msgstr "?"
 
 #: ui/shared/views/LoginView.cpp:116
 msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? matrix.org is a good default and works with anyone on Matrix."
-msgstr "Tu servidor de inicio es donde vive tu cuenta, algo similar a elegir un proveedor de correo electrónico. ¿No estás seguro? matrix.org es una buena opción por defecto y funciona con cualquier persona en Matrix."
+msgstr "Tu servidor es donde vive tu cuenta, algo similar a elegir un proveedor de correo electrónico. ¿No estás seguro? matrix.org es una buena opción por defecto y funciona con cualquier persona en Matrix."
 
 #: ui/shared/views/LoginView.cpp:317
 msgid "matrix.org"
@@ -677,7 +672,7 @@ msgstr "No se pudo conectar con este servidor"
 
 #: ui/shared/views/LoginView.cpp:327
 msgid "@user:example.org"
-msgstr "@usuario:ejemplo.org"
+msgstr "@usuario:example.org"
 
 #: ui/shared/views/LoginView.cpp:709
 msgid "Please enter your Matrix ID and password."
@@ -722,7 +717,7 @@ msgstr "Reintentar"
 
 #: ui/shared/views/RoomInfoPanel.cpp
 msgid "Room settings"
-msgstr "Ajustes de la sala"
+msgstr "Configuración de la sala"
 
 #: ui/shared/views/RoomInfoPanel.cpp
 msgid "Edit topic"
@@ -935,7 +930,7 @@ msgstr "Verifica este dispositivo para confirmar tu identidad."
 
 #: ui/shared/views/VerificationBanner.cpp:171
 msgid "Another device wants to verify. Accept to compare emoji."
-msgstr "Otro dispositivo quiere verificar. Acepta para comparar los emoji."
+msgstr "Otro dispositivo quiere verificar. Acepta para comparar los emojis."
 
 #: ui/shared/views/VerificationBanner.cpp:173
 msgid "Waiting for the other device to accept…"
@@ -943,7 +938,7 @@ msgstr "Esperando a que el otro dispositivo acepte…"
 
 #: ui/shared/views/VerificationBanner.cpp:175
 msgid "Do these emoji match what the other device shows?"
-msgstr "¿Coinciden estos emoji con los que muestra el otro dispositivo?"
+msgstr "¿Coinciden estos emojis con los que muestra el otro dispositivo?"
 
 #: ui/shared/views/VerificationBanner.cpp:177
 msgid "Confirming…"
@@ -1109,11 +1104,11 @@ msgstr "Más opciones"
 
 #: ui/shared/views/ComposeBar.cpp
 msgid "Emoji"
-msgstr "Emoji"
+msgstr "Emojis"
 
 #: ui/shared/views/ComposeBar.cpp
 msgid "Stickers"
-msgstr "Adhesivos"
+msgstr "Stickers"
 
 #: ui/shared/views/ComposeBar.cpp
 msgid "Stop recording"
@@ -1379,7 +1374,7 @@ msgstr "Cargar imagen"
 
 #: ui/shared/views/MessageListView.cpp
 msgid "Load sticker"
-msgstr "Cargar pegatina"
+msgstr "Cargar sticker"
 
 #: ui/shared/views/MessageListView.cpp
 msgid "Load video"
@@ -1437,9 +1432,7 @@ msgstr ""
 msgid ""
 "A monospaced, mIRC-style timeline: every line is \"[time] <nick>\" with a "
 "colour per person."
-msgstr ""
-"Una cronología monoespaciada al estilo de mIRC: cada línea es «[hora] "
-"<apodo>» con un color por persona."
+msgstr "Una línea de tiempo monoespaciada al estilo de mIRC: cada línea es «[hora] <apodo>» con un color por persona."
 
 #: ui/shared/views/settings/MessageLayoutPreview.cpp
 msgid "Alex"
@@ -1659,11 +1652,11 @@ msgstr "Pantalla"
 
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Room Settings"
-msgstr "Ajustes de la sala"
+msgstr "Configuración de la sala"
 
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Space Settings"
-msgstr "Ajustes del espacio"
+msgstr "Configuración del espacio"
 
 #: ui/shared/views/settings/RoomGeneralSection.cpp
 msgid "General"
@@ -1832,7 +1825,7 @@ msgstr "Expulsar usuarios"
 
 #: ui/shared/views/settings/RoomPermissionsSection.cpp
 msgid "Ban users"
-msgstr "Vetar usuarios"
+msgstr "Banear usuarios"
 
 #: ui/shared/views/settings/RoomPermissionsSection.cpp
 msgid "Calls"
@@ -2008,7 +2001,7 @@ msgstr "Establecer tu avatar en esta sala"
 
 #: ui/shared/app/SlashCommands.cpp:141
 msgid "Join a room by alias or ID"
-msgstr "Unirte a una sala por alias o ID"
+msgstr "Unirse a una sala por alias o ID"
 
 #: ui/shared/app/SlashCommands.cpp:142
 msgid "Leave the current room"
@@ -2024,7 +2017,7 @@ msgstr "Buscar un GIF para enviar"
 
 #: ui/shared/app/SlashCommands.cpp:145
 msgid "Take a selfie and attach it"
-msgstr "Hacerte un selfie y adjuntarlo"
+msgstr "Hacerse un selfie y adjuntarlo"
 
 #: ui/shared/app/SlashCommands.cpp:146
 msgid "Share your current location"
@@ -2168,11 +2161,11 @@ msgstr "Marcar como leída"
 
 #: ui/shared/views/RoomListView.cpp
 msgid "Leave room"
-msgstr "Abandonar sala"
+msgstr "Salir de la sala"
 
 #: ui/shared/views/SpaceRootView.cpp
 msgid "Leave Space"
-msgstr "Abandonar espacio"
+msgstr "Salir del espacio"
 
 #: ui/shared/app/ShellBase.cpp ui/shared/views/RoomView.cpp
 msgid "this room"
@@ -2181,7 +2174,7 @@ msgstr "esta sala"
 #: ui/shared/app/ShellBase.cpp ui/shared/views/RoomView.cpp
 #, c++-format
 msgid "Leave {0}?"
-msgstr "¿Abandonar {0}?"
+msgstr "¿Salir de {0}?"
 
 #: ui/shared/app/ShellBase.cpp ui/shared/views/RoomView.cpp
 msgid "You will stop receiving messages and need to be re-invited to rejoin."
@@ -2189,7 +2182,7 @@ msgstr "Dejarás de recibir mensajes y necesitarás una nueva invitación para v
 
 #: ui/shared/app/ShellBase.cpp ui/shared/views/RoomView.cpp
 msgid "Leave"
-msgstr "Abandonar"
+msgstr "Salir"
 
 #: ui/windows/src/Win32Taskbar.cpp
 msgid "Mentions"
@@ -2316,7 +2309,7 @@ msgstr "¿Denegar y banear a este usuario?"
 
 #: ui/shared/views/RoomView.cpp:858
 msgid "They will be removed from the room and unable to rejoin or knock again unless unbanned."
-msgstr "Se les eliminará de la sala y no podrán volver a unirse ni a llamar a la puerta a menos que se les desbanee."
+msgstr "Se les expulsará de la sala y no podrán volver a unirse ni solicitarlo de nuevo a menos que se les desbanee."
 
 #: ui/shared/views/ThreadListView.cpp:146
 msgid "Search threads…"
@@ -2472,7 +2465,7 @@ msgstr "Búsqueda deshabilitada: la indexación está desactivada"
 
 #: ui/shared/views/MessageSearchView.cpp
 msgid "Message search is disabled. Enable indexing in Settings to search your messages."
-msgstr "La búsqueda de mensajes está deshabilitada. Activa la indexación en Ajustes para buscar en tus mensajes."
+msgstr "La búsqueda de mensajes está deshabilitada. Activa la indexación en Configuración para buscar en tus mensajes."
 
 #: ui/macos/src/AppDelegate.mm
 msgid "File"
@@ -2492,7 +2485,7 @@ msgstr "Buscar…"
 
 #: ui/macos/src/AppDelegate.mm
 msgid "Search Your Messages…"
-msgstr "Busca en tus mensajes…"
+msgstr "Buscar en tus mensajes…"
 
 #: ui/macos/src/AppDelegate.mm
 msgid "Go"
@@ -2621,7 +2614,7 @@ msgstr "Bajo demanda"
 
 #: ui/shared/views/ActivityMonitorView.cpp
 msgid "Thread pool"
-msgstr "Grupo de hilos"
+msgstr "Grupo de subprocesos"
 
 #: ui/shared/views/ActivityMonitorView.cpp
 #, c++-format
@@ -2731,7 +2724,7 @@ msgstr "Abrir la búsqueda de mensajes"
 
 #: ui/shared/app/Launch.cpp
 msgid "Open Settings"
-msgstr "Abrir Ajustes"
+msgstr "Abrir configuración"
 
 #: ui/shared/app/Launch.cpp
 msgid "Sign out of every account and exit"
@@ -2768,3 +2761,2305 @@ msgstr "Sesión cerrada en {0}"
 #: ui/shared/app/Launch.cpp
 msgid "Removed {0} from this device, but the server sign-out failed: {1}"
 msgstr "Se eliminó {0} de este dispositivo, pero el cierre de sesión en el servidor falló: {1}"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "Invite people"
+msgstr "Invitar personas"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "Leave Room"
+msgstr "Salir de la sala"
+
+#: ui/shared/views/InviteDialog.cpp
+msgid "Search people or enter @user:server"
+msgstr "Busca personas o escribe @usuario:servidor"
+
+#: ui/shared/views/InviteDialog.cpp
+msgid "Already in room"
+msgstr "Ya está en la sala"
+
+#: ui/shared/views/InviteDialog.cpp
+msgid "Looking up…"
+msgstr "Buscando…"
+
+#: ui/shared/views/InviteDialog.cpp
+msgid "User not found"
+msgstr "Usuario no encontrado"
+
+#: ui/shared/views/InviteDialog.cpp
+msgid "Invite to room"
+msgstr "Invitar a la sala"
+
+#: ui/shared/views/InviteDialog.cpp
+#, c++-format
+msgid "Invite to {0}"
+msgstr "Invitar a {0}"
+
+#: ui/shared/views/InviteDialog.cpp
+msgid "Invite"
+msgstr "Invitar"
+
+#: ui/shared/views/InviteDialog.cpp
+#, c++-format
+msgid "Invite ({0})"
+msgstr "Invitar ({0})"
+
+#: ui/shared/views/InviteDialog.cpp
+msgid "No matching people"
+msgstr "No hay personas que coincidan"
+
+#: ui/shared/views/InviteDialog.cpp
+#, c++-format
+msgid "Failed to invite {0}: {1}"
+msgstr "No se pudo invitar a {0}: {1}"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Couldn't invite {0}"
+msgstr "No se pudo invitar a {0}"
+
+#: ui/shared/views/InviteDialog.cpp
+#, c++-format
+msgid "Inviting {0} person…"
+msgid_plural "Inviting {0} people…"
+msgstr[0] "Invitando a {0} persona…"
+msgstr[1] "Invitando a {0} personas…"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "Show profile"
+msgstr "Ver perfil"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "Kick user…"
+msgstr "Expulsar usuario…"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "Ban user…"
+msgstr "Banear usuario…"
+
+#: ui/shared/views/RoomView.cpp
+#, c++-format
+msgid "Ban {0}?"
+msgstr "¿Banear a {0}?"
+
+#: ui/shared/views/RoomView.cpp
+msgid "They will be removed from the room and unable to rejoin unless unbanned."
+msgstr "Se le expulsará de la sala y no podrá volver a unirse a menos que se le desbanee."
+
+#: ui/shared/views/RoomView.cpp
+msgid "Ban"
+msgstr "Banear"
+
+#: ui/shared/views/RoomView.cpp
+#, c++-format
+msgid "Remove {0} from the room?"
+msgstr "¿Expulsar a {0} de la sala?"
+
+#: ui/shared/views/RoomView.cpp
+msgid "They can rejoin if the room allows it."
+msgstr "Podrá volver a unirse si la sala lo permite."
+
+#: ui/shared/views/RoomView.cpp
+msgid "Kick"
+msgstr "Expulsar"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Couldn't ban {0}"
+msgstr "No se pudo banear a {0}"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Couldn't kick {0}"
+msgstr "No se pudo expulsar a {0}"
+
+#: ui/shared/views/MessageListView.cpp ui/shared/app/HistoryExportController.cpp
+#, c++-format
+msgid "{0}. Reason: {1}"
+msgstr "{0}. Motivo: {1}"
+
+#: ui/shared/views/RoomSettingsView.cpp
+msgid "Moderation"
+msgstr "Moderación"
+
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "Banned users"
+msgstr "Usuarios baneados"
+
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "No banned users"
+msgstr "No hay usuarios baneados"
+
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "Unban"
+msgstr "Desbanear"
+
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "Unban (you don't have permission to lift this ban)"
+msgstr "Desbanear (no tienes permiso para retirar este baneo)"
+
+#: ui/shared/views/settings/RoomModerationSection.cpp
+#, c++-format
+msgid "Banned by {0}"
+msgstr "Baneado por {0}"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Couldn't unban {0}"
+msgstr "No se pudo desbanear a {0}"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Save to file…"
+msgstr "Guardar en archivo…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Saved."
+msgstr "Guardado."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Couldn't save the file."
+msgstr "No se pudo guardar el archivo."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+#, c++-format
+msgid "Couldn't save the file: {0}"
+msgstr "No se pudo guardar el archivo: {0}"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Unlocking your messages…"
+msgstr "Desbloqueando tus mensajes…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Securing your messages…"
+msgstr "Protegiendo tus mensajes…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Done."
+msgstr "Listo."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Protect your messages"
+msgstr "Protege tus mensajes"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Confirm it's you"
+msgstr "Confirma que eres tú"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your messages are end-to-end encrypted. A recovery key lets you read them again if you sign in on a new device or lose this one."
+msgstr "Tus mensajes están cifrados de extremo a extremo. Una clave de recuperación te permite volver a leerlos si inicias sesión en un dispositivo nuevo o pierdes este."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "To read your encrypted messages on this device, confirm it's you with your recovery key or with another device where you're signed in."
+msgstr "Para leer tus mensajes cifrados en este dispositivo, confirma que eres tú con tu clave de recuperación o con otro dispositivo en el que hayas iniciado sesión."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Use a passphrase instead"
+msgstr "Usar una frase de contraseña"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Create recovery key"
+msgstr "Crear clave de recuperación"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Continue"
+msgstr "Continuar"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Skip for now"
+msgstr "Omitir por ahora"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Choose a passphrase"
+msgstr "Elige una frase de contraseña"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Pick something memorable that you don't use anywhere else."
+msgstr "Elige algo fácil de recordar que no uses en ningún otro sitio."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Passphrase"
+msgstr "Frase de contraseña"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Confirm passphrase"
+msgstr "Confirmar frase de contraseña"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The passphrases don't match."
+msgstr "Las frases de contraseña no coinciden."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Enter your recovery key"
+msgstr "Introduce tu clave de recuperación"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "If you set a passphrase instead, enter that."
+msgstr "Si configuraste una frase de contraseña, introdúcela."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Use another device instead"
+msgstr "Usar otro dispositivo"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Unlock"
+msgstr "Desbloquear"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Save your recovery key"
+msgstr "Guarda tu clave de recuperación"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Keep it somewhere safe, like a password manager. You'll need it to read your messages if you sign in on a new device."
+msgstr "Guárdala en un lugar seguro, como un gestor de contraseñas. La necesitarás para leer tus mensajes si inicias sesión en un dispositivo nuevo."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "I've saved my recovery key"
+msgstr "He guardado mi clave de recuperación"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "You're all set. Your messages are protected."
+msgstr "Todo listo. Tus mensajes están protegidos."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "You're all set. Your encrypted messages are available on this device."
+msgstr "Todo listo. Tus mensajes cifrados están disponibles en este dispositivo."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Resetting encryption"
+msgstr "Restableciendo el cifrado"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Approve the reset in the browser window that just opened. This will continue once you've confirmed."
+msgstr "Aprueba el restablecimiento en la ventana del navegador que se acaba de abrir. Esto continuará cuando lo hayas confirmado."
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Export room keys…"
+msgstr "Exportar claves de salas…"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Import room keys…"
+msgstr "Importar claves de salas…"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Reset encryption…"
+msgstr "Restablecer cifrado…"
+
+#: ui/shared/views/SettingsView.cpp
+msgid "Reset encryption?"
+msgstr "¿Restablecer el cifrado?"
+
+#: ui/shared/views/SettingsView.cpp
+msgid "Only do this if you've lost your recovery key and have no other signed-in device. Messages you can't read now will stay unreadable, and your other devices and the people you chat with will need to confirm you again. You'll get a new recovery key right after."
+msgstr "Hazlo solo si has perdido tu clave de recuperación y no tienes otro dispositivo con la sesión iniciada. Los mensajes que ahora no puedes leer seguirán sin poder leerse, y tus otros dispositivos y las personas con las que hablas tendrán que volver a confirmarte. Recibirás una nueva clave de recuperación justo después."
+
+#: ui/shared/views/VerificationBanner.cpp
+msgid "Confirm it's you to read your encrypted messages on this device."
+msgstr "Confirma que eres tú para leer tus mensajes cifrados en este dispositivo."
+
+#: ui/shared/views/VerificationBanner.cpp
+msgid "Confirm"
+msgstr "Confirmar"
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Remind me later"
+msgstr "Recordármelo más tarde"
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Your messages aren't backed up yet."
+msgstr "Tus mensajes aún no tienen copia de seguridad."
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Your encrypted messages are locked on this device."
+msgstr "Tus mensajes cifrados están bloqueados en este dispositivo."
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Set up recovery"
+msgstr "Configurar recuperación"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The request was cancelled or timed out."
+msgstr "La solicitud se canceló o caducó."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The codes didn't match, so nothing was confirmed. If you didn't start this, someone else may be trying to get into your account."
+msgstr "Los códigos no coincidían, así que no se confirmó nada. Si no iniciaste esto, puede que otra persona esté intentando acceder a tu cuenta."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Choose how to unlock your encrypted messages on this device."
+msgstr "Elige cómo desbloquear tus mensajes cifrados en este dispositivo."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Use another device"
+msgstr "Usar otro dispositivo"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Approve from a device where you're already signed in"
+msgstr "Apruébalo desde un dispositivo en el que ya hayas iniciado sesión"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Enter recovery key"
+msgstr "Introducir clave de recuperación"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Or the passphrase you chose instead"
+msgstr "O la frase de contraseña que elegiste"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "I've lost my recovery key and other devices"
+msgstr "He perdido mi clave de recuperación y mis otros dispositivos"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "If you've lost both your recovery key and every other signed-in device, you can start over with a new recovery key. Messages you can't read now will stay unreadable, and people you chat with will see that your security details changed."
+msgstr "Si has perdido tu clave de recuperación y todos tus otros dispositivos con sesión iniciada, puedes empezar de nuevo con una nueva clave de recuperación. Los mensajes que ahora no puedes leer seguirán sin poder leerse, y las personas con las que hablas verán que tus datos de seguridad han cambiado."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Reset encryption"
+msgstr "Restablecer cifrado"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Check your other device"
+msgstr "Revisa tu otro dispositivo"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Starting verification…"
+msgstr "Iniciando la verificación…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Open Tesseract (or another Matrix app) on a device where you're signed in and accept the request."
+msgstr "Abre Tesseract (u otra aplicación de Matrix) en un dispositivo en el que hayas iniciado sesión y acepta la solicitud."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Was this you?"
+msgstr "¿Has sido tú?"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Verification request"
+msgstr "Solicitud de verificación"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+#, c++-format
+msgid "Your device “{0}” wants to confirm it's you so it can read your encrypted messages."
+msgstr "Tu dispositivo «{0}» quiere confirmar que eres tú para poder leer tus mensajes cifrados."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+#, c++-format
+msgid "{0} wants to verify you. You'll compare a few numbers to make sure you're talking to the right person."
+msgstr "{0} quiere verificarte. Compararéis unos números para aseguraros de que habláis con la persona correcta."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Not me"
+msgstr "No he sido yo"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Compare numbers"
+msgstr "Compara los números"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Check that the other device shows the same numbers in the same order."
+msgstr "Comprueba que el otro dispositivo muestra los mismos números en el mismo orden."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Or compare these emoji:"
+msgstr "O compara estos emojis:"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "They match"
+msgstr "Coinciden"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "They don't match"
+msgstr "No coinciden"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Couldn't confirm"
+msgstr "No se pudo confirmar"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Try again"
+msgstr "Reintentar"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your other device is confirmed and can now read your encrypted messages."
+msgstr "Tu otro dispositivo está confirmado y ya puede leer tus mensajes cifrados."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Verified. You can trust you're talking to the right person."
+msgstr "Verificado. Puedes confiar en que hablas con la persona correcta."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "This verification is no longer active."
+msgstr "Esta verificación ya no está activa."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The other device didn't finish confirming in time."
+msgstr "El otro dispositivo no terminó de confirmar a tiempo."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Save recovery key"
+msgstr "Guardar clave de recuperación"
+
+#: ui/shared/app/ShellBase.cpp
+msgid "The file couldn't be written."
+msgstr "No se pudo escribir el archivo."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+#, c++-format
+msgid "Approve the reset as {0} in the browser window that just opened. If the browser is signed in as a different account, sign out there first, or copy the link into a private window."
+msgstr "Aprueba el restablecimiento como {0} en la ventana del navegador que se acaba de abrir. Si el navegador tiene la sesión iniciada con otra cuenta, ciérrala primero allí, o copia el enlace en una ventana privada."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+#, c++-format
+msgid "Still waiting? Check that you approved it as {0}, not another account."
+msgstr "¿Sigues esperando? Comprueba que lo aprobaste como {0} y no con otra cuenta."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Copy link"
+msgstr "Copiar enlace"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Link copied"
+msgstr "Enlace copiado"
+
+#: ui/shared/tk/video_capture.cpp
+msgid "No camera found."
+msgstr "No se encontró ninguna cámara."
+
+#: ui/shared/tk/video_capture.cpp
+msgid "The camera is being used by another app."
+msgstr "Otra aplicación está usando la cámara."
+
+#: ui/shared/tk/video_capture.cpp
+msgid "Camera access is blocked. Check your system privacy settings."
+msgstr "El acceso a la cámara está bloqueado. Revisa la configuración de privacidad del sistema."
+
+#: ui/shared/tk/video_capture.cpp
+msgid "The camera could not be started."
+msgstr "No se pudo iniciar la cámara."
+
+#: ui/shared/views/CameraWidget.cpp
+msgid "Click anywhere to close"
+msgstr "Haz clic en cualquier lugar para cerrar"
+
+#: ui/shared/views/CameraWidget.cpp
+msgid "Click anywhere to cancel"
+msgstr "Haz clic en cualquier lugar para cancelar"
+
+#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:2823
+msgid "Sign-in failed: %1"
+msgstr "Error al iniciar sesión: %1"
+
+msgid "Choose a folder for the exported history"
+msgstr "Elige una carpeta para el historial exportado"
+
+#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:4465
+msgid "\nmedia: %1 loading · fetch: %2 queued · send: %3 queued"
+msgstr "\nmultimedia: %1 cargando · descarga: %2 en cola · envío: %3 en cola"
+
+#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:513
+#: /home/rayden/src/tesseract/ui/macos/src/MainWindowController.mm:5037
+#: /home/rayden/src/tesseract/ui/windows/src/MainWindow.cpp:2617
+msgid "File exceeds the upload limit"
+msgstr "El archivo supera el límite de subida"
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:5066
+msgid "Jump to date failed: {0}"
+msgstr "Error al ir a la fecha: {0}"
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:5470
+msgid "Add device via QR…"
+msgstr "Añadir dispositivo mediante QR…"
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:6013
+msgid "Sign out failed: {0}"
+msgstr "Error al cerrar sesión: {0}"
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:8698
+msgid "Subscribe failed: {0}"
+msgstr "Error al suscribirse: {0}"
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9980
+msgid "Call disconnected due to a network error."
+msgstr "La llamada se desconectó por un error de red."
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9982
+msgid "Call ended due to a media error."
+msgstr "La llamada finalizó por un error multimedia."
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9984
+msgid "This call is not supported on your device."
+msgstr "Esta llamada no es compatible con tu dispositivo."
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9986
+msgid "Call ended due to an encryption error."
+msgstr "La llamada finalizó por un error de cifrado."
+
+#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9988
+msgid "The call ended unexpectedly."
+msgstr "La llamada finalizó inesperadamente."
+
+#: /home/rayden/src/tesseract/ui/shared/tk/screen_capture_gst.cpp:28
+msgid "Entire Screen"
+msgstr "Pantalla completa"
+
+#: /home/rayden/src/tesseract/ui/shared/tk/screen_capture_gst.cpp:29
+msgid "Select Window"
+msgstr "Seleccionar ventana"
+
+#: /home/rayden/src/tesseract/ui/shared/tk/screen_capture_portal.cpp:153
+msgid "Share Screen"
+msgstr "Compartir pantalla"
+
+msgid "Join call"
+msgstr "Unirse a la llamada"
+
+#: /home/rayden/src/tesseract/ui/shared/views/ImagePackEditorView.cpp:1144
+msgid "New pack name"
+msgstr "Nombre del paquete nuevo"
+
+#: /home/rayden/src/tesseract/ui/shared/views/ImagePackEditorView.cpp:1163
+msgid "No image packs yet — create one above."
+msgstr "Aún no hay paquetes de imágenes: crea uno arriba."
+
+#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:134
+msgid "New here? Create an account"
+msgstr "¿Eres nuevo? Crea una cuenta"
+
+#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:565
+#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:605
+#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:785
+msgid "Sign-in failed: {0}"
+msgstr "Error al iniciar sesión: {0}"
+
+#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:617
+msgid "Cancelling…"
+msgstr "Cancelando…"
+
+#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:893
+msgid "Connection Error"
+msgstr "Error de conexión"
+
+#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:896
+msgid "Sign In"
+msgstr "Iniciar sesión"
+
+#: /home/rayden/src/tesseract/ui/shared/views/MainAppWidget.cpp:305
+msgid "No internet connection — reconnecting…"
+msgstr "Sin conexión a internet: reconectando…"
+
+#: /home/rayden/src/tesseract/ui/shared/views/MessageListView.cpp:2404
+msgid "started a video call"
+msgstr "inició una videollamada"
+
+#: /home/rayden/src/tesseract/ui/shared/views/MessageListView.cpp:2406
+msgid "started a voice call"
+msgstr "inició una llamada de voz"
+
+#: /home/rayden/src/tesseract/ui/shared/views/MessageListView.cpp:2407
+msgid "started a call"
+msgstr "inició una llamada"
+
+msgid "({0} reaction)"
+msgid_plural "({0} reactions)"
+msgstr[0] "({0} reacción)"
+msgstr[1] "({0} reacciones)"
+
+msgid "Reactions"
+msgstr "Reacciones"
+
+msgid "{0}, {1} reaction"
+msgid_plural "{0}, {1} reactions"
+msgstr[0] "{0}, {1} reacción"
+msgstr[1] "{0}, {1} reacciones"
+
+msgid "reacted by you"
+msgstr "reaccionaste tú"
+
+msgid "Message actions"
+msgstr "Acciones del mensaje"
+
+msgid "Read by {0}"
+msgstr "Leído por {0}"
+
+msgid "Unable to decrypt message"
+msgstr "No se puede descifrar el mensaje"
+
+msgid "Image"
+msgstr "Imagen"
+
+msgid "Sticker"
+msgstr "Sticker"
+
+msgid "Audio message"
+msgstr "Mensaje de audio"
+
+msgid "Video"
+msgstr "Vídeo"
+
+#: /home/rayden/src/tesseract/ui/shared/views/MessageSearchView.cpp:178
+msgid "Search your messages…"
+msgstr "Buscar en tus mensajes…"
+
+#: /home/rayden/src/tesseract/ui/shared/views/MessageSearchView.cpp:413
+msgid "Type to search your messages"
+msgstr "Escribe para buscar en tus mensajes"
+
+#: /home/rayden/src/tesseract/ui/shared/views/MessageSearchView.cpp:414
+#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:132
+msgid "No matches"
+msgstr "Sin coincidencias"
+
+#: /home/rayden/src/tesseract/ui/shared/views/MessageSearchView.cpp:415
+#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:124
+msgid "Searching…"
+msgstr "Buscando…"
+
+#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:122
+msgid "Setting up secure channel…"
+msgstr "Estableciendo canal seguro…"
+
+#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:126
+msgid "Scan this QR code with your Matrix app"
+msgstr "Escanea este código QR con tu aplicación de Matrix"
+
+#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:134
+msgid "Enter the numeric code shown on the new device:"
+msgstr "Introduce el código numérico que aparece en el nuevo dispositivo:"
+
+#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:145
+msgid "Approve the sign-in in your browser…"
+msgstr "Aprueba el inicio de sesión en tu navegador…"
+
+#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:151
+msgid "Device added successfully."
+msgstr "Dispositivo añadido correctamente."
+
+#: /home/rayden/src/tesseract/ui/shared/views/QuickSwitcher.cpp:199
+msgid "Jump to a room, or @user to start a chat…"
+msgstr "Ir a una sala, o @usuario para iniciar un chat…"
+
+msgid "Invitation"
+msgstr "Invitación"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomListView.cpp:1004
+msgid "Fetching room details…"
+msgstr "Obteniendo detalles de la sala…"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomListView.cpp:1008
+msgid "members"
+msgstr "miembros"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomListView.cpp:1010
+#: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:82
+msgid "Invite-only"
+msgstr "Solo por invitación"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:81
+msgid "Knock to join"
+msgstr "Solicitar unirse"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:84
+msgid "Knock (restricted)"
+msgstr "Solicitar unirse (restringida)"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:157
+msgid "{0} members · {1}"
+msgstr "{0} miembros · {1}"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:28
+msgid "Find in conversation…"
+msgstr "Buscar en la conversación…"
+
+msgid "Previous match"
+msgstr "Coincidencia anterior"
+
+msgid "Next match"
+msgstr "Coincidencia siguiente"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:56
+msgid "Paginate"
+msgstr "Cargar historial"
+
+#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:74
+msgid "Type to search"
+msgstr "Escribe para buscar"
+
+#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:279
+msgid "Log out?"
+msgstr "¿Cerrar sesión?"
+
+#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:280
+msgid "You will need to sign in again to access your messages."
+msgstr "Tendrás que volver a iniciar sesión para acceder a tus mensajes."
+
+#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:281
+msgid "Log Out"
+msgstr "Cerrar sesión"
+
+#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:291
+msgid "Clear all caches?"
+msgstr "¿Borrar todas las cachés?"
+
+#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:295
+msgid "Clear"
+msgstr "Borrar"
+
+#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:311
+msgid "Reset"
+msgstr "Restablecer"
+
+#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:25
+#: /home/rayden/src/tesseract/ui/shared/views/settings/PronounsEditor.cpp:76
+msgid "×"
+msgstr "×"
+
+#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:28
+#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:97
+msgid "Message"
+msgstr "Mensaje"
+
+#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:31
+msgid "Ignore"
+msgstr "Ignorar"
+
+#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:101
+msgid "Open DM"
+msgstr "Abrir mensaje directo"
+
+#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:105
+msgid "Sending…"
+msgstr "Enviando…"
+
+#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:303
+msgid "Timezone"
+msgstr "Zona horaria"
+
+#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:304
+msgid "Bio"
+msgstr "Biografía"
+
+msgid "Choose status emoji"
+msgstr "Elegir emoji de estado"
+
+msgid "Clear status emoji"
+msgstr "Quitar emoji de estado"
+
+#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:783
+msgid "Send reply failed: %1"
+msgstr "Error al enviar respuesta: %1"
+
+#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:807
+msgid "Edit failed: %1"
+msgstr "Error al editar: %1"
+
+#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:1171
+msgid "Failed to set topic: %1"
+msgstr "Error al establecer el tema: %1"
+
+#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:306
+msgid "Reset your cryptographic identity?"
+msgstr "¿Restablecer tu identidad criptográfica?"
+
+#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:307
+msgid "This creates a brand-new identity and replaces your key backup. Your other sessions and the people you chat with will need to verify you again. You'll set up a new recovery key right after."
+msgstr "Esto crea una identidad completamente nueva y reemplaza la copia de seguridad de tus claves. Tus otras sesiones y las personas con las que hablas tendrán que volver a verificarte. Configurarás una nueva clave de recuperación justo después."
+
+#: ui/shared/views/settings/LanguageSection.cpp
+msgid "French"
+msgstr "Francés"
+
+#: ui/shared/views/settings/LanguageSection.cpp
+msgid "Restart now"
+msgstr "Reiniciar ahora"
+
+#: ui/shared/app/ShellBase.cpp
+msgid "End your call before restarting."
+msgstr "Finaliza la llamada antes de reiniciar."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Couldn't restart Tesseract. Please restart it yourself."
+msgstr "No se pudo reiniciar Tesseract. Reinícialo tú mismo."
+
+#: ui/linux-gtk/src/LinuxNotifier.cpp:269 ui/linux-qt/src/LinuxNotifier.cpp:216
+msgid "Open"
+msgstr "Abrir"
+
+#: ui/linux-gtk/src/LoginView.cpp:26
+msgid "Open this URL in your browser:"
+msgstr "Abre esta URL en tu navegador:"
+
+#: ui/linux-gtk/src/MainWindow.cpp:197 ui/linux-qt/src/MainWindow.cpp:4468
+msgid "{0} request in flight"
+msgid_plural "{0} requests in flight"
+msgstr[0] "{0} solicitud en curso"
+msgstr[1] "{0} solicitudes en curso"
+
+#: ui/linux-gtk/src/MainWindow.cpp:201 ui/linux-qt/src/MainWindow.cpp:4472
+msgid "media: {0} loading · fetch: {1} queued · send: {2} queued"
+msgstr "multimedia: {0} cargando · descarga: {1} en cola · envío: {2} en cola"
+
+#: ui/linux-gtk/src/MainWindow.cpp:3079 ui/windows/src/MainWindow.cpp:3953
+msgid "Already signed in as {0}"
+msgstr "Ya has iniciado sesión como {0}"
+
+#: ui/linux-gtk/src/MainWindow.cpp:3190
+msgid "_Cancel"
+msgstr "_Cancelar"
+
+#: ui/linux-gtk/src/MainWindow.cpp:3190
+msgid "_OK"
+msgstr "_Aceptar"
+
+#: ui/linux-gtk/src/MainWindow.cpp:3231
+msgid "Save room keys"
+msgstr "Guardar claves de salas"
+
+#: ui/linux-gtk/src/MainWindow.cpp:3260
+msgid "Open room keys"
+msgstr "Abrir claves de salas"
+
+#: ui/linux-gtk/src/MainWindow.cpp:3291 ui/linux-qt/src/SettingsWidget.cpp:181
+msgid "Room keys exported successfully."
+msgstr "Claves de salas exportadas correctamente."
+
+#: ui/linux-gtk/src/MainWindow.cpp:3307 ui/linux-qt/src/SettingsWidget.cpp:190
+msgid "Room keys imported successfully."
+msgstr "Claves de salas importadas correctamente."
+
+#: ui/linux-gtk/src/MainWindow.cpp:4535 ui/windows/src/MainWindow.cpp:3201
+msgid "Images"
+msgstr "Imágenes"
+
+#: ui/linux-gtk/src/MainWindow.cpp:5402 ui/linux-qt/src/MainWindow.cpp:4095
+msgid "Downloading encryption keys ({0})…"
+msgstr "Descargando claves de cifrado ({0})…"
+
+#: ui/linux-gtk/tk/host_gtk.cpp:3003 ui/linux-gtk/tk/host_gtk.cpp:3022
+msgid "Could not read file"
+msgstr "No se pudo leer el archivo"
+
+#: ui/linux-qt/src/SettingsWidget.cpp:166
+msgid "Export room keys"
+msgstr "Exportar claves de salas"
+
+#: ui/linux-qt/src/SettingsWidget.cpp:173
+msgid "Import room keys"
+msgstr "Importar claves de salas"
+
+#: ui/linux-qt/src/SettingsWidget.cpp:189
+msgid "Import complete"
+msgstr "Importación completa"
+
+#: ui/linux-qt/src/SettingsWidget.cpp:192
+msgid "Import failed"
+msgstr "Importación fallida"
+
+#: ui/macos/src/AppDelegate.mm:213
+msgid "About Tesseract"
+msgstr "Acerca de Tesseract"
+
+#: ui/macos/src/AppDelegate.mm:221
+msgid "Hide Tesseract"
+msgstr "Ocultar Tesseract"
+
+#: ui/macos/src/AppDelegate.mm:224
+msgid "Quit Tesseract"
+msgstr "Salir de Tesseract"
+
+#: ui/macos/src/AppDelegate.mm:242
+msgid "Undo"
+msgstr "Deshacer"
+
+#: ui/macos/src/AppDelegate.mm:245
+msgid "Redo"
+msgstr "Rehacer"
+
+#: ui/macos/src/AppDelegate.mm:249
+msgid "Cut"
+msgstr "Cortar"
+
+#: ui/macos/src/AppDelegate.mm:255
+msgid "Paste"
+msgstr "Pegar"
+
+#: ui/macos/src/AppDelegate.mm:258
+msgid "Select All"
+msgstr "Seleccionar todo"
+
+#: ui/macos/src/AppDelegate.mm:282
+msgid "Insert Emoji…"
+msgstr "Insertar emoji…"
+
+#: ui/macos/src/AppDelegate.mm:319
+msgid "Window"
+msgstr "Ventana"
+
+#: ui/macos/src/AppDelegate.mm:320
+msgid "Minimize"
+msgstr "Minimizar"
+
+#: ui/macos/src/AppDelegate.mm:323
+msgid "Zoom"
+msgstr "Zoom"
+
+#: ui/macos/src/MainWindowController.mm:6604 ui/windows/src/MainWindow.cpp:185
+msgid "OK"
+msgstr "Aceptar"
+
+#: ui/macos/src/MainWindowController.mm:8367
+msgid "Could Not Save Sticker"
+msgstr "No se pudo guardar el sticker"
+
+#: ui/macos/tk/screen_capture_macos.mm:140
+msgid "Display {0}"
+msgstr "Pantalla {0}"
+
+#: ui/shared/app/RoomPane.cpp:721 ui/shared/app/SettingsController.cpp:93
+msgid "not logged in"
+msgstr "sin sesión iniciada"
+
+#: ui/shared/app/ShellBase.cpp:6759
+msgid "Upload failed"
+msgstr "Error al subir"
+
+#: ui/shared/app/ShellBase.cpp:6760
+msgid "Upload failed: {0}"
+msgstr "Error al subir: {0}"
+
+#: ui/shared/app/ShellBase.cpp:7216
+msgid "Fetching older messages…"
+msgstr "Obteniendo mensajes anteriores…"
+
+#: ui/shared/app/ShellBase.cpp:7240 ui/shared/views/ThreadListView.cpp:95
+msgid "%b %-d"
+msgstr "%-d %b"
+
+#: ui/shared/app/ShellBase.cpp:7241
+msgid "%b %-d, %Y"
+msgstr "%-d %b %Y"
+
+#: ui/shared/app/ShellBase.cpp:7242
+msgid "(oldest: {0})"
+msgstr "(más antiguo: {0})"
+
+#: ui/shared/app/ShellBase.cpp:7751
+msgid "Tesseract {0} available"
+msgstr "Tesseract {0} disponible"
+
+#: ui/shared/app/ShellBase.cpp:8024
+msgid "empty session"
+msgstr "sesión vacía"
+
+#: ui/shared/app/ShellBase.cpp:8065
+msgid "couldn't persist matrix store: {0}"
+msgstr "no se pudo guardar el almacén de Matrix: {0}"
+
+#: ui/shared/app/ShellBase.cpp:8077
+msgid "couldn't persist session"
+msgstr "no se pudo guardar la sesión"
+
+#: ui/shared/app/ShellBase.cpp:8196
+msgid "no user id"
+msgstr "sin identificador de usuario"
+
+#: ui/shared/app/ShellBase.cpp:9232
+msgid "{0} is typing…"
+msgstr "{0} está escribiendo…"
+
+#: ui/shared/app/ShellBase.cpp:9236
+msgid "{0} and {1} are typing…"
+msgstr "{0} y {1} están escribiendo…"
+
+#: ui/shared/app/ShellBase.cpp:9240
+msgid "{0}, {1} and {2} other are typing…"
+msgid_plural "{0}, {1} and {2} others are typing…"
+msgstr[0] "{0}, {1} y {2} más están escribiendo…"
+msgstr[1] "{0}, {1} y {2} más están escribiendo…"
+
+#: ui/shared/app/ShellBase.cpp:14513
+msgid "Call failed: {0}"
+msgstr "Error en la llamada: {0}"
+
+#: ui/shared/app/ShellBase.h:3806
+msgid "New message"
+msgstr "Mensaje nuevo"
+
+#: ui/shared/app/SlashCommands.cpp:172
+msgid "(Spoiler: {0})"
+msgstr "(Spoiler: {0})"
+
+#: ui/shared/app/SlashCommands.cpp:179
+msgid "(Spoiler)"
+msgstr "(Spoiler)"
+
+#: ui/shared/app/SlashCommands.cpp:278
+msgid "slaps {0} around a bit with a large trout"
+msgstr "abofetea a {0} con una trucha grande"
+
+#: ui/shared/app/SlashCommands.cpp:312
+msgid "no mxc_uri provided; use /myroomavatar alone to open the image picker"
+msgstr "no se indicó ningún mxc_uri; usa /myroomavatar solo para abrir el selector de imágenes"
+
+#: ui/shared/tk/i18n.cpp:633
+msgid "Jan"
+msgstr "ene"
+
+#: ui/shared/tk/i18n.cpp:633
+msgid "Feb"
+msgstr "feb"
+
+#: ui/shared/tk/i18n.cpp:633
+msgid "Mar"
+msgstr "mar"
+
+#: ui/shared/tk/i18n.cpp:633
+msgid "Apr"
+msgstr "abr"
+
+#: ui/shared/tk/i18n.cpp:633
+msgid "Jun"
+msgstr "jun"
+
+#: ui/shared/tk/i18n.cpp:634
+msgid "Jul"
+msgstr "jul"
+
+#: ui/shared/tk/i18n.cpp:634
+msgid "Aug"
+msgstr "ago"
+
+#: ui/shared/tk/i18n.cpp:634
+msgid "Sep"
+msgstr "sept"
+
+#: ui/shared/tk/i18n.cpp:634
+msgid "Oct"
+msgstr "oct"
+
+#: ui/shared/tk/i18n.cpp:634
+msgid "Nov"
+msgstr "nov"
+
+#: ui/shared/tk/i18n.cpp:634
+msgid "Dec"
+msgstr "dic"
+
+#: ui/shared/tk/i18n.cpp:636
+msgid "Sunday"
+msgstr "Domingo"
+
+#: ui/shared/tk/i18n.cpp:636
+msgid "Monday"
+msgstr "Lunes"
+
+#: ui/shared/tk/i18n.cpp:636
+msgid "Tuesday"
+msgstr "Martes"
+
+#: ui/shared/tk/i18n.cpp:636
+msgid "Wednesday"
+msgstr "Miércoles"
+
+#: ui/shared/tk/i18n.cpp:637
+msgid "Thursday"
+msgstr "Jueves"
+
+#: ui/shared/tk/i18n.cpp:637
+msgid "Friday"
+msgstr "Viernes"
+
+#: ui/shared/tk/i18n.cpp:637
+msgid "Saturday"
+msgstr "Sábado"
+
+#: ui/shared/tk/i18n.cpp:639
+msgid "Sun"
+msgstr "Dom"
+
+#: ui/shared/tk/i18n.cpp:639
+msgid "Mon"
+msgstr "Lun"
+
+#: ui/shared/tk/i18n.cpp:639
+msgid "Tue"
+msgstr "Mar"
+
+#: ui/shared/tk/i18n.cpp:639
+msgid "Wed"
+msgstr "Mié"
+
+#: ui/shared/tk/i18n.cpp:639
+msgid "Thu"
+msgstr "Jue"
+
+#: ui/shared/tk/i18n.cpp:639
+msgid "Fri"
+msgstr "Vie"
+
+#: ui/shared/tk/i18n.cpp:639
+msgid "Sat"
+msgstr "Sáb"
+
+#: ui/shared/tk/i18n.cpp:641
+msgid "Su"
+msgstr "Do"
+
+#: ui/shared/tk/i18n.cpp:641
+msgid "Mo"
+msgstr "Lu"
+
+#: ui/shared/tk/i18n.cpp:641
+msgid "Tu"
+msgstr "Ma"
+
+#: ui/shared/tk/i18n.cpp:641
+msgid "We"
+msgstr "Mi"
+
+#: ui/shared/tk/i18n.cpp:641
+msgid "Th"
+msgstr "Ju"
+
+#: ui/shared/tk/i18n.cpp:641
+msgid "Fr"
+msgstr "Vi"
+
+#: ui/shared/tk/i18n.cpp:641
+msgid "Sa"
+msgstr "Sá"
+
+#: ui/shared/tk/i18n.cpp:708 ui/shared/views/settings/AboutSection.cpp:41
+msgid "{0} B"
+msgstr "{0} B"
+
+#: ui/shared/tk/i18n.cpp:710 ui/shared/views/settings/AboutSection.cpp:43
+msgid "{0} KB"
+msgstr "{0} KB"
+
+#: ui/shared/tk/i18n.cpp:712 ui/shared/views/settings/AboutSection.cpp:45
+msgid "{0} MB"
+msgstr "{0} MB"
+
+#: ui/shared/tk/i18n.cpp:713 ui/shared/views/settings/AboutSection.cpp:49
+msgid "{0} GB"
+msgstr "{0} GB"
+
+#: ui/shared/views/GifController.cpp:90
+msgid "No GIF API key configured"
+msgstr "No hay ninguna clave de API de GIF configurada"
+
+#: ui/shared/views/GifController.cpp:114
+msgid "No GIFs found"
+msgstr "No se encontraron GIF"
+
+#: ui/shared/views/GifController.cpp:134
+msgid "GIF search failed"
+msgstr "Error al buscar GIF"
+
+#: ui/shared/views/ImagePackEditorView.cpp:365
+msgid "Any"
+msgstr "Cualquiera"
+
+#: ui/shared/views/InviteCard.cpp:50
+msgid "Block"
+msgstr "Bloquear"
+
+#: ui/shared/views/InviteCard.cpp:302 ui/shared/views/RoomListView.cpp:1185
+msgid "Invited by {0}"
+msgstr "Invitado por {0}"
+
+#. TRANSLATORS: date separator pattern, see tk::format_date.
+#: ui/shared/views/MessageListView.cpp:975
+msgid "%B %-d, %Y"
+msgstr "%-d de %B de %Y"
+
+#: ui/shared/views/MessageListView.cpp:4099
+msgid "(empty message)"
+msgstr "(mensaje vacío)"
+
+#: ui/shared/views/MessageListView.cpp:4903
+msgid "[Spoiler]"
+msgstr "[Spoiler]"
+
+#: ui/shared/views/MessageListView.cpp:4904
+msgid "[Spoiler: {0}]"
+msgstr "[Spoiler: {0}]"
+
+#: ui/shared/views/QuickSwitcher.cpp:648
+msgid "No matching users — type a full @user:server to chat"
+msgstr "No hay usuarios que coincidan: escribe un @usuario:servidor completo para chatear"
+
+#: ui/shared/views/QuickSwitcher.cpp:684
+msgid "Recent"
+msgstr "Recientes"
+
+#: ui/shared/views/RoomInfoPanel.cpp:54 ui/shared/views/RoomInfoPanel.cpp:179
+msgid "Show all ▾"
+msgstr "Mostrar todo ▾"
+
+#: ui/shared/views/RoomInfoPanel.cpp:70
+msgid "Favourite"
+msgstr "Favorito"
+
+#: ui/shared/views/RoomInfoPanel.cpp:77
+msgid "Low priority"
+msgstr "Prioridad baja"
+
+#: ui/shared/views/RoomInfoPanel.cpp:89
+msgid "All messages"
+msgstr "Todos los mensajes"
+
+#: ui/shared/views/RoomInfoPanel.cpp:280
+msgid "Show all ({0}) ▾"
+msgstr "Mostrar todo ({0}) ▾"
+
+#: ui/shared/views/RoomInfoPanel.cpp:352 ui/shared/views/RoomInfoPanel.cpp:771
+msgid "No topic set."
+msgstr "No hay tema definido."
+
+#: ui/shared/views/RoomInfoPanel.cpp:815
+msgid "Members ({0})"
+msgstr "Miembros ({0})"
+
+#: ui/shared/views/RoomListView.cpp:104
+msgid "{0} sent an image"
+msgstr "{0} envió una imagen"
+
+#: ui/shared/views/RoomListView.cpp:105
+msgid "{0} sent a video"
+msgstr "{0} envió un vídeo"
+
+#: ui/shared/views/RoomListView.cpp:106
+msgid "{0} sent a GIF"
+msgstr "{0} envió un GIF"
+
+#: ui/shared/views/RoomListView.cpp:107
+msgid "{0} sent a file"
+msgstr "{0} envió un archivo"
+
+#: ui/shared/views/RoomListView.cpp:108
+msgid "{0} sent a voice message"
+msgstr "{0} envió un mensaje de voz"
+
+#: ui/shared/views/RoomListView.cpp:109
+msgid "{0} sent a sticker"
+msgstr "{0} envió un sticker"
+
+#: ui/shared/views/RoomListView.h:216
+msgid "Invitations"
+msgstr "Invitaciones"
+
+#: ui/shared/views/RoomListView.h:217
+msgid "Direct Messages"
+msgstr "Mensajes directos"
+
+#: ui/shared/views/RoomListView.h:217
+msgid "Rooms"
+msgstr "Salas"
+
+#: ui/shared/views/RoomListView.h:218
+msgid "Spaces"
+msgstr "Espacios"
+
+#: ui/shared/views/RoomListView.h:218
+msgid "Inactive"
+msgstr "Inactivas"
+
+#: ui/shared/views/RoomListView.h:218
+msgid "Available to Join"
+msgstr "Disponibles para unirse"
+
+#: ui/shared/views/RoomListView.h:219
+msgid "Requests to Join"
+msgstr "Solicitudes para unirse"
+
+#. TRANSLATORS: month header pattern, see tk::format_date.
+#: ui/shared/views/RoomMediaView.cpp:47
+msgid "%B %Y"
+msgstr "%B de %Y"
+
+#: ui/shared/views/RoomSearchBar.cpp:181
+msgid "{0} of {1}"
+msgstr "{0} de {1}"
+
+#: ui/shared/views/RoomView.cpp:285
+msgid "Audio call"
+msgstr "Llamada de voz"
+
+#: ui/shared/views/RoomView.cpp:292
+msgid "Video call"
+msgstr "Videollamada"
+
+#: ui/shared/views/ThreadListView.cpp:96
+msgid "%-m/%-d/%y"
+msgstr "%-d/%-m/%y"
+
+#: ui/shared/views/VideoViewerOverlay.cpp:465
+msgid "Unable to play video"
+msgstr "No se puede reproducir el vídeo"
+
+#: ui/shared/views/VideoViewerOverlay.cpp:481
+msgid "Use ⬇ to download and play in an external player"
+msgstr "Usa ⬇ para descargarlo y reproducirlo en un reproductor externo"
+
+#: ui/shared/views/room_chip_strip.cpp:86
+msgid "Unnamed"
+msgstr "Sin nombre"
+
+#: ui/shared/views/settings/AboutSection.cpp:56
+msgid "Hits: {0}  ·  Misses: {1}"
+msgstr "Aciertos: {0}  ·  Fallos: {1}"
+
+#: ui/shared/views/settings/AboutSection.cpp:61
+msgid "Hits: {0}  ·  Misses: {1}  ({2}% hit rate)"
+msgstr "Aciertos: {0}  ·  Fallos: {1}  ({2}% de aciertos)"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:215
+msgid "Light"
+msgstr "Claro"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:216
+msgid "Dark"
+msgstr "Oscuro"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:500
+msgid "Group inactive rooms"
+msgstr "Agrupar salas inactivas"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:509
+msgid "1 week"
+msgstr "1 semana"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:510
+msgid "2 weeks"
+msgstr "2 semanas"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:511
+msgid "1 month"
+msgstr "1 mes"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:512
+msgid "3 months"
+msgstr "3 meses"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:513
+msgid "6 months"
+msgstr "6 meses"
+
+#: ui/shared/views/settings/AppearanceSection.cpp:527
+msgid "Scroll to rooms with new messages"
+msgstr "Desplazarse a las salas con mensajes nuevos"
+
+#: ui/shared/views/settings/DevicesSection.cpp:39
+msgid "never"
+msgstr "nunca"
+
+#: ui/shared/views/settings/DevicesSection.cpp:46
+msgid "in the future"
+msgstr "en el futuro"
+
+#: ui/shared/views/settings/DevicesSection.cpp:53
+msgid "just now"
+msgstr "ahora mismo"
+
+#: ui/shared/views/settings/DevicesSection.cpp:63
+msgid "{0}mo"
+msgstr "{0} mes."
+
+#: ui/shared/views/settings/DevicesSection.cpp:189
+msgid "Open in browser"
+msgstr "Abrir en el navegador"
+
+#: ui/shared/views/settings/DevicesSection.cpp:198
+msgid "I've confirmed"
+msgstr "Ya lo he confirmado"
+
+#: ui/shared/views/settings/DevicesSection.cpp:221
+msgid "Sign out"
+msgstr "Cerrar sesión"
+
+#: ui/shared/views/settings/DevicesSection.cpp:342
+msgid "Complete sign-out in the browser, then click \"I've confirmed\"."
+msgstr "Completa el cierre de sesión en el navegador y luego pulsa «Ya lo he confirmado»."
+
+#: ui/shared/views/settings/DevicesSection.cpp:356
+msgid "Working…"
+msgstr "Procesando…"
+
+#: ui/shared/views/settings/DevicesSection.cpp:554
+msgid "Loading sessions…"
+msgstr "Cargando sesiones…"
+
+#: ui/shared/views/settings/DevicesSection.cpp:561
+msgid "No sessions."
+msgstr "No hay sesiones."
+
+#: ui/shared/views/settings/MediaSection.cpp:46
+msgid "System default"
+msgstr "Predeterminado del sistema"
+
+#: ui/shared/views/settings/MediaSection.cpp:75
+msgid "Show avatars in invites"
+msgstr "Mostrar avatares en las invitaciones"
+
+#: ui/shared/views/settings/MediaSection.cpp:87
+msgid "Pre-load full images while scrolling"
+msgstr "Precargar imágenes completas al desplazarse"
+
+#: ui/shared/views/settings/PrivacySection.cpp:68
+msgid "Send and receive presence status"
+msgstr "Enviar y recibir el estado de presencia"
+
+#: ui/shared/views/settings/PrivacySection.cpp:144
+msgid "Check for updates automatically"
+msgstr "Buscar actualizaciones automáticamente"
+
+#: ui/shared/views/settings/bcp47_languages.h:27
+msgid "Afar"
+msgstr "Afar"
+
+#: ui/shared/views/settings/bcp47_languages.h:28
+msgid "Abkhazian"
+msgstr "Abjasio"
+
+#: ui/shared/views/settings/bcp47_languages.h:29
+msgid "Afrikaans"
+msgstr "Afrikáans"
+
+#: ui/shared/views/settings/bcp47_languages.h:30
+msgid "Akan"
+msgstr "Akan"
+
+#: ui/shared/views/settings/bcp47_languages.h:31
+msgid "Albanian"
+msgstr "Albanés"
+
+#: ui/shared/views/settings/bcp47_languages.h:32
+msgid "Amharic"
+msgstr "Amárico"
+
+#: ui/shared/views/settings/bcp47_languages.h:33
+msgid "Arabic"
+msgstr "Árabe"
+
+#: ui/shared/views/settings/bcp47_languages.h:34
+msgid "Aragonese"
+msgstr "Aragonés"
+
+#: ui/shared/views/settings/bcp47_languages.h:35
+msgid "Armenian"
+msgstr "Armenio"
+
+#: ui/shared/views/settings/bcp47_languages.h:36
+msgid "Assamese"
+msgstr "Asamés"
+
+#: ui/shared/views/settings/bcp47_languages.h:37
+msgid "Avaric"
+msgstr "Avar"
+
+#: ui/shared/views/settings/bcp47_languages.h:38
+msgid "Avestan"
+msgstr "Avéstico"
+
+#: ui/shared/views/settings/bcp47_languages.h:39
+msgid "Aymara"
+msgstr "Aimara"
+
+#: ui/shared/views/settings/bcp47_languages.h:40
+msgid "Azerbaijani"
+msgstr "Azerbaiyano"
+
+#: ui/shared/views/settings/bcp47_languages.h:41
+msgid "Bambara"
+msgstr "Bambara"
+
+#: ui/shared/views/settings/bcp47_languages.h:42
+msgid "Bashkir"
+msgstr "Baskir"
+
+#: ui/shared/views/settings/bcp47_languages.h:43
+msgid "Basque"
+msgstr "Euskera"
+
+#: ui/shared/views/settings/bcp47_languages.h:44
+msgid "Belarusian"
+msgstr "Bielorruso"
+
+#: ui/shared/views/settings/bcp47_languages.h:45
+msgid "Bengali"
+msgstr "Bengalí"
+
+#: ui/shared/views/settings/bcp47_languages.h:46
+msgid "Bislama"
+msgstr "Bislama"
+
+#: ui/shared/views/settings/bcp47_languages.h:47
+msgid "Bosnian"
+msgstr "Bosnio"
+
+#: ui/shared/views/settings/bcp47_languages.h:48
+msgid "Breton"
+msgstr "Bretón"
+
+#: ui/shared/views/settings/bcp47_languages.h:49
+msgid "Bulgarian"
+msgstr "Búlgaro"
+
+#: ui/shared/views/settings/bcp47_languages.h:50
+msgid "Burmese"
+msgstr "Birmano"
+
+#: ui/shared/views/settings/bcp47_languages.h:51
+msgid "Catalan"
+msgstr "Catalán"
+
+#: ui/shared/views/settings/bcp47_languages.h:52
+msgid "Chamorro"
+msgstr "Chamorro"
+
+#: ui/shared/views/settings/bcp47_languages.h:53
+msgid "Chechen"
+msgstr "Checheno"
+
+#: ui/shared/views/settings/bcp47_languages.h:54
+msgid "Chichewa"
+msgstr "Chichewa"
+
+#: ui/shared/views/settings/bcp47_languages.h:55
+msgid "Chinese"
+msgstr "Chino"
+
+#: ui/shared/views/settings/bcp47_languages.h:56
+msgid "Chinese (Simplified)"
+msgstr "Chino (simplificado)"
+
+#: ui/shared/views/settings/bcp47_languages.h:57
+msgid "Chinese (Traditional)"
+msgstr "Chino (tradicional)"
+
+#: ui/shared/views/settings/bcp47_languages.h:58
+msgid "Church Slavic"
+msgstr "Eslavo eclesiástico"
+
+#: ui/shared/views/settings/bcp47_languages.h:59
+msgid "Chuvash"
+msgstr "Chuvasio"
+
+#: ui/shared/views/settings/bcp47_languages.h:60
+msgid "Cornish"
+msgstr "Córnico"
+
+#: ui/shared/views/settings/bcp47_languages.h:61
+msgid "Corsican"
+msgstr "Corso"
+
+#: ui/shared/views/settings/bcp47_languages.h:62
+msgid "Cree"
+msgstr "Cree"
+
+#: ui/shared/views/settings/bcp47_languages.h:63
+msgid "Croatian"
+msgstr "Croata"
+
+#: ui/shared/views/settings/bcp47_languages.h:64
+msgid "Czech"
+msgstr "Checo"
+
+#: ui/shared/views/settings/bcp47_languages.h:65
+msgid "Danish"
+msgstr "Danés"
+
+#: ui/shared/views/settings/bcp47_languages.h:66
+msgid "Divehi"
+msgstr "Divehi"
+
+#: ui/shared/views/settings/bcp47_languages.h:67
+msgid "Dutch"
+msgstr "Neerlandés"
+
+#: ui/shared/views/settings/bcp47_languages.h:68
+msgid "Dzongkha"
+msgstr "Dzongkha"
+
+#: ui/shared/views/settings/bcp47_languages.h:70
+msgid "English (UK)"
+msgstr "Inglés (Reino Unido)"
+
+#: ui/shared/views/settings/bcp47_languages.h:71
+msgid "English (US)"
+msgstr "Inglés (Estados Unidos)"
+
+#: ui/shared/views/settings/bcp47_languages.h:72
+msgid "Esperanto"
+msgstr "Esperanto"
+
+#: ui/shared/views/settings/bcp47_languages.h:73
+msgid "Estonian"
+msgstr "Estonio"
+
+#: ui/shared/views/settings/bcp47_languages.h:74
+msgid "Ewe"
+msgstr "Ewe"
+
+#: ui/shared/views/settings/bcp47_languages.h:75
+msgid "Faroese"
+msgstr "Feroés"
+
+#: ui/shared/views/settings/bcp47_languages.h:76
+msgid "Fijian"
+msgstr "Fiyiano"
+
+#: ui/shared/views/settings/bcp47_languages.h:77
+msgid "Finnish"
+msgstr "Finés"
+
+#: ui/shared/views/settings/bcp47_languages.h:79
+msgid "Western Frisian"
+msgstr "Frisón occidental"
+
+#: ui/shared/views/settings/bcp47_languages.h:80
+msgid "Fulah"
+msgstr "Fula"
+
+#: ui/shared/views/settings/bcp47_languages.h:81
+msgid "Scottish Gaelic"
+msgstr "Gaélico escocés"
+
+#: ui/shared/views/settings/bcp47_languages.h:82
+msgid "Galician"
+msgstr "Gallego"
+
+#: ui/shared/views/settings/bcp47_languages.h:83
+msgid "Ganda"
+msgstr "Luganda"
+
+#: ui/shared/views/settings/bcp47_languages.h:84
+msgid "Georgian"
+msgstr "Georgiano"
+
+#: ui/shared/views/settings/bcp47_languages.h:85
+msgid "German"
+msgstr "Alemán"
+
+#: ui/shared/views/settings/bcp47_languages.h:86
+msgid "Greek"
+msgstr "Griego"
+
+#: ui/shared/views/settings/bcp47_languages.h:87
+msgid "Kalaallisut"
+msgstr "Groenlandés"
+
+#: ui/shared/views/settings/bcp47_languages.h:88
+msgid "Guarani"
+msgstr "Guaraní"
+
+#: ui/shared/views/settings/bcp47_languages.h:89
+msgid "Gujarati"
+msgstr "Guyaratí"
+
+#: ui/shared/views/settings/bcp47_languages.h:90
+msgid "Haitian Creole"
+msgstr "Criollo haitiano"
+
+#: ui/shared/views/settings/bcp47_languages.h:91
+msgid "Hausa"
+msgstr "Hausa"
+
+#: ui/shared/views/settings/bcp47_languages.h:92
+msgid "Hebrew"
+msgstr "Hebreo"
+
+#: ui/shared/views/settings/bcp47_languages.h:93
+msgid "Herero"
+msgstr "Herero"
+
+#: ui/shared/views/settings/bcp47_languages.h:94
+msgid "Hindi"
+msgstr "Hindi"
+
+#: ui/shared/views/settings/bcp47_languages.h:95
+msgid "Hiri Motu"
+msgstr "Hiri motu"
+
+#: ui/shared/views/settings/bcp47_languages.h:96
+msgid "Hungarian"
+msgstr "Húngaro"
+
+#: ui/shared/views/settings/bcp47_languages.h:97
+msgid "Icelandic"
+msgstr "Islandés"
+
+#: ui/shared/views/settings/bcp47_languages.h:98
+msgid "Ido"
+msgstr "Ido"
+
+#: ui/shared/views/settings/bcp47_languages.h:99
+msgid "Igbo"
+msgstr "Igbo"
+
+#: ui/shared/views/settings/bcp47_languages.h:100
+msgid "Indonesian"
+msgstr "Indonesio"
+
+#: ui/shared/views/settings/bcp47_languages.h:101
+msgid "Interlingua"
+msgstr "Interlingua"
+
+#: ui/shared/views/settings/bcp47_languages.h:102
+msgid "Interlingue"
+msgstr "Interlingue"
+
+#: ui/shared/views/settings/bcp47_languages.h:103
+msgid "Inuktitut"
+msgstr "Inuktitut"
+
+#: ui/shared/views/settings/bcp47_languages.h:104
+msgid "Inupiaq"
+msgstr "Iñupiaq"
+
+#: ui/shared/views/settings/bcp47_languages.h:105
+msgid "Irish"
+msgstr "Irlandés"
+
+#: ui/shared/views/settings/bcp47_languages.h:106
+msgid "Italian"
+msgstr "Italiano"
+
+#: ui/shared/views/settings/bcp47_languages.h:107
+msgid "Japanese"
+msgstr "Japonés"
+
+#: ui/shared/views/settings/bcp47_languages.h:108
+msgid "Javanese"
+msgstr "Javanés"
+
+#: ui/shared/views/settings/bcp47_languages.h:109
+msgid "Kannada"
+msgstr "Canarés"
+
+#: ui/shared/views/settings/bcp47_languages.h:110
+msgid "Kanuri"
+msgstr "Kanuri"
+
+#: ui/shared/views/settings/bcp47_languages.h:111
+msgid "Kashmiri"
+msgstr "Cachemir"
+
+#: ui/shared/views/settings/bcp47_languages.h:112
+msgid "Kazakh"
+msgstr "Kazajo"
+
+#: ui/shared/views/settings/bcp47_languages.h:113
+msgid "Khmer"
+msgstr "Jemer"
+
+#: ui/shared/views/settings/bcp47_languages.h:114
+msgid "Kikuyu"
+msgstr "Kikuyu"
+
+#: ui/shared/views/settings/bcp47_languages.h:115
+msgid "Kinyarwanda"
+msgstr "Kinyarwanda"
+
+#: ui/shared/views/settings/bcp47_languages.h:116
+msgid "Kyrgyz"
+msgstr "Kirguís"
+
+#: ui/shared/views/settings/bcp47_languages.h:117
+msgid "Komi"
+msgstr "Komi"
+
+#: ui/shared/views/settings/bcp47_languages.h:118
+msgid "Kongo"
+msgstr "Kongo"
+
+#: ui/shared/views/settings/bcp47_languages.h:119
+msgid "Korean"
+msgstr "Coreano"
+
+#: ui/shared/views/settings/bcp47_languages.h:120
+msgid "Kuanyama"
+msgstr "Kuanyama"
+
+#: ui/shared/views/settings/bcp47_languages.h:121
+msgid "Kurdish"
+msgstr "Kurdo"
+
+#: ui/shared/views/settings/bcp47_languages.h:122
+msgid "Lao"
+msgstr "Lao"
+
+#: ui/shared/views/settings/bcp47_languages.h:123
+msgid "Latin"
+msgstr "Latín"
+
+#: ui/shared/views/settings/bcp47_languages.h:124
+msgid "Latvian"
+msgstr "Letón"
+
+#: ui/shared/views/settings/bcp47_languages.h:125
+msgid "Limburgish"
+msgstr "Limburgués"
+
+#: ui/shared/views/settings/bcp47_languages.h:126
+msgid "Lingala"
+msgstr "Lingala"
+
+#: ui/shared/views/settings/bcp47_languages.h:127
+msgid "Lithuanian"
+msgstr "Lituano"
+
+#: ui/shared/views/settings/bcp47_languages.h:128
+msgid "Luba-Katanga"
+msgstr "Luba-katanga"
+
+#: ui/shared/views/settings/bcp47_languages.h:129
+msgid "Luxembourgish"
+msgstr "Luxemburgués"
+
+#: ui/shared/views/settings/bcp47_languages.h:130
+msgid "Macedonian"
+msgstr "Macedonio"
+
+#: ui/shared/views/settings/bcp47_languages.h:131
+msgid "Malagasy"
+msgstr "Malgache"
+
+#: ui/shared/views/settings/bcp47_languages.h:132
+msgid "Malay"
+msgstr "Malayo"
+
+#: ui/shared/views/settings/bcp47_languages.h:133
+msgid "Malayalam"
+msgstr "Malayalam"
+
+#: ui/shared/views/settings/bcp47_languages.h:134
+msgid "Maltese"
+msgstr "Maltés"
+
+#: ui/shared/views/settings/bcp47_languages.h:135
+msgid "Manx"
+msgstr "Manés"
+
+#: ui/shared/views/settings/bcp47_languages.h:136
+msgid "Maori"
+msgstr "Maorí"
+
+#: ui/shared/views/settings/bcp47_languages.h:137
+msgid "Marathi"
+msgstr "Maratí"
+
+#: ui/shared/views/settings/bcp47_languages.h:138
+msgid "Marshallese"
+msgstr "Marshalés"
+
+#: ui/shared/views/settings/bcp47_languages.h:139
+msgid "Mongolian"
+msgstr "Mongol"
+
+#: ui/shared/views/settings/bcp47_languages.h:140
+msgid "Nauru"
+msgstr "Nauruano"
+
+#: ui/shared/views/settings/bcp47_languages.h:141
+msgid "Navajo"
+msgstr "Navajo"
+
+#: ui/shared/views/settings/bcp47_languages.h:142
+msgid "North Ndebele"
+msgstr "Ndebele del norte"
+
+#: ui/shared/views/settings/bcp47_languages.h:143
+msgid "South Ndebele"
+msgstr "Ndebele del sur"
+
+#: ui/shared/views/settings/bcp47_languages.h:144
+msgid "Ndonga"
+msgstr "Ndonga"
+
+#: ui/shared/views/settings/bcp47_languages.h:145
+msgid "Nepali"
+msgstr "Nepalí"
+
+#: ui/shared/views/settings/bcp47_languages.h:146
+msgid "Norwegian"
+msgstr "Noruego"
+
+#: ui/shared/views/settings/bcp47_languages.h:147
+msgid "Norwegian Bokmål"
+msgstr "Noruego bokmål"
+
+#: ui/shared/views/settings/bcp47_languages.h:148
+msgid "Norwegian Nynorsk"
+msgstr "Noruego nynorsk"
+
+#: ui/shared/views/settings/bcp47_languages.h:149
+msgid "Nuosu"
+msgstr "Yi de Sichuán"
+
+#: ui/shared/views/settings/bcp47_languages.h:150
+msgid "Occitan"
+msgstr "Occitano"
+
+#: ui/shared/views/settings/bcp47_languages.h:151
+msgid "Ojibwe"
+msgstr "Ojibwa"
+
+#: ui/shared/views/settings/bcp47_languages.h:152
+msgid "Odia"
+msgstr "Oriya"
+
+#: ui/shared/views/settings/bcp47_languages.h:153
+msgid "Oromo"
+msgstr "Oromo"
+
+#: ui/shared/views/settings/bcp47_languages.h:154
+msgid "Ossetian"
+msgstr "Osético"
+
+#: ui/shared/views/settings/bcp47_languages.h:155
+msgid "Pali"
+msgstr "Pali"
+
+#: ui/shared/views/settings/bcp47_languages.h:156
+msgid "Pashto"
+msgstr "Pastún"
+
+#: ui/shared/views/settings/bcp47_languages.h:157
+msgid "Persian"
+msgstr "Persa"
+
+#: ui/shared/views/settings/bcp47_languages.h:158
+msgid "Polish"
+msgstr "Polaco"
+
+#: ui/shared/views/settings/bcp47_languages.h:159
+msgid "Portuguese"
+msgstr "Portugués"
+
+#: ui/shared/views/settings/bcp47_languages.h:160
+msgid "Portuguese (Brazil)"
+msgstr "Portugués (Brasil)"
+
+#: ui/shared/views/settings/bcp47_languages.h:161
+msgid "Punjabi"
+msgstr "Panyabí"
+
+#: ui/shared/views/settings/bcp47_languages.h:162
+msgid "Quechua"
+msgstr "Quechua"
+
+#: ui/shared/views/settings/bcp47_languages.h:163
+msgid "Romanian"
+msgstr "Rumano"
+
+#: ui/shared/views/settings/bcp47_languages.h:164
+msgid "Romansh"
+msgstr "Romanche"
+
+#: ui/shared/views/settings/bcp47_languages.h:165
+msgid "Rundi"
+msgstr "Kirundi"
+
+#: ui/shared/views/settings/bcp47_languages.h:166
+msgid "Russian"
+msgstr "Ruso"
+
+#: ui/shared/views/settings/bcp47_languages.h:167
+msgid "Northern Sami"
+msgstr "Sami septentrional"
+
+#: ui/shared/views/settings/bcp47_languages.h:168
+msgid "Samoan"
+msgstr "Samoano"
+
+#: ui/shared/views/settings/bcp47_languages.h:169
+msgid "Sango"
+msgstr "Sango"
+
+#: ui/shared/views/settings/bcp47_languages.h:170
+msgid "Sanskrit"
+msgstr "Sánscrito"
+
+#: ui/shared/views/settings/bcp47_languages.h:171
+msgid "Sardinian"
+msgstr "Sardo"
+
+#: ui/shared/views/settings/bcp47_languages.h:172
+msgid "Serbian"
+msgstr "Serbio"
+
+#: ui/shared/views/settings/bcp47_languages.h:173
+msgid "Shona"
+msgstr "Shona"
+
+#: ui/shared/views/settings/bcp47_languages.h:174
+msgid "Sindhi"
+msgstr "Sindi"
+
+#: ui/shared/views/settings/bcp47_languages.h:175
+msgid "Sinhala"
+msgstr "Cingalés"
+
+#: ui/shared/views/settings/bcp47_languages.h:176
+msgid "Slovak"
+msgstr "Eslovaco"
+
+#: ui/shared/views/settings/bcp47_languages.h:177
+msgid "Slovenian"
+msgstr "Esloveno"
+
+#: ui/shared/views/settings/bcp47_languages.h:178
+msgid "Somali"
+msgstr "Somalí"
+
+#: ui/shared/views/settings/bcp47_languages.h:179
+msgid "Southern Sotho"
+msgstr "Sesoto"
+
+#: ui/shared/views/settings/bcp47_languages.h:181
+msgid "Spanish (Mexico)"
+msgstr "Español (México)"
+
+#: ui/shared/views/settings/bcp47_languages.h:182
+msgid "Sundanese"
+msgstr "Sundanés"
+
+#: ui/shared/views/settings/bcp47_languages.h:183
+msgid "Swahili"
+msgstr "Suajili"
+
+#: ui/shared/views/settings/bcp47_languages.h:184
+msgid "Swati"
+msgstr "Suazi"
+
+#: ui/shared/views/settings/bcp47_languages.h:185
+msgid "Swedish"
+msgstr "Sueco"
+
+#: ui/shared/views/settings/bcp47_languages.h:186
+msgid "Tagalog"
+msgstr "Tagalo"
+
+#: ui/shared/views/settings/bcp47_languages.h:187
+msgid "Tahitian"
+msgstr "Tahitiano"
+
+#: ui/shared/views/settings/bcp47_languages.h:188
+msgid "Tajik"
+msgstr "Tayiko"
+
+#: ui/shared/views/settings/bcp47_languages.h:189
+msgid "Tamil"
+msgstr "Tamil"
+
+#: ui/shared/views/settings/bcp47_languages.h:190
+msgid "Tatar"
+msgstr "Tártaro"
+
+#: ui/shared/views/settings/bcp47_languages.h:191
+msgid "Telugu"
+msgstr "Telugu"
+
+#: ui/shared/views/settings/bcp47_languages.h:192
+msgid "Thai"
+msgstr "Tailandés"
+
+#: ui/shared/views/settings/bcp47_languages.h:193
+msgid "Tibetan"
+msgstr "Tibetano"
+
+#: ui/shared/views/settings/bcp47_languages.h:194
+msgid "Tigrinya"
+msgstr "Tigriña"
+
+#: ui/shared/views/settings/bcp47_languages.h:195
+msgid "Tongan"
+msgstr "Tongano"
+
+#: ui/shared/views/settings/bcp47_languages.h:196
+msgid "Tsonga"
+msgstr "Tsonga"
+
+#: ui/shared/views/settings/bcp47_languages.h:197
+msgid "Tswana"
+msgstr "Setsuana"
+
+#: ui/shared/views/settings/bcp47_languages.h:198
+msgid "Turkish"
+msgstr "Turco"
+
+#: ui/shared/views/settings/bcp47_languages.h:199
+msgid "Turkmen"
+msgstr "Turcomano"
+
+#: ui/shared/views/settings/bcp47_languages.h:200
+msgid "Twi"
+msgstr "Twi"
+
+#: ui/shared/views/settings/bcp47_languages.h:201
+msgid "Uyghur"
+msgstr "Uigur"
+
+#: ui/shared/views/settings/bcp47_languages.h:202
+msgid "Ukrainian"
+msgstr "Ucraniano"
+
+#: ui/shared/views/settings/bcp47_languages.h:203
+msgid "Urdu"
+msgstr "Urdu"
+
+#: ui/shared/views/settings/bcp47_languages.h:204
+msgid "Uzbek"
+msgstr "Uzbeko"
+
+#: ui/shared/views/settings/bcp47_languages.h:205
+msgid "Venda"
+msgstr "Venda"
+
+#: ui/shared/views/settings/bcp47_languages.h:206
+msgid "Vietnamese"
+msgstr "Vietnamita"
+
+#: ui/shared/views/settings/bcp47_languages.h:207
+msgid "Volapük"
+msgstr "Volapük"
+
+#: ui/shared/views/settings/bcp47_languages.h:208
+msgid "Walloon"
+msgstr "Valón"
+
+#: ui/shared/views/settings/bcp47_languages.h:209
+msgid "Welsh"
+msgstr "Galés"
+
+#: ui/shared/views/settings/bcp47_languages.h:210
+msgid "Wolof"
+msgstr "Wólof"
+
+#: ui/shared/views/settings/bcp47_languages.h:211
+msgid "Xhosa"
+msgstr "Xhosa"
+
+#: ui/shared/views/settings/bcp47_languages.h:212
+msgid "Yiddish"
+msgstr "Yidis"
+
+#: ui/shared/views/settings/bcp47_languages.h:213
+msgid "Yoruba"
+msgstr "Yoruba"
+
+#: ui/shared/views/settings/bcp47_languages.h:214
+msgid "Zhuang"
+msgstr "Chuang"
+
+#: ui/shared/views/settings/bcp47_languages.h:215
+msgid "Zulu"
+msgstr "Zulú"
+
+#: ui/windows/src/MainWindow.cpp:3201 ui/windows/src/MainWindow.cpp:3237
+msgid "All files"
+msgstr "Todos los archivos"
+
+#: ui/windows/src/MainWindow.cpp:3237 ui/windows/src/RoomWindow.cpp:231
+msgid "Videos"
+msgstr "Vídeos"
+
+#: ui/windows/src/MainWindow.cpp:6520 ui/windows/src/MainWindow.cpp:6535
+msgid "Key files"
+msgstr "Archivos de claves"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Link previews"
+msgstr "Vistas previas de enlaces"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Include link previews in messages I send"
+msgstr "Incluir vistas previas de enlaces en los mensajes que envío"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch link previews directly instead of through my homeserver"
+msgstr "Obtener las vistas previas de enlaces directamente en lugar de a través de mi servidor"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid ""
+"Your homeserver doesn't provide link previews, so links you receive "
+"won't show a preview."
+msgstr "Tu servidor no ofrece vistas previas de enlaces, así que los enlaces que recibas no mostrarán ninguna vista previa."
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Before sending a message that contains links, ask your homeserver for a preview of each link and attach it to the message, so recipients see it without fetching it themselves. Sending such messages can take a few seconds longer."
+msgstr "Antes de enviar un mensaje que contiene enlaces, pide a tu servidor una vista previa de cada enlace y la adjunta al mensaje, para que los destinatarios la vean sin tener que obtenerla. Enviar estos mensajes puede tardar unos segundos más."
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
+msgstr "Obtiene las páginas enlazadas desde este dispositivo en lugar de pedírselas a tu servidor, y recurre al servidor si falla. Cada sitio que enlaces verá tu dirección IP. Nunca se obtienen direcciones de tu red local."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Message not sent: {0}"
+msgstr "Mensaje no enviado: {0}"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Command failed: {0}"
+msgstr "Error en el comando: {0}"
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0} ({1})"
+msgstr "{0} ({1})"
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0}'s verified identity was reset."
+msgstr "Se restableció la identidad verificada de {0}."
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0}'s identity was reset."
+msgstr "Se restableció la identidad de {0}."
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "Withdraw verification"
+msgstr "Retirar la verificación"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't update the identity: {0}"
+msgstr "No se pudo actualizar la identidad: {0}"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Exclude insecure devices (takes effect after restart)"
+msgstr "Excluir dispositivos inseguros (se aplica tras reiniciar)"
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Only send encrypted messages to devices their owner has verified, and hide messages sent from devices that aren't. This device must be verified to send, and people whose clients don't verify their devices won't see your messages."
+msgstr "Envía mensajes cifrados solo a los dispositivos que su propietario haya verificado y oculta los mensajes enviados desde dispositivos que no lo estén. Este dispositivo debe estar verificado para enviar, y las personas cuyos clientes no verifican sus dispositivos no verán tus mensajes."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Check that {0} sees the same numbers in the same order."
+msgstr "Comprueba que {0} ve los mismos números en el mismo orden."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Finish the current verification first."
+msgstr "Termina primero la verificación en curso."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Switch to this account to verify users."
+msgstr "Cambia a esta cuenta para verificar usuarios."
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Not verified"
+msgstr "No verificado"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Not verified · verify this device first"
+msgstr "No verificado · verifica primero este dispositivo"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Verified identity was reset"
+msgstr "Se restableció la identidad verificada"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Waiting for {0}"
+msgstr "Esperando a {0}"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "{0} needs to accept the verification request in their Matrix app."
+msgstr "{0} tiene que aceptar la solicitud de verificación en su aplicación de Matrix."

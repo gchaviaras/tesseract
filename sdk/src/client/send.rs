@@ -21,6 +21,9 @@ use matrix_sdk::ruma::{events::room::message::RoomMessageEventContent, OwnedRoom
 use matrix_sdk_ui::timeline::TimelineEventItemId;
 
 #[cfg(not(test))]
+use super::url_preview_gen::{parse_url_previews_json, set_url_previews};
+
+#[cfg(not(test))]
 use std::sync::atomic::Ordering;
 #[cfg(not(test))]
 use std::sync::Arc;
@@ -517,7 +520,13 @@ impl ClientFfi {
     }
 
     #[cfg(not(test))]
-    pub fn send_message(&self, room_id: &str, body: &str, formatted_body: &str) -> OpResult {
+    pub fn send_message(
+        &self,
+        room_id: &str,
+        body: &str,
+        formatted_body: &str,
+        url_previews_json: &str,
+    ) -> OpResult {
         let (mentions, html) = derive_mentions(formatted_body);
         let mut content = if html.is_empty() {
             RoomMessageEventContent::text_plain(body)
@@ -525,11 +534,18 @@ impl ClientFfi {
             RoomMessageEventContent::text_html(body, &html)
         };
         content.mentions = mentions;
+        set_url_previews(&mut content, parse_url_previews_json(url_previews_json));
         self.dispatch_room_msg_(room_id, content)
     }
 
     #[cfg(test)]
-    pub fn send_message(&self, _room_id: &str, _body: &str, _formatted_body: &str) -> OpResult {
+    pub fn send_message(
+        &self,
+        _room_id: &str,
+        _body: &str,
+        _formatted_body: &str,
+        _url_previews_json: &str,
+    ) -> OpResult {
         err("not logged in")
     }
 
@@ -636,17 +652,46 @@ impl ClientFfi {
     }
 
     #[cfg(not(test))]
-    pub fn retry_send(&self, room_id: &str) -> OpResult {
+    pub fn retry_send(&self, room_id: &str, txn_id: &str) -> OpResult {
         let Some(client) = self.client.clone() else {
             return err("not logged in");
         };
-        let (_, room) = try_op!(require_room(&client, room_id));
+        let (parsed_room_id, room) = try_op!(require_room(&client, room_id));
+        if !txn_id.is_empty() {
+            let timeline = self
+                .timelines
+                .read()
+                .get(&parsed_room_id)
+                .map(|h| Arc::clone(&h.timeline));
+            if let Some(timeline) = timeline {
+                let txn_id = txn_id.to_owned();
+                let unwedged = self.rt.block_on(async move {
+                    let items = timeline.items().await;
+                    let handle = items.iter().find_map(|it| {
+                        let ev = it.as_event()?;
+                        (ev.transaction_id().map(|t| t.as_str()) == Some(txn_id.as_str()))
+                            .then(|| ev.local_echo_send_handle())
+                            .flatten()
+                    });
+                    match handle {
+                        Some(h) => h.unwedge().await.map_err(|e| e.to_string()),
+                        None => Ok(()),
+                    }
+                });
+                if let Err(e) = unwedged {
+                    // Still re-enable the queue: the room's other pending
+                    // messages shouldn't stay stuck on this one's failure.
+                    room.send_queue().set_enabled(true);
+                    return err(e);
+                }
+            }
+        }
         room.send_queue().set_enabled(true);
         ok("")
     }
 
     #[cfg(test)]
-    pub fn retry_send(&self, _room_id: &str) -> OpResult {
+    pub fn retry_send(&self, _room_id: &str, _txn_id: &str) -> OpResult {
         ok("")
     }
 
@@ -726,6 +771,7 @@ impl ClientFfi {
         event_id: &str,
         body: &str,
         formatted_body: &str,
+        url_previews_json: &str,
     ) -> OpResult {
         use matrix_sdk::ruma::events::relation::{InReplyTo, Reply};
         use matrix_sdk::ruma::events::room::message::Relation;
@@ -754,6 +800,7 @@ impl ClientFfi {
         };
         content.mentions = mentions;
         content.relates_to = Some(Relation::Reply(Reply::new(InReplyTo::new(event_id))));
+        set_url_previews(&mut content, parse_url_previews_json(url_previews_json));
         match self.block_on_cancellable(async move { room.send(content).await }) {
             Some(Ok(_)) => ok(""),
             Some(Err(e)) => err(e.to_string()),
@@ -768,6 +815,7 @@ impl ClientFfi {
         _event_id: &str,
         _body: &str,
         _formatted_body: &str,
+        _url_previews_json: &str,
     ) -> OpResult {
         err("not logged in")
     }
@@ -779,8 +827,9 @@ impl ClientFfi {
         thread_root: &str,
         body: &str,
         formatted_body: &str,
+        url_previews_json: &str,
     ) -> OpResult {
-        self.send_thread_inner(room_id, thread_root, "", body, formatted_body)
+        self.send_thread_inner(room_id, thread_root, "", body, formatted_body, url_previews_json)
     }
 
     #[cfg(not(test))]
@@ -791,6 +840,7 @@ impl ClientFfi {
         in_reply_to_event_id: &str,
         body: &str,
         formatted_body: &str,
+        url_previews_json: &str,
     ) -> OpResult {
         if in_reply_to_event_id.is_empty() {
             return err("in_reply_to_event_id required");
@@ -801,6 +851,7 @@ impl ClientFfi {
             in_reply_to_event_id,
             body,
             formatted_body,
+            url_previews_json,
         )
     }
 
@@ -812,6 +863,7 @@ impl ClientFfi {
         in_reply_to: &str,
         body: &str,
         formatted_body: &str,
+        url_previews_json: &str,
     ) -> OpResult {
         let Some(client) = self.client.clone() else {
             return err("not logged in");
@@ -859,6 +911,7 @@ impl ClientFfi {
                 RoomMessageEventContent::text_html(body, &html)
             };
             msg.mentions = mentions;
+            set_url_previews(&mut msg, parse_url_previews_json(url_previews_json));
             if in_reply_to.is_empty() {
                 return match self.block_on_cancellable(async move { timeline.send(msg.into()).await }) {
                     Some(Ok(_)) => ok(""),
@@ -889,7 +942,8 @@ impl ClientFfi {
         } else {
             in_reply_to.parse().ok()
         };
-        let content = build_thread_message_content(body, formatted_body, root, reply_owned);
+        let mut content = build_thread_message_content(body, formatted_body, root, reply_owned);
+        set_url_previews(&mut content, parse_url_previews_json(url_previews_json));
         match self.block_on_cancellable(async move { room.send(content).await }) {
             Some(Ok(_)) => ok(""),
             Some(Err(e)) => err(e.to_string()),
@@ -904,6 +958,7 @@ impl ClientFfi {
         _thread_root: &str,
         _body: &str,
         _formatted_body: &str,
+        _url_previews_json: &str,
     ) -> OpResult {
         err("not logged in")
     }
@@ -916,6 +971,7 @@ impl ClientFfi {
         _in_reply_to_event_id: &str,
         _body: &str,
         _formatted_body: &str,
+        _url_previews_json: &str,
     ) -> OpResult {
         err("not logged in")
     }
@@ -2592,6 +2648,7 @@ impl ClientFfi {
         event_id: &str,
         new_body: &str,
         formatted_body: &str,
+        url_previews_json: &str,
     ) -> OpResult {
         use matrix_sdk::room::edit::EditedContent;
 
@@ -2603,11 +2660,12 @@ impl ClientFfi {
             Ok(id) => id,
             Err(e) => return err(format!("invalid event id: {e}")),
         };
-        let new_content = if formatted_body.is_empty() {
+        let mut new_content = if formatted_body.is_empty() {
             RoomMessageEventContent::text_plain(new_body)
         } else {
             RoomMessageEventContent::text_html(new_body, formatted_body)
         };
+        set_url_previews(&mut new_content, parse_url_previews_json(url_previews_json));
         match self.block_on_cancellable(async move {
             let edit_event = room
                 .make_edit_event(&event_id, EditedContent::RoomMessage(new_content.into()))
@@ -2631,6 +2689,7 @@ impl ClientFfi {
         _event_id: &str,
         _new_body: &str,
         _formatted_body: &str,
+        _url_previews_json: &str,
     ) -> OpResult {
         err("not logged in")
     }

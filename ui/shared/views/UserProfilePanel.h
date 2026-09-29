@@ -49,6 +49,17 @@ public:
     // and call set_extended_profile() when done
     std::function<void(std::string user_id)> on_extended_profile_requested;
 
+    // Encryption trust in this user (async after open()). `can_verify` is
+    // false while this device itself is unverified: verifying someone signs
+    // their key with this device's cross-signing key.
+    void set_trust(tesseract::UserTrust trust, bool can_verify);
+    const std::string& user_id() const { return user_id_; }
+    // Fired from open() so the shell can fetch the trust and call set_trust().
+    std::function<void(std::string user_id)> on_trust_requested;
+    // "Verify" (NotVerified) / "Withdraw verification" (VerificationViolation).
+    std::function<void(std::string user_id, std::string display_name)> on_verify_user;
+    std::function<void(std::string user_id)> on_withdraw_verification;
+
     // Callbacks wired by shell
     std::function<void(std::string user_id)> on_open_dm;
     std::function<void(std::string user_id)> on_ignore;
@@ -107,6 +118,14 @@ private:
     tk::IconCache close_icon_;
     tk::Button* dm_btn_     = nullptr;
     tk::Button* ignore_btn_ = nullptr;
+
+    // Trust row: status line + optional action button, hidden until
+    // set_trust() and for users with no cross-signing identity.
+    tk::Label*  trust_label_ = nullptr;
+    tk::Button* verify_btn_  = nullptr;
+    tesseract::UserTrust trust_ = tesseract::UserTrust::Unknown;
+    bool trust_row_visible_() const { return trust_ != tesseract::UserTrust::Unknown; }
+    void apply_trust_(bool can_verify);
 
     // Layout rects (world-space, updated each arrange)
     tk::Rect card_rect_{};

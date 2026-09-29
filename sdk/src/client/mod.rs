@@ -16,6 +16,7 @@ mod bot_commands;
 mod crypto_reset;
 pub(crate) mod gif;
 mod history_export;
+pub(crate) mod identity;
 mod image_packs;
 mod knock;
 pub(crate) mod legacy_login_ffi;
@@ -46,6 +47,7 @@ mod thread;
 mod timeline;
 mod timeline_convert;
 mod update;
+mod url_preview_gen;
 mod verification;
 
 #[cfg(not(test))]
@@ -410,6 +412,14 @@ use std::sync::atomic::AtomicU64;
 #[cfg(not(test))]
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// A running encryption-only sliding sync; see `ClientFfi::start_encryption_sync`.
+#[cfg(not(test))]
+pub(super) struct EncryptionPresync {
+    pub(super) sliding_sync: matrix_sdk::SlidingSync,
+    pub(super) stopping: Arc<std::sync::atomic::AtomicBool>,
+    pub(super) task: tokio::task::JoinHandle<()>,
+}
+
 #[cfg(not(test))]
 pub(super) struct SendHandler(pub(super) UniquePtr<EventHandlerBridge>);
 #[cfg(not(test))]
@@ -514,6 +524,12 @@ pub struct ClientFfi {
             (Option<String>, Option<String>, u64),
         >,
     >,
+    /// Thread-list preview + server reply count per thread root, written by
+    /// `apply_thread_chips` and read by every room timeline stream so any
+    /// re-emission of a root row keeps the preview. See
+    /// `thread::ThreadChipOverrides`.
+    #[cfg(not(test))]
+    pub(super) thread_chip_overrides: thread::ThreadChipOverrides,
     /// Active knock-request (MSC2403) watchers keyed by room_id — one per
     /// room whose admin-side "Requests to join" panel is currently open.
     /// `RwLock`-wrapped for the same `&self` reason as `thread_lists`.
@@ -629,6 +645,18 @@ pub struct ClientFfi {
     /// so they stop firing into a destroyed handler.
     #[cfg(not(test))]
     pub(super) event_handler_handles: Vec<matrix_sdk::event_handler::EventHandlerHandle>,
+    /// Whether the to-device `m.key.verification.request` handler is in
+    /// `event_handler_handles` already. Registered by whichever of
+    /// `start_encryption_sync` / `start_sync` runs first (never twice, or every
+    /// incoming request would be reported twice); reset by `stop_sync`.
+    #[cfg(not(test))]
+    pub(super) verification_request_handler_registered: bool,
+    /// The encryption-only sliding sync (`start_encryption_sync`) that runs
+    /// while a fresh login's full sync is withheld behind the encryption
+    /// dialog. `start_sync` / `stop_sync` stop it (it shares the "encryption"
+    /// sliding-sync connection with SyncService's own encryption sync).
+    #[cfg(not(test))]
+    pub(super) encryption_presync: Option<EncryptionPresync>,
     /// Latest known backup state code (see BACKUP_STATE_* constants).
     /// Updated by the backup watcher task and read by `backup_state()`.
     #[cfg(not(test))]
@@ -724,6 +752,19 @@ pub struct ClientFfi {
     /// visibility is decided (see `filter_membership` in `client::timeline`).
     /// Controlled by `set_show_membership_events`.
     pub(super) show_membership_events: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Sender-side MSC4095 bundled URL previews opt-in (via the homeserver's
+    /// `/preview_url`). Set by `set_bundled_url_previews`; see
+    /// `client::url_preview_gen`.
+    pub(super) bundled_url_previews: std::sync::atomic::AtomicBool,
+    /// Second opt-in: fetch previewed pages directly from Tesseract (SSRF-
+    /// guarded), falling back to the homeserver. Only ever `true` while
+    /// `bundled_url_previews` is.
+    pub(super) bundled_url_previews_direct: std::sync::atomic::AtomicBool,
+    /// MSC4452: whether the homeserver's `/preview_url` is available to this
+    /// user (`m.preview_url.enabled` capability, unstable
+    /// `io.element.msc4452.preview_url`). Populated by `get_server_info`;
+    /// `true` until the capabilities response says otherwise.
+    pub(super) homeserver_preview_url_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// When `true`, "low power mode" is active: the per-room warm-check
     /// auto-pagination task, the search-index backfill crawl and proactive
     /// image-pack rebuilds bail out / pause. Controlled by
@@ -766,11 +807,11 @@ pub struct ClientFfi {
     /// SDK's internal map using (user_id, flow_id).
     #[cfg(not(test))]
     pub(super) verification_flow_users: Arc<Mutex<HashMap<String, String>>>,
-    /// Most-recently-computed SAS emoji per `flow_id`. Populated by the SAS
+    /// Most-recently-computed SAS codes per `flow_id`. Populated by the SAS
     /// watcher task when `KeysExchanged` fires; read synchronously by
-    /// `get_sas_emojis()`.
+    /// `get_sas()`.
     #[cfg(not(test))]
-    pub(super) sas_emoji_cache: Arc<Mutex<HashMap<String, Vec<(String, String)>>>>,
+    pub(super) sas_cache: verification::SasCache,
     /// Abort handles for every verification/SAS watcher task. These spawns
     /// outlive their initiating method, hold cloned `Arc<SendHandler>`
     /// references, and would otherwise call back into a destroyed C++
@@ -1126,6 +1167,8 @@ impl ClientFfi {
             #[cfg(not(test))]
             thread_receipt_cache: parking_lot::RwLock::new(HashMap::new()),
             #[cfg(not(test))]
+            thread_chip_overrides: Default::default(),
+            #[cfg(not(test))]
             knock_requests: parking_lot::RwLock::new(HashMap::new()),
             #[cfg(not(test))]
             backfill_task: parking_lot::Mutex::new(None),
@@ -1160,6 +1203,10 @@ impl ClientFfi {
             #[cfg(not(test))]
             event_handler_handles: Vec::new(),
             #[cfg(not(test))]
+            verification_request_handler_registered: false,
+            #[cfg(not(test))]
+            encryption_presync: None,
+            #[cfg(not(test))]
             backup_state_code: Arc::new(std::sync::atomic::AtomicU8::new(BACKUP_STATE_UNKNOWN)),
             #[cfg(not(test))]
             imported_keys: Arc::new(AtomicU64::new(0)),
@@ -1191,6 +1238,11 @@ impl ClientFfi {
                 .unwrap_or_else(|_| reqwest::Client::new()),
             presence_polling_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             show_membership_events: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            bundled_url_previews: std::sync::atomic::AtomicBool::new(false),
+            bundled_url_previews_direct: std::sync::atomic::AtomicBool::new(false),
+            homeserver_preview_url_enabled: std::sync::Arc::new(
+                std::sync::atomic::AtomicBool::new(true),
+            ),
             low_power_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             msc2545_legacy_compat: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             #[cfg(not(test))]
@@ -1204,7 +1256,7 @@ impl ClientFfi {
             #[cfg(not(test))]
             verification_flow_users: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(not(test))]
-            sas_emoji_cache: Arc::new(Mutex::new(HashMap::new())),
+            sas_cache: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(not(test))]
             verification_tasks: Arc::new(Mutex::new(Vec::new())),
             // Per-origin ceiling = 2× per-origin base: lets one origin's queue
@@ -1300,6 +1352,11 @@ impl ClientFfi {
             http_client: reqwest::Client::new(),
             presence_polling_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             show_membership_events: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            bundled_url_previews: std::sync::atomic::AtomicBool::new(false),
+            bundled_url_previews_direct: std::sync::atomic::AtomicBool::new(false),
+            homeserver_preview_url_enabled: std::sync::Arc::new(
+                std::sync::atomic::AtomicBool::new(true),
+            ),
             low_power_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             msc2545_legacy_compat: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             profile_fields_prefix: std::sync::Arc::new(std::sync::RwLock::new(None)),
@@ -3809,7 +3866,7 @@ mod tests {
     #[test]
     fn send_message_fails_when_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_message("!room:example.com", "hello", "");
+        let r = c.send_message("!room:example.com", "hello", "", "");
         assert!(!r.ok);
         assert_eq!(r.message, "not logged in");
     }
@@ -3824,7 +3881,7 @@ mod tests {
 
     #[test]
     fn oauth_cancel_is_noop_without_flow() {
-        let mut c = ClientFfi::new();
+        let c = ClientFfi::new();
         c.oauth_cancel();
     }
 
@@ -4179,14 +4236,14 @@ mod tests {
     #[test]
     fn send_reply_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_reply("!room:example.com", "$event:example.com", "reply body", "");
+        let r = c.send_reply("!room:example.com", "$event:example.com", "reply body", "", "");
         assert!(!r.ok);
     }
 
     #[test]
     fn send_reply_invalid_room_id() {
         let c = ClientFfi::new();
-        let r = c.send_reply("not-a-room-id", "$event:example.com", "reply body", "");
+        let r = c.send_reply("not-a-room-id", "$event:example.com", "reply body", "", "");
         assert!(!r.ok);
     }
 
@@ -4227,28 +4284,28 @@ mod tests {
     #[test]
     fn send_thread_message_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_thread_message("!room:server", "$root:server", "hi", "");
+        let r = c.send_thread_message("!room:server", "$root:server", "hi", "", "");
         assert!(!r.ok);
     }
 
     #[test]
     fn send_thread_reply_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_thread_reply("!room:server", "$root:server", "$reply:server", "hi", "");
+        let r = c.send_thread_reply("!room:server", "$root:server", "$reply:server", "hi", "", "");
         assert!(!r.ok);
     }
 
     #[test]
     fn send_edit_not_logged_in() {
         let c = ClientFfi::new();
-        let r = c.send_edit("!room:example.com", "$event:example.com", "new body", "");
+        let r = c.send_edit("!room:example.com", "$event:example.com", "new body", "", "");
         assert!(!r.ok);
     }
 
     #[test]
     fn send_edit_invalid_room_id() {
         let c = ClientFfi::new();
-        let r = c.send_edit("not-a-room-id", "$event:example.com", "new body", "");
+        let r = c.send_edit("not-a-room-id", "$event:example.com", "new body", "", "");
         assert!(!r.ok);
     }
 

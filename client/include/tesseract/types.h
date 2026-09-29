@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -110,6 +111,19 @@ struct RoomMember
     std::string display_name; ///< resolves to user_id localpart when unset
     std::string avatar_url;   ///< mxc:// or empty
     int64_t power_level = 0;
+};
+
+/// A banned member of a room (Room Settings → Moderation). `reason` and
+/// `banned_by` (mxid of whoever issued the ban) come from the ban event and
+/// may be empty. `can_unban` = the current user may lift this ban.
+struct BannedMember
+{
+    std::string user_id;
+    std::string display_name; ///< resolves to user_id localpart when unset
+    std::string avatar_url;   ///< mxc:// or empty
+    std::string reason;
+    std::string banned_by;
+    bool can_unban = false;
 };
 
 /// One `m.pronouns` (MSC4247) entry: a language-tagged pronoun summary plus
@@ -487,6 +501,7 @@ struct MembershipStateEvent : public Event
     std::string target_user_id;
     std::string target_display_name; ///< as recorded in this state event; may be empty
     std::string target_avatar_url;   ///< mxc:// or empty
+    std::string reason;              ///< free-text reason from the event content; may be empty
 };
 
 /// Ordered list of timeline events (oldest-first), as passed to
@@ -1024,6 +1039,18 @@ struct VerificationEmoji
     std::string description; // English label, e.g. "Dog"
 };
 
+/// The short authentication string for one SAS flow, delivered via
+/// `IEventHandler::on_sas_ready`. Mirrors `VerificationSas` in the Rust FFI
+/// bridge. `decimals` (the spec's `decimal` method, three numbers in
+/// 1000..=9191) is always set. `emojis` holds the 7 emoji when the `emoji`
+/// method was also agreed and is empty when the other device offered decimal
+/// only (MSC4405 deprecates emoji SAS).
+struct VerificationSas
+{
+    std::vector<VerificationEmoji> emojis;
+    std::array<uint16_t, 3>        decimals{};
+};
+
 /// One GIF search result, surfaced via `IEventHandler::on_gif_results`. URLs
 /// point at the provider CDN: `preview_url` is a small static JPEG for the
 /// inline result strip; `image_url` is the animated form (MP4 preferred, WebP
@@ -1203,6 +1230,37 @@ enum class RoomListState : uint8_t
     Error = 4,
     /// Sync stopped intentionally (e.g. shutdown).
     Terminated = 5,
+};
+
+/// How far another user's cross-signing identity is trusted
+/// (`Client::get_user_trust`). Mirrors the u8 codes in sdk/src/client/identity.rs.
+enum class UserTrust : uint8_t
+{
+    Unknown = 0,               ///< no cross-signing identity known
+    NotVerified = 1,
+    Verified = 2,
+    VerificationViolation = 3, ///< was verified; identity reset since
+};
+
+/// A room member whose cryptographic identity changed (MSC4153 identity
+/// pinning). Delivered as a room's full current set via
+/// `IEventHandler::on_identity_status_changed`.
+struct IdentityWarning
+{
+    enum class Kind : uint8_t
+    {
+        /// The identity differs from the one first seen for this user.
+        /// Acknowledge with `Client::pin_user_identity`.
+        Changed = 1,
+        /// The identity changed after this user was verified. Blocks
+        /// sending in exclude-insecure-devices mode until resolved with
+        /// `Client::withdraw_user_verification`.
+        VerificationBroken = 2,
+    };
+
+    std::string user_id;
+    std::string display_name; // may be empty
+    Kind        kind = Kind::Changed;
 };
 
 } // namespace tesseract

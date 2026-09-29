@@ -217,6 +217,19 @@ public:
     {
         icon_svg_ = svg;
         icon_logical_px_ = logical_px;
+        icon_leading_ = false;
+        return *this;
+    }
+    // Icon drawn before the label (icon + text), rather than replacing it as
+    // set_icon() does. Same lifetime rule as set_icon(); an empty span clears
+    // the icon and leaves a plain text button. Not meaningful for
+    // Variant::Icon, which never paints its label.
+    Button& set_leading_icon(std::span<const std::uint8_t> svg, float logical_px = 16.0f)
+    {
+        icon_svg_ = svg;
+        icon_logical_px_ = logical_px;
+        icon_leading_ = true;
+        invalidate_cache();
         return *this;
     }
     // Overrides the default theme/enabled-driven tint (text_primary /
@@ -313,6 +326,17 @@ public:
         return enabled_ && static_cast<bool>(on_click_);
     }
 
+protected:
+    // Subclasses that paint their own content over the button's fill (e.g.
+    // BusyButton's spinner) return false to make paint() stop after the
+    // fill, skipping the icon and label.
+    virtual bool paints_content() const
+    {
+        return true;
+    }
+    // The colour paint() uses for the icon / label in the current state.
+    Color content_color(const Theme& theme) const;
+
 private:
     void invalidate_cache()
     {
@@ -333,11 +357,42 @@ private:
 
     std::span<const std::uint8_t> icon_svg_;
     float icon_logical_px_ = 20.0f;
+    bool icon_leading_ = false; // set_leading_icon(): icon + label, not icon-only
     std::optional<Color> icon_color_override_;
     IconCache icon_cache_;
 
     std::unique_ptr<TextLayout> cached_;
     Size cached_size_{};
+};
+
+// A Button that can show a busy state: while busy it keeps its fill (and
+// stays clickable) but paints the standard 8-dot loading spinner in place of
+// its icon / label, animating itself via repaint requests. Used for the
+// composer's send button while a send is still being prepared.
+class BusyButton : public Button
+{
+protected:
+    using Button::Button;
+    TK_WIDGET_FACTORY_FRIEND(BusyButton)
+
+public:
+    void set_busy(bool busy);
+    bool busy() const
+    {
+        return busy_;
+    }
+
+    void paint(PaintCtx&) override;
+
+protected:
+    bool paints_content() const override
+    {
+        return !busy_;
+    }
+
+private:
+    bool busy_ = false;
+    std::chrono::steady_clock::time_point busy_start_{};
 };
 
 // A labelled two-state checkbox. Hover and press are tracked internally;
@@ -437,6 +492,7 @@ private:
     std::unique_ptr<TextLayout> label_layout_;
     float cached_max_w_ = -2.0f;
     Size label_size_{};
+    IconCache check_icon_;
 };
 
 // A label + sliding on/off switch (settings-style). The whole row is the hit

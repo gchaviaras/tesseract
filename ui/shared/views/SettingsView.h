@@ -174,6 +174,12 @@ public:
     // persisted settings.
     void set_send_maps_urls_as_location_pref(bool enabled);
 
+    // Silently initialise the "exclude insecure devices" checkbox.
+    void set_exclude_insecure_devices_pref(bool enabled);
+
+    // Silently initialise the two bundled-URL-preview checkboxes.
+    void set_bundled_url_previews_pref(bool enabled, bool direct);
+
     // Silently initialise the "index messages for search" checkbox.
     void set_index_messages_pref(bool enabled);
 
@@ -385,6 +391,14 @@ public:
     // locations".
     std::function<void(bool)> on_send_maps_urls_as_location_changed;
 
+    // Fired when the user toggles "Exclude insecure devices" (MSC4153).
+    std::function<void(bool)> on_exclude_insecure_devices_changed;
+
+    // Fired when the user toggles either "Include link previews in messages I
+    // send" or "Fetch link previews directly…". The shell persists both and
+    // calls Client::set_bundled_url_previews() on every account.
+    std::function<void(bool enabled, bool direct)> on_bundled_url_previews_changed;
+
     // Fired when the user toggles "Index messages for search". The shell
     // persists the setting and calls Client::set_search_indexing_enabled().
     std::function<void(bool)> on_index_messages_changed;
@@ -431,6 +445,12 @@ public:
 
     // Fired when the user selects a different language (BCP47 code or "auto").
     std::function<void(std::string)> on_language_changed;
+
+    // Fired by the language section's "Restart now" button.
+    std::function<void()> on_restart_requested;
+
+    // Show / hide the language section's "Restart now" button.
+    void set_language_restart_pending(bool pending);
 
     // ----- tk::Widget overrides ---------------------------------------------
 

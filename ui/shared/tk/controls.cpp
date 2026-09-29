@@ -1,6 +1,8 @@
 #include "controls.h"
 
 #include "tk/host.h"
+#include "tk/loading_spinner.h"
+#include "tk/status_icons.h"
 
 #include <tesseract/visual.h>
 
@@ -107,6 +109,7 @@ constexpr float kBtnVPad = 6.0f;
 constexpr float kBtnMinHeight = 32.0f;
 constexpr float kBtnIconPad = 6.0f;
 constexpr float kBtnIconMinSize = 28.0f;
+constexpr float kBtnIconLabelGap = 8.0f;
 constexpr float kControlsHoverFadeMs = 110.0f;
 
 TextStyle button_text_style()
@@ -220,8 +223,15 @@ Size Button::measure(LayoutCtx& ctx, Size constraints)
             cached_size_ = cached_->measure();
         }
     }
-    float w = cached_size_.w + kBtnHPad * 2;
-    float h = std::max(cached_size_.h + kBtnVPad * 2, kBtnMinHeight);
+    float content_w = cached_size_.w;
+    float content_h = cached_size_.h;
+    if (icon_leading_ && !icon_svg_.empty())
+    {
+        content_w += icon_logical_px_ + kBtnIconLabelGap;
+        content_h = std::max(content_h, icon_logical_px_);
+    }
+    float w = content_w + kBtnHPad * 2;
+    float h = std::max(content_h + kBtnVPad * 2, kBtnMinHeight);
     return {std::max(w, min_size_.w), std::max(h, min_size_.h)};
 }
 
@@ -267,7 +277,11 @@ void Button::paint(PaintCtx& ctx)
     }
     ctx.canvas.fill_rounded_rect(bounds_, kControlsBtnRadius, fill);
 
-    if (!icon_svg_.empty())
+    if (!paints_content())
+    {
+        return;
+    }
+    if (!icon_svg_.empty() && !icon_leading_)
     {
         // Any variant may self-paint an icon over its fill (Primary/
         // Destructive keep their colored pill; Icon/Subtle stay
@@ -297,10 +311,68 @@ void Button::paint(PaintCtx& ctx)
     {
         return;
     }
-    float tx = bounds_.x + (bounds_.w - cached_size_.w) * 0.5f;
+    const Color text_color = button_text(variant_, ctx.theme, enabled_);
+    const bool leading_icon = icon_leading_ && !icon_svg_.empty();
+    // Centre the whole icon + gap + label group, so a leading-icon button
+    // lines up with plain-label buttons of the same width.
+    const float icon_w = leading_icon ? icon_logical_px_ + kBtnIconLabelGap : 0.0f;
+    float tx = bounds_.x + (bounds_.w - cached_size_.w - icon_w) * 0.5f;
     float ty = bounds_.y + (bounds_.h - cached_size_.h) * 0.5f;
-    ctx.canvas.draw_text(*cached_, {tx, ty},
-                         button_text(variant_, ctx.theme, enabled_));
+    if (leading_icon)
+    {
+        // Same tint as the label (see the icon-only branch above).
+        Color tint = icon_color_override_.value_or(text_color);
+        icon_cache_.draw(ctx.canvas, ctx.factory, icon_svg_,
+                         {tx, bounds_.y, icon_logical_px_, bounds_.h},
+                         icon_logical_px_, tint);
+        tx += icon_w;
+    }
+    ctx.canvas.draw_text(*cached_, {tx, ty}, text_color);
+}
+
+Color Button::content_color(const Theme& theme) const
+{
+    return icon_color_override_.value_or(button_text(variant_, theme, enabled_));
+}
+
+void BusyButton::set_busy(bool busy)
+{
+    if (busy == busy_)
+    {
+        return;
+    }
+    busy_ = busy;
+    if (busy_)
+    {
+        busy_start_ = std::chrono::steady_clock::now();
+    }
+    if (auto* h = host())
+    {
+        h->request_repaint();
+    }
+}
+
+void BusyButton::paint(PaintCtx& ctx)
+{
+    Button::paint(ctx);
+    if (!busy_)
+    {
+        return;
+    }
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now() - busy_start_)
+                                .count();
+    const float phase = static_cast<float>(elapsed_ms % 1000) / 1000.0f;
+    const float side = std::min(bounds_.w, bounds_.h);
+    const float radius = side * 0.22f;
+    const float dot_r = std::max(1.5f, side * 0.05f);
+    draw_spinner_dots(ctx.canvas,
+                      {bounds_.x + bounds_.w * 0.5f, bounds_.y + bounds_.h * 0.5f},
+                      phase, radius, dot_r, content_color(ctx.theme));
+    if (auto* h = host())
+    {
+        h->request_repaint();
+    }
 }
 
 void Button::click()
@@ -648,18 +720,9 @@ void CheckButton::paint(PaintCtx& ctx)
     if (checked_)
     {
         ctx.canvas.fill_rounded_rect(box, kCbBoxRad, pal.accent);
-        TextStyle st{};
-        st.role      = FontRole::UiSemibold;
-        st.max_width = box.w;
-        auto lo = ctx.factory.build_text("\xE2\x9C\x93", st); // U+2713 ✓
-        if (lo)
-        {
-            Size sz = lo->measure();
-            ctx.canvas.draw_text(*lo,
-                                 {box.x + (box.w - sz.w) * 0.5f,
-                                  box.y + (box.h - sz.h) * 0.5f},
-                                 pal.text_on_accent);
-        }
+        // Same Lucide check (and size) as the round picker checkboxes.
+        check_icon_.draw(ctx.canvas, ctx.factory, check_icon_svg(), box, 12.0f,
+                         pal.text_on_accent);
     }
     else
     {

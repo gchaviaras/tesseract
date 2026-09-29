@@ -100,6 +100,7 @@ pub(super) fn ffi_event_defaults() -> TimelineEvent {
         membership_target_user_id: String::new(),
         membership_target_name: String::new(),
         membership_target_avatar_url: String::new(),
+        membership_reason: String::new(),
         room_name_new: String::new(),
         room_name_old: String::new(),
     }
@@ -128,6 +129,21 @@ pub(crate) fn utd_message_for_cause(
             "🔒 Verify this device to access history"
         }
         UtdCause::Unknown => "🔒 Unable to decrypt",
+    }
+}
+
+/// Machine-readable `pending_error` for a local echo that matrix-sdk parked
+/// because of an MSC4153 encryption check, or `None` for any other failure.
+/// It reaches the UI as `pending_error`, which no view shows yet (the
+/// reason-tooltip follow-up in ROADMAP.md).
+#[cfg(not(test))]
+fn crypto_send_block_code(error: &matrix_sdk::Error) -> Option<&'static str> {
+    use matrix_sdk_base::store::QueueWedgeError;
+    match QueueWedgeError::from(error) {
+        QueueWedgeError::IdentityViolations { .. } => Some("identity_violation"),
+        QueueWedgeError::InsecureDevices { .. } => Some("insecure_devices"),
+        QueueWedgeError::CrossVerificationRequired => Some("own_verification_required"),
+        _ => None,
     }
 }
 
@@ -757,6 +773,12 @@ pub(super) async fn timeline_item_to_ffi(
                 .avatar_url()
                 .map(|u| u.to_string())
                 .unwrap_or_default(),
+            membership_reason: match change.content() {
+                matrix_sdk::ruma::events::StateEventContentChange::Original { content, .. } => {
+                    content.reason.clone().unwrap_or_default()
+                }
+                _ => String::new(),
+            },
             timestamp: event_item.timestamp().get().into(),
             ..ffi_event_defaults()
         });
@@ -776,7 +798,13 @@ pub(super) async fn timeline_item_to_ffi(
                 Some(EventSendState::SendingFailed {
                     error,
                     is_recoverable,
-                }) => ("failed".to_owned(), error.to_string(), *is_recoverable, txn),
+                }) => match crypto_send_block_code(error) {
+                    // Parked by an encryption check the user can resolve
+                    // (identity-change warning, verifying this device):
+                    // offer Retry, which unwedges it (`retry_send`).
+                    Some(code) => ("failed".to_owned(), code.to_owned(), true, txn),
+                    None => ("failed".to_owned(), error.to_string(), *is_recoverable, txn),
+                },
                 _ => (String::new(), String::new(), false, txn),
             }
         } else {

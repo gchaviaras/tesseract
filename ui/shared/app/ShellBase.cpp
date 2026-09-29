@@ -1,5 +1,6 @@
 #include "app/ShellBase.h"
 #include "app/EventHandlerBase.h"
+#include "app/Launch.h"
 #include <tesseract/crash_handler.h>
 #include <tesseract/version.h>
 #include "app/MediaPlaybackHub.h"
@@ -22,6 +23,7 @@
 #include "views/MainAppWidget.h"
 #include "views/VideoViewerOverlay.h"
 #include "views/RoomListView.h"
+#include "views/InviteDialog.h"
 #include "views/text_util.h"
 #include "views/RoomSearchBar.h"
 #include "views/SettingsView.h"
@@ -42,9 +44,18 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cerrno>
 #include <cstdio>
+#include <cstring>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #include <ctime>
+#include <filesystem>
 #include <fstream>
+#include <system_error>
 #include <thread>
 
 namespace tesseract
@@ -1498,30 +1509,42 @@ const tk::Image* ShellBase::shell_sticker_(const std::string& mxc)
 }
 
 void ShellBase::set_room_notification_mode_(const std::string& room_id,
-                                             const std::string& mode)
+                                             const std::string& mode,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (!client_) return;
-    auto sess = active_account_;
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (!acting_client) return;
+    auto sess = acting;
     run_async_mut_([sess, room_id, mode]() {
         if (!sess || !sess->client) return;
         sess->client->set_room_notification_mode(room_id, mode);
     });
 }
 
-void ShellBase::set_room_favourite_(const std::string& room_id, bool value)
+void ShellBase::set_room_favourite_(const std::string& room_id, bool value,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (!client_) return;
-    auto sess = active_account_;
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (!acting_client) return;
+    auto sess = acting;
     run_async_mut_([sess, room_id, value]() {
         if (!sess || !sess->client) return;
         sess->client->set_room_favourite(room_id, value);
     });
 }
 
-void ShellBase::set_room_low_priority_(const std::string& room_id, bool value)
+void ShellBase::set_room_low_priority_(const std::string& room_id, bool value,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (!client_) return;
-    auto sess = active_account_;
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (!acting_client) return;
+    auto sess = acting;
     run_async_mut_([sess, room_id, value]() {
         if (!sess || !sess->client) return;
         sess->client->set_room_low_priority(room_id, value);
@@ -1534,6 +1557,11 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
     { return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc)); };
 
     app->set_avatar_provider(avatar_lookup);
+    if (auto* reminder = app->encryption_reminder())
+    {
+        reminder->on_open    = [this] { reopen_encryption_setup_(); };
+        reminder->on_dismiss = [this] { snooze_encryption_reminder_(); };
+    }
     app->on_space_header = [this]
     {
         if (!space_stack_.empty())
@@ -1904,10 +1932,11 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
         ml->set_sticker_image_provider(make_sticker_image_provider_());
     // MSC4278: gate inline media behind the media-preview config + reveal set.
     wire_media_preview_gating_(app->room_view()->message_list());
-    // Retry/abort a failed outgoing message's hover actions are wired by
-    // main_room_pane_->attach() (RoomPane::wire_room_view_), called before
-    // this function on every shell — do not re-wire on_retry_send/
-    // on_abort_send here, it would silently clobber RoomPane's handlers.
+    // Retry/abort a failed outgoing message's hover actions (and the
+    // identity-change banner) are wired by main_room_pane_->attach()
+    // (RoomPane::wire_room_view_), called before this function on every
+    // shell — do not re-wire on_retry_send/on_abort_send here, it would
+    // silently clobber RoomPane's handlers.
     if (auto* ml = app->room_view()->message_list())
     {
         ml->on_video_thumbnail_needed =
@@ -1987,10 +2016,15 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
 
     // MSC4426: the sidebar strip (not AccountPicker rows) shows a third line
     // for the user's own status, with a "Click to set status" placeholder
-    // when unset. A click on that line opens Settings → Account.
+    // when unset. A click on that line opens Settings → Account. The
+    // placeholder and click are suppressed until server_info_ confirms
+    // MSC4133 profile-field support (push_own_status_to_strip_()).
     app->user_info()->set_status_line_enabled(true);
     app->user_info()->on_status_clicked = [this]
     { open_settings_to_account_tab_(); };
+    app->user_info()->set_status_editable(
+        server_info_.supports_profile_fields &&
+        server_info_.profile_fields_enabled);
     app->user_info()->set_status(own_extended_profile_.status_emoji,
                                  own_extended_profile_.status_text);
 
@@ -2490,6 +2524,11 @@ void ShellBase::ensure_tile_async(int z, int x, int y)
 void ShellBase::ensure_url_preview_(const std::string& url)
 {
     if (url.empty() || url_previews_.count(url))
+    {
+        return;
+    }
+    // MSC4452: the homeserver turned /preview_url off, so it would only 403.
+    if (!server_info_.preview_url_enabled)
     {
         return;
     }
@@ -3365,25 +3404,33 @@ void ShellBase::seed_room_media_section_(const std::string& room_id)
     v->set_media_override(it->second.has_media_previews, it->second.media_previews);
 }
 
-void ShellBase::fetch_room_security_state_(const std::string& room_id)
+void ShellBase::fetch_room_security_state_(const std::string& room_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (!client_ || room_id.empty())
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (!acting_client || room_id.empty())
         return;
     auto req_id = next_request_id_++;
     pending_security_state_requests_[req_id] = room_id;
-    client_->fetch_room_security_state_async(req_id, room_id);
+    acting_client->fetch_room_security_state_async(req_id, room_id);
 }
 
 void ShellBase::seed_image_pack_tab_(const std::string& room_id,
-                                     views::RoomSettingsView* target)
+                                     views::RoomSettingsView* target,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (!target || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (!target || !acting_client)
         return;
     if (!target->is_open() || target->room_id() != room_id)
         return;
     target->set_image_pack_field_permissions(
-        client_->can_set_room_image_packs(room_id));
-    auto packs = client_->list_image_packs();
+        acting_client->can_set_room_image_packs(room_id));
+    auto packs = acting_client->list_image_packs();
     std::vector<tesseract::ImagePack> room_packs;
     for (auto& p : packs)
     {
@@ -3515,6 +3562,10 @@ ShellBase::build_rows_(const EventList& snapshot, const std::string& room_id)
 {
     std::vector<views::MessageRowData> rows;
     rows.reserve(snapshot.size());
+    // The event's own account: its "is this mine" flag and reply lookups
+    // must not use the active account's for another account's pop-out.
+    const std::string own_user_id = dispatch_account_();
+    RoomPane* reply_pane = reply_pane_for_(room_id);
     // Only prefetch media for the trailing window — events at the top of the
     // snapshot are above the initial viewport and their media is fetched lazily
     // as the user scrolls up (via on_visible_rows_changed_).
@@ -3531,15 +3582,14 @@ ShellBase::build_rows_(const EventList& snapshot, const std::string& room_id)
             media_prepped_event_ids_.insert(ev->event_id);
         }
         // room_id may not be current_room_id_ (see doc comment) — go through
-        // the general (room_id-explicit) overload rather than main_room_pane_'s
-        // own implicit-current-room one. Any live RoomPane instance works as
-        // the entry point here: the general overload only touches shared
-        // ShellBase state (client_/reply_details_requested_), never the
-        // calling pane's own room_id_.
-        if (!ev->in_reply_to_id.empty() && main_room_pane_)
-            main_room_pane_->ensure_reply_details_(room_id, ev->event_id,
+        // the general (room_id-explicit) overload rather than the pane's own
+        // implicit-current-room one. It fetches through the pane's account,
+        // so reply_pane is a pane of the event's own account (see
+        // reply_pane_for_); it never touches that pane's own room_id_.
+        if (!ev->in_reply_to_id.empty() && reply_pane)
+            reply_pane->ensure_reply_details_(room_id, ev->event_id,
                                                    std::string());
-        rows.push_back(views::make_row_data(*ev, my_user_id_));
+        rows.push_back(views::make_row_data(*ev, own_user_id));
     }
     return rows;
 }
@@ -3550,6 +3600,10 @@ ShellBase::build_rows_(const std::vector<Event*>& snapshot,
 {
     std::vector<views::MessageRowData> rows;
     rows.reserve(snapshot.size());
+    // The event's own account: its "is this mine" flag and reply lookups
+    // must not use the active account's for another account's pop-out.
+    const std::string own_user_id = dispatch_account_();
+    RoomPane* reply_pane = reply_pane_for_(room_id);
     const std::size_t media_prefetch_window = media_prefetch_window_();
     const std::size_t n = snapshot.size();
     for (std::size_t i = 0; i < n; ++i)
@@ -3562,10 +3616,10 @@ ShellBase::build_rows_(const std::vector<Event*>& snapshot,
             prep_row_media_(*ev, /*fetch_avatars=*/false);
             media_prepped_event_ids_.insert(ev->event_id);
         }
-        if (!ev->in_reply_to_id.empty() && main_room_pane_)
-            main_room_pane_->ensure_reply_details_(room_id, ev->event_id,
+        if (!ev->in_reply_to_id.empty() && reply_pane)
+            reply_pane->ensure_reply_details_(room_id, ev->event_id,
                                                    std::string());
-        rows.push_back(views::make_row_data(*ev, my_user_id_));
+        rows.push_back(views::make_row_data(*ev, own_user_id));
     }
     return rows;
 }
@@ -3591,16 +3645,16 @@ void ShellBase::dispatch_message_inserted_secondary_(const std::string& room_id,
         [&](RoomWindowBase* w)
         {
             prep_row_media_(ev);
-            if (!ev.in_reply_to_id.empty() && main_room_pane_)
+            if (!ev.in_reply_to_id.empty() && w->pane())
             {
                 // See build_rows_'s doc comment: room_id here is w's own
                 // room, not necessarily current_room_id_, so this must go
                 // through the general (room_id-explicit) overload.
-                main_room_pane_->ensure_reply_details_(room_id, ev.event_id,
+                w->pane()->ensure_reply_details_(room_id, ev.event_id,
                                                        std::string());
             }
             w->on_message_inserted(index,
-                                   views::make_row_data(ev, my_user_id_));
+                                   views::make_row_data(ev, w->owner_user_id()));
         });
 }
 
@@ -3612,15 +3666,15 @@ void ShellBase::dispatch_message_prepended_secondary_(const std::string& room_id
         [&](RoomWindowBase* w)
         {
             prep_row_media_(ev);
-            if (!ev.in_reply_to_id.empty() && main_room_pane_)
+            if (!ev.in_reply_to_id.empty() && w->pane())
             {
                 // See build_rows_'s doc comment: room_id here is w's own
                 // room, not necessarily current_room_id_, so this must go
                 // through the general (room_id-explicit) overload.
-                main_room_pane_->ensure_reply_details_(room_id, ev.event_id,
+                w->pane()->ensure_reply_details_(room_id, ev.event_id,
                                                        std::string());
             }
-            w->on_message_prepended(views::make_row_data(ev, my_user_id_));
+            w->on_message_prepended(views::make_row_data(ev, w->owner_user_id()));
         });
 }
 
@@ -3632,15 +3686,15 @@ void ShellBase::dispatch_message_appended_secondary_(const std::string& room_id,
         [&](RoomWindowBase* w)
         {
             prep_row_media_(ev);
-            if (!ev.in_reply_to_id.empty() && main_room_pane_)
+            if (!ev.in_reply_to_id.empty() && w->pane())
             {
                 // See build_rows_'s doc comment: room_id here is w's own
                 // room, not necessarily current_room_id_, so this must go
                 // through the general (room_id-explicit) overload.
-                main_room_pane_->ensure_reply_details_(room_id, ev.event_id,
+                w->pane()->ensure_reply_details_(room_id, ev.event_id,
                                                        std::string());
             }
-            w->on_message_appended(views::make_row_data(ev, my_user_id_));
+            w->on_message_appended(views::make_row_data(ev, w->owner_user_id()));
         });
 }
 
@@ -3653,15 +3707,15 @@ void ShellBase::dispatch_message_updated_secondary_(const std::string& room_id,
         [&](RoomWindowBase* w)
         {
             prep_row_media_(ev);
-            if (!ev.in_reply_to_id.empty() && main_room_pane_)
+            if (!ev.in_reply_to_id.empty() && w->pane())
             {
                 // See build_rows_'s doc comment: room_id here is w's own
                 // room, not necessarily current_room_id_, so this must go
                 // through the general (room_id-explicit) overload.
-                main_room_pane_->ensure_reply_details_(room_id, ev.event_id,
+                w->pane()->ensure_reply_details_(room_id, ev.event_id,
                                                        std::string());
             }
-            w->on_message_updated(index, views::make_row_data(ev, my_user_id_));
+            w->on_message_updated(index, views::make_row_data(ev, w->owner_user_id()));
         });
 }
 
@@ -3677,9 +3731,12 @@ void ShellBase::dispatch_message_removed_secondary_(const std::string& room_id,
 
 void ShellBase::update_secondary_room_infos_()
 {
+    // Each pop-out gets its room from its own account's room list.
     for (const auto& [rid, w] : secondary_windows_)
     {
-        for (const auto& r : rooms_)
+        if (!w)
+            continue;
+        for (const auto& r : rooms_for_(w->owner_user_id()))
         {
             if (r.id == rid)
             {
@@ -3749,7 +3806,7 @@ void ShellBase::refresh_bridge_dependent_ui_(const std::string& room_id)
             apply_threads_list_(client_->list_room_threads(room_id));
         room_view_->set_room(*r); // refreshes the info panel's badge if open
     }
-    for (auto& [rid, w] : secondary_windows_)
+    for (auto& [rid, w] : active_account_popouts_())
     {
         if (rid != room_id || !w->room_view())
             continue;
@@ -3775,6 +3832,20 @@ void ShellBase::push_rooms_(std::string user_id, std::vector<RoomInfo> rooms)
     {
         // A pending --open-room target may live on this (inactive) account.
         retry_pending_launch_room_();
+        // Its pop-outs still show live room info (name, topic, avatar, ...).
+        for (const auto& [rid, w] : secondary_windows_)
+        {
+            if (!w || w->owner_user_id() != user_id)
+                continue;
+            for (const auto& r : per_account_rooms_[user_id])
+            {
+                if (r.id == rid)
+                {
+                    w->on_room_info_updated(r);
+                    break;
+                }
+            }
+        }
         return;
     }
     rooms_ = std::move(rooms);
@@ -3823,7 +3894,7 @@ void ShellBase::push_rooms_(std::string user_id, std::vector<RoomInfo> rooms)
     {
         if (room_view_ && room_view_->header())
             update_call_btn_visibility_(room_view_->header(), current_room_id_);
-        for (auto& [rid, w] : secondary_windows_)
+        for (auto& [rid, w] : active_account_popouts_())
         {
             if (auto* rv = w->room_view())
                 if (auto* h = rv->header())
@@ -4082,9 +4153,13 @@ const KnockedRoomInfo* ShellBase::find_my_knock_(const std::string& room_id) con
 
 void ShellBase::knock_room_command_(const std::string& room_id_or_alias,
                                     const std::string& reason,
-                                    std::vector<std::string> via)
+                                    std::vector<std::string> via,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id_or_alias.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id_or_alias.empty() || !acting_client)
         return;
     if (via.empty())
     {
@@ -4094,7 +4169,7 @@ void ShellBase::knock_room_command_(const std::string& room_id_or_alias,
     }
     auto req_id = next_room_action_id_++;
     pending_room_actions_[req_id] = {room_id_or_alias, RoomActionKind::Knock};
-    client_->knock_room_async(req_id, room_id_or_alias, reason, via);
+    acting_client->knock_room_async(req_id, room_id_or_alias, reason, via);
 }
 
 void ShellBase::retract_knock_command_(const std::string& room_id)
@@ -4104,42 +4179,56 @@ void ShellBase::retract_knock_command_(const std::string& room_id)
     leave_room_command_(room_id);
 }
 
-void ShellBase::subscribe_knock_requests_panel_(const std::string& room_id)
+void ShellBase::subscribe_knock_requests_panel_(
+    const std::string& room_id, const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    if (room_id.empty() || !acting || !acting->client)
         return;
-    if (knock_requests_panel_room_id_ == room_id)
+    if (knock_requests_panel_room_id_ == room_id &&
+        knock_requests_panel_account_.lock() == acting)
         return; // already subscribed
-    if (!knock_requests_panel_room_id_.empty())
-        client_->unsubscribe_room_knock_requests(knock_requests_panel_room_id_);
+    unsubscribe_knock_requests_panel_();
     knock_requests_panel_room_id_ = room_id;
+    knock_requests_panel_account_ = acting;
     current_room_knock_requests_.clear();
-    client_->subscribe_room_knock_requests(room_id);
+    acting->client->subscribe_room_knock_requests(room_id);
 }
 
 void ShellBase::unsubscribe_knock_requests_panel_()
 {
-    if (knock_requests_panel_room_id_.empty() || !client_)
+    if (knock_requests_panel_room_id_.empty())
         return;
-    client_->unsubscribe_room_knock_requests(knock_requests_panel_room_id_);
+    // On the client that subscribed, which may not be the active one.
+    if (auto sess = knock_requests_panel_account_.lock(); sess && sess->client)
+        sess->client->unsubscribe_room_knock_requests(knock_requests_panel_room_id_);
     knock_requests_panel_room_id_.clear();
+    knock_requests_panel_account_.reset();
     current_room_knock_requests_.clear();
 }
 
 void ShellBase::accept_knock_request_async_(const std::string& room_id,
-                                            const std::string& user_id)
+                                            const std::string& user_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id.empty() || user_id.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || user_id.empty() || !acting_client)
         return;
     auto req_id = next_room_action_id_++;
     pending_room_actions_[req_id] = {room_id, RoomActionKind::AcceptKnock};
-    client_->accept_knock_request_async(req_id, room_id, user_id);
+    acting_client->accept_knock_request_async(req_id, room_id, user_id);
 }
 
 void ShellBase::decline_knock_request_async_(const std::string& room_id,
-                                             const std::string& user_id)
+                                             const std::string& user_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id.empty() || user_id.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || user_id.empty() || !acting_client)
         return;
     // Optimistically remove from the local list for immediate UX; the next
     // on_knock_requests_updated poke from the SDK will confirm or restore it.
@@ -4150,14 +4239,18 @@ void ShellBase::decline_knock_request_async_(const std::string& room_id,
                        { return r.user_id == user_id; }),
         current_room_knock_requests_.end());
     on_knock_requests_panel_updated_();
-    client_->decline_knock_request_async(room_id, user_id, "");
+    acting_client->decline_knock_request_async(room_id, user_id, "");
 }
 
 void ShellBase::decline_and_ban_knock_request_async_(const std::string& room_id,
                                                      const std::string& user_id,
-                                                     const std::string& reason)
+                                                     const std::string& reason,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id.empty() || user_id.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || user_id.empty() || !acting_client)
         return;
     // Optimistically remove from the local list for immediate UX; the next
     // on_knock_requests_updated poke from the SDK will confirm or restore it.
@@ -4168,19 +4261,23 @@ void ShellBase::decline_and_ban_knock_request_async_(const std::string& room_id,
                        { return r.user_id == user_id; }),
         current_room_knock_requests_.end());
     on_knock_requests_panel_updated_();
-    client_->decline_and_ban_knock_request_async(room_id, user_id, reason);
+    acting_client->decline_and_ban_knock_request_async(room_id, user_id, reason);
 }
 
-void ShellBase::leave_room_command_(const std::string& room_id)
+void ShellBase::leave_room_command_(const std::string& room_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || !acting_client)
         return;
     auto req_id = next_room_action_id_++;
     const RoomInfo* ri = room_by_id_(room_id);
     const auto kind = (ri && ri->is_space) ? RoomActionKind::LeaveSpace
                                            : RoomActionKind::Leave;
     pending_room_actions_[req_id] = {room_id, kind};
-    client_->leave_room_async(req_id, room_id);
+    acting_client->leave_room_async(req_id, room_id);
 }
 
 void ShellBase::leave_space_navigate_back_(const std::string& space_id)
@@ -4261,9 +4358,13 @@ void ShellBase::confirm_leave_room_(const std::string& room_id)
 }
 
 void ShellBase::join_room_command_(const std::string& room_id_or_alias,
-                                   std::vector<std::string> via)
+                                   std::vector<std::string> via,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id_or_alias.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id_or_alias.empty() || !acting_client)
         return;
     // No caller-supplied `via`? Fall back to any `?via=` hints open_matrix_link()
     // stashed for this id/alias (a matrix.to / matrix: permalink the user
@@ -4282,20 +4383,20 @@ void ShellBase::join_room_command_(const std::string& room_id_or_alias,
     // own knock-awareness. JoinRoomView (the "Join a Room" dialog) already
     // knows up front via its richer preview_ and calls knock_room_command_
     // directly with an optional reason, bypassing this redirect.
-    if (auto cached = client_->get_cached_room_summary(room_id_or_alias))
+    if (auto cached = acting_client->get_cached_room_summary(room_id_or_alias))
     {
         const bool wants_knock =
             (cached->join_rule == "knock" || cached->join_rule == "knock_restricted") &&
             cached->membership != "join" && cached->membership != "knock";
         if (wants_knock)
         {
-            knock_room_command_(room_id_or_alias, "", std::move(via));
+            knock_room_command_(room_id_or_alias, "", std::move(via), acting);
             return;
         }
     }
     auto req_id = next_room_action_id_++;
     pending_room_actions_[req_id] = {room_id_or_alias, RoomActionKind::Join};
-    client_->join_room_async(req_id, room_id_or_alias, via);
+    acting_client->join_room_async(req_id, room_id_or_alias, via);
 }
 
 void ShellBase::lookup_room_command_(const std::string& room_id_or_alias)
@@ -4371,19 +4472,84 @@ void ShellBase::create_room_command_(const RoomCreateOptions& options)
 
 void ShellBase::invite_user_command_(const std::string& room_id,
                                      const std::string& user_id,
-                                     const std::string& reason)
+                                     const std::string& reason,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id.empty() || user_id.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || user_id.empty() || !acting_client)
         return;
-    client_->invite_user_async(room_id, user_id, reason);
+    auto req_id = next_room_action_id_++;
+    pending_invites_[req_id] = {room_id, user_id, nullptr};
+    acting_client->invite_user_async(req_id, room_id, user_id, reason);
+}
+
+void ShellBase::moderate_member_(ModerationAction action, const std::string& room_id,
+                                 const std::string& user_id,
+                                 const std::string& display_name,
+                                 const std::string& reason,
+                                 std::function<void(bool ok)> done,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
+{
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || user_id.empty() || !acting_client)
+        return;
+    auto req_id = next_room_action_id_++;
+    pending_moderations_[req_id] = {user_id, display_name, action, std::move(done)};
+    switch (action)
+    {
+    case ModerationAction::Kick:
+        acting_client->kick_user_async(req_id, room_id, user_id, reason);
+        break;
+    case ModerationAction::Ban:
+        acting_client->ban_user_async(req_id, room_id, user_id, reason);
+        break;
+    case ModerationAction::Unban:
+        acting_client->unban_user_async(req_id, room_id, user_id, reason);
+        break;
+    }
+}
+
+void ShellBase::invite_users_(
+    const std::string& room_id, const std::vector<std::string>& user_ids,
+    std::function<void(const std::string& user_id, bool ok,
+                       const std::string& message)> per_user,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
+{
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || !acting_client)
+        return;
+    // One shared copy of the per-user callback across every request.
+    auto cb = std::make_shared<decltype(per_user)>(std::move(per_user));
+    for (const auto& user_id : user_ids)
+    {
+        auto req_id = next_room_action_id_++;
+        pending_invites_[req_id] = {
+            room_id, user_id,
+            [cb, user_id](bool ok, const std::string& message)
+            {
+                if (*cb)
+                    (*cb)(user_id, ok, message);
+            }};
+        acting_client->invite_user_async(req_id, room_id, user_id);
+    }
 }
 
 ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
     const std::string& room_id, const std::string& body,
-    const std::string& formatted_body)
+    const std::string& formatted_body,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
     RoomSendOutcome out;
-    if (room_id.empty() || !client_)
+    if (room_id.empty() || !acting_client)
     {
         // No active room/client: treat as consumed so callers no-op without
         // clearing on a failed send result.
@@ -4394,19 +4560,19 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
     // intercepted here; everything else falls through to dispatch_compose_send.
     if (tesseract::is_slash_command_no_arg(body, "myroomavatar"))
     {
-        pick_and_set_room_avatar_(room_id);
+        pick_and_set_room_avatar_(room_id, acting);
         out.handled_as_command = true;
         return out;
     }
     if (tesseract::is_slash_command_no_arg(body, "leave"))
     {
-        leave_room_command_(room_id);
+        leave_room_command_(room_id, acting);
         out.handled_as_command = true;
         return out;
     }
     if (auto target = tesseract::parse_slash_arg(body, "join"))
     {
-        join_room_command_(*target);
+        join_room_command_(*target, {}, acting);
         out.handled_as_command = true;
         return out;
     }
@@ -4420,7 +4586,7 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
                 reason += ' ';
             reason += (*args)[i];
         }
-        invite_user_command_(room_id, user_id, reason);
+        invite_user_command_(room_id, user_id, reason, acting);
         out.handled_as_command = true;
         return out;
     }
@@ -4440,7 +4606,7 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
         auto cls = tesseract::classify_maps_link(trimmed);
         if (cls.matched)
         {
-            auto sess = active_account_;
+            auto sess = acting;
             auto rid = room_id;
             auto body_copy = body;
             auto fmt_copy = formatted_body;
@@ -4448,23 +4614,29 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
             auto shortlink = cls.shortlink_url;
             bool needs_resolve = cls.needs_resolve;
             double lat = cls.lat, lon = cls.lon;
-            run_async_mut_([sess, rid, needs_resolve, lat, lon, shortlink,
-                            body_copy, fmt_copy, trimmed_copy]() mutable {
+            // Through the pipeline (no prepare step) so it keeps its place
+            // among this room's sends and a slow shortlink resolve shows the
+            // send-button spinner.
+            submit_room_send_(sess, rid, std::string{},
+                              [this, sess, rid, needs_resolve, lat, lon, shortlink,
+                               body_copy, fmt_copy, trimmed_copy](const std::string&) mutable {
                 if (!sess || !sess->client) return;
+                tesseract::Result r;
                 if (needs_resolve)
                 {
                     auto resolved = sess->client->resolve_maps_shortlink(shortlink);
                     if (resolved.matched)
-                        sess->client->send_location(rid, resolved.lat,
-                                                     resolved.lon, trimmed_copy);
+                        r = sess->client->send_location(rid, resolved.lat,
+                                                         resolved.lon, trimmed_copy);
                     else
-                        tesseract::dispatch_compose_send(*sess->client, rid,
-                                                         body_copy, fmt_copy);
+                        r = tesseract::dispatch_compose_send(*sess->client, rid,
+                                                             body_copy, fmt_copy);
                 }
                 else
                 {
-                    sess->client->send_location(rid, lat, lon, trimmed_copy);
+                    r = sess->client->send_location(rid, lat, lon, trimmed_copy);
                 }
+                report_unsent_message_(sess->user_id, rid, body_copy, r);
             });
             out.send_result = tesseract::Result{true, ""};
             return out;
@@ -4476,22 +4648,105 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
     // the one composer mutation that used to run inline (reply/edit/redact/
     // reaction already hop to mut_pool_), so under SH_FFI contention with a
     // heavy exclusive op (start_sync/clear_caches/logout) it could freeze the
-    // composer; off-thread it cannot. timeline.send() only enqueues, so a
-    // synchronous failure here is rare; any failure surfaces via the
-    // per-message ◷→⚠/retry indicator rather than a status-bar message. Report
-    // success so the caller clears the composer immediately (matching the
-    // optimistic clear the popout RoomWindow already does).
-    auto sess = active_account_;
+    // composer; off-thread it cannot. timeline.send() only enqueues, so once
+    // it succeeds any later failure surfaces via the per-message ◷→⚠/retry
+    // indicator. Report success so the caller clears the composer immediately
+    // (matching the optimistic clear the popout RoomWindow already does); a
+    // failure before the message reached the send queue (no local echo, so no
+    // retry row — e.g. the unsubscribed-room fallback, or a slash command's
+    // server call) is reported by report_unsent_message_, which puts the text
+    // back.
+    //
+    // Routed through send_pipeline_: bundled URL previews (when enabled) are
+    // generated on the read pool first, so they never hold up mut_pool_.
+    auto sess = acting;
     auto rid = room_id;
     auto body_copy = body;
     auto fmt_copy = formatted_body;
-    run_async_mut_([sess, rid, body_copy, fmt_copy]() mutable {
+    submit_room_send_(sess, rid, body,
+                      [this, sess, rid, body_copy, fmt_copy](const std::string& previews) mutable {
         if (!sess || !sess->client) return;
-        tesseract::dispatch_compose_send(*sess->client, rid, body_copy,
-                                         fmt_copy);
+        report_unsent_message_(
+            sess->user_id, rid, body_copy,
+            tesseract::dispatch_compose_send(*sess->client, rid, body_copy,
+                                             fmt_copy, previews));
     });
     out.send_result = tesseract::Result{true, ""};
     return out;
+}
+
+void ShellBase::report_unsent_message_(const std::string& user_id,
+                                       const std::string& room_id,
+                                       const std::string& body,
+                                       const tesseract::Result& result)
+{
+    // "cancelled": the account is being torn down (logout / shutdown), so
+    // there is no composer left to restore into.
+    if (result.ok || result.message == "cancelled")
+        return;
+    post_to_ui_(
+        [this, uid = user_id, rid = room_id, text = body, err = result.message]
+        {
+            show_status_message_(
+                tk::trf(tk::tr("Message not sent: {0}"), {err}), 8000);
+            // Only the account that sent it gets its text back: its own
+            // pop-out of the room first (whether or not it is active), then
+            // the main window if that account is the active one.
+            if (auto* w = find_secondary_(rid, uid);
+                w && w->pane()->restore_unsent_text_(text))
+                return;
+            if (!active_account_ || active_account_->user_id != uid)
+                return;
+            if (current_room_id_ == rid && main_room_pane_ &&
+                main_room_pane_->restore_unsent_text_(text))
+                return;
+            // Room not on screen (or its composer has new text): keep the
+            // message as that room's draft, restored when the user returns.
+            if (main_room_pane_ && current_room_id_ != rid)
+                main_room_pane_->stash_unsent_draft_(rid, text);
+        });
+}
+
+void ShellBase::submit_room_send_(const std::shared_ptr<AccountSession>& sess,
+                                  const std::string& room_id,
+                                  const std::string& preview_body,
+                                  SendPipeline::Send send)
+{
+    // Cheap UI-thread pre-filter so plain sends skip the read-pool hop; the
+    // Rust side re-checks the opt-in and does the real link detection.
+    // Slash-command bodies are skipped: their sent text differs from what
+    // was typed (e.g. /spoiler), so a preview could leak hidden content.
+    SendPipeline::Prepare prepare;
+    if (tesseract::Settings::instance().send_bundled_url_previews && sess &&
+        !preview_body.empty() && preview_body[0] != '/' &&
+        preview_body.find("http") != std::string::npos)
+    {
+        prepare = [sess, room_id, preview_body]() -> std::string
+        {
+            if (!sess || !sess->client)
+                return {};
+            return sess->client->generate_url_previews(room_id, preview_body);
+        };
+    }
+    send_pipeline_.submit(room_id, std::move(prepare), std::move(send));
+}
+
+void ShellBase::refresh_send_busy_ui_()
+{
+    auto apply = [this](const std::string& room_id, views::RoomView* rv)
+    {
+        if (!rv || !rv->compose_bar())
+            return;
+        rv->compose_bar()->set_send_busy(!room_id.empty() &&
+                                         send_pipeline_.is_busy(room_id));
+    };
+    if (main_room_pane_)
+        apply(main_room_pane_->room_id(), main_room_pane_->room_view());
+    for (const auto& [rid, w] : secondary_windows_)
+    {
+        if (w)
+            apply(rid, w->room_view());
+    }
 }
 
 void ShellBase::update_space_children_cache_()
@@ -4753,8 +5008,9 @@ void ShellBase::handle_server_info_async_ready_ui_(std::uint64_t /*request_id*/,
                                                     std::string info_json)
 {
     server_info_ = tesseract::ServerInfo::from_json(info_json);
+    push_own_status_to_strip_(); // profile-field support gates the placeholder
     on_server_info_ready_ui_();
-    for (auto& [rid, w] : secondary_windows_)
+    for (auto& [rid, w] : active_account_popouts_())
     {
         if (auto* rv = w->room_view())
             if (auto* h = rv->header())
@@ -4762,7 +5018,7 @@ void ShellBase::handle_server_info_async_ready_ui_(std::uint64_t /*request_id*/,
     }
     if (room_view_ && room_view_->header())
         update_call_btn_visibility_(room_view_->header(), current_room_id_);
-    for (auto& [rid, w] : secondary_windows_)
+    for (auto& [rid, w] : active_account_popouts_())
         if (auto* rv = w->room_view())
             if (auto* h = rv->header())
                 update_call_btn_visibility_(h, rid);
@@ -4963,6 +5219,18 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     {
         handle_send_maps_urls_as_location_toggle_(enabled);
     };
+    view->on_exclude_insecure_devices_changed = [](bool enabled)
+    {
+        // Persist only: the mode is read when a client is built, so it
+        // applies from the next launch (see Settings::exclude_insecure_devices).
+        auto& s = tesseract::Settings::instance();
+        s.exclude_insecure_devices = enabled;
+        s.save_to_disk(tesseract::config_dir());
+    };
+    view->on_bundled_url_previews_changed = [this](bool enabled, bool direct)
+    {
+        handle_bundled_url_previews_toggle_(enabled, direct);
+    };
     view->on_media_previews_changed =
         [this](tesseract::Settings::MediaPreviews mode)
     {
@@ -4992,6 +5260,16 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
         s.camera_device_id = std::move(id);
         s.save_to_disk(tesseract::config_dir());
     };
+    view->set_language_restart_pending(
+        tesseract::Settings::instance().language != tesseract::launch_language());
+    view->on_language_changed = [view](std::string code)
+    {
+        auto& s = tesseract::Settings::instance();
+        s.language = std::move(code);
+        s.save_to_disk(tesseract::config_dir());
+        view->set_language_restart_pending(s.language != tesseract::launch_language());
+    };
+    view->on_restart_requested = [this] { restart_app_(); };
     view->on_clear_caches = [this, view]
     {
         clear_all_caches_([view](uint64_t local, uint64_t sdk, uint64_t memory,
@@ -5430,6 +5708,9 @@ void ShellBase::setup_dm_callbacks()
         {
             ensure_viewer_fullres_(mxc);
         };
+        // The trust row's callbacks are wired per pane (RoomPane::
+        // wire_room_view_, via main_room_pane_->attach()) — don't set
+        // on_trust_requested / on_verify_user / on_withdraw_verification here.
     }
 }
 
@@ -5499,8 +5780,31 @@ void ShellBase::fetch_own_extended_profile_async_()
 void ShellBase::push_own_status_to_strip_()
 {
     if (main_app_ && main_app_->user_info())
+    {
+        main_app_->user_info()->set_status_editable(
+            server_info_.supports_profile_fields &&
+            server_info_.profile_fields_enabled);
         main_app_->user_info()->set_status(own_extended_profile_.status_emoji,
                                            own_extended_profile_.status_text);
+    }
+}
+
+void ShellBase::restart_app_()
+{
+    // Quitting drops the call; make the user end it deliberately, like
+    // clear_all_caches_() does.
+    if (active_call())
+    {
+        show_status_message_(tk::tr("End your call before restarting."));
+        return;
+    }
+    tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
+    if (!spawn_relaunch_(tesseract::relaunch_args()))
+    {
+        show_status_message_(tk::tr("Couldn't restart Tesseract. Please restart it yourself."));
+        return;
+    }
+    quit_app_();
 }
 
 void ShellBase::open_settings_to_account_tab_()
@@ -5690,6 +5994,36 @@ void ShellBase::handle_extended_profile_ready_ui_(std::uint64_t request_id,
         return;
     }
 
+    // InviteDialog lookup: merge into the roster when found, and tell every
+    // open dialog either way (not-found turns the row red).
+    auto iit = pending_invite_resolves_.find(request_id);
+    if (iit != pending_invite_resolves_.end())
+    {
+        auto [mxid, gen] = iit->second;
+        pending_invite_resolves_.erase(iit);
+        if (gen == 0)
+            invite_resolves_inflight_.erase(mxid);
+        else if (invite_resolve_gen_.load() != gen)
+            return; // superseded by a later keystroke
+        auto p = tesseract::UserProfile::from_json(profile_json);
+        std::optional<views::InviteDialog::UserEntry> entry;
+        if (p.exists)
+        {
+            if (p.user_id.empty())
+                p.user_id = mxid;
+            entry = views::InviteDialog::UserEntry{p.user_id, p.display_name,
+                                                   p.avatar_url};
+            // Roster insert only — merge_resolved_user_ would also re-emit
+            // the quick switcher's results.
+            known_users_[p.user_id] =
+                tesseract::RoomMember{p.user_id, p.display_name, p.avatar_url};
+        }
+        for_each_invite_dialog_([&](views::InviteDialog& d)
+                                { d.set_resolved_user(mxid, entry); });
+        request_repaint_();
+        return;
+    }
+
     // Gendered-narration case: resolve the pronoun entry matching the app's
     // current locale, cache its possessive pronoun word, and push it into
     // every currently-open MessageListView (main window + any pop-outs)
@@ -5732,20 +6066,6 @@ void ShellBase::handle_extended_profile_ready_ui_(std::uint64_t request_id,
     }
 }
 
-namespace
-{
-
-// A complete, openable mxid: "@localpart:server" with both parts non-empty.
-bool is_complete_mxid(const std::string& s)
-{
-    if (s.size() < 4 || s.front() != '@')
-        return false;
-    const auto colon = s.find(':');
-    return colon != std::string::npos && colon > 1 && colon + 1 < s.size();
-}
-
-} // namespace
-
 void ShellBase::handle_user_query_(const std::string& query)
 {
     // Strip the leading '@' for substring matching; keep `query` for the
@@ -5765,7 +6085,7 @@ void ShellBase::handle_user_query_(const std::string& query)
 
     // Live-resolve a fully-typed mxid we don't already know, debounced so fast
     // typing coalesces into a single lookup.
-    if (is_complete_mxid(query) &&
+    if (views::is_complete_mxid(query) &&
         known_users_.find(query) == known_users_.end())
     {
         if (!client_) return;
@@ -5935,8 +6255,76 @@ ShellBase::filter_known_users_(const std::string& needle) const
     return out;
 }
 
+void ShellBase::ensure_known_users_roster_()
+{
+    if (!known_users_built_ && !known_users_building_)
+        build_known_users_roster_();
+}
+
+void ShellBase::resolve_invite_user_(const std::string& user_id, bool debounce,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
+{
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (!acting_client || !views::is_complete_mxid(user_id))
+        return;
+    // Already known (e.g. the roster landed since the dialog asked).
+    if (auto it = known_users_.find(user_id); it != known_users_.end())
+    {
+        const auto& m = it->second;
+        views::InviteDialog::UserEntry e{m.user_id, m.display_name, m.avatar_url};
+        for_each_invite_dialog_([&](views::InviteDialog& d)
+                                { d.set_resolved_user(user_id, e); });
+        return;
+    }
+    if (!debounce)
+    {
+        if (!invite_resolves_inflight_.insert(user_id).second)
+            return;
+        auto req_id = next_request_id_++;
+        pending_invite_resolves_[req_id] = {user_id, 0};
+        acting_client->resolve_user_profile_async(req_id, user_id);
+        return;
+    }
+
+    const std::uint64_t gen = invite_resolve_gen_.fetch_add(1) + 1;
+    auto req_id = next_request_id_++;
+    pending_invite_resolves_[req_id] = {user_id, gen};
+    // Capture acting_client on the UI thread; don't read it from the worker.
+    auto* c = acting_client;
+    run_async_(
+        [this, c, req_id, mxid = user_id, gen]()
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            if (invite_resolve_gen_.load() != gen)
+            {
+                post_to_ui_alive_([this, req_id]()
+                                  { pending_invite_resolves_.erase(req_id); });
+                return;
+            }
+            c->resolve_user_profile_async(req_id, mxid);
+        });
+}
+
+void ShellBase::for_each_invite_dialog_(
+    const std::function<void(views::InviteDialog&)>& fn)
+{
+    if (room_view_)
+        if (auto* d = room_view_->invite_dialog(); d && d->is_open())
+            fn(*d);
+    for (const auto& [rid, w] : secondary_windows_)
+    {
+        if (auto* rv = w->room_view())
+            if (auto* d = rv->invite_dialog(); d && d->is_open())
+                fn(*d);
+    }
+}
+
 void ShellBase::emit_user_results_()
 {
+    // Open invite dialogs filter the same roster.
+    for_each_invite_dialog_([](views::InviteDialog& d) { d.refresh_candidates(); });
     if (!main_app_)
         return;
     if (auto* qs = main_app_->quick_switcher())
@@ -6194,12 +6582,15 @@ bool ShellBase::focus_tray_unread_popout_()
     return best && focus_secondary_window_(best->id);
 }
 
-void ShellBase::push_paginate_result_(std::string room_id, bool reached_start)
+void ShellBase::push_paginate_result_(std::string room_id, bool reached_start,
+                                      const std::string& user_id)
 {
-    auto& state = pagination_[room_id];
+    auto& state = pagination_for_(user_id, room_id);
     state.in_flight = false;
     state.reached_start = reached_start;
-    if (room_id == current_room_id_ && room_view_)
+    const bool for_active = user_id.empty() ||
+                            (active_account_ && active_account_->user_id == user_id);
+    if (for_active && room_id == current_room_id_ && room_view_)
     {
         room_view_->set_paginating(false);
         schedule_relayout_();
@@ -6234,14 +6625,16 @@ void ShellBase::handle_paginate_result_ui_(std::uint64_t request_id, bool ok,
     auto [room_id, is_backward] = it->second;
     pending_paginates_.erase(it);
 
-    auto& state = pagination_[room_id];
+    // The result comes from the account that paginated, which for a pop-out
+    // may not be the active one.
+    auto& state = pagination_for_(dispatch_account_(), room_id);
     if (is_backward)
     {
         state.in_flight = false;
         if (ok)
             state.reached_start = reached_start;
 
-        if (room_id == current_room_id_ && room_view_)
+        if (main_window_shows_(room_id) && room_view_)
         {
             room_view_->set_paginating(false);
             schedule_relayout_();
@@ -6293,6 +6686,55 @@ void ShellBase::handle_room_action_complete_ui_(std::uint64_t request_id,
                                                  std::string joined_room_id,
                                                  std::string message)
 {
+    if (auto iit = pending_invites_.find(request_id); iit != pending_invites_.end())
+    {
+        PendingInvite inv = std::move(iit->second);
+        pending_invites_.erase(iit);
+        if (inv.done)
+        {
+            inv.done(ok, message);
+        }
+        else if (!ok)
+        {
+            std::string status = tk::trf(tk::tr("Couldn't invite {0}"), {inv.user_id});
+            if (!message.empty())
+                status += ": " + message;
+            show_status_message_(std::move(status));
+        }
+        return;
+    }
+
+    if (auto mit = pending_moderations_.find(request_id);
+        mit != pending_moderations_.end())
+    {
+        PendingModeration mod = std::move(mit->second);
+        pending_moderations_.erase(mit);
+        if (!ok)
+        {
+            const std::string& who =
+                mod.display_name.empty() ? mod.user_id : mod.display_name;
+            std::string status;
+            switch (mod.action)
+            {
+            case ModerationAction::Kick:
+                status = tk::trf(tk::tr("Couldn't kick {0}"), {who});
+                break;
+            case ModerationAction::Ban:
+                status = tk::trf(tk::tr("Couldn't ban {0}"), {who});
+                break;
+            case ModerationAction::Unban:
+                status = tk::trf(tk::tr("Couldn't unban {0}"), {who});
+                break;
+            }
+            if (!message.empty())
+                status += ": " + message;
+            show_status_message_(std::move(status));
+        }
+        if (mod.done)
+            mod.done(ok);
+        return;
+    }
+
     auto it = pending_room_actions_.find(request_id);
     if (it == pending_room_actions_.end())
         return;
@@ -6533,9 +6975,9 @@ void ShellBase::handle_upload_complete_ui_(std::uint64_t request_id,
     if (!ok)
     {
         std::fprintf(stderr, "[upload] failed: %s\n", message.c_str());
-        std::string status = "Upload failed";
-        if (!message.empty())
-            status += ": " + message;
+        std::string status = message.empty()
+                                 ? tk::tr("Upload failed")
+                                 : tk::trf(tk::tr("Upload failed: {0}"), {message});
         show_status_message_(std::move(status));
     }
 }
@@ -6699,9 +7141,13 @@ views::RoomSearchBar* ShellBase::in_room_search_bar_() const
     return rv ? rv->room_search_bar() : nullptr;
 }
 
-void ShellBase::handle_in_room_search_query_(const std::string& query)
+void ShellBase::handle_in_room_search_query_(const std::string& query,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (query.empty() || !client_)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (query.empty() || !acting_client)
     {
         cancel_debounce_(DebounceSlot::InRoomSearch);
         in_room_search_matches_.clear();
@@ -6720,16 +7166,19 @@ void ShellBase::handle_in_room_search_query_(const std::string& query)
     const std::string search_room_id = in_room_search_room_id_;
     auto* search_rv = in_room_search_active_rv_;
     debounce_(DebounceSlot::InRoomSearch, 120,
-              [this, query, search_room_id, search_rv]()
+              [this, query, search_room_id, search_rv,
+               weak_acting = std::weak_ptr<AccountSession>(acting)]()
     {
-        if (query.empty() || !client_)
+        auto still = weak_acting.lock();
+        Client* const acting_client = still ? still->client.get() : nullptr;
+        if (query.empty() || !acting_client)
             return;
         if (in_room_search_room_id_ != search_room_id ||
             in_room_search_active_rv_ != search_rv)
             return; // room switched or different window started searching
         const std::uint64_t id = ++in_room_search_request_id_;
         in_room_search_pending_[id] = query;
-        client_->search_messages(id, query, in_room_search_room_id_, std::string(), 200);
+        acting_client->search_messages(id, query, in_room_search_room_id_, std::string(), 200);
         if (auto* bar = in_room_search_bar_())
             bar->set_match_status(0, 0, /*searching=*/true, false);
     });
@@ -6991,7 +7440,7 @@ void ShellBase::in_room_search_maybe_paginate_(bool at_oldest_boundary)
     // using the oldest *loaded event* (front of the message list) — this
     // advances each batch even when no new matches have appeared yet.
     {
-        std::string status = "Fetching older messages\xe2\x80\xa6";
+        std::string status = tk::tr("Fetching older messages\xe2\x80\xa6");
         std::uint64_t ts_ms = 0;
         {
             auto* ml = room_view_ ? room_view_->message_list() : nullptr;
@@ -7012,18 +7461,12 @@ void ShellBase::in_room_search_maybe_paginate_(bool at_oldest_boundary)
             localtime_r(&t, &tm_val);
             localtime_r(&now, &now_tm);
 #endif
-            constexpr const char* kMon[] = {
-                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-            char buf[32];
-            if (tm_val.tm_year == now_tm.tm_year)
-                std::snprintf(buf, sizeof(buf), " (oldest: %s %d)",
-                              kMon[tm_val.tm_mon], tm_val.tm_mday);
-            else
-                std::snprintf(buf, sizeof(buf), " (oldest: %s %d, %d)",
-                              kMon[tm_val.tm_mon], tm_val.tm_mday,
-                              tm_val.tm_year + 1900);
-            status += buf;
+            // TRANSLATORS: date patterns, see tk::format_date.
+            const std::string date =
+                tm_val.tm_year == now_tm.tm_year
+                    ? tk::format_date(tm_val, tk::tr("%b %-d"))
+                    : tk::format_date(tm_val, tk::tr("%b %-d, %Y"));
+            status += " " + tk::trf(tk::tr("(oldest: {0})"), {date});
         }
         // Set synchronously on the UI thread so the text is visible before
         // paginate_back_async() fires its completion callback via PostMessage.
@@ -7454,7 +7897,7 @@ void ShellBase::handle_media_view_paginate_result_ui_(
     const std::string room_id = it->second.first;
     pending_paginates_.erase(it);
 
-    auto& state = pagination_[room_id];
+    auto& state = pagination_for_(dispatch_account_(), room_id);
     state.in_flight = false;
     if (ok)
         state.reached_start = reached_start;
@@ -7503,6 +7946,9 @@ void ShellBase::push_room_list_state_(RoomListState state)
 
 void ShellBase::trigger_update_check_()
 {
+    // Disabled at runtime for installs updated by something else (MSIX).
+    if (!tesseract::update_checks_enabled())
+        return;
     // kVersion is generated from PROJECT_VERSION in CMakeLists.txt via version.h.in.
 #if defined(TESSERACT_AUR_PACKAGE)
     // TESSERACT_AUR_PACKAGE is set at configure time with -DTESSERACT_AUR_PACKAGE=pkgname.
@@ -7529,7 +7975,8 @@ void ShellBase::trigger_update_check_()
 #endif
     update_checker_->check_async([this](std::string version, std::string url) {
         show_status_message_(
-            "[Tesseract " + version + " available](" + url + ")",
+            "[" + tk::trf(tk::tr("Tesseract {0} available"), {version}) + "](" +
+                url + ")",
             0,
             true);
     });
@@ -7700,6 +8147,7 @@ ShellBase::RestoreIOResult ShellBase::restore_all_accounts_blocking_(bool networ
         // assumed.
         apply_search_indexing_pref_(*acc.client);
         apply_membership_events_pref_(*acc.client);
+        apply_bundled_url_previews_pref_(*acc.client);
         apply_msc2545_legacy_compat_pref_(*acc.client);
         apply_low_power_pref_(*acc.client);
 
@@ -7801,7 +8249,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     const std::string session_json = pending_client->export_session();
     if (session_json.empty())
     {
-        out.error = "empty session";
+        out.error = tk::tr("empty session");
         return io;
     }
 
@@ -7842,7 +8290,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
                 ec2);
             if (ec2)
             {
-                out.error = "couldn't persist matrix store: " + ec2.message();
+                out.error = tk::trf(tk::tr("couldn't persist matrix store: {0}"), {ec2.message()});
                 return io;
             }
             std::filesystem::remove_all(pending_temp_dir, ec2);
@@ -7854,7 +8302,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     if (!tesseract::SessionStore::save_account_with_key(user_id, session_json,
                                                         store_key))
     {
-        out.error = "couldn't persist session";
+        out.error = tk::tr("couldn't persist session");
         return io;
     }
 
@@ -7936,6 +8384,11 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
         // later calls the real start_sync(), which re-attaches (harmlessly)
         // and spawns the sync tasks this deliberately skips for now.
         session->client->attach_event_handler(session->bridge.get());
+        // Keep the crypto side alive meanwhile: uploads this device's keys and
+        // carries verification traffic both ways, so "Use another device"
+        // and requests from the user's other devices work from the dialog
+        // without the room-list sync that slows recovery operations down.
+        session->client->start_encryption_sync();
     }
     else
     {
@@ -7944,6 +8397,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     }
     apply_search_indexing_pref_(*session->client);
     apply_membership_events_pref_(*session->client);
+    apply_bundled_url_previews_pref_(*session->client);
     apply_msc2545_legacy_compat_pref_(*session->client);
     apply_low_power_pref_(*session->client);
 
@@ -7968,7 +8422,7 @@ void ShellBase::finalize_login_async_(std::function<void(FinalizeLoginResult)> d
     if (user_id.empty())
     {
         FinalizeLoginResult out;
-        out.error = "no user id";
+        out.error = tk::tr("no user id");
         done(std::move(out));
         return;
     }
@@ -8087,15 +8541,43 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
         return false;
     }
 
-    // Unsubscribe the previous account's open room so its timeline stops
-    // streaming updates to the message list when we swap surfaces. Skip rooms
-    // that are pinned by a pop-out subscription. Must happen before client_ is
-    // reassigned to the incoming account. (Phase-1.2 fix, now shared so every
-    // shell — Windows included — gets it.)
-    if (client_ && !current_room_id_.empty() &&
-        room_subscription_refs_.count(current_room_id_) == 0)
+    // Unsubscribe every room timeline the previous account keeps live for
+    // this window — the open room, its tabs, the warm LRU and any thread
+    // timelines — so none of them keeps streaming events through this shell
+    // once the incoming account's rooms are shown. Only the bookkeeping for
+    // these used to be cleared below; the SDK subscriptions stayed live.
+    // Rooms pinned by a pop-out keep their subscription (pop-outs stay open
+    // across a switch). Must happen before client_ is reassigned to the
+    // incoming account.
+    if (client_)
     {
-        client_->unsubscribe_room(current_room_id_);
+        auto pinned = [this](const std::string& rid)
+        { return room_pinned_by_popout_(rid); };
+        std::unordered_set<std::string> rooms;
+        if (!current_room_id_.empty())
+            rooms.insert(current_room_id_);
+        for (const auto& t : tabs_)
+            rooms.insert(t.room_id);
+        rooms.insert(visited_lru_.begin(), visited_lru_.end());
+        for (const auto& kv : room_last_active_)
+            rooms.insert(kv.first);
+        for (auto it = thread_last_active_.begin(); it != thread_last_active_.end();)
+        {
+            if (pinned(it->first.first))
+            {
+                ++it;
+                continue;
+            }
+            client_->unsubscribe_thread(it->first.first, it->first.second);
+            it = thread_last_active_.erase(it);
+        }
+        for (const auto& rid : rooms)
+        {
+            if (rid.empty() || pinned(rid))
+                continue;
+            client_->unsubscribe_room(rid);
+            room_last_active_.erase(rid);
+        }
     }
 
     // Drop per-account, room-id-keyed state so it can't bleed into the next
@@ -8113,6 +8595,15 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
     pending_summaries_.clear();
     unjoined_fetch_retry_.clear();
     active_space_id_.clear();
+    // Rooms kept open by the outgoing account's pop-outs stay subscribed, so
+    // their scroll-back state stays valid: park it under that account.
+    if (active_account_)
+    {
+        auto& parked = other_account_pagination_[active_account_->user_id];
+        for (auto& [rid, st] : pagination_)
+            if (room_pinned_by_popout_(rid))
+                parked[rid] = st;
+    }
     pagination_.clear();
     visited_lru_.clear(); // warm-subscription LRU is per-account
     reply_details_requested_.clear();
@@ -8139,12 +8630,19 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
     cancel_debounce_(DebounceSlot::MessageSearch);
     search_pending_queries_.clear();
 
-    // Save the outgoing account's banner state before switching.
-    if (active_account_)
-    {
-        active_account_->verification_banner_dismissed =
-            verification_banner_dismissed_;
-    }
+    // An interactive verification belongs to the outgoing account's client:
+    // its events stop routing here. Cancel it on that client (still active at
+    // this point) and take down the dialog if it's showing it, or its buttons
+    // would act on the wrong account.
+    if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr;
+        o && o->visible() &&
+        (o->in_verification_step() ||
+         o->step() == views::EncryptionSetupOverlay::Step::VerifyFailed ||
+         o->mode() == views::EncryptionSetupOverlay::Mode::Verify))
+        main_app_->show_encryption_setup(false);
+    cancel_active_verification_();
+    foreign_identity_known_true_ = false;
+    last_device_verified_.reset();
 
     // Multi-window: release the outgoing account's dedicated mapping if it points
     // at this window; the incoming account is claimed at the tail of the switch.
@@ -8161,6 +8659,13 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
     push_own_status_to_strip_(); // blank the strip status until the new fetch
     active_account_ = new_session;
     auto& sess = *active_account_;
+    // ...and bring back the incoming account's own pop-out rooms' state.
+    if (auto it = other_account_pagination_.find(sess.user_id);
+        it != other_account_pagination_.end())
+    {
+        pagination_ = std::move(it->second);
+        other_account_pagination_.erase(it);
+    }
 
     client_ = sess.client.get();
     event_handler_ = sess.bridge.get(); // keep ShellBase's non-owning alias in sync
@@ -8233,9 +8738,13 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
 
     if (settings_controller_)
     {
-        settings_controller_->set_client(client_);
+        settings_controller_->set_client(client_, active_account_);
         settings_controller_->set_up_connector(sess.up_connector.get());
     }
+    // Same for history export: an export started on the outgoing account is
+    // cancelled there, and new requests go through the incoming client.
+    if (history_export_controller_)
+        history_export_controller_->set_client(client_, active_account_);
 
     // Use this account's last-known rooms snapshot if cached; otherwise leave
     // rooms_ empty and wait for the next on_rooms_updated_ callback. The native
@@ -8277,9 +8786,6 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
     current_knock_status_room_id_.clear();
     knock_requests_panel_room_id_.clear();
     current_room_knock_requests_.clear();
-
-    // Load the incoming account's banner state.
-    verification_banner_dismissed_ = sess.verification_banner_dismissed;
 
     // Persist the active selection on disk (active = the new uid).
     auto index = tesseract::SessionStore::load_index();
@@ -8436,7 +8942,7 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     // same guard switch_active_account_impl_ uses. Folded in so Qt/Win get it
     // too (they previously skipped this, leaking a streaming timeline sub).
     if (client_ && !current_room_id_.empty() &&
-        room_subscription_refs_.count(current_room_id_) == 0)
+        !room_pinned_by_popout_(current_room_id_))
     {
         client_->unsubscribe_room(current_room_id_);
     }
@@ -8510,6 +9016,19 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     // Move (not reset) so the barrier task posted below — not this function
     // — drops the session's last ShellBase-held reference, off the UI
     // thread. `sess` is not referenced again after this point.
+    // Pop-outs act through their own account's Client, so this account's
+    // must close before that Client goes; other accounts' pop-outs stay.
+    close_popouts_for_account_(uid);
+
+    // Cancel any export running on this account and drop the controller's
+    // pointer before the Client is handed off for destruction; the
+    // remaining-account branch rebinds it in switch_active_account_impl_.
+    if (history_export_controller_)
+        history_export_controller_->set_client(nullptr);
+    // Same for the settings controller: its jobs hold the session while they
+    // run, and the drain below waits for exactly those references.
+    if (settings_controller_)
+        settings_controller_->set_client(nullptr);
     auto draining_sess = std::move(active_account_);
     client_        = nullptr;
     event_handler_ = nullptr;
@@ -8713,7 +9232,7 @@ ShellBase::~ShellBase()
 
 void ShellBase::register_room_window_(RoomWindowBase* w)
 {
-    secondary_windows_[w->room_id()] = w;
+    secondary_windows_.emplace(w->room_id(), w);
     // See active_popout_media_groups_'s doc comment: this room's ordinary
     // timeline media must not be dropped by should_deliver_ just because
     // it isn't the main window's current room.
@@ -8722,38 +9241,99 @@ void ShellBase::register_room_window_(RoomWindowBase* w)
 
 void ShellBase::unregister_room_window_(RoomWindowBase* w)
 {
-    auto it = secondary_windows_.find(w->room_id());
-    if (it != secondary_windows_.end() && it->second == w)
+    auto [first, last] = secondary_windows_.equal_range(w->room_id());
+    for (auto it = first; it != last; ++it)
     {
+        if (it->second != w)
+            continue;
         secondary_windows_.erase(it);
-        active_popout_media_groups_.erase(media_group_for_room_(w->room_id()));
+        // Another account's pop-out of the same room still needs the group.
+        if (secondary_windows_.count(w->room_id()) == 0)
+            active_popout_media_groups_.erase(media_group_for_room_(w->room_id()));
+        break;
     }
+}
+
+RoomWindowBase* ShellBase::find_secondary_(const std::string& room_id,
+                                           const std::string& user_id) const
+{
+    auto [first, last] = secondary_windows_.equal_range(room_id);
+    for (auto it = first; it != last; ++it)
+        if (it->second && it->second->owner_user_id() == user_id)
+            return it->second;
+    return nullptr;
+}
+
+RoomWindowBase* ShellBase::find_event_secondary_(const std::string& room_id) const
+{
+    return find_secondary_(room_id, dispatch_account_());
+}
+
+std::vector<std::pair<std::string, RoomWindowBase*>>
+ShellBase::active_account_popouts_() const
+{
+    const std::string uid = active_account_ ? active_account_->user_id : std::string{};
+    std::vector<std::pair<std::string, RoomWindowBase*>> out;
+    for (const auto& [rid, w] : secondary_windows_)
+        if (w && w->owner_user_id() == uid)
+            out.emplace_back(rid, w);
+    return out;
+}
+
+RoomPane* ShellBase::reply_pane_for_(const std::string& room_id) const
+{
+    if (event_is_for_active_account_())
+        return main_room_pane_.get();
+    auto* w = find_event_secondary_(room_id);
+    return w ? w->pane() : nullptr;
 }
 
 bool ShellBase::focus_secondary_window_(const std::string& room_id)
 {
-    auto it = secondary_windows_.find(room_id);
-    if (it != secondary_windows_.end() && it->second)
+    if (auto* w = find_secondary_(room_id, dispatch_account_()))
     {
-        it->second->bring_to_front();
+        w->bring_to_front();
         return true;
     }
     return false;
 }
 
-void ShellBase::acquire_room_subscription_(const std::string& room_id)
+bool ShellBase::room_pinned_by_popout_(const std::string& room_id) const
 {
-    int& refs = room_subscription_refs_[room_id];
+    if (!active_account_)
+        return false;
+    auto it = room_subscription_refs_.find(
+        subscription_key_(active_account_->user_id, room_id));
+    return it != room_subscription_refs_.end() && it->second > 0;
+}
+
+void ShellBase::close_popouts_for_account_(const std::string& user_id)
+{
+    // Collect first: each window's destructor unregisters itself.
+    std::vector<RoomWindowBase*> doomed;
+    for (const auto& w : owned_secondary_windows_)
+        if (w && w->owner_user_id() == user_id)
+            doomed.push_back(w.get());
+    for (auto* w : doomed)
+        release_owned_window_(w);
+}
+
+void ShellBase::acquire_room_subscription_(
+    const std::shared_ptr<AccountSession>& sess, const std::string& room_id)
+{
+    if (!sess)
+        return;
+    int& refs = room_subscription_refs_[subscription_key_(sess->user_id, room_id)];
     if (++refs > 1)
     {
         return;
     }
-    // If the main window is already showing this room its subscription is live.
-    if (room_id == current_room_id_)
+    // If the main window is already showing this room for this account, its
+    // subscription is live.
+    if (room_id == current_room_id_ && sess == active_account_)
     {
         return;
     }
-    auto sess = active_account_;
     run_async_mut_(
         [sess, room_id]
         {
@@ -8764,9 +9344,12 @@ void ShellBase::acquire_room_subscription_(const std::string& room_id)
         });
 }
 
-void ShellBase::release_room_subscription_(const std::string& room_id)
+void ShellBase::release_room_subscription_(
+    const std::shared_ptr<AccountSession>& sess, const std::string& room_id)
 {
-    auto it = room_subscription_refs_.find(room_id);
+    if (!sess)
+        return;
+    auto it = room_subscription_refs_.find(subscription_key_(sess->user_id, room_id));
     if (it == room_subscription_refs_.end())
     {
         return;
@@ -8776,11 +9359,18 @@ void ShellBase::release_room_subscription_(const std::string& room_id)
         return;
     }
     room_subscription_refs_.erase(it);
-    if (room_id == current_room_id_)
+    // The room's timeline is torn down below, so its scroll-back state for
+    // this account no longer applies.
+    if (sess != active_account_)
+    {
+        if (auto acct = other_account_pagination_.find(sess->user_id);
+            acct != other_account_pagination_.end())
+            acct->second.erase(room_id);
+    }
+    if (room_id == current_room_id_ && sess == active_account_)
     {
         return;
     }
-    auto sess = active_account_;
     run_async_mut_(
         [sess, room_id]
         {
@@ -8794,14 +9384,17 @@ void ShellBase::release_room_subscription_(const std::string& room_id)
 void ShellBase::dispatch_to_secondary_windows_(
     const std::string& room_id, const std::function<void(RoomWindowBase*)>& fn)
 {
-    auto it = secondary_windows_.find(room_id);
-    if (it != secondary_windows_.end())
-    {
-        fn(it->second);
-    }
+    if (auto* w = find_event_secondary_(room_id))
+        fn(w);
 }
 
-void ShellBase::open_room_in_new_window(const std::string& room_id_in)
+bool ShellBase::popout_accepts_event_(const RoomWindowBase* w) const
+{
+    return w && w->owner_user_id() == dispatch_account_();
+}
+
+void ShellBase::open_room_in_new_window(
+    const std::string& room_id_in, const std::shared_ptr<AccountSession>& on_behalf_of)
 {
     if (room_id_in.empty())
     {
@@ -8812,10 +9405,13 @@ void ShellBase::open_room_in_new_window(const std::string& room_id_in)
     // aliases a TabState's room_id string (see tab_popout_room's identical
     // precedent/comment).
     const std::string room_id = room_id_in;
-    auto it = secondary_windows_.find(room_id);
-    if (it != secondary_windows_.end())
+    // The account the window is for: the caller's pop-out account, or the
+    // active one.
+    const auto acting = acting_session_(on_behalf_of);
+    const std::string uid = acting ? acting->user_id : std::string{};
+    if (auto* existing = find_secondary_(room_id, uid))
     {
-        it->second->bring_to_front();
+        existing->bring_to_front();
         return;
     }
     // Deactivate the tab in this window before opening the pop-out, so the
@@ -8825,11 +9421,15 @@ void ShellBase::open_room_in_new_window(const std::string& room_id_in)
     // doesn't go through tab_popout_room). tab_close() itself now handles
     // the only-tab-open case by deselecting to the empty/BrandView state
     // rather than no-op'ing.
-    if (room_open_in_tab(room_id))
+    if (acting == active_account_ && room_open_in_tab(room_id))
     {
         tab_close(room_id);
     }
+    // RoomWindowBase's constructor takes its owner from here (see
+    // pending_popout_owner_): the platform factory has no parameter for it.
+    pending_popout_owner_ = acting;
     RoomWindowBase* w = create_secondary_room_window_(room_id);
+    pending_popout_owner_.reset();
     if (w)
     {
         // A pop-out opened while in dark mode (with no later theme change)
@@ -8850,14 +9450,27 @@ void ShellBase::open_room_in_new_window(const std::string& room_id_in)
         // itself on resize/move; initialise with valid=false so the first
         // save_popout_geometry_() call writes real coordinates.
         auto& pops = Settings::instance().popout_windows;
+        // Same match as RoomWindowBase's own lookups: this account's entry,
+        // or one saved before entries recorded an account. An old entry is
+        // claimed for this account rather than duplicated — otherwise
+        // closing the window would remove only one of the two, and the
+        // other would reopen it on the next launch.
         auto pit = std::find_if(pops.begin(), pops.end(),
-                                [&room_id](const Settings::PopoutEntry& e)
-                                { return e.room_id == room_id; });
-        if (pit == pops.end())
+                                [&room_id, &uid](const Settings::PopoutEntry& e)
+                                {
+                                    return e.room_id == room_id &&
+                                           (e.user_id.empty() || e.user_id == uid);
+                                });
+        if (pit != pops.end() && pit->user_id.empty() && !uid.empty())
+        {
+            pit->user_id = uid;
+            save_settings_debounced_();
+        }
+        else if (pit == pops.end())
         {
             Settings::PopoutEntry e;
             e.room_id = room_id;
-            e.user_id = active_account_ ? active_account_->user_id : std::string{};
+            e.user_id = uid;
             pops.push_back(std::move(e));
             save_settings_debounced_();
         }
@@ -8879,8 +9492,12 @@ void ShellBase::release_owned_window_(RoomWindowBase* w)
 }
 
 void ShellBase::maybe_send_read_receipt_(const std::string& room_id,
-                                         const std::string& event_id)
+                                         const std::string& event_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
     if (room_id.empty() || event_id.empty())
     {
         return;
@@ -8891,7 +9508,7 @@ void ShellBase::maybe_send_read_receipt_(const std::string& room_id,
         return;
     }
     last = event_id;
-    auto sess = active_account_;
+    auto sess = acting;
     run_async_mut_(
         [sess, room_id, event_id]()
         {
@@ -8918,15 +9535,19 @@ void ShellBase::forget_thread_receipts_(const std::string& room_id)
 
 void ShellBase::maybe_send_thread_read_receipt_(const std::string& room_id,
                                                 const std::string& thread_root,
-                                                const std::string& event_id)
+                                                const std::string& event_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
     if (room_id.empty() || thread_root.empty() || event_id.empty())
         return;
     auto& last = last_sent_thread_receipt_[room_id + "\x1F" + thread_root];
     if (last == event_id)
         return;
     last = event_id;
-    auto sess = active_account_;
+    auto sess = acting;
     run_async_mut_(
         [sess, room_id, thread_root, event_id]()
         {
@@ -8935,14 +9556,18 @@ void ShellBase::maybe_send_thread_read_receipt_(const std::string& room_id,
         });
 }
 
-void ShellBase::mark_all_threads_read_(const std::string& room_id)
+void ShellBase::mark_all_threads_read_(const std::string& room_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
     if (room_id.empty())
         return;
     // The Rust side writes optimistic markers + fires on_threads_updated, so
     // the panel/header dots clear on the next list_room_threads re-query
     // without any local bookkeeping here.
-    auto sess = active_account_;
+    auto sess = acting;
     run_async_mut_(
         [sess, room_id]()
         {
@@ -9000,14 +9625,17 @@ static std::string format_typing_text(const std::vector<std::string>& names)
     }
     if (names.size() == 1)
     {
-        return names[0] + " is typing\xe2\x80\xa6";
+        return tk::trf(tk::tr("{0} is typing\xe2\x80\xa6"), {names[0]});
     }
     if (names.size() == 2)
     {
-        return names[0] + " and " + names[1] + " are typing\xe2\x80\xa6";
+        return tk::trf(tk::tr("{0} and {1} are typing\xe2\x80\xa6"),
+                       {names[0], names[1]});
     }
-    return names[0] + ", " + names[1] + ", and " +
-           std::to_string(names.size() - 2) + " others are typing\xe2\x80\xa6";
+    const long others = static_cast<long>(names.size() - 2);
+    return tk::trf(tk::trn("{0}, {1} and {2} other are typing\xe2\x80\xa6",
+                           "{0}, {1} and {2} others are typing\xe2\x80\xa6", others),
+                   {names[0], names[1], std::to_string(others)});
 }
 
 void ShellBase::handle_account_prefs_updated_ui_(std::string user_id,
@@ -9353,7 +9981,7 @@ void ShellBase::schedule_relayout_()
 void ShellBase::handle_timeline_reset_ui_(std::string room_id,
                                           EventList snapshot)
 {
-    if (room_id == current_room_id_ && room_view_)
+    if (main_window_shows_(room_id) && room_view_)
     {
         // RoomPane::on_timeline_reset applies the same display gate (genuine
         // switch, OR re-population of an emptied view — e.g. logout ->
@@ -9428,7 +10056,7 @@ void ShellBase::handle_timeline_reset_ui_(std::string room_id,
     // room_id against its own media_view_room_id() (may differ from
     // current_room_id_ if the gallery is pinned open on a room the user has
     // since navigated away from) and no-ops if the gallery isn't open for it.
-    if (main_room_pane_)
+    if (main_room_pane_ && event_is_for_active_account_())
     {
         main_room_pane_->feed_gallery_reset_(room_id,
                                              build_rows_(snapshot, room_id));
@@ -9469,7 +10097,7 @@ void ShellBase::handle_message_inserted_ui_(std::string room_id,
     // nothing to insert into yet.
     const std::size_t withheld =
         main_room_pane_ ? main_room_pane_->withheld_count() : 0;
-    if (room_id == current_room_id_ && !in_thread && room_view_ &&
+    if (main_window_shows_(room_id) && !in_thread && room_view_ &&
         index >= withheld)
     {
         prep_row_media_(*ev);
@@ -9478,7 +10106,7 @@ void ShellBase::handle_message_inserted_ui_(std::string room_id,
             main_room_pane_->ensure_reply_details_(ev->event_id);
         }
         room_view_->insert_message(
-            index - withheld, tesseract::views::make_row_data(*ev, my_user_id_));
+            index - withheld, tesseract::views::make_row_data(*ev, dispatch_account_()));
         if (main_room_pane_)
             main_room_pane_->retry_stale_reply_previews_({ev->event_id});
         schedule_relayout_(); // coalesce bursts into one layout pass
@@ -9490,10 +10118,10 @@ void ShellBase::handle_message_inserted_ui_(std::string room_id,
     // known as of the last (re)load, not a strictly live view.
     // feed_gallery_live_ checks room_id against main_room_pane_'s own
     // media_view_room_id() and self-filters to Image/Video.
-    if (!in_thread && main_room_pane_)
+    if (!in_thread && main_room_pane_ && event_is_for_active_account_())
     {
         main_room_pane_->feed_gallery_live_(
-            room_id, tesseract::views::make_row_data(*ev, my_user_id_),
+            room_id, tesseract::views::make_row_data(*ev, dispatch_account_()),
             /*prepend=*/false);
     }
     if (!in_thread)
@@ -9522,7 +10150,7 @@ void ShellBase::handle_message_updated_ui_(std::string room_id,
     // without paying for prep_row_media_/ensure_reply_details_ first.
     const std::size_t withheld =
         main_room_pane_ ? main_room_pane_->withheld_count() : 0;
-    if (room_id == current_room_id_ && !in_thread && room_view_ &&
+    if (main_window_shows_(room_id) && !in_thread && room_view_ &&
         index >= withheld)
     {
         // NOT delegated to main_room_pane_->on_message_updated() — that
@@ -9540,7 +10168,7 @@ void ShellBase::handle_message_updated_ui_(std::string room_id,
             main_room_pane_->ensure_reply_details_(ev->event_id);
         }
         room_view_->update_message(
-            index - withheld, tesseract::views::make_row_data(*ev, my_user_id_));
+            index - withheld, tesseract::views::make_row_data(*ev, dispatch_account_()));
         if (!ev->in_reply_to_id.empty() && !ev->in_reply_to_sender_name.empty())
         {
             // Reply metadata just resolved (or this is a subsequent update
@@ -9576,7 +10204,7 @@ void ShellBase::handle_message_removed_ui_(std::string room_id,
     // translation this needs.
     const std::size_t withheld =
         main_room_pane_ ? main_room_pane_->withheld_count() : 0;
-    if (room_id == current_room_id_ && room_view_ && index >= withheld)
+    if (main_window_shows_(room_id) && room_view_ && index >= withheld)
     {
         room_view_->remove_message(index - withheld);
         schedule_relayout_(); // coalesce bursts into one layout pass
@@ -9601,7 +10229,7 @@ void ShellBase::handle_messages_prepended_ui_(std::string room_id,
 {
     const bool in_thread = !events.empty() && events.front() &&
                            !events.front()->thread_root_id.empty();
-    if (room_id == current_room_id_ && !in_thread && room_view_)
+    if (main_window_shows_(room_id) && !in_thread && room_view_)
     {
         std::vector<views::MessageRowData> rows;
         std::vector<std::string> new_ids;
@@ -9617,7 +10245,7 @@ void ShellBase::handle_messages_prepended_ui_(std::string room_id,
             if (!ev->in_reply_to_id.empty() && main_room_pane_)
                 main_room_pane_->ensure_reply_details_(ev->event_id);
             new_ids.push_back(ev->event_id);
-            rows.push_back(tesseract::views::make_row_data(*ev, my_user_id_));
+            rows.push_back(tesseract::views::make_row_data(*ev, dispatch_account_()));
         }
         if (!rows.empty())
         {
@@ -9642,7 +10270,7 @@ void ShellBase::handle_messages_prepended_ui_(std::string room_id,
     // rounds resolve. Filtering to Image/Video here (not inside
     // feed_gallery_prepend_batch_) avoids converting every non-media event
     // in the batch just to have it dropped there.
-    if (!in_thread && main_room_pane_)
+    if (!in_thread && main_room_pane_ && event_is_for_active_account_())
     {
         std::vector<views::MessageRowData> media_rows;
         for (auto& ev : events)
@@ -9650,7 +10278,7 @@ void ShellBase::handle_messages_prepended_ui_(std::string room_id,
             if (!ev || (ev->type != tesseract::EventType::Image &&
                        ev->type != tesseract::EventType::Video))
                 continue;
-            media_rows.push_back(tesseract::views::make_row_data(*ev, my_user_id_));
+            media_rows.push_back(tesseract::views::make_row_data(*ev, dispatch_account_()));
         }
         if (!media_rows.empty())
         {
@@ -9677,7 +10305,7 @@ void ShellBase::handle_messages_appended_ui_(std::string room_id,
 {
     const bool in_thread = !events.empty() && events.front() &&
                            !events.front()->thread_root_id.empty();
-    if (room_id == current_room_id_ && !in_thread && room_view_)
+    if (main_window_shows_(room_id) && !in_thread && room_view_)
     {
         std::vector<views::MessageRowData> rows;
         std::vector<std::string> new_ids;
@@ -9693,7 +10321,7 @@ void ShellBase::handle_messages_appended_ui_(std::string room_id,
             if (!ev->in_reply_to_id.empty() && main_room_pane_)
                 main_room_pane_->ensure_reply_details_(ev->event_id);
             new_ids.push_back(ev->event_id);
-            rows.push_back(tesseract::views::make_row_data(*ev, my_user_id_));
+            rows.push_back(tesseract::views::make_row_data(*ev, dispatch_account_()));
         }
         if (!rows.empty())
         {
@@ -9724,7 +10352,7 @@ void ShellBase::handle_messages_updated_batch_ui_(std::string room_id,
     // full-timeline-relative as the single-update path's.
     const std::size_t withheld =
         main_room_pane_ ? main_room_pane_->withheld_count() : 0;
-    if (room_id == current_room_id_ && !in_thread && room_view_)
+    if (main_window_shows_(room_id) && !in_thread && room_view_)
     {
         for (std::size_t i = 0; i < indices.size() && i < events.size(); ++i)
         {
@@ -9740,7 +10368,7 @@ void ShellBase::handle_messages_updated_batch_ui_(std::string room_id,
                 main_room_pane_->ensure_reply_details_(ev->event_id);
             room_view_->update_message(
                 indices[i] - withheld,
-                tesseract::views::make_row_data(*ev, my_user_id_));
+                tesseract::views::make_row_data(*ev, dispatch_account_()));
         }
         if (!indices.empty())
             schedule_relayout_();
@@ -9761,9 +10389,9 @@ void ShellBase::handle_thread_messages_prepended_ui_(std::string room_id,
 {
     // Fan out to secondary window for this room if it has this thread open.
     {
-        auto it = secondary_windows_.find(room_id);
-        if (it != secondary_windows_.end() && it->second &&
-            it->second->popout_thread_root() == thread_root)
+        RoomWindowBase* sw = find_event_secondary_(room_id);
+        if (sw &&
+            sw->popout_thread_root() == thread_root)
         {
             std::vector<views::MessageRowData> rows;
             std::vector<std::string> new_ids;
@@ -9778,25 +10406,25 @@ void ShellBase::handle_thread_messages_prepended_ui_(std::string room_id,
                 if (!ev->in_reply_to_id.empty())
                     reply_ids.push_back(ev->event_id);
                 new_ids.push_back(ev->event_id);
-                rows.push_back(tesseract::views::make_row_data(*ev, my_user_id_));
+                rows.push_back(tesseract::views::make_row_data(*ev, dispatch_account_()));
             }
             if (!rows.empty())
             {
-                it->second->apply_thread_prepend_(std::move(rows));
+                sw->apply_thread_prepend_(std::move(rows));
                 // Resolve AFTER the rows exist in the thread's own list —
                 // ensure_thread_reply_details_'s root-row case needs to find
                 // its row there to copy an already-resolved main-list
                 // preview into it.
                 for (const auto& rid : reply_ids)
-                    it->second->ensure_thread_reply_details_(rid);
+                    sw->ensure_thread_reply_details_(rid);
                 // Backward pagination is exactly how older thread history
                 // reaches the client — retry any already-rendered reply row
                 // still waiting on one of these newly-loaded events.
-                it->second->retry_stale_thread_reply_previews_(new_ids);
+                sw->retry_stale_thread_reply_previews_(new_ids);
             }
         }
     }
-    if (room_id != current_room_id_ || !main_room_pane_ ||
+    if (!main_window_shows_(room_id) || !main_room_pane_ ||
         thread_root != main_room_pane_->thread_root())
         return;
     if (!room_view_)
@@ -9817,7 +10445,7 @@ void ShellBase::handle_thread_messages_prepended_ui_(std::string room_id,
         if (!ev->in_reply_to_id.empty())
             reply_ids.push_back(ev->event_id);
         new_ids.push_back(ev->event_id);
-        rows.push_back(tesseract::views::make_row_data(*ev, my_user_id_));
+        rows.push_back(tesseract::views::make_row_data(*ev, dispatch_account_()));
     }
     if (!rows.empty())
     {
@@ -9835,9 +10463,9 @@ void ShellBase::handle_thread_messages_appended_ui_(std::string room_id,
 {
     // Fan out to secondary window for this room if it has this thread open.
     {
-        auto it = secondary_windows_.find(room_id);
-        if (it != secondary_windows_.end() && it->second &&
-            it->second->popout_thread_root() == thread_root)
+        RoomWindowBase* sw = find_event_secondary_(room_id);
+        if (sw &&
+            sw->popout_thread_root() == thread_root)
         {
             std::vector<views::MessageRowData> rows;
             std::vector<std::string> new_ids;
@@ -9852,18 +10480,18 @@ void ShellBase::handle_thread_messages_appended_ui_(std::string room_id,
                 if (!ev->in_reply_to_id.empty())
                     reply_ids.push_back(ev->event_id);
                 new_ids.push_back(ev->event_id);
-                rows.push_back(tesseract::views::make_row_data(*ev, my_user_id_));
+                rows.push_back(tesseract::views::make_row_data(*ev, dispatch_account_()));
             }
             if (!rows.empty())
             {
-                it->second->apply_thread_append_(std::move(rows));
+                sw->apply_thread_append_(std::move(rows));
                 for (const auto& rid : reply_ids)
-                    it->second->ensure_thread_reply_details_(rid);
-                it->second->retry_stale_thread_reply_previews_(new_ids);
+                    sw->ensure_thread_reply_details_(rid);
+                sw->retry_stale_thread_reply_previews_(new_ids);
             }
         }
     }
-    if (room_id != current_room_id_ || !main_room_pane_ ||
+    if (!main_window_shows_(room_id) || !main_room_pane_ ||
         thread_root != main_room_pane_->thread_root())
         return;
     if (!room_view_)
@@ -9884,7 +10512,7 @@ void ShellBase::handle_thread_messages_appended_ui_(std::string room_id,
         if (!ev->in_reply_to_id.empty())
             reply_ids.push_back(ev->event_id);
         new_ids.push_back(ev->event_id);
-        rows.push_back(tesseract::views::make_row_data(*ev, my_user_id_));
+        rows.push_back(tesseract::views::make_row_data(*ev, dispatch_account_()));
     }
     if (!rows.empty())
     {
@@ -9902,14 +10530,14 @@ void ShellBase::handle_thread_reset_ui_(std::string room_id,
 {
     // Determine whether main window and/or a secondary window need this update.
     const bool main_matches =
-        (room_id == current_room_id_ && main_room_pane_ &&
+        (main_window_shows_(room_id) && main_room_pane_ &&
          thread_root == main_room_pane_->thread_root());
     RoomWindowBase* popout_win = nullptr;
     {
-        auto it = secondary_windows_.find(room_id);
-        if (it != secondary_windows_.end() && it->second &&
-            it->second->popout_thread_root() == thread_root)
-            popout_win = it->second;
+        RoomWindowBase* sw = find_event_secondary_(room_id);
+        if (sw &&
+            sw->popout_thread_root() == thread_root)
+            popout_win = sw;
     }
     if (!main_matches && !popout_win)
         return;
@@ -9928,8 +10556,15 @@ void ShellBase::handle_thread_reset_ui_(std::string room_id,
         if (!ev->in_reply_to_id.empty())
             reply_ids.push_back(ev->event_id);
         ids.push_back(ev->event_id);
-        rows.push_back(tesseract::views::make_row_data(*ev, my_user_id_));
+        rows.push_back(tesseract::views::make_row_data(*ev, dispatch_account_()));
     }
+
+    // Every thread reset comes from a freshly-built subscribe_thread timeline
+    // with no reply details resolved yet. Dedup entries for these rows were
+    // recorded against the previous (now dropped) timeline, so leaving them
+    // would skip the fetch and leave a reopened thread's quotes unresolved.
+    for (const auto& rid : reply_ids)
+        reply_details_requested_.erase(reply_details_key_(dispatch_account_(), rid));
 
     // A full reset can land a reply row and its quoted target in the same
     // snapshot (see handle_timeline_reset_ui_'s identical rationale for the
@@ -9962,28 +10597,28 @@ void ShellBase::handle_thread_inserted_ui_(std::string room_id,
         return;
     // Fan out to secondary window if it has this thread open.
     {
-        auto it = secondary_windows_.find(room_id);
-        if (it != secondary_windows_.end() && it->second &&
-            it->second->popout_thread_root() == thread_root)
+        RoomWindowBase* sw = find_event_secondary_(room_id);
+        if (sw &&
+            sw->popout_thread_root() == thread_root)
         {
             prep_row_media_(*ev);
-            it->second->apply_thread_insert_(
-                index, tesseract::views::make_row_data(*ev, my_user_id_));
+            sw->apply_thread_insert_(
+                index, tesseract::views::make_row_data(*ev, dispatch_account_()));
             // Resolve/sync AFTER the row exists in the thread's own list —
             // ensure_thread_reply_details_'s root-row case needs to find it
             // there to copy an already-resolved main-list preview into it.
             if (!ev->in_reply_to_id.empty())
-                it->second->ensure_thread_reply_details_(ev->event_id);
-            it->second->retry_stale_thread_reply_previews_({ev->event_id});
+                sw->ensure_thread_reply_details_(ev->event_id);
+            sw->retry_stale_thread_reply_previews_({ev->event_id});
         }
     }
-    if (room_id != current_room_id_ || !main_room_pane_ ||
+    if (!main_window_shows_(room_id) || !main_room_pane_ ||
         thread_root != main_room_pane_->thread_root())
         return;
     prep_row_media_(*ev);
     apply_thread_message_insert_(
         thread_root, index,
-        tesseract::views::make_row_data(*ev, my_user_id_));
+        tesseract::views::make_row_data(*ev, dispatch_account_()));
     if (!ev->in_reply_to_id.empty())
         main_room_pane_->ensure_thread_reply_details_(ev->event_id);
     main_room_pane_->retry_stale_thread_reply_previews_({ev->event_id});
@@ -9998,27 +10633,27 @@ void ShellBase::handle_thread_updated_ui_(std::string room_id,
         return;
     // Fan out to secondary window if it has this thread open.
     {
-        auto it = secondary_windows_.find(room_id);
-        if (it != secondary_windows_.end() && it->second &&
-            it->second->popout_thread_root() == thread_root)
+        RoomWindowBase* sw = find_event_secondary_(room_id);
+        if (sw &&
+            sw->popout_thread_root() == thread_root)
         {
             prep_row_media_(*ev);
-            it->second->apply_thread_update_(
-                index, tesseract::views::make_row_data(*ev, my_user_id_));
+            sw->apply_thread_update_(
+                index, tesseract::views::make_row_data(*ev, dispatch_account_()));
             // Resolve AFTER apply_thread_update_ — it overwrites the row
             // with freshly-converted (possibly still-unresolved) data, which
             // would otherwise clobber a sync done beforehand.
             if (!ev->in_reply_to_id.empty())
-                it->second->ensure_thread_reply_details_(ev->event_id);
+                sw->ensure_thread_reply_details_(ev->event_id);
         }
     }
-    if (room_id != current_room_id_ || !main_room_pane_ ||
+    if (!main_window_shows_(room_id) || !main_room_pane_ ||
         thread_root != main_room_pane_->thread_root())
         return;
     prep_row_media_(*ev);
     apply_thread_message_update_(
         thread_root, index,
-        tesseract::views::make_row_data(*ev, my_user_id_));
+        tesseract::views::make_row_data(*ev, dispatch_account_()));
     if (!ev->in_reply_to_id.empty())
         main_room_pane_->ensure_thread_reply_details_(ev->event_id);
 }
@@ -10029,12 +10664,12 @@ void ShellBase::handle_thread_removed_ui_(std::string room_id,
 {
     // Fan out to secondary window if it has this thread open.
     {
-        auto it = secondary_windows_.find(room_id);
-        if (it != secondary_windows_.end() && it->second &&
-            it->second->popout_thread_root() == thread_root)
-            it->second->apply_thread_remove_(index);
+        RoomWindowBase* sw = find_event_secondary_(room_id);
+        if (sw &&
+            sw->popout_thread_root() == thread_root)
+            sw->apply_thread_remove_(index);
     }
-    if (room_id != current_room_id_ || !main_room_pane_ ||
+    if (!main_window_shows_(room_id) || !main_room_pane_ ||
         thread_root != main_room_pane_->thread_root())
         return;
     apply_thread_message_remove_(thread_root, index);
@@ -10048,13 +10683,14 @@ void ShellBase::handle_threads_updated_ui_(std::string room_id)
     // Always update the threads button on any secondary window showing this
     // room (a popout may have a different room_id than current_room_id_).
     {
-        auto it = secondary_windows_.find(room_id);
-        if (it != secondary_windows_.end() && it->second && it->second->room_view())
+        RoomWindowBase* sw = find_event_secondary_(room_id);
+        auto owner = sw ? sw->owner_session() : nullptr;
+        if (sw && sw->room_view() && owner && owner->client)
         {
-            auto threads = client_->list_room_threads(room_id);
+            auto threads = owner->client->list_room_threads(room_id);
             const auto agg = views::aggregate_threads(threads);
-            it->second->room_view()->set_show_threads_button(!threads.empty());
-            it->second->room_view()->set_threads_unread(agg.any_unread,
+            sw->room_view()->set_show_threads_button(!threads.empty());
+            sw->room_view()->set_threads_unread(agg.any_unread,
                                                         agg.any_mention);
         }
     }
@@ -10062,7 +10698,7 @@ void ShellBase::handle_threads_updated_ui_(std::string room_id)
     // Update visibility regardless of panel state — the threads button needs
     // the latest list to decide whether to render. apply_threads_list_ no-ops
     // cheaply when the thread-list panel widget isn't around.
-    if (room_id != current_room_id_)
+    if (!main_window_shows_(room_id))
         return;
     apply_threads_list_(client_->list_room_threads(room_id));
     // on_near_bottom only fires on user scroll, so it can't bootstrap the
@@ -10076,9 +10712,11 @@ void ShellBase::handle_threads_updated_ui_(std::string room_id)
 
 void ShellBase::handle_knock_requests_updated_ui_(std::string room_id)
 {
-    if (!client_ || room_id != knock_requests_panel_room_id_)
+    auto sess = knock_requests_panel_account_.lock();
+    if (!sess || !sess->client || room_id != knock_requests_panel_room_id_ ||
+        dispatch_account_() != sess->user_id)
         return; // stale poke from a room whose panel isn't (or is no longer) open
-    current_room_knock_requests_ = client_->list_knock_requests(room_id);
+    current_room_knock_requests_ = sess->client->list_knock_requests(room_id);
     on_knock_requests_panel_updated_();
 }
 
@@ -10201,7 +10839,7 @@ void ShellBase::handle_image_packs_updated_ui_()
         if (auto* v = room_view_->room_settings_view())
             seed_image_pack_tab_(v->room_id(), v);
     }
-    for (const auto& [rid, w] : secondary_windows_)
+    for (const auto& [rid, w] : active_account_popouts_())
     {
         if (w->room_view())
         {
@@ -10213,7 +10851,7 @@ void ShellBase::handle_image_packs_updated_ui_()
 
 void ShellBase::handle_bot_commands_updated_ui_(std::string room_id)
 {
-    if (room_id != current_room_id_)
+    if (!main_window_shows_(room_id))
         return;
     on_active_room_bot_commands_changed_ui_();
 }
@@ -10255,7 +10893,7 @@ void ShellBase::handle_typing_changed_ui_(std::string room_id,
 {
     const std::string text = format_typing_text(names);
     const bool visible = !names.empty();
-    if (room_id == current_room_id_)
+    if (main_window_shows_(room_id))
     {
         update_typing_bar_(text, visible);
     }
@@ -10264,6 +10902,32 @@ void ShellBase::handle_typing_changed_ui_(std::string room_id,
                                    {
                                        w->on_typing_changed(text, visible);
                                    });
+}
+
+void ShellBase::handle_identity_status_changed_ui_(
+    std::string room_id, std::vector<tesseract::IdentityWarning> warnings)
+{
+    if (main_window_shows_(room_id) && main_room_pane_)
+    {
+        main_room_pane_->on_identity_status_changed(room_id, warnings);
+    }
+    dispatch_to_secondary_windows_(room_id,
+                                   [&](RoomWindowBase* w)
+                                   {
+                                       w->on_identity_status_changed(room_id,
+                                                                     warnings);
+                                   });
+}
+
+void ShellBase::handle_user_identities_changed_ui_(std::vector<std::string> user_ids)
+{
+    // Every pane of this account (main window and pop-outs) re-reads its
+    // open profile's trust row if it shows one of these users.
+    if (event_is_for_active_account_() && main_room_pane_)
+        main_room_pane_->on_user_identities_changed(user_ids);
+    for (const auto& w : owned_secondary_windows_)
+        if (w && w->pane() && popout_accepts_event_(w.get()))
+            w->pane()->on_user_identities_changed(user_ids);
 }
 
 void ShellBase::handle_presence_changed_ui_(const std::string& user_id,
@@ -10678,6 +11342,22 @@ void ShellBase::handle_send_maps_urls_as_location_toggle_(bool enabled)
     s.save_to_disk(tesseract::config_dir());
 }
 
+void ShellBase::handle_bundled_url_previews_toggle_(bool enabled, bool direct)
+{
+    auto& s = tesseract::Settings::instance();
+    s.send_bundled_url_previews = enabled;
+    s.fetch_url_previews_directly = direct;
+    s.save_to_disk(tesseract::config_dir());
+
+    // Global preference, per-account flag: push to every logged-in client.
+    // A plain atomic store on the Rust side — safe on the UI thread.
+    for (const auto& sess : account_manager_.accounts())
+    {
+        if (sess && sess->client)
+            sess->client->set_bundled_url_previews(enabled, direct);
+    }
+}
+
 #ifdef TESSERACT_UPDATE_CHECKS
 void ShellBase::handle_check_for_updates_toggle_(bool enabled)
 {
@@ -10706,6 +11386,15 @@ void ShellBase::apply_membership_events_pref_(tesseract::Client& client)
     // the Rust side — non-blocking.
     if (tesseract::Settings::instance().show_room_join_leave_events)
         client.set_show_membership_events(true);
+}
+
+void ShellBase::apply_bundled_url_previews_pref_(tesseract::Client& client)
+{
+    // Rust-side flags default to off; push only when the preference is on.
+    // Plain atomic stores — non-blocking.
+    const auto& s = tesseract::Settings::instance();
+    if (s.send_bundled_url_previews)
+        client.set_bundled_url_previews(true, s.fetch_url_previews_directly);
 }
 
 void ShellBase::apply_low_power_pref_(tesseract::Client& client)
@@ -11329,7 +12018,8 @@ bool ShellBase::room_open_in_tab(const std::string& room_id) const
 
 bool ShellBase::room_open_in_window(const std::string& room_id) const
 {
-    return secondary_windows_.count(room_id) != 0;
+    return find_secondary_(room_id, active_account_ ? active_account_->user_id
+                                                    : std::string{}) != nullptr;
 }
 
 bool ShellBase::try_restore_tab_session_(
@@ -11569,7 +12259,7 @@ void ShellBase::clear_all_caches_(
         show_status_message_(tk::tr("End your call before clearing the cache."));
         return;
     }
-    if (!active_verification_flow_id_.empty())
+    if (encryption_flow_.has_flow())
     {
         show_status_message_(
             tk::tr("Finish verifying your device before clearing the cache."));
@@ -11712,6 +12402,7 @@ void ShellBase::restart_sdk_begin_(
     unjoined_fetch_retry_.clear();
     active_space_id_.clear();
     pagination_.clear();
+    other_account_pagination_.clear(); // every pop-out was closed above
     visited_lru_.clear();
     reply_details_requested_.clear();
     // MSC4278 per-account gating state.
@@ -11942,7 +12633,7 @@ void ShellBase::apply_threads_list_(std::vector<ThreadInfo> threads)
     room_view_->set_threads_unread(agg.any_unread, agg.any_mention);
 
     // Fan out to any popout window currently showing the same room.
-    for (auto& [rid, w] : secondary_windows_)
+    for (auto& [rid, w] : active_account_popouts_())
     {
         if (rid == current_room_id_ && w->room_view())
         {
@@ -12389,9 +13080,11 @@ void ShellBase::prune_warm_subscriptions_()
         keep.insert(current_room_id_);
     for (const auto& t : tabs_)
         keep.insert(t.room_id);
-    for (const auto& kv : room_subscription_refs_)
-        if (kv.second > 0)
-            keep.insert(kv.first); // pinned by a pop-out window
+    // Pinned by one of this (the active) account's pop-outs. visited_lru_ is
+    // the active account's, so other accounts' pins don't apply here.
+    for (const auto& r : visited_lru_)
+        if (room_pinned_by_popout_(r))
+            keep.insert(r);
     // Favorite rooms, once opened, stay warm for the rest of the session so
     // switching back is always instant (no timeline rebuild / gap-resolving
     // /messages). They bypass the kWarmRoomsMax cap; un-favouriting drops a room
@@ -12526,7 +13219,8 @@ void ShellBase::ensure_settings_controller_()
             if (!decoded.frames.empty())
                 return std::shared_ptr<tk::Image>(std::move(decoded.frames.front()));
             return nullptr;
-        });
+        },
+        active_account_);
     // UnifiedPush up-connector (Linux only); nullptr elsewhere — a no-op.
     settings_controller_->set_up_connector(
         active_account_ ? active_account_->up_connector.get() : nullptr);
@@ -12538,7 +13232,8 @@ void ShellBase::ensure_history_export_controller_()
     history_export_controller_ = std::make_unique<tesseract::HistoryExportController>(
         client_,
         [this](std::function<void()> fn) { post_to_ui_(std::move(fn)); },
-        [this](std::function<void()> fn) { run_async_(std::move(fn)); });
+        [this](std::function<void()> fn) { run_async_(std::move(fn)); },
+        active_account_);
 
     // Wire the shared ExportHistoryDialog's request callbacks to the
     // controller, and the controller's results back into the dialog.
@@ -12636,20 +13331,25 @@ void ShellBase::ensure_history_export_controller_()
     }
 }
 
-void ShellBase::pick_and_set_room_avatar_(const std::string& room_id)
+void ShellBase::pick_and_set_room_avatar_(const std::string& room_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    auto* c = client_;
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    auto* c = acting_client;
     if (!c)
         return;
 
     pick_image_file_(
-        [this, c, room_id](std::vector<uint8_t> bytes, std::string mime) mutable
+        [this, c, weak_acting = std::weak_ptr<AccountSession>(acting),
+         room_id](std::vector<uint8_t> bytes, std::string mime) mutable
         {
             if (bytes.empty())
                 return; // cancelled
-            if (c != client_)
+            auto sess = weak_acting.lock();
+            if (!sess || sess->client.get() != c)
                 return; // logged out between pick and callback
-            auto sess = active_account_;
             run_async_mut_(
                 [sess, room_id,
                  bytes = std::move(bytes),
@@ -12666,16 +13366,21 @@ void ShellBase::pick_and_set_room_avatar_(const std::string& room_id)
 }
 
 void ShellBase::stage_room_settings_avatar_upload_(const std::string& room_id,
-                                                   views::RoomSettingsView* target)
+                                                   views::RoomSettingsView* target,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    auto* c = client_;
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    auto* c = acting_client;
     if (!c || !target)
         return;
 
     target->set_avatar_busy(true);
 
     pick_image_file_(
-        [this, c, room_id, target](std::vector<uint8_t> bytes, std::string mime) mutable
+        [this, c, weak_acting = std::weak_ptr<AccountSession>(acting), room_id,
+         target](std::vector<uint8_t> bytes, std::string mime) mutable
         {
             if (bytes.empty())
             {
@@ -12686,7 +13391,8 @@ void ShellBase::stage_room_settings_avatar_upload_(const std::string& room_id,
                 request_repaint_();
                 return;
             }
-            if (c != client_)
+            auto still = weak_acting.lock();
+            if (!still || still->client.get() != c)
                 return; // logged out between pick and callback
 
             const std::uint64_t gen = target->open_generation();
@@ -12792,7 +13498,7 @@ ShellBase::RoomSettingsCommitOutcome ShellBase::apply_room_settings_(
     RoomSettingsCommitOutcome out;
     if (!client)
     {
-        out.error = "not logged in";
+        out.error = tk::tr("not logged in");
         return out;
     }
     std::vector<std::string> errors;
@@ -12906,14 +13612,6 @@ bool ShellBase::foreign_cross_signing_identity_() const
     return read_own_identity_exists_() && !read_have_cross_signing_keys_();
 }
 
-void ShellBase::dismiss_encryption_setup_after_verification_()
-{
-    encryption_setup_dismissed_ = true;
-    if (main_app_)
-        main_app_->show_encryption_setup(false);
-    request_relayout_();
-}
-
 void ShellBase::handle_offline_ui_()
 {
     offline_ = true;
@@ -12936,6 +13634,69 @@ void ShellBase::handle_enable_recovery_progress_ui_(uint8_t  step,
     if (auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr)
         ov->advance_progress(step, recovery_key, backed_up, total);
 }
+
+namespace
+{
+// Backstop for the dialog's Confirming step (after "They match").
+constexpr int kConfirmTimeoutMs = 30'000;
+
+// Write `text` (a secret — the recovery key) to the UTF-8 `path`. On POSIX
+// the file is owner-only (0600) from the moment it exists — including when
+// overwriting an existing file — and failing to make it so is an error, not
+// a silently world-readable key. Windows has no mode bits; files in the
+// user's profile already inherit per-user ACLs.
+bool write_private_text_file_(const std::string& path, const std::string& text,
+                              std::string& error)
+{
+#ifdef _WIN32
+    namespace fs = std::filesystem;
+    const fs::path p(reinterpret_cast<const char8_t*>(path.c_str()));
+    std::ofstream f(p, std::ios::binary | std::ios::trunc);
+    if (f) f.write(text.data(), static_cast<std::streamsize>(text.size()));
+    if (f) f.close();
+    if (!f)
+    {
+        error = tk::tr("The file couldn't be written.");
+        return false;
+    }
+    return true;
+#else
+    const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (fd < 0)
+    {
+        error = std::strerror(errno);
+        return false;
+    }
+    auto fail = [&](int err) {
+        error = std::strerror(err);
+        ::close(fd);
+        return false;
+    };
+    // O_CREAT's mode only applies to a new file; tighten an existing one
+    // before any of the secret goes in.
+    if (::fchmod(fd, S_IRUSR | S_IWUSR) != 0) return fail(errno);
+    const char* data = text.data();
+    std::size_t left = text.size();
+    while (left > 0)
+    {
+        const ssize_t n = ::write(fd, data, left);
+        if (n < 0)
+        {
+            if (errno == EINTR) continue;
+            return fail(errno);
+        }
+        data += n;
+        left -= static_cast<std::size_t>(n);
+    }
+    if (::close(fd) != 0)
+    {
+        error = std::strerror(errno);
+        return false;
+    }
+    return true;
+#endif
+}
+} // namespace
 
 void ShellBase::wire_encryption_setup_callbacks_(
     views::EncryptionSetupOverlay& ov, tk::Host& host)
@@ -12966,28 +13727,109 @@ void ShellBase::wire_encryption_setup_callbacks_(
         });
     };
 
-    ov.on_request_sas = [this]() {
-        encryption_setup_dismissed_ = true;
-        if (main_app_) main_app_->show_encryption_setup(false);
-        release_pending_sync_gate_();
+    // "Use another device" / "Try again": the dialog has already moved to
+    // its waiting step. A gated first sync stays gated — the encryption-only
+    // presync (Client::start_encryption_sync) carries the to-device traffic.
+    ov.on_request_sas = [this]() { start_self_verification_(); };
+    ov.on_retry_verification = [this]() { start_outgoing_verification_(); };
+
+    ov.on_cancel_verification = [this]() { cancel_active_verification_(); };
+
+    ov.on_accept_request = [this]() {
+        if (!encryption_flow_.has_flow()) return;
+        const std::string fid = encryption_flow_.flow().id;
         auto sess = active_account_;
-        run_async_mut_([sess]() {
+        run_async_mut_([this, sess, fid]() {
             if (!sess || !sess->client) return;
-            sess->client->request_self_verification();
+            auto r = sess->client->accept_verification(fid);
+            if (r.ok) r = sess->client->start_sas(fid);
+            if (r.ok) return;
+            post_to_ui_alive_([this, fid, msg = std::string(r.message)]() {
+                if (!encryption_flow_.is_flow(fid)) return;
+                encryption_flow_.clear();
+                if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr)
+                    o->verification_failed(msg, false);
+                request_relayout_();
+            });
         });
+    };
+
+    ov.on_decline_request = [this]() {
+        cancel_active_verification_();
+        // Back to where the user was (Recover's chooser), or close.
+        if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr)
+            o->return_to_start();
         request_relayout_();
     };
 
+    // The dialog is now on Confirming, which has no button of its own: every
+    // way out of it must come from here (a failed confirm, or the backstop
+    // timeout) or from the SDK's done / cancelled events.
+    ov.on_sas_match = [this]() {
+        auto fail = [this](const std::string& fid, std::string msg) {
+            if (!fid.empty() && !encryption_flow_.is_flow(fid)) return; // resolved
+            cancel_active_verification_();
+            if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr;
+                o && o->step() == views::EncryptionSetupOverlay::Step::Confirming)
+                o->verification_failed(std::move(msg), false);
+            request_relayout_();
+        };
+        if (!encryption_flow_.has_flow())
+        {
+            fail({}, tk::tr("This verification is no longer active."));
+            return;
+        }
+        const std::string fid = encryption_flow_.flow().id;
+        auto sess = active_account_;
+        run_async_mut_([this, sess, fid, fail]() {
+            if (!sess || !sess->client) return;
+            auto r = sess->client->confirm_sas(fid);
+            if (r.ok) return;
+            post_to_ui_alive_([fid, fail, msg = std::string(r.message)]() { fail(fid, msg); });
+        });
+        post_to_ui_after_(kConfirmTimeoutMs, guarded([fid, fail]() {
+            fail(fid, tk::tr("The other device didn't finish confirming in time."));
+        }));
+    };
+
+    // The dialog shows its own "didn't match" explanation; the SDK's cancel
+    // echo that follows is then ignored (verification_failed is idempotent).
+    ov.on_sas_mismatch = [this]() { cancel_active_verification_(); };
+
+    ov.on_reset_encryption = [this]() { begin_crypto_identity_reset_(); };
+
     ov.on_close = [this]() {
-        encryption_setup_dismissed_ = true;
+        auto* o = main_app_ ? main_app_->encryption_setup() : nullptr;
+        // Closing mid-verification abandons it on both sides.
+        if (o && o->in_verification_step()) cancel_active_verification_();
+        // A dismissed *setup* isn't raised again automatically this session
+        // (the reminder strip takes over); answering a request isn't setup.
+        if (!o || o->mode() != views::EncryptionSetupOverlay::Mode::Verify)
+            encryption_setup_dismissed_ = true;
         if (main_app_) main_app_->show_encryption_setup(false);
         release_pending_sync_gate_();
+        refresh_encryption_reminder_();
         request_relayout_();
     };
 
     ov.on_copy_to_clipboard = [host_ptr](std::string text) {
         host_ptr->set_clipboard_text(text);
     };
+
+    if (has_save_file_dialog_())
+    {
+        ov.on_save_to_file = [this](std::string key) {
+            pick_save_file_(
+                tk::tr("Save recovery key"), "tesseract-recovery-key.txt",
+                [this, key = std::move(key)](std::string path) {
+                    std::string error;
+                    const bool ok = write_private_text_file_(path, key + "\n", error);
+                    if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr)
+                        o->key_save_result(ok, error);
+                    request_relayout_();
+                });
+        };
+    }
 
     ov.on_layout_changed = [this]() { request_relayout_(); };
 }
@@ -13024,6 +13866,14 @@ void ShellBase::check_encryption_setup_()
 {
     if (encryption_setup_shown_ || encryption_setup_dismissed_)
         return;
+    // "Remind me later" on the reminder strip covers the automatic dialog too.
+    {
+        const auto& snoozes = Settings::instance().encryption_reminder_snoozed_until;
+        auto it = snoozes.find(my_user_id_);
+        if (it != snoozes.end() &&
+            EncryptionFlowController::snoozed(it->second, wall_clock_s_()))
+            return;
+    }
 
     using Mode      = tesseract::views::EncryptionSetupOverlay::Mode;
     const uint8_t state = read_recovery_state_();
@@ -13055,14 +13905,394 @@ void ShellBase::check_encryption_setup_()
         encryption_setup_shown_ = true;
         show_encryption_setup_overlay_(Mode::Recover);
     }
-    // Unknown (0) and Enabled (2): do nothing; re-checked on next tick.
+    else if (state == 2 && !read_device_verified_() && foreign_identity_cached_())
+    {
+        // Recovery is fine account-wide but this device was never confirmed
+        // against the identity (what the old "verify this device" banner
+        // used to prompt for) — same unlock choices.
+        encryption_setup_shown_ = true;
+        show_encryption_setup_overlay_(Mode::Recover);
+    }
+    // Unknown (0), or Enabled (2) on a confirmed device: nothing to do;
+    // re-checked on the next tick.
 }
 
 void ShellBase::reopen_encryption_setup_()
 {
     encryption_setup_dismissed_ = false;
     encryption_setup_shown_     = false;
-    check_encryption_setup_();
+    // User-initiated: bypass the snooze check_encryption_setup_ honours.
+    using Reminder = EncryptionFlowController::Reminder;
+    const Reminder kind = EncryptionFlowController::reminder_for(
+        read_recovery_state_(), read_device_verified_(),
+        foreign_cross_signing_identity_());
+    if (kind == Reminder::None)
+    {
+        check_encryption_setup_();
+        return;
+    }
+    encryption_setup_shown_ = true;
+    show_encryption_setup_overlay_(kind == Reminder::SetupNeeded
+                                       ? views::EncryptionSetupOverlay::Mode::Fresh
+                                       : views::EncryptionSetupOverlay::Mode::Recover);
+}
+
+// ── Encryption flow ───────────────────────────────────────────────────────────
+
+void ShellBase::show_encryption_setup_overlay_(views::EncryptionSetupOverlay::Mode mode)
+{
+    if (!main_app_) return;
+    auto* ov = main_app_->encryption_setup();
+    if (!ov || !main_app_->host()) return;
+
+    // Reconfigure the overlay (clears prior callbacks + field text) before
+    // wiring the shared callbacks.
+    ov->reset(mode);
+    wire_encryption_setup_callbacks_(*ov, *main_app_->host());
+    if (mode == views::EncryptionSetupOverlay::Mode::Recover)
+        refresh_other_device_availability_();
+
+    main_app_->show_encryption_setup(true);
+    request_relayout_();
+}
+
+std::int64_t ShellBase::wall_clock_s_() const
+{
+    return std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+bool ShellBase::foreign_identity_cached_()
+{
+    if (!foreign_identity_known_true_)
+        foreign_identity_known_true_ = foreign_cross_signing_identity_();
+    return foreign_identity_known_true_;
+}
+
+void ShellBase::handle_recovery_state_changed_ui_()
+{
+    foreign_identity_known_true_ = false;
+    refresh_encryption_reminder_();
+}
+
+void ShellBase::refresh_encryption_reminder_(std::optional<bool> device_verified)
+{
+    if (!main_app_) return;
+    auto* banner = main_app_->encryption_reminder();
+    if (!banner) return;
+
+    using Reminder = EncryptionFlowController::Reminder;
+    Reminder kind = Reminder::None;
+    if (active_account_ && client_)
+    {
+        // Runs on every sync tick: only pay for the identity lookups when
+        // reminder_for() would look at the answer.
+        const bool    verified = device_verified.value_or(read_device_verified_());
+        const uint8_t state    = read_recovery_state_();
+        const bool    foreign  = (!verified || state == 1) && foreign_identity_cached_();
+        kind = EncryptionFlowController::reminder_for(state, verified, foreign);
+    }
+
+    bool show = kind != Reminder::None;
+    if (show)
+    {
+        const auto& snoozes = Settings::instance().encryption_reminder_snoozed_until;
+        auto it = snoozes.find(my_user_id_);
+        if (it != snoozes.end() &&
+            EncryptionFlowController::snoozed(it->second, wall_clock_s_()))
+            show = false;
+    }
+    const auto new_kind = kind == Reminder::SetupNeeded
+                              ? views::EncryptionReminderBanner::Kind::SetupNeeded
+                              : views::EncryptionReminderBanner::Kind::Locked;
+    if (show == main_app_->encryption_reminder_requested() &&
+        (!show || banner->kind() == new_kind))
+        return; // unchanged — the common case on a sync tick
+    if (show) banner->set_kind(new_kind);
+    main_app_->show_encryption_reminder(show);
+    request_relayout_();
+}
+
+void ShellBase::snooze_encryption_reminder_()
+{
+    if (my_user_id_.empty()) return;
+    auto& s = Settings::instance();
+    s.encryption_reminder_snoozed_until[my_user_id_] =
+        wall_clock_s_() + EncryptionFlowController::kSnoozeSeconds;
+    s.save_to_disk(tesseract::config_dir());
+    refresh_encryption_reminder_();
+}
+
+void ShellBase::refresh_other_device_availability_()
+{
+    auto sess = active_account_;
+    run_async_mut_([this, sess]() {
+        if (!sess || !sess->client) return;
+        // Not list_devices()'s Verified flag: for our own devices that also
+        // requires *this* device to be trusted, so it's always false exactly
+        // where this question is asked.
+        const bool has = sess->client->has_devices_to_verify_against();
+        post_to_ui_alive_([this, sess, has]() {
+            if (sess != active_account_) return;
+            if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr)
+                o->set_has_verified_other_device(has);
+            request_relayout_();
+        });
+    });
+}
+
+void ShellBase::start_self_verification_()
+{
+    encryption_flow_.set_outgoing_target({});
+    start_outgoing_verification_();
+}
+
+void ShellBase::start_user_verification_(const std::string& user_id,
+                                         const std::string& name)
+{
+    if (user_id.empty() || !main_app_) return;
+    auto* ov = main_app_->encryption_setup();
+    if (!ov) return;
+    if (encryption_flow_.has_flow() || (ov->visible() && ov->busy()))
+    {
+        show_status_message_(tk::tr("Finish the current verification first."));
+        return;
+    }
+    if (!ov->visible())
+        show_encryption_setup_overlay_(views::EncryptionSetupOverlay::Mode::Verify);
+    ov->show_outgoing_user_request(name.empty() ? user_id : name);
+    request_relayout_();
+    encryption_flow_.set_outgoing_target(user_id);
+    start_outgoing_verification_();
+}
+
+void ShellBase::start_outgoing_verification_()
+{
+    const std::string target = encryption_flow_.outgoing_target();
+    encryption_flow_.clear();
+    encryption_flow_.set_awaiting_outgoing(true);
+    auto sess = active_account_;
+    run_async_mut_([this, sess, target]() {
+        if (!sess || !sess->client) return;
+        auto r = target.empty() ? sess->client->request_self_verification()
+                                : sess->client->request_user_verification(target);
+        post_to_ui_alive_([this, sess, target, ok = r.ok, msg = std::string(r.message)]() {
+            if (sess != active_account_)
+            {
+                // Switched away while it was being sent: don't leave it
+                // pending on the other devices.
+                if (ok)
+                    run_async_mut_([sess, fid = msg]() {
+                        if (sess && sess->client) sess->client->cancel_verification(fid);
+                    });
+                return;
+            }
+            if (!ok)
+            {
+                encryption_flow_.set_awaiting_outgoing(false);
+                if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr)
+                    o->verification_failed(msg, true);
+                request_relayout_();
+                return;
+            }
+            if (!encryption_flow_.awaiting_outgoing())
+            {
+                // The user cancelled while the request was being sent.
+                run_async_mut_([sess, fid = msg]() {
+                    if (sess && sess->client) sess->client->cancel_verification(fid);
+                });
+                return;
+            }
+            // Track the request from now on, not only once a device accepts:
+            // a decline or timeout arrives as a cancel for this id before any
+            // Ready does.
+            encryption_flow_.begin({.id = msg,
+                                    .user_id = target.empty() ? my_user_id_ : target,
+                                    .incoming = false, .own_user = target.empty(),
+                                    .this_device_unverified = !read_device_verified_()});
+        });
+    });
+}
+
+void ShellBase::cancel_active_verification_()
+{
+    const std::string fid = encryption_flow_.flow().id;
+    encryption_flow_.clear(); // also drops a still-pending outgoing request
+    if (fid.empty()) return;
+    auto sess = active_account_;
+    run_async_mut_([sess, fid]() {
+        if (sess && sess->client) sess->client->cancel_verification(fid);
+    });
+}
+
+void ShellBase::handle_verification_request_ui_(std::string account_uid, std::string flow_id,
+                                                std::string user_id, std::string device_id,
+                                                bool incoming)
+{
+    auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr;
+
+    // A background account of this window received it: answer it on that
+    // account, not in the active one's dialog (whose client doesn't know
+    // the flow).
+    if (!active_account_ || account_uid != active_account_->user_id)
+    {
+        auto target = account_manager_.find(account_uid);
+        // Only requests *to* us matter; an accepted outgoing one can't
+        // belong to a background account's (never shown) dialog.
+        if (!incoming || !target || !target->client)
+            return;
+        // Switching accounts and raising the window is only for the user's
+        // own other device. Anyone sharing a room could otherwise do it at
+        // will; leave their request pending (it times out, or is answered
+        // from another client) rather than cancel it on the user's behalf.
+        if (user_id != account_uid)
+        {
+            std::fprintf(stderr,
+                         "[verify] request from %s to background account %s left pending\n",
+                         user_id.c_str(), account_uid.c_str());
+            return;
+        }
+        if (ov && ov->visible() && ov->busy())
+        {
+            // Switching now would throw away e.g. a just-created recovery key
+            // on screen; turn the request away on its own account instead.
+            run_async_mut_([target, flow_id]() {
+                if (target->client) target->client->cancel_verification(flow_id);
+            });
+            return;
+        }
+        switch_active_account_(account_uid);
+        if (!active_account_ || active_account_->user_id != account_uid)
+            return; // switch refused
+        raise_and_activate_(); // the user just started this on their other device
+        ov = main_app_ ? main_app_->encryption_setup() : nullptr;
+    }
+
+    auto sess = active_account_;
+
+    if (!incoming)
+    {
+        // Our outgoing request was accepted. Only adopt it if the dialog is
+        // still waiting for it (tracked since it was sent, or — if Ready beat
+        // the send result here — still awaited); anything else is cancelled.
+        const bool ours = (encryption_flow_.is_flow(flow_id) &&
+                           !encryption_flow_.flow().incoming) ||
+                          (!encryption_flow_.has_flow() && encryption_flow_.awaiting_outgoing());
+        if (!ours || !ov || !ov->visible())
+        {
+            run_async_mut_([sess, flow_id]() {
+                if (sess && sess->client) sess->client->cancel_verification(flow_id);
+            });
+            return;
+        }
+        encryption_flow_.begin({.id = flow_id, .user_id = user_id,
+                                .device_id = device_id, .incoming = false,
+                                .own_user = user_id == my_user_id_,
+                                .this_device_unverified = !read_device_verified_()});
+        run_async_mut_([sess, flow_id]() {
+            if (sess && sess->client) sess->client->start_sas(flow_id);
+        });
+        ov->show_waiting();
+        request_relayout_();
+        return;
+    }
+
+    if (!ov) return;
+    using Action = EncryptionFlowController::IncomingAction;
+    if (EncryptionFlowController::on_incoming(ov->visible(), ov->busy()) ==
+            Action::RefuseBusy ||
+        encryption_flow_.has_flow())
+    {
+        // Mid-setup (the new recovery key may be on screen) or already
+        // verifying: turn the newcomer away rather than yank the dialog.
+        run_async_mut_([sess, flow_id]() {
+            if (sess && sess->client) sess->client->cancel_verification(flow_id);
+        });
+        return;
+    }
+
+    const bool own = user_id == my_user_id_;
+    encryption_flow_.begin({.id = flow_id, .user_id = user_id, .device_id = device_id,
+                            .incoming = true, .own_user = own,
+                            .this_device_unverified = !read_device_verified_()});
+    if (!ov->visible())
+        show_encryption_setup_overlay_(views::EncryptionSetupOverlay::Mode::Verify);
+    ov->show_incoming_request(own ? device_id : user_id, own);
+    request_relayout_();
+
+    // Name the device the way the user named it, once known.
+    if (own)
+    {
+        run_async_mut_([this, sess, flow_id, device_id]() {
+            if (!sess || !sess->client) return;
+            std::string name;
+            for (const auto& d : sess->client->list_devices())
+                if (d.id == device_id && !d.display_name.empty()) name = d.display_name;
+            if (name.empty()) return;
+            post_to_ui_alive_([this, flow_id, name]() {
+                if (!encryption_flow_.is_flow(flow_id)) return;
+                if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr)
+                    o->set_peer(name);
+                request_relayout_();
+            });
+        });
+    }
+}
+
+void ShellBase::handle_sas_ready_ui_(std::string flow_id, VerificationSas sas)
+{
+    if (!encryption_flow_.is_flow(flow_id)) return;
+    auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr;
+    if (!ov || !ov->visible()) return;
+    ov->show_sas(std::move(sas));
+    request_relayout_();
+}
+
+void ShellBase::handle_verification_done_ui_(std::string flow_id)
+{
+    if (!encryption_flow_.is_flow(flow_id)) return;
+    const auto flow = encryption_flow_.flow();
+    encryption_flow_.clear();
+
+    using DoneKind = views::EncryptionSetupOverlay::DoneKind;
+    const DoneKind kind = !flow.own_user                ? DoneKind::UserVerified
+                        : flow.this_device_unverified   ? DoneKind::Unlocked
+                                                        : DoneKind::OtherDeviceConfirmed;
+    if (kind == DoneKind::Unlocked)
+        encryption_setup_dismissed_ = true; // nothing left to set up here
+
+    if (auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr; ov && ov->visible())
+        ov->verification_done(kind);
+    // A just-verified user's open profile should say so. The flow ran on the
+    // active account, which is who untagged dispatches address.
+    if (!flow.own_user)
+        handle_user_identities_changed_ui_({flow.user_id});
+    refresh_encryption_reminder_();
+    request_relayout_();
+}
+
+void ShellBase::handle_verification_cancelled_ui_(std::string flow_id, std::string reason)
+{
+    if (!encryption_flow_.is_flow(flow_id)) return;
+    const bool we_started = !encryption_flow_.flow().incoming;
+    encryption_flow_.clear();
+    auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr;
+    if (!ov || !ov->visible() || !ov->in_verification_step()) return;
+    ov->verification_failed(std::move(reason), we_started);
+    request_relayout_();
+}
+
+void ShellBase::handle_verification_state_ui_(bool is_verified)
+{
+    if (last_device_verified_ != is_verified)
+    {
+        last_device_verified_        = is_verified;
+        foreign_identity_known_true_ = false;
+    }
+    if (main_app_ && main_app_->user_info())
+        main_app_->user_info()->set_warning_dot(!is_verified);
+    refresh_encryption_reminder_(is_verified);
 }
 
 std::function<void()> ShellBase::verify_session_menu_callback_()
@@ -13107,11 +14337,14 @@ void ShellBase::begin_crypto_identity_reset_()
             if (!sess || !sess->client) return;
             sess->client->cancel_reset_crypto_identity();
         });
-        encryption_setup_dismissed_ = true;
-        if (main_app_)
-            main_app_->show_encryption_setup(false);
-        request_relayout_();
+        // Same exit as any other close: in particular it releases a gated
+        // first sync — the reset is reachable from the gated login dialog
+        // (Recover › I've lost… › Reset encryption).
+        auto* o = main_app_ ? main_app_->encryption_setup() : nullptr;
+        if (o && o->on_close)
+            o->on_close();
     };
+    ov->set_reset_account(my_user_id_);
     ov->begin_reset_wait();
     request_relayout_();
 
@@ -13139,6 +14372,7 @@ void ShellBase::begin_crypto_identity_reset_()
             {
                 // Wait for the user to approve in the browser; the SDK polls
                 // and fires on_crypto_reset_result when it resolves.
+                o->set_reset_approval_url(url);
                 tesseract::Client::open_in_browser(url);
             }
             request_relayout_();
@@ -13152,7 +14386,7 @@ void ShellBase::handle_crypto_reset_result_ui_(bool ok, std::string message)
     if (!o)
         return;
     if (ok)
-        o->reset_approved(); // → Fresh recovery-key setup (ChooseMethod)
+        o->reset_approved(); // → Fresh recovery-key setup (Intro)
     else
         o->report_reset_error(message);
     request_relayout_();
@@ -13314,10 +14548,10 @@ ShellBase::SpaceNavFrame::capture(views::RoomListView* rlv)
 
 views::RoomView* ShellBase::room_view_for_room_(const std::string& room_id) const
 {
-    if (room_id == current_room_id_)
+    if (main_window_shows_(room_id))
         return room_view_;
-    auto it = secondary_windows_.find(room_id);
-    return it != secondary_windows_.end() ? it->second->room_view() : nullptr;
+    auto* w = find_event_secondary_(room_id);
+    return w ? w->room_view() : nullptr;
 }
 
 void ShellBase::handle_rtc_invitation_ui_(std::string /*room_id*/,
@@ -13336,7 +14570,7 @@ void ShellBase::refresh_call_banners_()
 {
     if (room_view_ && !current_room_id_.empty())
         refresh_call_banner_(room_view_, current_room_id_);
-    for (auto& [rid, w] : secondary_windows_)
+    for (auto& [rid, w] : active_account_popouts_())
         refresh_call_banner_(w->room_view(), rid);
 }
 
@@ -13582,9 +14816,13 @@ void ShellBase::stop_screen_share_()
         ov->set_screen_sharing(false);
 }
 
-void ShellBase::send_current_location_(std::string room_id)
+void ShellBase::send_current_location_(std::string room_id,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
-    if (room_id.empty() || !active_account_ || !active_account_->client)
+    const auto acting = acting_session_(on_behalf_of);
+    Client* const acting_client = acting_client_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || !acting || !acting->client)
         return;
 
     if (!location_provider_)
@@ -13605,7 +14843,7 @@ void ShellBase::send_current_location_(std::string room_id)
     // own show_status_message_ call (success or failure) supersedes it.
     show_status_message_(tk::tr("Fetching your location\xe2\x80\xa6"), 0);
 
-    auto sess = active_account_;
+    auto sess = acting;
     location_provider_->request_current_location(
         [this, sess, room_id](bool success, const tk::LocationFix& fix,
                               tk::LocationError error)
@@ -13664,10 +14902,13 @@ void ShellBase::send_notification_reply_(std::string user_id,
         return;
     }
 
-    run_async_mut_([this, sess, room_id, event_id, text]() mutable {
+    // Through the pipeline so a quick-reply keeps its order among this
+    // room's sends and gets bundled URL previews like a composer send.
+    submit_room_send_(sess, room_id, text,
+                      [this, sess, room_id, event_id, text](const std::string& previews) mutable {
         auto res = event_id.empty()
-            ? sess->client->send_message(room_id, text, "")
-            : sess->client->send_reply(room_id, event_id, text, "");
+            ? sess->client->send_message(room_id, text, "", previews)
+            : sess->client->send_reply(room_id, event_id, text, "", previews);
         if (res)
             return;
         post_to_ui_(guarded([this, uid = sess->user_id, room_id]() mutable {
@@ -13703,6 +14944,63 @@ void ShellBase::push_call_audio_bgnd_(const std::int16_t* samples,
         call_audio_output_->push_frame(samples, sample_count, sample_rate, num_channels);
 }
 
+void ShellBase::start_call_video_capture_()
+{
+    if (call_video_capture_)
+        return;
+    const std::uint64_t gen = ++call_video_capture_gen_;
+    // Errors can fire synchronously from start() or later from a capture
+    // thread; either way handle them on a fresh UI-thread turn.
+    auto on_error = [this, gen](tk::VideoCapture::Error err)
+    {
+        post_to_ui_alive_(
+            [this, gen, err]
+            {
+                if (gen == call_video_capture_gen_)
+                    handle_call_video_error_(err);
+            });
+    };
+
+    auto vc = tk::VideoCapture::create();
+    if (!vc)
+    {
+        on_error(tk::VideoCapture::Error::NoDevice);
+        return;
+    }
+    vc->set_callback(
+        [this](const tk::VideoCapture::Frame& f)
+        {
+            client_->rtc_push_video_frame_i420(
+                f.y, f.u, f.v, f.width, f.height,
+                f.stride_y, f.stride_u, f.stride_v);
+        });
+    vc->set_error_callback(on_error);
+    call_video_capture_ = std::move(vc);
+    call_video_capture_->start();
+}
+
+void ShellBase::stop_call_video_capture_()
+{
+    ++call_video_capture_gen_;
+    if (call_video_capture_)
+    {
+        call_video_capture_->stop();
+        call_video_capture_.reset();
+    }
+}
+
+void ShellBase::handle_call_video_error_(tk::VideoCapture::Error err)
+{
+    if (!call_session_)
+        return;
+    stop_call_video_capture_();
+    call_session_->mute_video(true);
+    call_overlay_state_.video_muted = true;
+    if (auto* ov = active_call_overlay_())
+        ov->set_video_muted(true);
+    show_status_message_(tk::VideoCapture::describe(err));
+}
+
 views::CallOverlayWidget::Mode ShellBase::overlay_mode_from_settings_() const
 {
     switch (Settings::instance().call_overlay_mode)
@@ -13719,7 +15017,8 @@ views::CallOverlayWidget::Mode ShellBase::overlay_mode_from_settings_() const
 }
 
 void ShellBase::start_call(const std::string& room_id, const std::string& slot_id,
-                           bool audio_only, bool start_audio_muted)
+                           bool audio_only, bool start_audio_muted,
+                           bool start_video_muted)
 {
     if (call_session_ || !client_)
         return;
@@ -13727,7 +15026,7 @@ void ShellBase::start_call(const std::string& room_id, const std::string& slot_i
     auto result = client_->rtc_start_call(room_id, slot_id, audio_only);
     if (!result.ok)
     {
-        show_status_message_("Call failed: " + result.message);
+        show_status_message_(tk::trf(tk::tr("Call failed: {0}"), {result.message}));
         return;
     }
 
@@ -13742,27 +15041,20 @@ void ShellBase::start_call(const std::string& room_id, const std::string& slot_i
     call_overlay_state_ = {};
     call_overlay_state_.show_video_button = !audio_only;
     call_overlay_state_.audio_muted       = start_audio_muted;
+    call_overlay_state_.video_muted       = !audio_only && start_video_muted;
     call_overlay_state_.local_user_id     = my_user_id_;
 
-    if (!audio_only)
+    if (!audio_only && !start_video_muted)
     {
-        auto vc = tk::VideoCapture::create();
-        if (vc)
-        {
-            vc->set_callback(
-                [this](const tk::VideoCapture::Frame& f)
-                {
-                    client_->rtc_push_video_frame_i420(
-                        f.y, f.u, f.v, f.width, f.height,
-                        f.stride_y, f.stride_u, f.stride_v);
-                });
-            vc->start();
-            call_video_capture_ = std::move(vc);
-        }
+        // The camera track is published muted; this asks for it to go live
+        // on the first real frame, so a missing or busy camera never sends
+        // placeholder video.
+        start_call_video_capture_();
+        call_session_->mute_video(false);
     }
     else
     {
-        // Audio-only: publish video track muted so no frames are sent.
+        // Audio-only or camera off: keep the video track muted.
         call_session_->mute_video(true);
     }
 
@@ -13833,10 +15125,8 @@ void ShellBase::request_call_(const std::string& room_id, const std::string& slo
     {
         lobby->set_repaint_requester([this] { request_repaint_(); });
     }
-    else if (auto it = secondary_windows_.find(room_id);
-             it != secondary_windows_.end())
+    else if (RoomWindowBase* win = find_event_secondary_(room_id))
     {
-        RoomWindowBase* win = it->second;
         lobby->set_repaint_requester([win] { if (win) win->request_relayout(); });
     }
 
@@ -13855,7 +15145,7 @@ void ShellBase::request_call_(const std::string& room_id, const std::string& slo
         });
 
     lobby->on_join = [this](const std::string& rid, const std::string& sid,
-                            bool ao, bool muted)
+                            bool ao, bool muted, bool video_muted)
     {
         // If a different room's call is still active (LeaveAndJoin), end it
         // before joining — start_call() no-ops while call_session_ is
@@ -13863,7 +15153,7 @@ void ShellBase::request_call_(const std::string& room_id, const std::string& slo
         // room switch that opened this lobby.
         if (call_session_ && call_session_->room_id() != rid)
             end_call();
-        start_call(rid, sid, ao, muted);
+        start_call(rid, sid, ao, muted, video_muted);
     };
     lobby->on_cancel = [] {};
 
@@ -13942,7 +15232,7 @@ void ShellBase::end_call()
             w->room_view()->header()->set_call_active(false);
     }
 
-    call_video_capture_.reset();
+    stop_call_video_capture_();
     if (screen_capture_)
     {
         screen_capture_->stop();
@@ -14032,7 +15322,7 @@ void ShellBase::handle_rtc_session_ended_ui_(std::uint64_t session_id,
     }
 
     call_session_->on_session_ended({});
-    call_video_capture_.reset();
+    stop_call_video_capture_();
     {
         std::lock_guard<std::mutex> lock(call_audio_mutex_);
         call_audio_output_.reset();
@@ -14200,7 +15490,17 @@ void ShellBase::on_call_overlay_mode_requested_(views::CallOverlayWidget::Mode m
         };
         ov->on_toggle_video = [this](bool muted)
         {
-            if (call_session_) call_session_->mute_video(muted);
+            if (!call_session_) return;
+            if (muted)
+            {
+                call_session_->mute_video(true);
+                stop_call_video_capture_();
+            }
+            else
+            {
+                start_call_video_capture_();
+                call_session_->mute_video(false);
+            }
         };
         ov->on_toggle_screen_share = [this](bool sharing)
         {

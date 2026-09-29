@@ -46,6 +46,7 @@
 #include <QMessageBox>
 #include <QMetaType>
 #include <QApplication>
+#include <QProcess>
 #include <QClipboard>
 #include <QStyleHints>
 #include <QCloseEvent>
@@ -399,66 +400,6 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
                 QPoint(static_cast<int>(world.x), static_cast<int>(world.y))));
         };
 
-        // ---- Verification banner ----
-        mainApp_->verif_banner()->on_verify = [this]
-        {
-            if (client_)
-            {
-                client_->request_self_verification();
-            }
-        };
-        mainApp_->verif_banner()->on_accept = [this]
-        {
-            if (client_ && !active_verification_flow_id_.empty())
-            {
-                client_->accept_verification(active_verification_flow_id_);
-                client_->start_sas(active_verification_flow_id_);
-            }
-        };
-        mainApp_->verif_banner()->on_match = [this]
-        {
-            if (client_ && !active_verification_flow_id_.empty())
-            {
-                mainApp_->verif_banner()->set_state(
-                    tesseract::views::VerificationBanner::State::Confirming);
-                mainAppSurface_->relayout();
-                client_->confirm_sas(active_verification_flow_id_);
-            }
-        };
-        mainApp_->verif_banner()->on_mismatch = [this]
-        {
-            if (client_ && !active_verification_flow_id_.empty())
-            {
-                client_->cancel_verification(active_verification_flow_id_);
-            }
-        };
-        mainApp_->verif_banner()->on_cancel = [this]
-        {
-            if (client_ && !active_verification_flow_id_.empty())
-            {
-                client_->cancel_verification(active_verification_flow_id_);
-            }
-        };
-        mainApp_->verif_banner()->on_dismiss = [this]
-        {
-            verification_banner_dismissed_ = true;
-            mainApp_->show_verif_banner(false);
-            mainAppSurface_->relayout();
-        };
-        mainApp_->verif_banner()->on_done = [this]
-        {
-            mainApp_->show_verif_banner(false);
-            mainAppSurface_->relayout();
-        };
-        mainApp_->verif_banner()->on_use_recovery_key = [this]
-        {
-            mainApp_->show_verif_banner(false);
-            // The recovery-key entry path now lives in the encryption-setup
-            // overlay (Recover mode); the old inline RecoveryBanner was removed.
-            show_encryption_setup_overlay_(
-                tesseract::views::EncryptionSetupOverlay::Mode::Recover);
-        };
-
         // ---- Image + video viewers ----
         // Providers / repaint / on_close come from RoomPane::wire_room_view_
         // via main_room_pane_->attach() above; only the video player is
@@ -580,7 +521,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             auto* menu = new QMenu(mainAppSurface_);
             menu->setAttribute(Qt::WA_DeleteOnClose);
             menu->setStyleSheet(tk::qt6::build_menu_qss(current_theme_));
-            QAction* copyAct = menu->addAction(tr("Copy"));
+            QAction* copyAct = menu->addAction(QString::fromStdString(tk::tr("Copy")));
             QObject::connect(copyAct, &QAction::triggered, [ml]()
             {
                 ml->copy_selection();
@@ -703,9 +644,9 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         {
             std::string suggested = filename_hint.empty() ? "image" : filename_hint;
             QString path = QFileDialog::getSaveFileName(
-                this, tr("Save image"),
+                this, QString::fromStdString(tk::tr("Save image")),
                 QString::fromStdString(suggested),
-                tr("Images (*.jpg *.jpeg *.png *.gif *.webp);;All files (*.*)"));
+                QString::fromStdString(tk::tr("Images (*.jpg *.jpeg *.png *.gif *.webp);;All files (*.*)")));
             if (path.isEmpty())
                 return;
             std::string dest = path.toStdString();
@@ -733,9 +674,9 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         {
             std::string suggested = hit.file_name.empty() ? "download" : hit.file_name;
             QString path = QFileDialog::getSaveFileName(
-                this, tr("Save file"),
+                this, QString::fromStdString(tk::tr("Save file")),
                 QString::fromStdString(suggested),
-                tr("All files (*.*)"));
+                QString::fromStdString(tk::tr("All files (*.*)")));
             if (path.isEmpty())
                 return;
             std::string url  = hit.source ? hit.source->fetch_token() : std::string{};
@@ -867,9 +808,9 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             if (slash != std::string::npos)
                 ext = "." + mime_type.substr(slash + 1);
             QString path = QFileDialog::getSaveFileName(
-                this, tr("Save video"),
+                this, QString::fromStdString(tk::tr("Save video")),
                 QString::fromStdString("video" + ext),
-                tr("Videos (*.mp4 *.webm *.mkv);;All files (*.*)"));
+                QString::fromStdString(tk::tr("Videos (*.mp4 *.webm *.mkv);;All files (*.*)")));
             if (path.isEmpty())
                 return;
             std::string dest = path.toStdString();
@@ -1620,8 +1561,8 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             menu->setAttribute(Qt::WA_DeleteOnClose);
             menu->setStyleSheet(tk::qt6::build_menu_qss(current_theme_));
             QAction* add =
-                menu->addAction(already_saved ? tr("Already in Saved Stickers")
-                                              : tr("Add to Saved Stickers"));
+                menu->addAction(already_saved ? QString::fromStdString(tk::tr("Already in Saved Stickers"))
+                                              : QString::fromStdString(tk::tr("Add to Saved Stickers")));
             add->setEnabled(!already_saved);
             if (!already_saved)
             {
@@ -1640,7 +1581,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             menu->popup(mainAppSurface_->mapToGlobal(pos));
         });
 
-    statusBar()->showMessage(tr("Not logged in"));
+    statusBar()->showMessage(QString::fromStdString(tk::tr("Not logged in")));
     // Generic status-bar click (distinct from statusLinkLabel_'s
     // http(s)-only QLabel::linkActivated handling) — see eventFilter()'s
     // QEvent::MouseButtonRelease branch. Safe unconditionally:
@@ -1753,7 +1694,7 @@ void MainWindow::captureScreenshots(const std::string& output_dir)
     mainApp_->room_view()->set_messages(std::move(fixture.messages));
     populateUserStrip();
 
-    statusBar()->showMessage(tr("Connected"));
+    statusBar()->showMessage(QString::fromStdString(tk::tr("Connected")));
     showMainContent_();
     resize(1100, 768);
 
@@ -2329,7 +2270,7 @@ void MainWindow::doLogin()
         return;
     }
 
-    statusBar()->showMessage(tr("Restoring sessions\xe2\x80\xa6"));
+    statusBar()->showMessage(QString::fromStdString(tk::tr("Restoring sessions\xe2\x80\xa6")));
 
     // Pre-flight OS-level connectivity check — see tk::Host::
     // is_network_available()'s doc comment. Computed here, on the UI
@@ -2364,7 +2305,7 @@ void MainWindow::doLogin()
                 loginView_->set_on_begin_oauth([this] { arm_pending_login_(); });
                 loginView_->reset();
                 contentStack_->setCurrentWidget(loginView_);
-                statusBar()->showMessage(tr("Not logged in"));
+                statusBar()->showMessage(QString::fromStdString(tk::tr("Not logged in")));
                 if (restore.any_restore_failed)
                 {
                     if (restore.network_unavailable)
@@ -2475,7 +2416,7 @@ void MainWindow::finishLoginUi_(const std::string& uid)
     ensure_settings_controller_();
     ensure_history_export_controller_();
     wire_history_export_dialog_callbacks_();
-    statusBar()->showMessage(tr("Connected"));
+    statusBar()->showMessage(QString::fromStdString(tk::tr("Connected")));
     showMainContent_();
 
     // Exactly one window owns the single app-wide tray icon (multi-window).
@@ -2561,7 +2502,7 @@ void MainWindow::onLoginSucceeded()
             if (fin.rejected_duplicate)
             {
                 statusBar()->showMessage(
-                    tr("Already signed in as %1")
+                    QString::fromStdString(tk::tr("Already signed in as %1"))
                         .arg(QString::fromStdString(fin.user_id)),
                     4000);
                 // Restore previous active account's UI.
@@ -2580,7 +2521,7 @@ void MainWindow::onLoginSucceeded()
             if (!fin.ok)
             {
                 statusBar()->showMessage(
-                    tr("Sign-in failed: %1").arg(QString::fromStdString(fin.error)),
+                    QString::fromStdString(tk::tr("Sign-in failed: %1")).arg(QString::fromStdString(fin.error)),
                     6000);
                 return;
             }
@@ -2589,7 +2530,7 @@ void MainWindow::onLoginSucceeded()
             ensure_settings_controller_();
             ensure_history_export_controller_();
             wire_history_export_dialog_callbacks_();
-            statusBar()->showMessage(tr("Connected"));
+            statusBar()->showMessage(QString::fromStdString(tk::tr("Connected")));
             showMainContent_();
             begin_gated_encryption_setup_if_needed_(fin);
 
@@ -2646,6 +2587,25 @@ void MainWindow::onLoginCancelled()
         switchActiveAccount(account_manager_.accounts()[back]->user_id);
         showMainContent_();
     }
+}
+
+bool MainWindow::spawn_relaunch_(const std::vector<std::string>& args)
+{
+    // Inside an AppImage the running binary lives on a mount that goes away
+    // with this process; relaunch the .AppImage itself.
+    const QByteArray appimage = qgetenv("APPIMAGE");
+    const QString program = appimage.isEmpty()
+                                ? QCoreApplication::applicationFilePath()
+                                : QString::fromLocal8Bit(appimage);
+    QStringList qargs;
+    for (const auto& a : args)
+        qargs << QString::fromStdString(a);
+    return QProcess::startDetached(program, qargs);
+}
+
+void MainWindow::quit_app_()
+{
+    do_quit_();
 }
 
 void MainWindow::do_quit_()
@@ -3212,18 +3172,27 @@ void MainWindow::wire_history_export_dialog_callbacks_()
         [this](std::string /*suggested_name*/, std::function<void(std::string)> cb)
     {
         const QString dir = QFileDialog::getExistingDirectory(
-            this, tr("Choose a folder for the exported history"));
+            this, QString::fromStdString(tk::tr("Choose a folder for the exported history")));
         if (!dir.isEmpty())
             cb(dir.toStdString());
     };
+}
+
+void MainWindow::pick_save_file_(std::string title, std::string suggested_name,
+                                 std::function<void(std::string)> cb)
+{
+    const QString path = QFileDialog::getSaveFileName(
+        this, QString::fromStdString(title), QString::fromStdString(suggested_name));
+    if (!path.isEmpty())
+        cb(path.toStdString());
 }
 
 void MainWindow::pick_image_file_(
     std::function<void(std::vector<uint8_t>, std::string)> cb)
 {
     const QString path = QFileDialog::getOpenFileName(
-        this, tr("Select image"), {},
-        tr("Images (*.png *.jpg *.jpeg *.gif *.webp)"));
+        this, QString::fromStdString(tk::tr("Select image")), {},
+        QString::fromStdString(tk::tr("Images (*.png *.jpg *.jpeg *.gif *.webp)")));
     if (path.isEmpty())
         return;
     QFile f(path);
@@ -4093,7 +4062,7 @@ void MainWindow::refreshSyncStatus()
                             last_room_list_state_ == RLS2::SettingUp)
                         {
                             sync_progress_shown_ = true;
-                            statusBar()->showMessage(tr("Syncing rooms…"));
+                            statusBar()->showMessage(QString::fromStdString(tk::tr("Syncing rooms…")));
                         }
                     });
         }
@@ -4103,7 +4072,7 @@ void MainWindow::refreshSyncStatus()
         }
         else if (sync_progress_shown_)
         {
-            statusBar()->showMessage(tr("Syncing rooms…"));
+            statusBar()->showMessage(QString::fromStdString(tk::tr("Syncing rooms…")));
         }
         return;
     }
@@ -4116,15 +4085,15 @@ void MainWindow::refreshSyncStatus()
     if (reconnecting)
     {
         sync_progress_shown_ = true;
-        statusBar()->showMessage(tr("Reconnecting…"));
+        statusBar()->showMessage(QString::fromStdString(tk::tr("Reconnecting…")));
         return;
     }
     if (keys_busy)
     {
         sync_progress_shown_ = true;
         statusBar()->showMessage(
-            tr("Downloading encryption keys (%1)…")
-                .arg(static_cast<qulonglong>(last_imported_keys_)));
+            QString::fromStdString(tk::trf(tk::tr("Downloading encryption keys ({0})…"),
+                                           {std::to_string(last_imported_keys_)})));
         return;
     }
     // Steady state: settle to "Connected" unless a persistent status override
@@ -4143,7 +4112,7 @@ void MainWindow::refreshSyncStatus()
         return;
     }
     sync_progress_shown_ = false;
-    statusBar()->showMessage(tr("Connected"));
+    statusBar()->showMessage(QString::fromStdString(tk::tr("Connected")));
 }
 
 // ---------------------------------------------------------------------------
@@ -4495,12 +4464,13 @@ void MainWindow::on_inflight_ui_()
     const auto sp = mut_pool_pending_count_();
     const auto mp = pending_media_count_();
     inflightDot_->update_state(n, c);
-    const QString first = (n == 1) ? tr("1 request in flight")
-                                   : tr("%1 requests in flight").arg(n);
-    QString tip =
-        first +
-        tr("\nmedia: %1 loading · fetch: %2 queued · send: %3 queued")
-            .arg(mp).arg(fp).arg(sp);
+    QString tip = QString::fromStdString(
+        tk::trf(tk::trn("{0} request in flight", "{0} requests in flight",
+                        static_cast<long>(n)),
+                {std::to_string(n)}) +
+        "\n" +
+        tk::trf(tk::tr("media: {0} loading · fetch: {1} queued · send: {2} queued"),
+                {std::to_string(mp), std::to_string(fp), std::to_string(sp)}));
 #ifndef NDEBUG
     if (!last_inflight_urls_.empty()) {
         tip += QString("\n── requests ──\n");
@@ -4666,7 +4636,7 @@ void MainWindow::refresh_account_ui_after_switch_()
 
     if (mainApp_)
     {
-        mainApp_->show_verif_banner(false);
+        mainApp_->show_encryption_reminder(false);
         mainAppSurface_->relayout();
     }
 
@@ -4705,7 +4675,7 @@ void MainWindow::beginAddAccount()
     loginView_->set_mode(tesseract::views::LoginView::Mode::AddAccount);
     loginView_->reset();
     contentStack_->setCurrentWidget(loginView_);
-    statusBar()->showMessage(tr("Add Account"));
+    statusBar()->showMessage(QString::fromStdString(tk::tr("Add Account")));
 }
 
 void MainWindow::logoutActiveAccount()
@@ -4740,7 +4710,6 @@ void MainWindow::logoutActiveAccount()
             mainAppSurface_->relayout();
         }
     }
-    verification_banner_dismissed_ = false;
 
     if (!result.has_remaining)
     {
@@ -4755,13 +4724,13 @@ void MainWindow::logoutActiveAccount()
         loginView_->set_on_begin_oauth([this] { arm_pending_login_(); });
         loginView_->reset();
         contentStack_->setCurrentWidget(loginView_);
-        statusBar()->showMessage(tr("Signed out"), 3000);
+        statusBar()->showMessage(QString::fromStdString(tk::tr("Signed out")), 3000);
         rebuildAccountPicker();
         return;
     }
 
     statusBar()->showMessage(
-        tr("Signed out of %1").arg(QString::fromStdString(result.logged_out_uid)),
+        QString::fromStdString(tk::tr("Signed out of %1")).arg(QString::fromStdString(result.logged_out_uid)),
         3000);
 }
 
@@ -4791,6 +4760,9 @@ void MainWindow::rebuildAccountPicker()
         }
     }
     accountPicker_->set_entries(std::move(entries));
+    // A changed account count rebuilds the rows with empty bounds; arrange
+    // them now rather than relying on a later resizeEvent.
+    accountPickerSurface_->relayout();
 }
 
 void MainWindow::openAccountPicker(const QPoint& global_anchor)
@@ -4840,6 +4812,11 @@ void MainWindow::openAccountPicker(const QPoint& global_anchor)
             ->measure(lc, {static_cast<float>(kPickerWidth), 0.0f})
             .h));
     accountPickerPopover_->resize(kPickerWidth, height);
+    // Apply the popover's layout now so the Surface has its final size, then
+    // arrange at that size: a hidden popup only resizes the Surface on show,
+    // and not at all if its geometry is unchanged.
+    accountPickerPopover_->layout()->activate();
+    accountPickerSurface_->relayout();
 
     // Anchor above the strip (popover hangs down from the user-strip top
     // edge on most desktops; if it would clip the screen bottom Qt::Popup
@@ -4871,137 +4848,6 @@ void MainWindow::doLogout()
 }
 
 // ── Cross-signing / SAS verification hooks ────────────────────────────────────
-
-void MainWindow::handle_verification_state_ui_(bool is_verified)
-{
-    if (!mainApp_)
-    {
-        return;
-    }
-    if (mainApp_->user_info())
-    {
-        mainApp_->user_info()->set_warning_dot(!is_verified);
-    }
-    if (is_verified)
-    {
-        mainApp_->show_verif_banner(false);
-        mainAppSurface_->relayout();
-        return;
-    }
-    // Only prompt when there is actually an identity to verify against. On a
-    // fresh/only device our own login-time bootstrap holds the cross-signing
-    // keys, so "verify this device" is a dead end — check_encryption_setup_
-    // drives the Fresh setup overlay instead.
-    if (!foreign_cross_signing_identity_())
-    {
-        mainApp_->show_verif_banner(false);
-        mainAppSurface_->relayout();
-        return;
-    }
-    if (verification_banner_dismissed_)
-    {
-        return;
-    }
-    if (!mainApp_->verif_banner()->visible())
-    {
-        active_verification_flow_id_.clear();
-        mainApp_->verif_banner()->set_state(
-            tesseract::views::VerificationBanner::State::Prompt);
-        mainApp_->show_verif_banner(true);
-        mainAppSurface_->relayout();
-    }
-}
-
-void MainWindow::show_encryption_setup_overlay_(
-    tesseract::views::EncryptionSetupOverlay::Mode mode)
-{
-    if (!mainApp_) return;
-    auto* ov = mainApp_->encryption_setup();
-    if (!ov) return;
-
-    // Reconfigure the overlay (clears prior callbacks + field text) before
-    // wiring the shared callbacks via ShellBase.
-    ov->reset(mode);
-
-    wire_encryption_setup_callbacks_(*ov, mainAppSurface_->host());
-
-    mainApp_->show_encryption_setup(true);
-    mainAppSurface_->relayout();
-}
-
-void MainWindow::handle_verification_request_ui_(std::string flow_id,
-                                                 std::string /*user_id*/,
-                                                 std::string /*device_id*/,
-                                                 bool incoming)
-{
-    if (!mainApp_)
-    {
-        return;
-    }
-    active_verification_flow_id_ = flow_id;
-    if (incoming)
-    {
-        mainApp_->verif_banner()->set_state(
-            tesseract::views::VerificationBanner::State::IncomingRequest);
-    }
-    else
-    {
-        mainApp_->verif_banner()->set_state(
-            tesseract::views::VerificationBanner::State::Waiting);
-        if (client_)
-        {
-            client_->start_sas(flow_id);
-        }
-    }
-    mainApp_->show_verif_banner(true);
-    mainAppSurface_->relayout();
-}
-
-void MainWindow::handle_sas_ready_ui_(
-    std::string /*flow_id*/, std::vector<tesseract::VerificationEmoji> emojis)
-{
-    if (!mainApp_)
-    {
-        return;
-    }
-    mainApp_->verif_banner()->set_emojis(emojis);
-    mainApp_->show_verif_banner(true);
-    mainAppSurface_->relayout();
-}
-
-void MainWindow::handle_verification_done_ui_(std::string /*flow_id*/)
-{
-    dismiss_encryption_setup_after_verification_();
-    if (!mainApp_)
-    {
-        return;
-    }
-    mainApp_->verif_banner()->set_state(
-        tesseract::views::VerificationBanner::State::Done);
-    mainAppSurface_->relayout();
-    QTimer::singleShot(1500, this,
-                       [this]
-                       {
-                           if (mainApp_ && mainApp_->verif_banner()->on_done)
-                           {
-                               mainApp_->verif_banner()->on_done();
-                           }
-                       });
-}
-
-void MainWindow::handle_verification_cancelled_ui_(std::string /*flow_id*/,
-                                                   std::string reason)
-{
-    if (!mainApp_)
-    {
-        return;
-    }
-    mainApp_->verif_banner()->set_state(
-        tesseract::views::VerificationBanner::State::Cancelled);
-    mainApp_->verif_banner()->set_cancel_reason(std::move(reason));
-    mainApp_->show_verif_banner(true);
-    mainAppSurface_->relayout();
-}
 
 tk::ThemeMode MainWindow::os_color_scheme_() const
 {

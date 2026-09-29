@@ -29,6 +29,7 @@
 #include "RoomHeader.h"
 #include "RoomInfoPanel.h"
 #include "KnockRequestsPanel.h"
+#include "InviteDialog.h"
 #include "RoomMediaView.h"
 #include "RoomSearchBar.h"
 #include "RoomSettingsView.h"
@@ -39,6 +40,7 @@
 #include "media_drop.h"
 #include "CallOverlayWidget.h"
 #include "CallBanner.h"
+#include "IdentityChangeBanner.h"
 #include "CallLobbyView.h"
 
 #include "tk/audio.h"
@@ -248,6 +250,10 @@ public:
     {
         return room_media_view_;
     }
+    InviteDialog* invite_dialog() const
+    {
+        return invite_dialog_;
+    }
     KnockRequestsPanel* knock_requests_panel() const
     {
         return knock_requests_panel_;
@@ -402,6 +408,16 @@ public:
     void set_call_banner_avatar_provider(CallBanner::AvatarProvider p);
     // Returns true while the call banner is visible.
     bool call_banner_visible() const;
+
+    // Identity-change warnings (MSC4153 pinning) for the shown room. An empty
+    // set hides the strip. The shell clears it on room switch.
+    void set_identity_warnings(std::vector<tesseract::IdentityWarning> warnings);
+    // Whether the identity-change strip holds a warning (whether or not
+    // RoomView itself is currently visible).
+    bool identity_warning_shown() const;
+    // Fired when the user clicks the strip's button for `w`: pin the new
+    // identity (Kind::Changed) or withdraw verification (VerificationBroken).
+    std::function<void(const tesseract::IdentityWarning& w)> on_resolve_identity_warning;
 
     // Fired when the user answers (banner or header button). The shell calls
     // ShellBase::start_call(room_id, slot_id, audio_only).
@@ -559,12 +575,23 @@ public:
     // (see ShellBase::subscribe_knock_requests_panel_/
     // unsubscribe_knock_requests_panel_).
     std::function<void(std::string room_id)>                on_knock_requests_opened;
+    // Fired right after invite_dialog_ opens for room_id (from
+    // RoomInfoPanel's "Invite people" button) — the owner pushes the room's
+    // existing members and wires/refreshes its providers here.
+    std::function<void(std::string room_id)>                on_invite_dialog_opened;
     std::function<void()>                                   on_knock_requests_closed;
     // Fired when the user confirms "Deny & Ban" in the confirm dialog RoomView
     // itself interposes on knock_requests_panel_->on_decline_and_ban (mirrors
     // on_leave_room's confirm-then-forward pattern).
     std::function<void(std::string room_id, std::string user_id,
                        std::string reason)>                 on_decline_and_ban_knock_request;
+    // Fired once the user confirms Kick / Ban from the room info panel's
+    // member context menu (RoomView interposes a ConfirmDialog with an
+    // optional reason field). `reason` empty = none given.
+    std::function<void(std::string room_id, std::string user_id,
+                       std::string display_name, std::string reason)> on_kick_member;
+    std::function<void(std::string room_id, std::string user_id,
+                       std::string display_name, std::string reason)> on_ban_member;
     // Fired when the user clicks the room-settings avatar disc to pick a
     // new image. The shell uploads it (Client::upload_media) and calls
     // room_settings_view()->set_staged_avatar() — never commits directly.
@@ -575,6 +602,11 @@ public:
     // doc comment (local-only preference, applied right away, not staged).
     std::function<void(std::string room_id, bool not_bridged)>
         on_bridge_override_changed;
+    // Room Settings → Moderation's Unban button (applies immediately — see
+    // RoomSettingsView::on_unban_requested).
+    std::function<void(std::string room_id, std::string user_id,
+                       std::string display_name)>
+        on_unban_member;
     std::function<void(std::string user_id)>                on_open_dm;
     // Predicate: return true when a DM with user_id already exists.
     // Set by the shell (ShellBase wires this to find_existing_dm_).
@@ -716,7 +748,7 @@ private:
     // area. room_settings_view_ is deliberately not here — it replaces the
     // ENTIRE room content (early-returns from both arrange() and paint())
     // rather than layering on top of it.
-    std::array<tk::Widget*, 7> overlay_panels_() const;
+    std::array<tk::Widget*, 8> overlay_panels_() const;
 
     // Transparent overlay placed on top of the main MessageListView while the
     // thread panel is open. It eats hover events (so the timeline doesn't
@@ -745,11 +777,19 @@ private:
     // — close_panel closes whichever of the two panels is currently open.
     void confirm_and_leave_room_(std::function<void()> close_panel,
                                  std::string room_id);
+    // Confirms kicking (ban=false) / banning a member, collecting an
+    // optional reason, then forwards to on_kick_member / on_ban_member.
+    // Falls back to firing directly (no reason) if confirm_provider_ is unset.
+    void confirm_and_moderate_member_(bool ban, std::string room_id,
+                                      std::string user_id,
+                                      std::string display_name);
     // Swap room_info_panel_ for knock_requests_panel_. Mirrors
     // show_room_settings(); the reverse (knock_requests_panel_->on_close)
     // calls show_room_info() to go back, unlike Settings' Cancel which
     // leaves the slot empty (see RoomInfoPanel::on_knock_requests_view_requested).
     void show_knock_requests();
+    // Close room_info_panel_ and open invite_dialog_ for the current room.
+    void show_invite_dialog();
     void show_user_profile(std::string user_id, std::string display_name,
                            std::string avatar_url);
 
@@ -841,6 +881,12 @@ private:
     // routing and set_room()'s room-switch panel-closing for free, the same
     // as room_info_panel_/room_settings_view_/user_profile_panel_.
     RoomMediaView*    room_media_view_    = nullptr;
+    // Modal invite-to-room card, opened from RoomInfoPanel's "Invite
+    // people" button. RoomView-owned (added after room_media_view_) for the
+    // same reasons as room_media_view_: pop-out windows get it for free, and
+    // it joins active_overlay_panel_() routing and set_room()'s room-switch
+    // closing.
+    InviteDialog*     invite_dialog_      = nullptr;
     // Admin-side "Requests to join" panel (MSC2403). Swaps in for
     // room_info_panel_ exactly like room_settings_view_ does — see
     // show_knock_requests()/KnockRequestsPanel's own header doc comment.
@@ -864,6 +910,9 @@ private:
     // Call-in-progress banner — created in constructor (hidden), driven by
     // set_call_banner() / clear_call_banner().
     CallBanner* call_banner_ = nullptr;
+    // Identity-change strip — created in constructor (hidden), driven by
+    // set_identity_warnings().
+    IdentityChangeBanner* identity_banner_ = nullptr;
     // Docked call panel — lazily created by mount_call_panel(), removed by
     // unmount_call_panel(). nullptr when no call is active.
     views::CallOverlayWidget* call_panel_ = nullptr;

@@ -182,8 +182,8 @@ std::wstring prompt_passphrase_w32(HWND parent, const wchar_t* title)
 
     item(WS_CHILD | WS_VISIBLE | WS_BORDER | ES_PASSWORD | ES_AUTOHSCROLL,
          100, 4, 4, 192, 14, 0x0081, L"");
-    item(WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, IDOK, 96, 40, 46, 14, 0x0080, L"OK");
-    item(WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, IDCANCEL, 146, 40, 50, 14, 0x0080, L"Cancel");
+    item(WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, IDOK, 96, 40, 46, 14, 0x0080, utf8_to_wstr(tk::tr("OK")).c_str());
+    item(WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, IDCANCEL, 146, 40, 50, 14, 0x0080, utf8_to_wstr(tk::tr("Cancel")).c_str());
 
     PassphraseCtx_ ctx;
     DialogBoxIndirectParamW(GetModuleHandleW(nullptr),
@@ -842,130 +842,6 @@ void MainWindow::refresh_pickers_packs_()
         sp->invalidate_image_cache();
 }
 
-void MainWindow::handle_verification_state_ui_(bool is_verified)
-{
-    if (!main_app_)
-    {
-        return;
-    }
-    if (main_app_->user_info())
-    {
-        main_app_->user_info()->set_warning_dot(!is_verified);
-    }
-    // Only prompt when there is actually an identity to verify against. On a
-    // fresh/only device our own login-time bootstrap holds the cross-signing
-    // keys, so "verify this device" is a dead end — check_encryption_setup_
-    // drives the Fresh setup overlay instead.
-    if (!is_verified && !verification_banner_dismissed_
-        && foreign_cross_signing_identity_())
-    {
-        if (!verif_banner_visible_)
-        {
-            if (verif_shared_)
-            {
-                verif_shared_->set_state(
-                    tesseract::views::VerificationBanner::State::Prompt);
-            }
-            main_app_->show_verif_banner(true);
-            verif_banner_visible_ = true;
-            if (main_app_surface_)
-            {
-                main_app_surface_->relayout();
-            }
-        }
-    }
-    else
-    {
-        if (verif_banner_visible_)
-        {
-            main_app_->show_verif_banner(false);
-            verif_banner_visible_ = false;
-            if (main_app_surface_)
-            {
-                main_app_surface_->relayout();
-            }
-        }
-    }
-}
-
-void MainWindow::handle_verification_request_ui_(std::string flow_id,
-                                                 std::string /*user_id*/,
-                                                 std::string /*device_id*/,
-                                                 bool incoming)
-{
-    active_verification_flow_id_ = std::move(flow_id);
-    if (!verif_shared_)
-    {
-        return;
-    }
-    if (incoming)
-    {
-        verif_shared_->set_state(
-            tesseract::views::VerificationBanner::State::IncomingRequest);
-    }
-    else
-    {
-        verif_shared_->set_state(
-            tesseract::views::VerificationBanner::State::Waiting);
-        if (client_)
-        {
-            client_->start_sas(active_verification_flow_id_);
-        }
-    }
-    if (main_app_surface_)
-    {
-        main_app_surface_->relayout();
-    }
-}
-
-void MainWindow::handle_sas_ready_ui_(
-    std::string /*flow_id*/, std::vector<tesseract::VerificationEmoji> emojis)
-{
-    if (!verif_shared_)
-    {
-        return;
-    }
-    verif_shared_->set_emojis(emojis);
-    if (main_app_surface_)
-    {
-        main_app_surface_->relayout();
-    }
-}
-
-void MainWindow::handle_verification_done_ui_(std::string /*flow_id*/)
-{
-    dismiss_encryption_setup_after_verification_();
-    if (!verif_shared_)
-    {
-        return;
-    }
-    verif_shared_->set_state(tesseract::views::VerificationBanner::State::Done);
-    if (main_app_surface_)
-    {
-        main_app_surface_->relayout();
-    }
-    if (hwnd_)
-    {
-        SetTimer(hwnd_, kVerifDoneTimerId, 1500, nullptr);
-    }
-}
-
-void MainWindow::handle_verification_cancelled_ui_(std::string /*flow_id*/,
-                                                   std::string reason)
-{
-    if (!verif_shared_)
-    {
-        return;
-    }
-    verif_shared_->set_state(
-        tesseract::views::VerificationBanner::State::Cancelled);
-    verif_shared_->set_cancel_reason(std::move(reason));
-    if (main_app_surface_)
-    {
-        main_app_surface_->relayout();
-    }
-}
-
 void MainWindow::handle_notification_ui_(
     std::string user_id, std::string room_id, std::string room_name,
     std::string sender, std::string body, bool is_mention,
@@ -1022,16 +898,13 @@ void MainWindow::on_inflight_ui_()
              reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(phase_enc)));
     if (hStatusTip_)
     {
-        wchar_t buf[192];
-        if (n == 1u)
-            std::swprintf(buf, 192,
-                          L"1 request in flight\nmedia: %zu loading \xB7 fetch: %zu queued \xB7 send: %zu queued",
-                          mp, fp, sp);
-        else
-            std::swprintf(buf, 192,
-                          L"%u requests in flight\nmedia: %zu loading \xB7 fetch: %zu queued \xB7 send: %zu queued",
-                          n, mp, fp, sp);
-        inflight_tip_text_ = buf;
+        inflight_tip_text_ = utf8_to_wstr(
+            tk::trf(tk::trn("{0} request in flight", "{0} requests in flight",
+                            static_cast<long>(n)),
+                    {std::to_string(n)}) +
+            "\n" +
+            tk::trf(tk::tr("media: {0} loading \xC2\xB7 fetch: {1} queued \xC2\xB7 send: {2} queued"),
+                    {std::to_string(mp), std::to_string(fp), std::to_string(sp)}));
 #ifndef NDEBUG
         if (!last_inflight_urls_.empty()) {
             inflight_tip_text_ += L"\n── requests ──\n";
@@ -1683,15 +1556,6 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
             }
             return 0;
         }
-        if (wParam == kVerifDoneTimerId)
-        {
-            KillTimer(hwnd, kVerifDoneTimerId);
-            if (self->verif_shared_ && self->verif_shared_->on_done)
-            {
-                self->verif_shared_->on_done();
-            }
-            return 0;
-        }
         if (wParam == kMarkReadTimerId)
         {
             KillTimer(hwnd, kMarkReadTimerId);
@@ -1716,7 +1580,7 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
                  self->last_room_list_state_ == RLS::SettingUp))
             {
                 self->sync_progress_shown_ = true;
-                SetWindowTextW(self->hStatus_, L"Syncing rooms…");
+                SetWindowTextW(self->hStatus_, utf8_to_wstr(tk::tr("Syncing rooms…")).c_str());
             }
             return 0;
         }
@@ -2074,7 +1938,6 @@ void MainWindow::on_create(HWND hwnd)
         // Wire borrowed sub-view pointers.
         room_list_view_ = main_app_->room_list_view();
         room_view_ = main_app_->room_view();
-        verif_shared_ = main_app_->verif_banner();
         img_viewer_ = main_app_->image_viewer();
         vid_viewer_ = main_app_->video_viewer();
         room_media_view_ = main_app_->room_media_view();
@@ -2356,7 +2219,7 @@ void MainWindow::on_create(HWND hwnd)
                 return;
             auto* ml = room_view_->message_list();
             HMENU menu = CreatePopupMenu();
-            AppendMenuW(menu, MF_STRING, 1, L"Copy");
+            AppendMenuW(menu, MF_STRING, 1, utf8_to_wstr(tk::tr("Copy")).c_str());
             POINT pt{};
             GetCursorPos(&pt);
             int cmd = static_cast<int>(TrackPopupMenuEx(
@@ -2589,8 +2452,10 @@ void MainWindow::on_create(HWND hwnd)
                 HMENU menu = CreatePopupMenu();
                 AppendMenuW(menu, MF_STRING | (already_saved ? MF_GRAYED : 0),
                             1,
-                            already_saved ? L"Already in Saved Stickers"
-                                          : L"Add to Saved Stickers");
+                            utf8_to_wstr(already_saved
+                                             ? tk::tr("Already in Saved Stickers")
+                                             : tk::tr("Add to Saved Stickers"))
+                                .c_str());
                 POINT sp{dip_to_phys(p.x), dip_to_phys(p.y)};
                 ClientToScreen(main_app_surface_->hwnd(), &sp);
                 int cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
@@ -3318,86 +3183,6 @@ void MainWindow::on_create(HWND hwnd)
         // pack_name_field()/paste_catcher() — so no shell-side wiring is
         // needed for any of them.
 
-        // ── VerificationBanner callbacks ─────────────────────────────────────
-        verif_shared_->on_verify = [this]
-        {
-            if (client_)
-            {
-                client_->request_self_verification();
-            }
-        };
-        verif_shared_->on_accept = [this]
-        {
-            if (client_)
-            {
-                client_->accept_verification(active_verification_flow_id_);
-                client_->start_sas(active_verification_flow_id_);
-            }
-        };
-        verif_shared_->on_match = [this]
-        {
-            if (client_)
-            {
-                client_->confirm_sas(active_verification_flow_id_);
-            }
-            if (verif_shared_)
-            {
-                verif_shared_->set_state(
-                    tesseract::views::VerificationBanner::State::Confirming);
-            }
-            if (main_app_surface_)
-            {
-                main_app_surface_->relayout();
-            }
-        };
-        verif_shared_->on_mismatch = [this]
-        {
-            if (client_)
-            {
-                client_->cancel_verification(active_verification_flow_id_);
-            }
-        };
-        verif_shared_->on_cancel = [this]
-        {
-            if (client_)
-            {
-                client_->cancel_verification(active_verification_flow_id_);
-            }
-        };
-        verif_shared_->on_dismiss = [this]
-        {
-            verification_banner_dismissed_ = true;
-            main_app_->show_verif_banner(false);
-            verif_banner_visible_ = false;
-            if (main_app_surface_)
-            {
-                main_app_surface_->relayout();
-            }
-        };
-        verif_shared_->on_done = [this]
-        {
-            main_app_->show_verif_banner(false);
-            verif_banner_visible_ = false;
-            if (main_app_surface_)
-            {
-                main_app_surface_->relayout();
-            }
-        };
-        verif_shared_->on_use_recovery_key = [this]
-        {
-            main_app_->show_verif_banner(false);
-            verif_banner_visible_ = false;
-            // The recovery-key entry path now lives in the encryption-setup
-            // overlay (Recover mode); the old inline recovery-key banner was
-            // removed.
-            show_encryption_setup_overlay_(
-                tesseract::views::EncryptionSetupOverlay::Mode::Recover);
-            if (main_app_surface_)
-            {
-                main_app_surface_->relayout();
-            }
-        };
-
         // ── Image + video viewers ──────────────────────────────────────────
         // Providers / repaint / on_close come from RoomPane::wire_room_view_
         // via main_room_pane_->attach() above; only the video player is
@@ -3413,7 +3198,7 @@ void MainWindow::on_create(HWND hwnd)
                 suggested = L"image";
             std::wstring path = show_save_dialog_(
                 suggested,
-                L"Images\0*.jpg;*.jpeg;*.png;*.gif;*.webp\0All files\0*.*\0\0");
+                file_filter({{tk::tr("Images"), L"*.jpg;*.jpeg;*.png;*.gif;*.webp"}, {tk::tr("All files"), L"*.*"}}).c_str());
             if (path.empty())
                 return;
             if (client_)
@@ -3449,7 +3234,7 @@ void MainWindow::on_create(HWND hwnd)
             std::wstring suggested(suggested_u8.begin(), suggested_u8.end());
             std::wstring path = show_save_dialog_(
                 suggested,
-                L"Videos\0*.mp4;*.webm;*.mkv\0All files\0*.*\0\0");
+                file_filter({{tk::tr("Videos"), L"*.mp4;*.webm;*.mkv"}, {tk::tr("All files"), L"*.*"}}).c_str());
             if (path.empty())
                 return;
             if (client_)
@@ -3482,7 +3267,7 @@ void MainWindow::on_create(HWND hwnd)
             if (suggested.empty())
                 suggested = L"download";
             std::wstring path = show_save_dialog_(suggested,
-                                                  L"All files\0*.*\0\0");
+                                                  file_filter({{tk::tr("All files"), L"*.*"}}).c_str());
             if (path.empty())
                 return;
             std::string url = hit.source ? hit.source->fetch_token() : std::string{};
@@ -3611,12 +3396,7 @@ void MainWindow::on_create(HWND hwnd)
                     if (auto* sf = main_app_->room_list_view()->search_field())
                         sf->set_visible(false);
                     if (auto* ov = main_app_->encryption_setup())
-                    {
-                        if (auto* pf = ov->passphrase_field())
-                            pf->set_visible(false);
-                        if (auto* kf = ov->key_field())
-                            kf->set_visible(false);
-                    }
+                        ov->hide_native_fields();
                     if (auto* tf = main_app_->room_view()->room_info_panel()->topic_field())
                         tf->set_visible(false);
                 }
@@ -3637,7 +3417,7 @@ void MainWindow::on_create(HWND hwnd)
     // Custom flat status strip. Replaces STATUSCLASSNAMEW which carries a 9x
     // size-grip and chunky inset borders.
     register_status_bar_class(hInst_);
-    hStatus_ = CreateWindowExW(0, L"TesseractStatusBar", L"Not logged in",
+    hStatus_ = CreateWindowExW(0, L"TesseractStatusBar", utf8_to_wstr(tk::tr("Not logged in")).c_str(),
                                WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, hwnd, nullptr,
                                hInst_, nullptr);
     // Lets status_bar_wnd_proc (a free function, no `this`) reach back into
@@ -3904,7 +3684,7 @@ void MainWindow::start_login()
     }
 
     SendMessageW(hStatus_, SB_SETTEXTW, 0,
-                 reinterpret_cast<LPARAM>(L"Restoring session…"));
+                 reinterpret_cast<LPARAM>(utf8_to_wstr(tk::tr("Restoring session…")).c_str()));
 
     // Pre-flight OS-level connectivity check — see tk::Host::
     // is_network_available()'s doc comment. Computed here, on the UI
@@ -3945,7 +3725,7 @@ void MainWindow::start_login()
                 }
                 show_login_view();
                 SendMessageW(hStatus_, SB_SETTEXTW, 0,
-                             reinterpret_cast<LPARAM>(L"Not logged in"));
+                             reinterpret_cast<LPARAM>(utf8_to_wstr(tk::tr("Not logged in")).c_str()));
                 return;
             }
 
@@ -3988,7 +3768,7 @@ void MainWindow::start_screenshot_mode_()
     populate_user_strip();
     show_main_content();
     SendMessageW(hStatus_, SB_SETTEXTW, 0,
-                 reinterpret_cast<LPARAM>(L"Connected"));
+                 reinterpret_cast<LPARAM>(utf8_to_wstr(tk::tr("Connected")).c_str()));
 
     // A fixed physical window size makes output stable on the 96-DPI hosted
     // runner while remaining large enough to exercise the desktop layout.
@@ -4170,8 +3950,8 @@ void MainWindow::on_login_succeeded()
                 if (login_view_)
                 {
                     login_view_->set_status_message(
-                        L"Already signed in as " +
-                        std::wstring(fin.user_id.begin(), fin.user_id.end()));
+                        utf8_to_wstr(tk::trf(tk::tr("Already signed in as {0}"),
+                                             {fin.user_id})));
                 }
                 pending_login_is_add_account_ = false;
                 if (add_account_return_idx_ >= 0 &&
@@ -4199,8 +3979,8 @@ void MainWindow::on_login_succeeded()
                     // is wiped before it's ever painted.
                     login_view_->reset();
                     login_view_->set_status_message(
-                        L"Sign-in failed: " +
-                        std::wstring(fin.error.begin(), fin.error.end()));
+                        utf8_to_wstr(tk::trf(tk::tr("Sign-in failed: {0}"),
+                                             {fin.error})));
                 }
                 return;
             }
@@ -5312,7 +5092,9 @@ void MainWindow::pick_image_file_(
     ofn.hwndOwner   = hwnd_;
     ofn.lpstrFile   = buf;
     ofn.nMaxFile    = MAX_PATH;
-    ofn.lpstrFilter = L"Images\0*.png;*.jpg;*.jpeg;*.gif;*.webp\0\0";
+    const std::wstring filter =
+        file_filter({{tk::tr("Images"), L"*.png;*.jpg;*.jpeg;*.gif;*.webp"}});
+    ofn.lpstrFilter = filter.c_str();
     ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
     if (!GetOpenFileNameW(&ofn))
         return;
@@ -5983,7 +5765,7 @@ void MainWindow::refresh_sync_status()
         }
         else if (sync_progress_shown_)
         {
-            SetWindowTextW(hStatus_, L"Syncing rooms…");
+            SetWindowTextW(hStatus_, utf8_to_wstr(tk::tr("Syncing rooms…")).c_str());
         }
         return;
     }
@@ -5997,16 +5779,16 @@ void MainWindow::refresh_sync_status()
     if (reconnecting)
     {
         sync_progress_shown_ = true;
-        SetWindowTextW(hStatus_, L"Reconnecting…");
+        SetWindowTextW(hStatus_, utf8_to_wstr(tk::tr("Reconnecting…")).c_str());
         return;
     }
     if (keys_busy)
     {
         sync_progress_shown_ = true;
-        wchar_t buf[96];
-        swprintf_s(buf, L"Downloading encryption keys (%llu)…",
-                   static_cast<unsigned long long>(last_imported_keys_));
-        SetWindowTextW(hStatus_, buf);
+        SetWindowTextW(hStatus_,
+                       utf8_to_wstr(tk::trf(tk::tr("Downloading encryption keys ({0})…"),
+                                            {std::to_string(last_imported_keys_)}))
+                           .c_str());
         return;
     }
     // Steady state: settle to "Connected" unless a persistent status override
@@ -6014,7 +5796,7 @@ void MainWindow::refresh_sync_status()
     if (has_status_override_())
         return;
     sync_progress_shown_ = false;
-    SetWindowTextW(hStatus_, L"Connected");
+    SetWindowTextW(hStatus_, utf8_to_wstr(tk::tr("Connected")).c_str());
 }
 
 // ---------------------------------------------------------------------------
@@ -6118,9 +5900,8 @@ void MainWindow::refresh_account_ui_after_switch_()
 
     if (main_app_)
     {
-        main_app_->show_verif_banner(false);
+        main_app_->show_encryption_reminder(false);
     }
-    verif_banner_visible_ = false;
     if (main_app_surface_)
     {
         main_app_surface_->relayout();
@@ -6131,7 +5912,7 @@ void MainWindow::refresh_account_ui_after_switch_()
 
     show_main_content();
     SendMessageW(hStatus_, SB_SETTEXTW, 0,
-                 reinterpret_cast<LPARAM>(L"Connected"));
+                 reinterpret_cast<LPARAM>(utf8_to_wstr(tk::tr("Connected")).c_str()));
     handle_verification_state_ui_(active_account_ && !active_account_->unverified);
 
     // Exactly one window owns the single app-wide tray icon (multi-window).
@@ -6297,15 +6078,13 @@ void MainWindow::logout_active_account()
         if (main_app_)
         {
             main_app_->clear_content();
-            main_app_->show_verif_banner(false);
+            main_app_->show_encryption_reminder(false);
         }
         if (main_app_surface_)
         {
             main_app_surface_->relayout();
         }
     }
-    verification_banner_dismissed_ = false;
-    verif_banner_visible_ = false;
 
     if (!result.has_remaining)
     {
@@ -6323,7 +6102,7 @@ void MainWindow::logout_active_account()
     }
 
     SendMessageW(hStatus_, SB_SETTEXTW, 0,
-                 reinterpret_cast<LPARAM>(L"Signed out"));
+                 reinterpret_cast<LPARAM>(utf8_to_wstr(tk::tr("Signed out")).c_str()));
 }
 
 void MainWindow::rebuild_account_picker()
@@ -6738,7 +6517,7 @@ void MainWindow::wire_key_dialog_callbacks_()
     {
         std::wstring path = show_save_dialog_(
             utf8_to_wstr(suggested_name),
-            L"Key files\0*.txt\0All files\0*.*\0\0");
+            file_filter({{tk::tr("Key files"), L"*.txt"}, {tk::tr("All files"), L"*.*"}}).c_str());
         if (!path.empty())
             cb(wstr_to_utf8(path.c_str()));
     };
@@ -6752,7 +6531,9 @@ void MainWindow::wire_key_dialog_callbacks_()
         ofn.hwndOwner   = hwnd_;
         ofn.lpstrFile   = buf;
         ofn.nMaxFile    = MAX_PATH;
-        ofn.lpstrFilter = L"Key files\0*.txt\0All files\0*.*\0\0";
+        const std::wstring filter = file_filter(
+            {{tk::tr("Key files"), L"*.txt"}, {tk::tr("All files"), L"*.*"}});
+        ofn.lpstrFilter = filter.c_str();
         ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
         if (GetOpenFileNameW(&ofn))
             cb(wstr_to_utf8(buf));
@@ -6762,22 +6543,22 @@ void MainWindow::wire_key_dialog_callbacks_()
         [this](bool ok, std::string error)
     {
         if (ok)
-            MessageBoxW(hwnd_, L"Room keys exported successfully.",
-                        L"Export complete", MB_OK | MB_ICONINFORMATION);
+            MessageBoxW(hwnd_, utf8_to_wstr(tk::tr("Room keys exported successfully.")).c_str(),
+                        utf8_to_wstr(tk::tr("Export complete")).c_str(), MB_OK | MB_ICONINFORMATION);
         else
             MessageBoxW(hwnd_, utf8_to_wstr(error).c_str(),
-                        L"Export failed", MB_OK | MB_ICONWARNING);
+                        utf8_to_wstr(tk::tr("Export failed")).c_str(), MB_OK | MB_ICONWARNING);
     };
 
     settings_controller_->on_import_keys_result =
         [this](bool ok, std::string error)
     {
         if (ok)
-            MessageBoxW(hwnd_, L"Room keys imported successfully.",
-                        L"Import complete", MB_OK | MB_ICONINFORMATION);
+            MessageBoxW(hwnd_, utf8_to_wstr(tk::tr("Room keys imported successfully.")).c_str(),
+                        utf8_to_wstr(tk::tr("Import complete")).c_str(), MB_OK | MB_ICONINFORMATION);
         else
             MessageBoxW(hwnd_, utf8_to_wstr(error).c_str(),
-                        L"Import failed", MB_OK | MB_ICONWARNING);
+                        utf8_to_wstr(tk::tr("Import failed")).c_str(), MB_OK | MB_ICONWARNING);
     };
 }
 
@@ -6792,7 +6573,9 @@ void MainWindow::wire_history_export_dialog_callbacks_()
         BROWSEINFOW bi{};
         bi.hwndOwner = hwnd_;
         bi.pszDisplayName = path_buf;
-        bi.lpszTitle = L"Choose a folder for the exported history";
+        const std::wstring title =
+            utf8_to_wstr(tk::tr("Choose a folder for the exported history"));
+        bi.lpszTitle = title.c_str();
         bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
         LPITEMIDLIST pidl = SHBrowseForFolderW(&bi);
         if (!pidl)
@@ -6811,6 +6594,21 @@ void MainWindow::wire_history_export_dialog_callbacks_()
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+std::wstring MainWindow::file_filter(
+    std::initializer_list<std::pair<std::string, const wchar_t*>> entries)
+{
+    std::wstring f;
+    for (const auto& [label, pattern] : entries)
+    {
+        f += utf8_to_wstr(label);
+        f.push_back(L'\0');
+        f += pattern;
+        f.push_back(L'\0');
+    }
+    f.push_back(L'\0');
+    return f;
+}
+
 std::wstring MainWindow::show_save_dialog_(const std::wstring& suggested,
                                            const wchar_t* filter)
 {
@@ -6827,30 +6625,6 @@ std::wstring MainWindow::show_save_dialog_(const std::wstring& suggested,
     if (GetSaveFileNameW(&ofn))
         return buf;
     return {};
-}
-
-// ---------------------------------------------------------------------------
-// EncryptionSetupOverlay — Win32 wiring
-// ---------------------------------------------------------------------------
-
-void MainWindow::show_encryption_setup_overlay_(
-    tesseract::views::EncryptionSetupOverlay::Mode mode)
-{
-    if (!main_app_)
-        return;
-    auto* ov = main_app_->encryption_setup();
-    if (!ov)
-        return;
-
-    // Reconfigure the overlay (clears prior callbacks + field text) before
-    // wiring the shared callbacks via ShellBase.
-    ov->reset(mode);
-
-    wire_encryption_setup_callbacks_(*ov, main_app_surface_->host());
-
-    main_app_->show_encryption_setup(true);
-    if (main_app_surface_)
-        main_app_surface_->relayout();
 }
 
 std::vector<tk::Rect> MainWindow::get_screen_work_areas_() const
@@ -6920,6 +6694,64 @@ void MainWindow::set_window_fullscreen_(bool on)
     RECT rc{};
     GetClientRect(hwnd_, &rc);
     on_size(rc.right - rc.left, rc.bottom - rc.top);
+}
+
+bool MainWindow::spawn_relaunch_(const std::vector<std::string>& args)
+{
+    wchar_t exe_path[MAX_PATH]{};
+    if (GetModuleFileNameW(nullptr, exe_path, MAX_PATH) == 0)
+        return false;
+
+    // relaunch_args() are ASCII without spaces (profile names are
+    // [A-Za-z0-9_-]), so only the exe path needs quoting.
+    std::wstring cmd = std::wstring(L"\"") + exe_path + L"\"";
+    for (const auto& arg : args)
+    {
+        cmd += L" ";
+        for (char c : arg)
+            cmd.push_back(static_cast<wchar_t>(c));
+    }
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    if (!CreateProcessW(exe_path, cmd.data(), nullptr, nullptr, FALSE, 0,
+                        nullptr, nullptr, &si, &pi))
+    {
+        return false;
+    }
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return true;
+}
+
+void MainWindow::quit_app_()
+{
+    // The "Quit" menu item only destroys its own window; the app exits when
+    // the last one goes (WM_DESTROY). Restarting must close them all.
+    // Close the others first, re-reading the registry each time (WM_DESTROY
+    // unregisters a window, and closing one may tear down others), and this
+    // window last, since nothing may touch `this` after it is destroyed.
+    for (;;)
+    {
+        MainWindow* other = nullptr;
+        for (ShellBase* w : account_manager_.all_windows())
+        {
+            if (w != this)
+            {
+                other = dynamic_cast<MainWindow*>(w);
+                if (other)
+                    break;
+            }
+        }
+        if (!other)
+            break;
+        other->quitting_ = true;
+        if (!DestroyWindow(other->hwnd_))
+            break;
+    }
+    quitting_ = true;
+    DestroyWindow(hwnd_);
 }
 
 void MainWindow::rebuild_tray_()

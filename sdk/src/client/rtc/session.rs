@@ -306,9 +306,12 @@ pub async fn start_call(
                     }
                     Ok(raw_key) => {
                         let set = holder.lock().clone();
+                        // accept_key_event checked the claimed device against
+                        // the one the event was actually sent from.
+                        let device = ev.content.member.claimed_device_id.as_str();
                         match set {
-                            Some(set) => set.apply_key(&sender, index, raw_key),
-                            None => shared.store(&sender, index, raw_key),
+                            Some(set) => set.apply_key(&sender, device, index, raw_key),
+                            None => shared.store(&sender, device, index, raw_key),
                         }
                     }
                     Err(e) => warn!(

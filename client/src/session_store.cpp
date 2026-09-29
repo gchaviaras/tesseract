@@ -2,6 +2,7 @@
 #include "tesseract/secret_store.h"
 #include "tesseract/paths.h"
 #include "json_util.h"
+#include "session_persist_queue.h"
 
 #include <nlohmann/json.hpp>
 
@@ -9,6 +10,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -222,6 +224,16 @@ static bool atomic_write(const fs::path& p, std::string_view content)
     return true;
 }
 
+// Serialises every write to an account's credentials (SecretStore entry +
+// session.json). The persist queue's worker, the login-time save and logout's
+// clear_account() otherwise run on different threads and share the fixed
+// session.json.tmp name used by atomic_write().
+static std::mutex& credential_write_mutex()
+{
+    static std::mutex m;
+    return m;
+}
+
 // Written to session.json after a successful migration to SecretStore.
 // load_account() treats this as "data is in SecretStore; return nullopt on miss."
 static constexpr std::string_view kMigratedSentinel = "{\"v\":2}";
@@ -328,8 +340,11 @@ fs::path SessionStore::sdk_store_dir(const std::string& user_id)
 // Parse the on-disk index body with nlohmann. Unlike the previous hand-rolled
 // scanner (which returned a silently-empty index on ANY malformation —
 // indistinguishable from "no accounts"), this distinguishes three outcomes:
-//   * empty body            ⇒ empty index, not corrupt   (treated by caller as
-//                                                          file-absent)
+//   * empty body            ⇒ empty index, corrupt = true (serialize_index
+//                                                          never writes an
+//                                                          empty body, so a
+//                                                          zero-byte file is
+//                                                          a truncated write)
 //   * valid JSON object     ⇒ parsed index, not corrupt
 //   * parse error / wrong   ⇒ empty index, corrupt = true
 //     shape
@@ -340,8 +355,8 @@ static SessionStore::AccountIndex parse_index_body(const std::string& body)
     SessionStore::AccountIndex idx;
     if (body.empty())
     {
-        return idx; // not corrupt — caller treats an empty/absent file as "no
-                    // accounts".
+        idx.corrupt = true;
+        return idx;
     }
 
     try
@@ -399,6 +414,41 @@ SessionStore::AccountIndex SessionStore::load_index()
     std::ifstream in(p, std::ios::binary);
     if (!in)
     {
+        std::error_code ec;
+        if (fs::exists(p, ec) || ec)
+        {
+            // Present but unopenable (locked, permissions): not the same as
+            // "no accounts".
+            idx.corrupt = true;
+            return idx;
+        }
+        // Absent. atomic_write()'s replace fallback moves the old file to
+        // .bak before installing the new one, so a crash between those two
+        // renames leaves only the backup — recover it.
+        fs::path bak = p;
+        bak += ".bak";
+        std::ifstream bin(bak, std::ios::binary);
+        if (bin)
+        {
+            std::ostringstream bbuf;
+            bbuf << bin.rdbuf();
+            const bool read_ok = !bin.bad();
+            bin.close();
+            if (read_ok)
+            {
+                AccountIndex recovered = parse_index_body(bbuf.str());
+                if (!recovered.corrupt)
+                {
+                    std::error_code re;
+                    fs::rename(bak, p, re);
+                    std::fprintf(stderr,
+                                 "[tesseract] accounts.json was missing; "
+                                 "recovered it from accounts.json.bak.\n");
+                    recovered.present = true;
+                    return recovered;
+                }
+            }
+        }
         return idx; // file absent ⇒ legitimately no accounts (corrupt == false)
     }
     std::ostringstream buf;
@@ -412,6 +462,7 @@ SessionStore::AccountIndex SessionStore::load_index()
     }
 
     idx = parse_index_body(buf.str());
+    idx.present = !idx.corrupt;
     if (idx.corrupt)
     {
         std::fprintf(stderr,
@@ -551,8 +602,11 @@ SessionStore::load_account(const std::string& user_id)
     // 3. Opportunistic migration: on first load after upgrade, move the
     //    plaintext session to SecretStore. Best-effort: if SecretStore is
     //    unavailable (stub) the plaintext continues to be used as-is.
-    if (SecretStore::save(user_id, s))
-        atomic_write(p, kMigratedSentinel);
+    {
+        std::lock_guard<std::mutex> lk(credential_write_mutex());
+        if (SecretStore::save(user_id, s))
+            atomic_write(p, kMigratedSentinel);
+    }
 
     return s;
 }
@@ -563,6 +617,7 @@ bool SessionStore::save_account(const std::string& user_id,
     if (sanitize_user_id(user_id).empty())
         return false;
 
+    std::lock_guard<std::mutex> lk(credential_write_mutex());
     if (SecretStore::save(user_id, json))
     {
         // Sentinel write is best-effort: if it fails, SecretStore remains
@@ -573,7 +628,24 @@ bool SessionStore::save_account(const std::string& user_id,
 
     // SecretStore unavailable (stub / backend error) — write full JSON to
     // disk (plaintext fallback).
-    return atomic_write(account_dir(user_id) / "session.json", json);
+    //
+    // load_account() prefers SecretStore, so an older entry still sitting
+    // there (from a save that worked earlier) would win over this newer disk
+    // copy on the next load — e.g. restoring a refresh token that has since
+    // been consumed. Drop it first; if it can't be dropped, the disk copy
+    // isn't authoritative and the save must not report success.
+    SecretStore::remove(user_id);
+    const bool written =
+        atomic_write(account_dir(user_id) / "session.json", json);
+    if (SecretStore::load(user_id))
+    {
+        std::fprintf(stderr,
+                     "[tesseract] credential store rejected the session "
+                     "update but still holds an older copy; the new session "
+                     "was not persisted authoritatively.\n");
+        return false;
+    }
+    return written;
 }
 
 namespace
@@ -659,8 +731,23 @@ bool SessionStore::save_session_update(const std::string& user_id,
     return save_account(user_id, session_json);
 }
 
+void SessionStore::queue_session_update(const std::string& user_id,
+                                        const std::string& session_json)
+{
+    session_persist_queue().enqueue(user_id, session_json);
+}
+
+void SessionStore::flush_session_updates()
+{
+    session_persist_queue().drain();
+}
+
 void SessionStore::clear_account(const std::string& user_id)
 {
+    // Outside the lock: a write already in flight on the queue's worker
+    // takes credential_write_mutex() itself, and discard() waits for it.
+    session_persist_queue().discard(user_id);
+    std::lock_guard<std::mutex> lk(credential_write_mutex());
     SecretStore::remove(user_id);
     // Best-effort: if this fails (matrix-sdk's crypto store can still hold
     // an open, memory-mapped section post-logout — see
@@ -709,6 +796,14 @@ void SessionStore::sweep_orphaned_account_dirs()
     // preserved (quarantined to accounts.json.corrupt) by save_index() the
     // next time anything legitimately saves it.
     if (idx.corrupt)
+    {
+        return;
+    }
+    // Same for an absent index: with no file there is no record of which
+    // folders are in use, and anything under accounts/ may be a live
+    // account whose index was lost. Deleting it would take its local
+    // encryption keys with it.
+    if (!idx.present)
     {
         return;
     }

@@ -101,7 +101,15 @@ struct ReplyRetryShell : ShellReplyRetryWithAccountManager, ShellBase
                                       std::size_t) override {}
 
     using ShellBase::reply_details_requested_;
+    using ShellBase::reply_details_key_;
 };
+
+// Entries are keyed by (account, event id). These panes have no session, so
+// their account is empty.
+std::string key(const std::string& event_id)
+{
+    return ReplyRetryShell::reply_details_key_("", event_id);
+}
 
 std::unique_ptr<RoomPane> make_pane(ReplyRetryShell& s,
                                     const std::string& room_id)
@@ -145,8 +153,8 @@ TEST_CASE("retry_stale_reply_previews_ retries an unresolved reply once its "
     // dedup guard permanently set the way ensure_reply_details_ would after
     // a lost race with pagination.
     view.insert_message(0, make_reply_row("$reply1", "$missing", ""));
-    s.reply_details_requested_.insert("$reply1");
-    REQUIRE(s.reply_details_requested_.count("$reply1") == 1);
+    s.reply_details_requested_.insert(key("$reply1"));
+    REQUIRE(s.reply_details_requested_.count(key("$reply1")) == 1);
 
     // Retrying against an empty room_id makes the re-triggered
     // ensure_reply_details_ call a guaranteed no-op (see comment above)
@@ -158,7 +166,7 @@ TEST_CASE("retry_stale_reply_previews_ retries an unresolved reply once its "
     // bailed out (empty room_id) without re-inserting it — proving
     // retry_stale_reply_previews_ actually re-attempted the fetch rather
     // than leaving the stale guard in place.
-    CHECK(s.reply_details_requested_.count("$reply1") == 0);
+    CHECK(s.reply_details_requested_.count(key("$reply1")) == 0);
 }
 
 TEST_CASE("retry_stale_reply_previews_ (thread overload) retries an "
@@ -178,8 +186,8 @@ TEST_CASE("retry_stale_reply_previews_ (thread overload) retries an "
     view.set_room(info);
 
     view.insert_message(0, make_reply_row("$reply1", "$missing", ""));
-    s.reply_details_requested_.insert("$reply1");
-    REQUIRE(s.reply_details_requested_.count("$reply1") == 1);
+    s.reply_details_requested_.insert(key("$reply1"));
+    REQUIRE(s.reply_details_requested_.count(key("$reply1")) == 1);
 
     // Empty room_id forces the re-triggered ensure_reply_details_ call to be
     // a guaranteed no-op (same early-return as the empty-room_id case above)
@@ -187,7 +195,7 @@ TEST_CASE("retry_stale_reply_previews_ (thread overload) retries an "
     pane->retry_stale_reply_previews_(view.message_list(), /*room_id=*/"",
                                       "$thread_root_event", {"$missing"});
 
-    CHECK(s.reply_details_requested_.count("$reply1") == 0);
+    CHECK(s.reply_details_requested_.count(key("$reply1")) == 0);
 }
 
 TEST_CASE("retry_stale_reply_previews_ leaves unrelated rows untouched",
@@ -206,16 +214,16 @@ TEST_CASE("retry_stale_reply_previews_ leaves unrelated rows untouched",
     // Unresolved, but quoting a *different* event than the one that just
     // arrived — must not be retried.
     view.insert_message(0, make_reply_row("$reply_other", "$other", ""));
-    s.reply_details_requested_.insert("$reply_other");
+    s.reply_details_requested_.insert(key("$reply_other"));
 
     // Already resolved — must not be retried even though its target matches,
     // since re-fetching a resolved reply is pure waste.
     view.insert_message(1, make_reply_row("$reply_resolved", "$missing", "Bob"));
-    s.reply_details_requested_.insert("$reply_resolved");
+    s.reply_details_requested_.insert(key("$reply_resolved"));
 
     pane->retry_stale_reply_previews_(view.message_list(), /*room_id=*/"",
                                       /*thread_root=*/"", {"$missing"});
 
-    CHECK(s.reply_details_requested_.count("$reply_other") == 1);
-    CHECK(s.reply_details_requested_.count("$reply_resolved") == 1);
+    CHECK(s.reply_details_requested_.count(key("$reply_other")) == 1);
+    CHECK(s.reply_details_requested_.count(key("$reply_resolved")) == 1);
 }

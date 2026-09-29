@@ -245,7 +245,10 @@ void SlashCommandController::accept(const SlashCommandSuggestion& s)
             return;
         }
         std::string body = "/" + s.name;
-        (void)tesseract::dispatch_compose_send(*c, rid, body, std::string{});
+        const tesseract::Result r =
+            tesseract::dispatch_compose_send(*c, rid, body, std::string{});
+        if (!r && hooks_.on_command_failed)
+            hooks_.on_command_failed(r.message);
         text_area_->set_text("");
         if (hooks_.clear_composer)
         {

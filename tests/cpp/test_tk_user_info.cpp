@@ -258,6 +258,38 @@ TEST_CASE("UserInfo status-line click fires on_status_clicked, not on_primary",
     CHECK_FALSE(primary_fired);
 }
 
+TEST_CASE("UserInfo non-editable status keeps height and routes clicks to "
+          "on_primary",
+          "[tk][view][user_info]")
+{
+    TkUserInfoStage st;
+    UserInfo info;
+    info.set_display_name("Alice");
+    info.set_user_id("@alice:example.org");
+    info.set_status_line_enabled(true); // no status → would be placeholder
+
+    auto lc = st.layout_ctx();
+    const float editable_h = info.measure(lc, {320.0f, 0.0f}).h;
+    info.set_status_editable(false);
+    CHECK(info.measure(lc, {320.0f, 0.0f}).h == editable_h);
+
+    bool status_fired = false;
+    bool primary_fired = false;
+    info.on_status_clicked = [&] { status_fired = true; };
+    info.on_primary = [&](tk::Point) { primary_fired = true; };
+
+    st.run(info, {0, 0, 320, 80});
+
+    // Where the placeholder would sit — no status line is drawn, so the
+    // click must fall through to on_primary.
+    info.dispatch_pointer_down({180.0f, 62.0f});
+    info.on_pointer_up({180.0f - info.bounds().x, 62.0f - info.bounds().y},
+                       /*inside_self=*/true);
+
+    CHECK(primary_fired);
+    CHECK_FALSE(status_fired);
+}
+
 TEST_CASE("UserInfo avatar click still fires on_primary with status enabled",
           "[tk][view][user_info]")
 {

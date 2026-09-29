@@ -11,6 +11,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -174,5 +175,49 @@ TEST_CASE("SessionPersistQueue drains all pending work on destruction",
         // No explicit drain — the destructor must finish queued work.
     }
     std::lock_guard<std::mutex> lk(sink().m);
+    REQUIRE(sink().total == 2);
+}
+
+TEST_CASE("SessionPersistQueue discard drops pending jobs and waits for the "
+          "in-flight one",
+          "[session_persist_queue]")
+{
+    sink().reset();
+    {
+        std::lock_guard<std::mutex> lk(sink().m);
+        sink().gate_first = true;
+    }
+
+    SessionPersistQueue q(&recording_writer);
+    q.enqueue("@a:hs", "a1"); // in-flight (gated)
+    {
+        std::unique_lock<std::mutex> lk(sink().m);
+        sink().cv.wait(lk, [] { return sink().entered; });
+    }
+    q.enqueue("@a:hs", "a2"); // pending — must never be written
+    q.enqueue("@b:hs", "b1"); // another account — unaffected
+
+    REQUIRE(q.pending() == 2);
+    std::thread discarder([&] { q.discard("@a:hs"); });
+    // discard() removes a2 immediately, then blocks on the in-flight a1.
+    // Release a1 only after that, so the worker can't pick a2 up first.
+    while (q.pending() != 1)
+        std::this_thread::yield();
+    {
+        std::lock_guard<std::mutex> lk(sink().m);
+        sink().release = true;
+    }
+    sink().cv.notify_all();
+    discarder.join(); // returns only once a1 has finished writing
+
+    {
+        std::lock_guard<std::mutex> lk(sink().m);
+        REQUIRE(sink().latest["@a:hs"] == "a1");
+    }
+    q.drain();
+
+    std::lock_guard<std::mutex> lk(sink().m);
+    REQUIRE(sink().latest["@a:hs"] == "a1");
+    REQUIRE(sink().latest["@b:hs"] == "b1");
     REQUIRE(sink().total == 2);
 }

@@ -45,6 +45,24 @@ public:
     {
         return room_id_;
     }
+    // Account that was active when this pop-out opened. Pop-outs stay open
+    // across account switches, so SDK events for room_id_ are routed here
+    // only when they come from this account (see
+    // ShellBase::popout_accepts_event_).
+    const std::string& owner_user_id() const
+    {
+        return owner_user_id_;
+    }
+    // That account's session, or null once it has logged out (its pop-outs
+    // are closed before its Client is destroyed, so normally never null).
+    std::shared_ptr<AccountSession> owner_session() const
+    {
+        return owner_.lock();
+    }
+    RoomPane* pane() const
+    {
+        return pane_.get();
+    }
     views::RoomView* room_view() const
     {
         return room_view_;
@@ -82,6 +100,12 @@ public:
     void on_typing_changed(const std::string& text, bool visible)
     {
         pane_->on_typing_changed(text, visible);
+    }
+    void on_identity_status_changed(
+        const std::string& room_id,
+        const std::vector<tesseract::IdentityWarning>& warnings)
+    {
+        pane_->on_identity_status_changed(room_id, warnings);
     }
 
     // Thread view delivery — called by ShellBase when SDK events arrive for
@@ -234,6 +258,9 @@ protected:
 
     ShellBase* shell_;
     std::string room_id_;
+    std::string owner_user_id_;
+    // Weak: holding the session would stall its logout drain.
+    std::weak_ptr<AccountSession> owner_;
     views::RoomView* room_view_ =
         nullptr; // borrowed; owned by surface widget tree. Also handed to
                  // pane_ via attach() — kept here too since platform ctors

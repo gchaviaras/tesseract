@@ -99,6 +99,17 @@ void UserInfo::set_status_line_enabled(bool enabled)
     status_layout_.reset();
 }
 
+void UserInfo::set_status_editable(bool editable)
+{
+    if (status_editable_ == editable)
+    {
+        return;
+    }
+    status_editable_ = editable;
+    status_emoji_layout_.reset();
+    status_layout_.reset();
+}
+
 void UserInfo::set_image_provider(ImageProvider p)
 {
     image_provider_ = std::move(p);
@@ -338,8 +349,11 @@ void UserInfo::paint(tk::PaintCtx& ctx)
 
         if (status_is_placeholder)
         {
-            status_layout_ =
-                ctx.factory.build_text(tk::tr("Click to set status"), st);
+            // No placeholder when the server can't store a status: clicking
+            // it would open a Settings editor that can't save anything.
+            if (status_editable_)
+                status_layout_ =
+                    ctx.factory.build_text(tk::tr("Click to set status"), st);
         }
         else
         {
@@ -468,7 +482,7 @@ void UserInfo::on_pointer_up(tk::Point local, bool inside_self)
     // A release on the status line routes to on_status_clicked (opens
     // Settings → Account), never to on_primary (which opens the account
     // picker). status_rect_ is world-space, cached in the last paint().
-    if (status_line_enabled_ && on_status_clicked &&
+    if (status_line_enabled_ && status_editable_ && on_status_clicked &&
         world.x >= status_rect_.x && world.x < status_rect_.x + status_rect_.w &&
         world.y >= status_rect_.y && world.y < status_rect_.y + status_rect_.h)
     {

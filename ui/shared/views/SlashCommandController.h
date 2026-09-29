@@ -47,6 +47,9 @@ public:
         // after an arg-less command is dispatched. The controller already empties
         // the native text area; this keeps the view's cached text in sync.
         std::function<void()> clear_composer;
+        // Report an arg-less command whose server call failed (e.g. a
+        // permission error), with the error message. No-op if unset.
+        std::function<void(std::string error)> on_command_failed;
         // Open the selfie camera overlay. Called instead of dispatch_compose_send
         // when the user accepts /selfie. No-op if unset (e.g. popout windows).
         std::function<void()> on_selfie;

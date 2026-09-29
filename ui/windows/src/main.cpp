@@ -17,6 +17,7 @@
 #include <vector>
 #include "tk/i18n.h"
 #include "app/Launch.h"
+#include "app/UpdateChecker.h"
 #include <tesseract/client.h>
 #include <tesseract/paths.h>
 #include <tesseract/settings.h>
@@ -226,7 +227,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/,
         screenshot_mode ? L"io.gnomos.Tesseract.ScreenshotModeMutex" :
 #endif
         single_instance_mutex_name().c_str());
-    if (!single_inst_mutex || GetLastError() == ERROR_ALREADY_EXISTS)
+    bool duplicate = !single_inst_mutex || GetLastError() == ERROR_ALREADY_EXISTS;
+    if (duplicate && single_inst_mutex && launch.relaunch)
+    {
+        // --relaunch: the previous instance is still shutting down. Wait for
+        // it to release the mutex (an abandoned mutex, if it exits without
+        // releasing, is acquired just the same) instead of handing off.
+        const DWORD wait = WaitForSingleObject(
+            single_inst_mutex,
+            static_cast<DWORD>(plan.instance_lock_wait().count()));
+        duplicate = wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED;
+    }
+    if (duplicate)
     {
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
         if (screenshot_mode)
@@ -297,6 +309,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/,
         }
         return 0;
     }
+
+    // MSIX installs are updated by the Store or App Installer, not by the
+    // GitHub release check (which would point at the NSIS installer).
+    if (win32::package_context::is_packaged())
+        tesseract::disable_update_checks();
 
     // Packaged installs declare matrix: in AppxManifest.xml. Only the NSIS /
     // developer build owns the equivalent HKCU registration.

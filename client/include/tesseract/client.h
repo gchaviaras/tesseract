@@ -99,6 +99,7 @@ struct ServerInfo
     bool can_set_avatar            = true;
     bool supports_profile_fields   = false;  ///< server advertises uk.tcpip.msc4133
     bool profile_fields_enabled    = true;   ///< m.profile_fields.enabled capability
+    bool preview_url_enabled       = true;   ///< MSC4452 m.preview_url.enabled capability
     bool supports_qr_grant         = false;  ///< server advertises org.matrix.msc4108 (QR grant login)
     bool supports_calls            = false;  ///< server has a livekit RTC transport (MSC4195/MSC4143/well-known)
     std::string default_room_version;        ///< e.g. "10"; empty when absent
@@ -291,6 +292,12 @@ public:
 
     static bool open_in_browser(const std::string& url);
 
+    /// MSC4153 "exclude insecure devices" mode, process-wide: share room
+    /// keys only with cross-signed devices and hide messages from devices
+    /// that aren't. Read when a client restores or logs in, so set it from
+    /// the persisted setting before any account starts.
+    static void set_exclude_insecure_devices(bool enabled);
+
     /// Parsed representation of a `https://matrix.to/#/…` URL or a
     /// `matrix:` URI (MSC2312).  `kind == Unknown` for unrecognised input.
     struct MatrixLink
@@ -339,6 +346,12 @@ public:
     // start_sync() later re-attaches over this (harmless) and does the
     // actual spawning.
     void attach_event_handler(IEventHandler* handler);
+
+    // While the full sync is withheld (see attach_event_handler): run an
+    // encryption-only sync — uploads this device's keys and carries
+    // verification / secret-sharing traffic, without the room-list sync.
+    // start_sync() stops it and takes over.
+    void start_encryption_sync();
     /// Signals shutdown (session flush + stop channel) without stop_sync()'s
     /// exclusive lock, so it can run immediately even while a concurrent
     /// call (send_message, subscribe_room, ...) is mid-flight. Call this
@@ -595,8 +608,14 @@ public:
     // Messaging
     // ------------------------------------------------------------------
 
+    ///
+    /// `url_previews_json` is the MSC4095 bundled-preview array from
+    /// `generate_url_previews` (empty for none); `send_reply`,
+    /// `send_thread_message`, `send_thread_reply` and `send_edit` take the
+    /// same trailing argument.
     Result send_message(const std::string& room_id, const std::string& body,
-                        const std::string& formatted_body = "");
+                        const std::string& formatted_body = "",
+                        const std::string& url_previews_json = "");
 
     /// Send an `m.emote` message (the `/me` slash command). Same arguments
     /// and semantics as `send_message` but the event carries an `m.emote`
@@ -623,7 +642,10 @@ public:
                             const std::string& arguments_json);
 
     /// Re-enable the send queue for `room_id` after a recoverable failure.
-    Result retry_send(const std::string& room_id);
+    /// A non-empty `txn_id` also unwedges that local echo, for a send that
+    /// an encryption check blocked (`pending_error` "identity_violation" /
+    /// "insecure_devices" / "own_verification_required").
+    Result retry_send(const std::string& room_id, const std::string& txn_id);
 
     /// Abort the pending local echo with `txn_id` in `room_id`.
     Result abort_send(const std::string& room_id, const std::string& txn_id);
@@ -862,14 +884,16 @@ public:
     /// the `m.in_reply_to` relation. Does not require `subscribe_room`.
     Result send_reply(const std::string& room_id, const std::string& event_id,
                       const std::string& body,
-                      const std::string& formatted_body = "");
+                      const std::string& formatted_body = "",
+                      const std::string& url_previews_json = "");
 
     /// Send `body` into the thread rooted at `thread_root` (MSC3440). Does not
     /// require subscribe_room.
     Result send_thread_message(const std::string& room_id,
                                const std::string& thread_root,
                                const std::string& body,
-                               const std::string& formatted_body);
+                               const std::string& formatted_body,
+                               const std::string& url_previews_json = "");
 
     /// Reply to `in_reply_to_event_id` within the thread rooted at
     /// `thread_root`. Does not require subscribe_room.
@@ -877,7 +901,8 @@ public:
                              const std::string& thread_root,
                              const std::string& in_reply_to_event_id,
                              const std::string& body,
-                             const std::string& formatted_body);
+                             const std::string& formatted_body,
+                             const std::string& url_previews_json = "");
 
     /// Follow `url`'s HTTP redirects (best-effort, `timeout_ms` budget) to
     /// resolve a maps shortlink (goo.gl/maps, maps.app.goo.gl, osm.org/go) to
@@ -910,7 +935,8 @@ public:
     /// Only works on own `m.text` events. Does not require `subscribe_room`.
     Result send_edit(const std::string& room_id, const std::string& event_id,
                      const std::string& new_body,
-                     const std::string& formatted_body = "");
+                     const std::string& formatted_body = "",
+                     const std::string& url_previews_json = "");
 
     /// Edit the caption of an image/file/video/audio/voice `event_id` in
     /// `room_id`. Preserves the original media content; only patches the
@@ -1537,11 +1563,31 @@ public:
     /// via IEventHandler::on_room_action_complete.
     void leave_room_async(std::uint64_t request_id, const std::string& room_id);
 
-    /// Non-blocking invite. Fire-and-forget; no callback. `reason` is
-    /// optional (empty = no reason) and, when set, is attached to the
-    /// invite via the stable `POST /rooms/{roomId}/invite` reason field.
-    void invite_user_async(const std::string& room_id, const std::string& user_id,
+    /// Non-blocking invite. Result delivered via
+    /// IEventHandler::on_room_action_complete. `reason` is optional (empty =
+    /// no reason) and, when set, is attached to the invite via the stable
+    /// `POST /rooms/{roomId}/invite` reason field.
+    void invite_user_async(std::uint64_t request_id, const std::string& room_id,
+                           const std::string& user_id,
                            const std::string& reason = "");
+
+    /// Non-blocking kick / ban. Result delivered via
+    /// IEventHandler::on_room_action_complete. `reason` is optional (empty =
+    /// no reason).
+    void kick_user_async(std::uint64_t request_id, const std::string& room_id,
+                         const std::string& user_id,
+                         const std::string& reason = "");
+    void ban_user_async(std::uint64_t request_id, const std::string& room_id,
+                        const std::string& user_id,
+                        const std::string& reason = "");
+    void unban_user_async(std::uint64_t request_id, const std::string& room_id,
+                          const std::string& user_id,
+                          const std::string& reason = "");
+
+    /// Banned members of a room. Syncs the member list first (bounded by a
+    /// timeout) so bans of users who never spoke are included.
+    /// Blocks the calling thread — call from a worker thread.
+    std::vector<BannedMember> get_banned_members(const std::string& room_id);
 
     /// Fetch the joined member list for a room.
     /// Blocks the calling thread — call from a worker thread.
@@ -1655,6 +1701,13 @@ public:
     /// room (gates the "Deny & Ban" knock-request action). Cached read —
     /// no network. Returns false on any uncertainty.
     bool can_ban_users(const std::string& room_id);
+
+    /// True iff the current user may kick / ban `target_user_id`
+    /// specifically: meets the room's kick/ban level AND outranks the target
+    /// (room-v12 privileged creators included). False for the current user
+    /// themselves. Cached read — no network. False on any uncertainty.
+    bool can_kick_user(const std::string& room_id, const std::string& target_user_id);
+    bool can_ban_user(const std::string& room_id, const std::string& target_user_id);
 
     /// True iff the current user's PL meets the requirement for sending
     /// m.room.power_levels in this room — the single all-or-nothing gate
@@ -2030,6 +2083,12 @@ public:
     /// identity synced from another device (keys absent).
     bool have_cross_signing_keys() const;
 
+    /// Whether another of our devices, signed by our own identity, can confirm
+    /// this one via emoji verification. Correct on an unverified device (unlike
+    /// list_devices()'s verification flag, which needs this device trusted) and
+    /// before the first sync. Blocks on the network — worker thread only.
+    bool has_devices_to_verify_against() const;
+
     /// Bootstrap cross-signing + key backup for a fresh account.
     /// Pass an empty `passphrase` to generate a random recovery key; non-empty
     /// to derive the key from the passphrase. Progress is reported via
@@ -2095,6 +2154,22 @@ public:
     /// refresh it immediately.
     void set_show_membership_events(bool enabled);
 
+    /// Configure sender-side MSC4095 bundled URL previews. `enabled` bundles
+    /// previews of http(s) links into outgoing text messages, fetched via the
+    /// homeserver's `/preview_url`; `direct` (only honoured with `enabled`)
+    /// fetches pages from Tesseract itself first, falling back to the
+    /// homeserver. Thread-safe; takes effect on the next send.
+    void set_bundled_url_previews(bool enabled, bool direct);
+
+    /// Generate MSC4095 bundled previews for the links in `body` (an
+    /// outgoing text body for `room_id`) per the opt-ins above, returned as
+    /// JSON for the send calls' `url_previews_json`. Empty when the opt-in
+    /// is off, there are no links, or nothing could be previewed. Blocks for
+    /// up to ~8 s and takes only the shared FFI lock: run it on the read
+    /// pool, never on the `&mut` worker (it would stall room switches).
+    std::string generate_url_previews(const std::string& room_id,
+                                      const std::string& body);
+
     /// Enable/disable MSC2545 "historical compatibility" — see
     /// Settings::msc2545_legacy_compat's doc comment for the full contract.
     /// Thread-safe.
@@ -2114,7 +2189,30 @@ public:
     /// other devices. On success, `IEventHandler::on_verification_request`
     /// fires on the remote device; locally, a request-watcher is started and
     /// `on_verification_request(incoming=false)` fires when the remote accepts.
+    // On success, `message` is the new flow id (so a decline / timeout before
+    // any device accepts can be matched to it).
     Result request_self_verification();
+
+    /// Request verification of another user's identity. The request goes to
+    /// the DM shared with them (created if missing). On success `message` is
+    /// the flow id; `IEventHandler::on_verification_request(incoming=false)`
+    /// fires once they accept. Needs this device verified (it signs their
+    /// key). Blocks — worker thread.
+    Result request_user_verification(const std::string& user_id);
+
+    /// Trust in `user_id`'s cross-signing identity. Reads the local crypto
+    /// store, downloading the user's keys once when not yet tracked.
+    /// Blocks — worker thread.
+    UserTrust get_user_trust(const std::string& user_id);
+
+    /// Accept `user_id`'s changed identity (IdentityWarning::Kind::Changed).
+    /// Blocks — worker thread.
+    Result pin_user_identity(const std::string& user_id);
+
+    /// Withdraw verification of `user_id` after their identity changed while
+    /// verified (IdentityWarning::Kind::VerificationBroken). Blocks — worker
+    /// thread.
+    Result withdraw_user_verification(const std::string& user_id);
 
     /// Accept an incoming verification request identified by `flow_id`.
     /// Call this when the UI is in IncomingRequest state and the user taps
@@ -2124,10 +2222,10 @@ public:
     /// Begin the SAS key exchange for `flow_id`. Call after accepting an
     /// incoming request (or immediately after the remote accepts an outgoing
     /// one via `on_verification_request(incoming=false)`). When the keys are
-    /// exchanged `IEventHandler::on_sas_ready` fires with the 7 emoji.
+    /// exchanged `IEventHandler::on_sas_ready` fires with the SAS codes.
     Result start_sas(const std::string& flow_id);
 
-    /// Confirm that the 7 SAS emoji match what the other device shows.
+    /// Confirm that the SAS codes match what the other device shows.
     /// Both sides must call this for verification to complete.
     Result confirm_sas(const std::string& flow_id);
 
@@ -2135,11 +2233,10 @@ public:
     /// Covers both the request phase and the SAS phase.
     Result cancel_verification(const std::string& flow_id);
 
-    /// Return the cached 7 SAS emoji for `flow_id` after
-    /// `IEventHandler::on_sas_ready` has fired. Returns an empty vector
-    /// if the flow has no emoji yet (call too early) or is unknown.
-    std::vector<VerificationEmoji>
-    get_sas_emojis(const std::string& flow_id) const;
+    /// Return the cached SAS codes for `flow_id` after
+    /// `IEventHandler::on_sas_ready` has fired. Returns no emoji and all-zero
+    /// decimals if the key exchange hasn't finished or the flow is unknown.
+    VerificationSas get_sas(const std::string& flow_id) const;
 
     // ------------------------------------------------------------------
     // Server pushers (Step 12)

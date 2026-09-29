@@ -36,11 +36,14 @@ set(_tk_sources
     app/PowerPolicy.cpp
     app/ThreadPanelController.h
     app/ThreadPanelController.cpp
+    app/EncryptionFlowController.h
+    app/EncryptionFlowController.cpp
     app/SearchBackend.h
     app/SearchBackend.cpp
     app/MediaPlaybackHub.h
     app/MediaPlaybackHub.cpp
     app/SlashCommands.h
+    app/SendPipeline.cpp
     app/SlashCommands.cpp
     app/status_links.h
     app/status_links.cpp
@@ -153,6 +156,8 @@ set(_tk_sources
     views/html_spans.cpp
     views/table_layout.h
     views/table_layout.cpp
+    views/call_tile_layout.h
+    views/call_tile_layout.cpp
     views/TabbedGridPicker.h
     views/TabbedGridPicker.cpp
     views/ReceiptGridPopup.h
@@ -171,8 +176,12 @@ set(_tk_sources
     views/ThreadListView.cpp
     views/ThreadView.h
     views/ThreadView.cpp
-    views/VerificationBanner.h
-    views/VerificationBanner.cpp
+    views/EncryptionReminderBanner.h
+    views/EncryptionReminderBanner.cpp
+    views/IdentityChangeBanner.h
+    views/IdentityChangeBanner.cpp
+    views/sas_emoji_tiles.h
+    views/sas_emoji_tiles.cpp
     views/DatePickerView.h
     views/DatePickerView.cpp
     views/RoomHeader.h
@@ -203,6 +212,10 @@ set(_tk_sources
     views/room_chip_strip.cpp
     views/ForwardRoomPicker.h
     views/ForwardRoomPicker.cpp
+    views/InviteDialog.h
+    views/InviteDialog.cpp
+    views/InviteFieldModel.h
+    views/InviteFieldModel.cpp
     views/SpaceAddRoomList.h
     views/SpaceAddRoomList.cpp
     views/SpaceChildRoomGrid.h
@@ -324,6 +337,8 @@ set(_tk_sources
     views/settings/RoomGeneralSection.cpp
     views/settings/RoomBridgeSection.h
     views/settings/RoomBridgeSection.cpp
+    views/settings/RoomModerationSection.h
+    views/settings/RoomModerationSection.cpp
     views/settings/RoomMediaSection.h
     views/settings/RoomMediaSection.cpp
     views/settings/RoomSecuritySection.h
@@ -353,6 +368,7 @@ if(TESSERACT_UI STREQUAL "qt6" OR TESSERACT_UI STREQUAL "gtk" OR TESSERACT_UI ST
     list(APPEND _tk_sources
         tk/video_decode_gst.cpp
         tk/gst_hw_probe.cpp
+        tk/gst_device_listing.cpp
     )
 endif()
 
@@ -491,10 +507,16 @@ set(_icon_svgs
     "${_lucide_dir}/lucide-battery-low.svg"
     "${_lucide_dir}/lucide-list-checks.svg"
     "${_lucide_dir}/lucide-check-check.svg"
+    "${_lucide_dir}/lucide-check.svg"
     "${_lucide_dir}/lucide-lock-keyhole.svg"
     "${_lucide_dir}/lucide-lock-keyhole-open.svg"
     "${_lucide_dir}/lucide-eye.svg"
     "${_lucide_dir}/lucide-cable.svg"
+    "${_lucide_dir}/lucide-user-round-plus.svg"
+    "${_lucide_dir}/lucide-user-round.svg"
+    "${_lucide_dir}/lucide-user-round-minus.svg"
+    "${_lucide_dir}/lucide-ban.svg"
+    "${_lucide_dir}/lucide-chevron-right.svg"
 )
 
 add_custom_command(

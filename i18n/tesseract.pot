@@ -1769,3 +1769,97 @@ msgstr ""
 #: ui/windows/src/Win32Taskbar.cpp
 msgid "Recent rooms"
 msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Link previews"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Include link previews in messages I send"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch link previews directly instead of through my homeserver"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid ""
+"Your homeserver doesn't provide link previews, so links you receive "
+"won't show a preview."
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Before sending a message that contains links, ask your homeserver for a preview of each link and attach it to the message, so recipients see it without fetching it themselves. Sending such messages can take a few seconds longer."
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
+msgstr ""
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Message not sent: {0}"
+msgstr ""
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Command failed: {0}"
+msgstr ""
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0} ({1})"
+msgstr ""
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0}'s verified identity was reset."
+msgstr ""
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "{0}'s identity was reset."
+msgstr ""
+
+#: ui/shared/views/IdentityChangeBanner.cpp
+msgid "Withdraw verification"
+msgstr ""
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't update the identity: {0}"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Exclude insecure devices (takes effect after restart)"
+msgstr ""
+
+#: ui/shared/views/settings/PrivacySection.cpp
+msgid "Only send encrypted messages to devices their owner has verified, and hide messages sent from devices that aren't. This device must be verified to send, and people whose clients don't verify their devices won't see your messages."
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Check that {0} sees the same numbers in the same order."
+msgstr ""
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Finish the current verification first."
+msgstr ""
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Switch to this account to verify users."
+msgstr ""
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Not verified"
+msgstr ""
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Not verified · verify this device first"
+msgstr ""
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Verified identity was reset"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Waiting for {0}"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "{0} needs to accept the verification request in their Matrix app."
+msgstr ""

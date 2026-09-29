@@ -9,6 +9,8 @@
 #include "tk/text_area.h"
 #include "tk/widget.h"
 
+#include "PopupMenu.h"
+
 #include <tesseract/types.h>
 
 #include <functional>
@@ -58,11 +60,29 @@ public:
     void set_notification_mode(std::string mode);
     void set_media_count(int count);
     void set_knock_requests_visible(bool visible);
+    void set_invite_visible(bool visible);
 
     using ImageProvider = std::function<const tk::Image*(const std::string& mxc)>;
     using PresenceProvider = std::function<tesseract::PresenceState(const std::string& user_id)>;
     void set_avatar_provider(ImageProvider p);
     void set_presence_provider(PresenceProvider p);
+
+    // Which moderation actions the current user may take on one member —
+    // queried when that member's context menu opens. Without a provider
+    // both are false (items shown disabled).
+    struct MemberActions
+    {
+        bool can_kick = false;
+        bool can_ban  = false;
+    };
+    using MemberActionsProvider = std::function<MemberActions(const std::string& user_id)>;
+    void set_member_actions_provider(MemberActionsProvider p);
+
+    // Test-only: the items of the most recently opened member context menu,
+    // and member row i's rect in on_right_click()'s local coordinates
+    // (empty if that row isn't laid out).
+    const std::vector<PopupMenu::Item>& member_menu_items_for_test() const;
+    tk::Rect member_row_rect_for_test(int i) const;
 
     // Self-owned topic-edit control — see tk::TextArea. Non-null whenever
     // this body was constructed with a real Host.
@@ -91,6 +111,7 @@ public:
     std::function<void(std::string room_id)>                on_fetch_members;
     std::function<void(std::string room_id, std::string t)> on_save_topic;
     std::function<void(std::string room_id)>                on_leave_room;
+    std::function<void(std::string room_id)>                on_invite_requested;
     std::function<void(std::string room_id)>                on_export_history_requested;
     std::function<void(std::string room_id)>                on_media_view_requested;
     std::function<void(std::string user_id,
@@ -102,12 +123,19 @@ public:
     std::function<void(std::string url)>                    on_link_clicked;
     std::function<void(std::string url)>                    on_link_hovered;
     std::function<void(std::string room_id)>                on_knock_requests_view_requested;
+    std::function<void(std::string room_id, std::string user_id,
+                       std::string display_name)>           on_kick_member;
+    std::function<void(std::string room_id, std::string user_id,
+                       std::string display_name)>           on_ban_member;
 
     // tk::Widget overrides
     tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override;
     void     arrange(tk::LayoutCtx&, tk::Rect bounds) override;
     void     paint_before_children(tk::PaintCtx&) override;
     void     paint_after_children(tk::PaintCtx&) override;
+    // Member row → context menu (Show profile / Kick / Ban).
+    bool     on_right_click(tk::Point local) override;
+    void     on_popup_dismiss() override;
     bool     on_pointer_down(tk::Point local) override;
     void     on_pointer_up(tk::Point local, bool inside_self) override;
     void     on_pointer_drag(tk::Point local) override;
@@ -152,6 +180,7 @@ private:
     tk::Button* save_btn_       = nullptr;
     tk::Button* cancel_btn_     = nullptr;
     tk::Button* expand_btn_     = nullptr;
+    tk::Button* invite_btn_     = nullptr;
     tk::Button* export_btn_     = nullptr;
     tk::Button* leave_btn_      = nullptr;
 
@@ -214,6 +243,11 @@ private:
 
     ImageProvider image_provider_;
     PresenceProvider presence_provider_;
+    MemberActionsProvider member_actions_provider_;
+
+    // Member-row context menu — renders in its own native popup surface (see
+    // PopupMenu's doc comment), so it's never painted/hit-tested here.
+    PopupMenu* member_menu_ = nullptr;
 
     static constexpr float kAvatarD     = 72.0f;
     static constexpr float kAvatarSmall = 32.0f;
@@ -276,10 +310,24 @@ public:
     // to keep a summary badge in sync. No-op if unchanged.
     void set_knock_requests_visible(bool visible);
 
+    // Show the "Invite people" button. Pushed by the shell whenever this
+    // panel opens (see Client::can_invite_users) — hidden by default. No-op
+    // if unchanged.
+    void set_invite_visible(bool visible);
+
     using ImageProvider = RoomInfoPanelBody::ImageProvider;
     using PresenceProvider = RoomInfoPanelBody::PresenceProvider;
     void set_avatar_provider(ImageProvider p);
     void set_presence_provider(PresenceProvider p);
+
+    using MemberActions = RoomInfoPanelBody::MemberActions;
+    using MemberActionsProvider = RoomInfoPanelBody::MemberActionsProvider;
+    // See RoomInfoPanelBody::set_member_actions_provider. Pushed by the
+    // shell whenever this panel opens.
+    void set_member_actions_provider(MemberActionsProvider p);
+
+    // Test-only access to the body (member-row rects are body-local).
+    RoomInfoPanelBody* body_for_test() const { return body_; }
 
     // Self-owned topic-edit control — see tk::TextArea. Non-null whenever
     // this panel was constructed with a real Host.
@@ -299,6 +347,9 @@ public:
     std::function<void(std::string room_id)>                on_fetch_members;
     std::function<void(std::string room_id, std::string t)> on_save_topic;
     std::function<void(std::string room_id)>                on_leave_room;
+    // Fired when the "Invite people" button is clicked. RoomView closes
+    // this panel and opens its InviteDialog.
+    std::function<void(std::string room_id)>                on_invite_requested;
     // Fired when the "Export History" button is clicked. The shell opens
     // the shared ExportHistoryDialog for this room.
     std::function<void(std::string room_id)>                on_export_history_requested;
@@ -326,6 +377,13 @@ public:
     // this panel and opens KnockRequestsPanel in its place (mirrors
     // on_room_settings_requested).
     std::function<void(std::string room_id)>                on_knock_requests_view_requested;
+    // Fired by the member-row context menu's "Kick user…" / "Ban user…"
+    // items (enabled only when MemberActionsProvider allows). RoomView
+    // confirms (with an optional reason) before forwarding to the shell.
+    std::function<void(std::string room_id, std::string user_id,
+                       std::string display_name)>           on_kick_member;
+    std::function<void(std::string room_id, std::string user_id,
+                       std::string display_name)>           on_ban_member;
 
     // tk::Widget overrides
     tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override;

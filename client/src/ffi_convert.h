@@ -40,6 +40,17 @@ inline Client::QrGrantAuth from_ffi(const tesseract_ffi::QrGrantAuth& r)
     };
 }
 
+inline VerificationSas from_ffi(const tesseract_ffi::VerificationSas& s)
+{
+    VerificationSas out;
+    out.emojis.reserve(s.emojis.size());
+    for (const auto& e : s.emojis)
+        out.emojis.push_back({std::string(e.symbol), std::string(e.description)});
+    for (size_t i = 0; i < out.decimals.size(); ++i)
+        out.decimals[i] = s.decimals[i];
+    return out;
+}
+
 inline SearchIndexStats from_ffi(const tesseract_ffi::SearchIndexStats& s)
 {
     return {s.message_count, s.room_count, s.oldest_ts_ms, s.backfill_done, 0};
@@ -799,6 +810,7 @@ inline std::unique_ptr<Event> make_event(const tesseract_ffi::TimelineEvent& e)
         ev->target_user_id = std::string(e.membership_target_user_id);
         ev->target_display_name = std::string(e.membership_target_name);
         ev->target_avatar_url = std::string(e.membership_target_avatar_url);
+        ev->reason = std::string(e.membership_reason);
         return ev;
     }
 

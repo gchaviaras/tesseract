@@ -34,6 +34,12 @@ pub fn set_rust_crash_reporting_enabled(enabled: bool) {
     super::crash_reporter::set_enabled(enabled);
 }
 
+/// MSC4153 "exclude insecure devices" mode. Process-wide; read when each
+/// matrix-sdk client is built, so call it before restoring/logging in.
+pub fn set_exclude_insecure_devices(enabled: bool) {
+    super::client::identity::set_exclude_insecure_devices(enabled);
+}
+
 pub fn compute_waveform_from_ogg(bytes: &[u8]) -> Vec<u16> {
     super::waveform::compute_waveform_from_ogg(bytes)
 }
@@ -365,6 +371,19 @@ pub mod ffi {
         power_level: i64,
     }
 
+    /// One banned member of a room, for the Room Settings → Moderation
+    /// tab. `reason` / `banned_by` come from the ban's m.room.member event
+    /// (empty when absent). `can_unban` = the current user may lift this
+    /// specific ban (ruma's target-aware `user_can_unban_user`).
+    struct BannedMember {
+        user_id: String,
+        display_name: String,
+        avatar_url: String,
+        reason: String,
+        banned_by: String,
+        can_unban: bool,
+    }
+
     /// Result of a `resolve_user_profile` lookup. `exists` is true only when
     /// the homeserver returned a profile for the requested mxid (i.e. the user
     /// exists). `display_name` falls back to the localpart when the user has no
@@ -594,6 +613,9 @@ pub mod ffi {
         /// "m.room.member" only: mxc:// avatar URL of the target as
         /// recorded in this state event's content. Empty when absent.
         membership_target_avatar_url: String,
+        /// "m.room.member" only: the optional free-text `reason` from the
+        /// state event's content (e.g. a kick/ban reason). Empty when absent.
+        membership_reason: String,
         /// "m.room.name" only: the new room name. Empty when the name was
         /// removed. Never English prose — the raw name value only.
         room_name_new: String,
@@ -673,9 +695,21 @@ pub mod ffi {
     /// `description` is the English label from the Matrix spec table (e.g. "Dog").
     /// The UI renders both side-by-side for each of the 7 tiles so the user
     /// can compare them with the other device's display.
+    #[derive(Clone)]
     struct VerificationEmoji {
         symbol: String,
         description: String,
+    }
+
+    /// The short authentication string for one SAS flow, delivered via
+    /// `on_sas_ready`. `decimals` is always set: three numbers in 1000..=9191,
+    /// the spec's `decimal` method (MSC4405 makes it the preferred one).
+    /// `emojis` holds the 7 emoji when the `emoji` method was also agreed and
+    /// is empty when the other device offered decimal only.
+    #[derive(Clone)]
+    struct VerificationSas {
+        emojis: Vec<VerificationEmoji>,
+        decimals: [u16; 3],
     }
 
     /// One GIF search result delivered to C++ via `on_gif_results`. URLs point
@@ -1473,10 +1507,10 @@ pub mod ffi {
         );
 
         /// Fired when the SAS short-auth-string key exchange completes and the
-        /// 7 emoji are ready to compare. The UI should transition to its
-        /// ShowEmojis state and render the tiles. `flow_id` matches the one
-        /// supplied by `on_verification_request`.
-        fn on_sas_ready(self: &EventHandlerBridge, flow_id: &str, emojis: &Vec<VerificationEmoji>);
+        /// codes are ready to compare. The UI should show the decimals, plus
+        /// the emoji tiles when `sas.emojis` is non-empty. `flow_id` matches
+        /// the one supplied by `on_verification_request`.
+        fn on_sas_ready(self: &EventHandlerBridge, flow_id: &str, sas: &VerificationSas);
 
         /// Fired after both sides called `confirm_sas` — the device is now
         /// cross-signing verified. The UI should transition to Done state and
@@ -1495,6 +1529,12 @@ pub mod ffi {
         /// "Verify this device" banner.
         fn on_verification_state_changed(self: &EventHandlerBridge, verified: bool);
 
+        /// Fired when the account's recovery state changes (e.g. Incomplete →
+        /// Enabled once another device has shared its secrets after an emoji
+        /// verification). Same encoding as `recovery_state()`: 0 = Unknown,
+        /// 1 = Disabled, 2 = Enabled, 3 = Incomplete.
+        fn on_recovery_state_changed(self: &EventHandlerBridge, state: u8);
+
         /// Fired when the set of typing users in `room_id` changes. `typing_user_ids`
         /// contains the localpart of each typing user (excluding the local user).
         /// An empty vec means no one is typing.
@@ -1502,6 +1542,25 @@ pub mod ffi {
             self: &EventHandlerBridge,
             room_id: &str,
             typing_user_ids: &Vec<String>,
+        );
+
+        /// Fired when the stored cross-signing identity of these users changed
+        /// (keys downloaded, a verification signature arrived, a reset), so
+        /// the UI can re-read `get_user_trust` for any it is showing.
+        fn on_user_identities_changed(self: &EventHandlerBridge, user_ids: &Vec<String>);
+
+        /// Fired while `room_id` (an encrypted room) is subscribed, with the
+        /// room's full current set of members whose cryptographic identity
+        /// changed: parallel vecs of user id, display name (may be empty) and
+        /// kind (1 = changed since first seen, 2 = changed after being
+        /// verified). An empty set means no warning. The first call after
+        /// subscribing is only made when the set is non-empty.
+        fn on_identity_status_changed(
+            self: &EventHandlerBridge,
+            room_id: &str,
+            user_ids: &Vec<String>,
+            display_names: &Vec<String>,
+            kinds: &Vec<u8>,
         );
 
         /// Fired when a presence event arrives for `user_id`. `state` encodes:
@@ -1858,6 +1917,13 @@ pub mod ffi {
         fn install_rust_panic_hook(crash_file: &str, enabled: bool);
         fn set_rust_crash_reporting_enabled(enabled: bool);
 
+        // ----- MSC4153 exclude-insecure-devices mode -----
+
+        /// Share room keys only with cross-signed devices and hide messages
+        /// from devices that aren't. Process-wide, read when a client is
+        /// built: call before `restore_session` / `oauth_begin`.
+        fn set_exclude_insecure_devices(enabled: bool);
+
         // ----- Local waveform generation -----
 
         /// Decode an Ogg/Opus buffer and compute MSC1767 waveform samples
@@ -2029,6 +2095,11 @@ pub mod ffi {
         /// spawns the sync tasks.
         fn attach_event_handler(self: &mut ClientFfi, handler: UniquePtr<EventHandlerBridge>);
         fn start_sync(self: &mut ClientFfi, handler: UniquePtr<EventHandlerBridge>);
+        /// While a fresh login's full sync is withheld behind the encryption
+        /// dialog: run an encryption-only sliding sync (key upload, to-device
+        /// verification traffic, secret sharing — no room lists). Needs
+        /// `attach_event_handler` first; `start_sync` hands over from it.
+        fn start_encryption_sync(self: &mut ClientFfi);
         /// Signals shutdown (session flush + stop channel) without the
         /// exclusive lock `stop_sync` needs, so it can run immediately even
         /// while a concurrent `&self` call (send_message, subscribe_room,
@@ -2395,11 +2466,16 @@ pub mod ffi {
 
         // ----- Messaging -----
 
+        /// `url_previews_json` is the MSC4095 bundled-preview array returned
+        /// by `generate_url_previews` (empty string for none); the same
+        /// trailing argument on `send_reply` / `send_thread_message` /
+        /// `send_thread_reply` / `send_edit` means the same thing.
         fn send_message(
             self: &ClientFfi,
             room_id: &str,
             body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Send an `m.emote` message (the `/me` slash command). Same arguments
@@ -2414,8 +2490,11 @@ pub mod ffi {
         ) -> OpResult;
 
         /// Re-enable the send queue for `room_id` after a recoverable failure.
-        /// The SDK automatically retries all pending sends.
-        fn retry_send(self: &ClientFfi, room_id: &str) -> OpResult;
+        /// The SDK automatically retries all pending sends. When `txn_id` is
+        /// non-empty that local echo is also unwedged first, which is what a
+        /// send blocked by an encryption check (see `pending_error`) needs
+        /// once the user has resolved it.
+        fn retry_send(self: &ClientFfi, room_id: &str, txn_id: &str) -> OpResult;
 
         /// Abort a pending local echo identified by `txn_id` in `room_id`.
         fn abort_send(self: &ClientFfi, room_id: &str, txn_id: &str) -> OpResult;
@@ -2434,6 +2513,7 @@ pub mod ffi {
             event_id: &str,
             body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Send `body` as a message into the thread rooted at `thread_root`
@@ -2444,6 +2524,7 @@ pub mod ffi {
             thread_root: &str,
             body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Send `body` as a reply to `in_reply_to_event_id` *within* the thread
@@ -2455,6 +2536,7 @@ pub mod ffi {
             in_reply_to_event_id: &str,
             body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Trigger an async fetch of the details of the event referenced by
@@ -2694,6 +2776,7 @@ pub mod ffi {
             event_id: &str,
             new_body: &str,
             formatted_body: &str,
+            url_previews_json: &str,
         ) -> OpResult;
 
         /// Edit the caption of an image/file/video/audio/voice `event_id` in
@@ -3354,9 +3437,50 @@ pub mod ffi {
         /// the result via `on_room_action_complete(request_id, ok, "", message)`.
         fn leave_room_async(self: &ClientFfi, request_id: u64, room_id: &str);
 
-        /// Non-blocking invite. Spawns as a tokio task; no callback. `reason`
+        /// Non-blocking invite. Spawns as a tokio task; result delivered via
+        /// on_room_action_complete(request_id, ok, "", message). `reason`
         /// empty = no reason.
-        fn invite_user_async(self: &ClientFfi, room_id: &str, user_id: &str, reason: &str);
+        fn invite_user_async(
+            self: &ClientFfi,
+            request_id: u64,
+            room_id: &str,
+            user_id: &str,
+            reason: &str,
+        );
+
+        /// Non-blocking kick. Spawns as a tokio task; result delivered via
+        /// on_room_action_complete(request_id, ok, "", message). `reason`
+        /// empty = no reason.
+        fn kick_user_async(
+            self: &ClientFfi,
+            request_id: u64,
+            room_id: &str,
+            user_id: &str,
+            reason: &str,
+        );
+
+        /// Non-blocking ban. Same delivery contract as `kick_user_async`.
+        fn ban_user_async(
+            self: &ClientFfi,
+            request_id: u64,
+            room_id: &str,
+            user_id: &str,
+            reason: &str,
+        );
+
+        /// Non-blocking unban. Same delivery contract as `kick_user_async`.
+        fn unban_user_async(
+            self: &ClientFfi,
+            request_id: u64,
+            room_id: &str,
+            user_id: &str,
+            reason: &str,
+        );
+
+        /// Banned members of a room. Syncs the member list first (bounded by
+        /// a timeout, since lazy-loaded rooms may not have ban events
+        /// locally), then reads the store. Blocks — worker thread.
+        fn get_banned_members(self: &ClientFfi, room_id: &str) -> Vec<BannedMember>;
 
         /// Fetch the joined member list for a room. Blocks — worker thread.
         fn get_room_members(self: &ClientFfi, room_id: &str) -> Vec<RoomMember>;
@@ -3477,6 +3601,14 @@ pub mod ffi {
         /// power levels, no network round-trip).
         fn can_ban_users(self: &ClientFfi, room_id: &str) -> bool;
 
+        /// True iff the current user may kick `target_user_id` specifically
+        /// (meets the kick level and outranks the target; false for self).
+        /// Blocks — worker thread (cached power levels, no network).
+        fn can_kick_user(self: &ClientFfi, room_id: &str, target_user_id: &str) -> bool;
+
+        /// Ban counterpart of `can_kick_user`.
+        fn can_ban_user(self: &ClientFfi, room_id: &str, target_user_id: &str) -> bool;
+
         /// True iff the current user's power level meets the requirement for
         /// sending m.room.power_levels in this room — the single all-or-
         /// nothing gate for the whole Permissions tab (Matrix has no finer
@@ -3586,6 +3718,24 @@ pub mod ffi {
         /// currently-subscribed rooms — callers should re-`subscribe_room`
         /// the active room after toggling to refresh it immediately.
         fn set_show_membership_events(self: &ClientFfi, enabled: bool);
+
+        /// Configure sender-side MSC4095 bundled URL previews. `enabled`
+        /// previews http(s) links in outgoing `m.text` messages (sends,
+        /// replies, thread messages, edits) via the homeserver's
+        /// `/preview_url` and bundles them into the event; `direct` (only
+        /// honoured with `enabled`) fetches the page from Tesseract itself
+        /// through an SSRF-guarded client first, falling back to the
+        /// homeserver. Thread-safe; takes effect on the next send.
+        fn set_bundled_url_previews(self: &ClientFfi, enabled: bool, direct: bool);
+
+        /// Generate MSC4095 bundled previews for the http(s) links in `body`
+        /// (an outgoing `m.text` body for `room_id`), per the
+        /// `set_bundled_url_previews` opt-ins. Returns the preview array as
+        /// JSON for the send calls' `url_previews_json` argument, or an empty
+        /// string when the opt-in is off, the body has no links, or nothing
+        /// could be previewed. Blocks for up to ~8 s; call it on a worker
+        /// thread, not the one serialising `&mut` FFI calls.
+        fn generate_url_previews(self: &ClientFfi, room_id: &str, body: &str) -> String;
 
         /// Enable/disable MSC2545 "historical compatibility": when true
         /// (default), room image-pack state and the emote-rooms
@@ -3759,6 +3909,11 @@ pub mod ffi {
         /// another device (keys absent → Recover).
         fn have_cross_signing_keys(self: &ClientFfi) -> bool;
 
+        /// Whether another of our devices (cross-signed by our identity) can
+        /// confirm this one via emoji verification. Runs the initial keys
+        /// query itself; blocks on the network.
+        fn has_devices_to_verify_against(self: &ClientFfi) -> bool;
+
         /// Unlock the server-side secret storage with a recovery key or
         /// passphrase, import the cross-signing private keys + backup
         /// decryption key into this device, and start downloading historical
@@ -3800,29 +3955,51 @@ pub mod ffi {
         // ----- SAS device verification -----
 
         /// Send an `m.key.verification.request` to-device event to every other
-        /// device of the current user. When one accepts, `on_verification_request`
-        /// fires with `incoming = false` and the UI should call `start_sas`.
+        /// device of the current user. On success `message` is the new flow id.
+        /// When one accepts, `on_verification_request` fires with
+        /// `incoming = false` and the UI should call `start_sas`.
         fn request_self_verification(self: &ClientFfi) -> OpResult;
+
+        /// Request verification of another user's cross-signing identity,
+        /// sent in the DM shared with them (created if missing). On success
+        /// `message` is the flow id; `on_verification_request` fires with
+        /// `incoming = false` once they accept. Blocks — worker thread.
+        fn request_user_verification(self: &ClientFfi, user_id: &str) -> OpResult;
+
+        /// Trust in `user_id`'s identity: 0 = unknown (no identity), 1 = not
+        /// verified, 2 = verified, 3 = verified but reset since. Blocks —
+        /// worker thread.
+        fn get_user_trust(self: &ClientFfi, user_id: &str) -> u8;
+
+        /// Accept `user_id`'s changed identity (pin the new one) after the
+        /// identity-change warning. Blocks — worker thread.
+        fn pin_user_identity(self: &ClientFfi, user_id: &str) -> OpResult;
+
+        /// Withdraw verification of `user_id` whose identity changed after
+        /// being verified; the new identity becomes pinned. Blocks — worker
+        /// thread.
+        fn withdraw_user_verification(self: &ClientFfi, user_id: &str) -> OpResult;
 
         /// Accept an incoming verification request identified by `flow_id`.
         /// Call after receiving `on_verification_request(incoming=true)`.
         fn accept_verification(self: &ClientFfi, flow_id: &str) -> OpResult;
 
         /// Start the SAS key-exchange on a ready request. The SDK will fire
-        /// `on_sas_ready` with the 7 emoji once both sides have exchanged keys.
+        /// `on_sas_ready` with the SAS codes once both sides have exchanged keys.
         fn start_sas(self: &ClientFfi, flow_id: &str) -> OpResult;
 
-        /// Confirm that the emoji shown on this device match the other device's
+        /// Confirm that the SAS codes shown on this device match the other device's
         /// display. Fires `on_verification_done` when both sides confirm.
         fn confirm_sas(self: &ClientFfi, flow_id: &str) -> OpResult;
 
-        /// Cancel or decline a verification flow (e.g. emoji mismatch or user
+        /// Cancel or decline a verification flow (e.g. SAS mismatch or user
         /// dismissed). Fires `on_verification_cancelled` on both sides.
         fn cancel_verification(self: &ClientFfi, flow_id: &str) -> OpResult;
 
-        /// Return the 7 SAS emoji for `flow_id` after `on_sas_ready` has fired.
-        /// Returns an empty Vec before the key exchange completes.
-        fn get_sas_emojis(self: &ClientFfi, flow_id: &str) -> Vec<VerificationEmoji>;
+        /// Return the SAS codes for `flow_id` after `on_sas_ready` has fired.
+        /// Before the key exchange completes, `emojis` is empty and
+        /// `decimals` is all zeros.
+        fn get_sas(self: &ClientFfi, flow_id: &str) -> VerificationSas;
 
         // ----- Server pushers (Step 12) -----
 

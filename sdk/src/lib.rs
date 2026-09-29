@@ -19,11 +19,13 @@ mod maps_link;
 mod markdown;
 mod matrix_uri;
 mod media_preview;
+mod net_guard;
 mod oauth;
 #[cfg(feature = "legacy_login")]
 mod password_login;
 mod recent_emoji;
 mod text_utils;
+mod url_preview;
 mod waveform;
 mod waveform_store;
 
@@ -181,6 +183,16 @@ pub mod ffi {
         pub avatar_url: String,
     }
 
+    #[derive(Debug, Clone, Default)]
+    pub struct BannedMember {
+        pub user_id: String,
+        pub display_name: String,
+        pub avatar_url: String,
+        pub reason: String,
+        pub banned_by: String,
+        pub can_unban: bool,
+    }
+
     #[derive(Debug, PartialEq, Default)]
     pub struct UserProfile {
         pub exists: bool,
@@ -260,6 +272,7 @@ pub mod ffi {
         pub membership_target_user_id: String,
         pub membership_target_name: String,
         pub membership_target_avatar_url: String,
+        pub membership_reason: String,
         pub room_name_new: String,
         pub room_name_old: String,
     }
@@ -519,6 +532,18 @@ pub mod ffi {
         pub ok: bool,
         pub message: String,
         pub verification_uri: String,
+    }
+
+    #[derive(Debug, PartialEq, Default, Clone)]
+    pub struct VerificationEmoji {
+        pub symbol: String,
+        pub description: String,
+    }
+
+    #[derive(Debug, PartialEq, Default, Clone)]
+    pub struct VerificationSas {
+        pub emojis: Vec<VerificationEmoji>,
+        pub decimals: [u16; 3],
     }
 
     pub struct EventHandlerBridge;

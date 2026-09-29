@@ -79,6 +79,11 @@ struct PopoutMediaShell : PopoutMediaShellWithAccountManager, ShellBase
     using ShellBase::media_group_for_room_;
     using ShellBase::register_room_window_;
     using ShellBase::unregister_room_window_;
+    using ShellBase::active_account_;
+    using ShellBase::pending_popout_owner_;
+    using ShellBase::find_secondary_;
+    using ShellBase::find_event_secondary_;
+    using ShellBase::EventAccountScope;
 };
 
 // Minimal concrete RoomWindowBase: never calls init_pane_()/finish_init_(), so
@@ -160,5 +165,53 @@ TEST_CASE(
     CHECK(s.active_popout_media_groups_.count(grp) == 1);
 
     s.unregister_room_window_(&win_b);
+    CHECK(s.active_popout_media_groups_.count(grp) == 0);
+}
+
+namespace
+{
+std::shared_ptr<tesseract::AccountSession> make_session(const std::string& uid)
+{
+    auto sess = std::make_shared<tesseract::AccountSession>();
+    sess->user_id = uid;
+    return sess;
+}
+} // namespace
+
+TEST_CASE("each account can have its own pop-out of the same room",
+          "[shell][popout][accounts]")
+{
+    PopoutMediaShell s;
+    auto alice = make_session("@alice:example.org");
+    auto bob = make_session("@bob:example.org");
+    const std::string room = "!shared:example.org";
+    const auto grp = s.media_group_for_room_(room);
+
+    s.active_account_ = alice;
+    TestRoomWindow alice_win(&s, room); // owner: the active account
+    s.pending_popout_owner_ = bob;      // as open_room_in_new_window does
+    TestRoomWindow bob_win(&s, room);
+    s.pending_popout_owner_.reset();
+    CHECK(alice_win.owner_user_id() == "@alice:example.org");
+    CHECK(bob_win.owner_user_id() == "@bob:example.org");
+
+    s.register_room_window_(&alice_win);
+    s.register_room_window_(&bob_win);
+    CHECK(s.find_secondary_(room, "@alice:example.org") == &alice_win);
+    CHECK(s.find_secondary_(room, "@bob:example.org") == &bob_win);
+
+    // Untagged dispatches target the active account's window; an event
+    // tagged with Bob's account targets Bob's.
+    CHECK(s.find_event_secondary_(room) == &alice_win);
+    {
+        PopoutMediaShell::EventAccountScope scope(s, "@bob:example.org");
+        CHECK(s.find_event_secondary_(room) == &bob_win);
+    }
+
+    // The room's media group stays allowed until its last pop-out closes.
+    s.unregister_room_window_(&alice_win);
+    CHECK(s.active_popout_media_groups_.count(grp) == 1);
+    CHECK(s.find_secondary_(room, "@bob:example.org") == &bob_win);
+    s.unregister_room_window_(&bob_win);
     CHECK(s.active_popout_media_groups_.count(grp) == 0);
 }

@@ -192,10 +192,20 @@ SettingsView::SettingsView()
     {
         if (on_send_presence_changed) on_send_presence_changed(v);
     };
+    privacy->on_exclude_insecure_devices_changed = [this](bool v)
+    {
+        if (on_exclude_insecure_devices_changed)
+            on_exclude_insecure_devices_changed(v);
+    };
     privacy->on_send_maps_urls_as_location_changed = [this](bool v)
     {
         if (on_send_maps_urls_as_location_changed)
             on_send_maps_urls_as_location_changed(v);
+    };
+    privacy->on_bundled_url_previews_changed = [this](bool enabled, bool direct)
+    {
+        if (on_bundled_url_previews_changed)
+            on_bundled_url_previews_changed(enabled, direct);
     };
     privacy->on_index_messages_changed = [this](bool v)
     {
@@ -270,6 +280,11 @@ SettingsView::SettingsView()
         {
             on_language_changed(std::move(code));
         }
+    };
+    language->on_restart_requested = [this]
+    {
+        if (on_restart_requested)
+            on_restart_requested();
     };
     language_ = language.get();
 
@@ -351,16 +366,18 @@ SettingsView::SettingsView()
             [this] { if (on_clear_caches) on_clear_caches(); });
     };
 
-    // PrivacySection: route "Reset cryptographic identity" through the shared
-    // ConfirmDialog — destructive, so guard it behind an explicit confirm.
+    // PrivacySection: route "Reset encryption" (a cryptographic identity
+    // reset) through the shared ConfirmDialog — destructive, so guard it
+    // behind an explicit confirm.
     privacy_->on_reset_identity = [this]
     {
         confirm_dialog_->open(
-            {.title         = tk::tr("Reset your cryptographic identity?"),
-             .body          = tk::tr("This creates a brand-new identity and replaces your "
-                              "key backup. Your other sessions and the people you "
-                              "chat with will need to verify you again. You'll set up "
-                              "a new recovery key right after."),
+            {.title         = tk::tr("Reset encryption?"),
+             .body          = tk::tr("Only do this if you've lost your recovery key and "
+                              "have no other signed-in device. Messages you can't "
+                              "read now will stay unreadable, and your other devices "
+                              "and the people you chat with will need to confirm you "
+                              "again. You'll get a new recovery key right after."),
              .confirm_label = tk::tr("Reset"),
              .cancel_label  = tk::tr("Cancel"),
              .destructive   = true},
@@ -559,11 +576,27 @@ void SettingsView::set_prefetch_enabled(bool enabled)
     }
 }
 
+void SettingsView::set_exclude_insecure_devices_pref(bool enabled)
+{
+    if (privacy_)
+    {
+        privacy_->set_exclude_insecure_devices(enabled);
+    }
+}
+
 void SettingsView::set_send_maps_urls_as_location_pref(bool enabled)
 {
     if (privacy_)
     {
         privacy_->set_send_maps_urls_as_location(enabled);
+    }
+}
+
+void SettingsView::set_bundled_url_previews_pref(bool enabled, bool direct)
+{
+    if (privacy_)
+    {
+        privacy_->set_bundled_url_previews(enabled, direct);
     }
 }
 
@@ -709,6 +742,8 @@ void SettingsView::load_persisted_settings()
     set_image_previews_enabled(s.notification_image_previews);
     set_prefetch_enabled(s.prefetch_full_media);
     set_send_maps_urls_as_location_pref(s.send_maps_urls_as_location);
+    set_exclude_insecure_devices_pref(s.exclude_insecure_devices);
+    set_bundled_url_previews_pref(s.send_bundled_url_previews, s.fetch_url_previews_directly);
     set_group_inactive_pref(s.group_inactive_rooms);
     set_group_unread_pref(s.group_unread_rooms);
     set_inactive_period_pref(s.inactive_room_threshold_days);
@@ -750,6 +785,10 @@ void SettingsView::set_server_info(const tesseract::ServerInfo& info)
         account_->set_avatar_editable(info.can_set_avatar);
         account_->set_profile_fields_editable(
             info.supports_profile_fields && info.profile_fields_enabled);
+    }
+    if (privacy_)
+    {
+        privacy_->set_homeserver_previews_available(info.preview_url_enabled);
     }
     // Toggling profile-fields editability now also shows/hides the whole
     // ExtendedFields block, which changes AccountSection's measured height —
@@ -805,6 +844,12 @@ void SettingsView::set_known_packs(std::vector<tesseract::ImagePack> all_room_pa
 UserPackEditor* SettingsView::user_pack_editor() const
 {
     return image_packs_ ? image_packs_->user_pack_editor() : nullptr;
+}
+
+void SettingsView::set_language_restart_pending(bool pending)
+{
+    if (language_)
+        language_->set_restart_pending(pending);
 }
 
 void SettingsView::set_cache_sizes(uint64_t local_bytes, uint64_t sdk_bytes,
@@ -1072,17 +1117,23 @@ void SettingsView::set_controller(tesseract::SettingsController* ctrl)
     // Timezone: on_changed only fires for a real committed pick or an
     // exact-match Enter (see TimezonePicker/tk::SearchablePicker), so unlike
     // the old free-text field this never saves a string that isn't a known
-    // IANA zone id.
+    // IANA zone id. Both the stable and unstable keys are written because
+    // reads prefer m.tz: a stale m.tz left by another client (Element writes
+    // both) would otherwise mask this write. Busy/error track the unstable
+    // key only; an m.tz failure on a server without stable MSC4133 is benign.
     if (auto* tz = account_->tz_field())
     {
-        static constexpr const char* kTzKey = "us.cloke.msc4175.tz";
+        static constexpr const char* kTzKey       = "us.cloke.msc4175.tz";
+        static constexpr const char* kStableTzKey = "m.tz";
         tz->on_changed = [this](std::string value)
         {
             account_->set_profile_field_busy(kTzKey, true);
             if (on_profile_field_changed)
             {
-                on_profile_field_changed(
-                    kTzKey, value.empty() ? "null" : json_quote(value));
+                const std::string json =
+                    value.empty() ? "null" : json_quote(value);
+                on_profile_field_changed(kStableTzKey, json);
+                on_profile_field_changed(kTzKey, json);
             }
             if (request_repaint_) request_repaint_();
         };

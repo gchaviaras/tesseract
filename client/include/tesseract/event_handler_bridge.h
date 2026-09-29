@@ -19,6 +19,7 @@ struct InviteInfo;
 struct KnockedRoomInfo;
 struct BackupProgress;
 struct VerificationEmoji;
+struct VerificationSas;
 struct GifResult;
 struct SearchHit;
 struct RoomDirectoryEntryFfi;
@@ -205,14 +206,21 @@ public:
 
     void on_verification_request(rust::Str flow_id, rust::Str user_id,
                                  rust::Str device_id, bool incoming) const;
-    void on_sas_ready(rust::Str flow_id,
-                      const rust::Vec<VerificationEmoji>& emojis) const;
+    void on_sas_ready(rust::Str flow_id, const VerificationSas& sas) const;
     void on_verification_done(rust::Str flow_id) const;
     void on_verification_cancelled(rust::Str flow_id, rust::Str reason) const;
     void on_verification_state_changed(bool verified) const;
+    void on_recovery_state_changed(std::uint8_t state) const;
 
     void on_typing_changed(rust::Str room_id,
                            const rust::Vec<rust::String>& user_ids) const;
+
+    void on_user_identities_changed(const rust::Vec<rust::String>& user_ids) const;
+
+    void on_identity_status_changed(rust::Str room_id,
+                                    const rust::Vec<rust::String>& user_ids,
+                                    const rust::Vec<rust::String>& display_names,
+                                    const rust::Vec<std::uint8_t>& kinds) const;
 
     void on_presence_changed(rust::Str user_id, std::uint8_t state) const;
 

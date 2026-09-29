@@ -94,7 +94,9 @@ struct InsertShell : ShellMessageInsertedWithAccountManager, ShellBase
         prepped_event_ids.push_back(ev.event_id);
     }
 
+    using ShellBase::active_account_;
     using ShellBase::current_room_id_;
+    using ShellBase::EventAccountScope;
     using ShellBase::handle_message_inserted_ui_;
     using ShellBase::room_view_;
 
@@ -155,4 +157,38 @@ TEST_CASE("handle_message_inserted_ui_ excludes in-thread replies from the "
                                   make_event("$t2", "$root:example.org"));
     CHECK(s.prepped_event_ids.size() == 1);
     CHECK(view.message_list()->messages().size() == 1);
+}
+
+TEST_CASE("handle_message_inserted_ui_ ignores another account's event for a "
+          "shared room",
+          "[shell][message_inserted]")
+{
+    InsertShell s;
+    auto view_owner = tk::create_root_widget<tesseract::views::RoomView>(nullptr);
+    tesseract::views::RoomView& view = *view_owner;
+    tesseract::RoomInfo info;
+    info.id = "!shared:example.org";
+    view.set_room(info);
+
+    s.room_view_ = &view;
+    s.current_room_id_ = info.id;
+    s.active_account_ = std::make_shared<tesseract::AccountSession>();
+    s.active_account_->user_id = "@bob:example.org";
+
+    // Alice (inactive account) still has the same room subscribed: her event
+    // carries the same room_id as the room Bob has open.
+    {
+        InsertShell::EventAccountScope scope(s, "@alice:example.org");
+        s.handle_message_inserted_ui_(info.id, 0, make_event("$alice", ""));
+    }
+    CHECK(s.prepped_event_ids.empty());
+    CHECK(view.message_list()->messages().empty());
+
+    // Bob's own event for that room is applied.
+    {
+        InsertShell::EventAccountScope scope(s, "@bob:example.org");
+        s.handle_message_inserted_ui_(info.id, 0, make_event("$bob", ""));
+    }
+    REQUIRE(view.message_list()->messages().size() == 1);
+    CHECK(view.message_list()->messages()[0].event_id == "$bob");
 }

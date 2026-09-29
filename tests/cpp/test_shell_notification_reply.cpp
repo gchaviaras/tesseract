@@ -104,6 +104,7 @@ struct NotificationReplyShell : NotificationReplyShellAccountManager, ShellBase
 
     using ShellBase::account_manager_;
     using ShellBase::send_notification_reply_;
+    using ShellBase::send_pipeline_;
 
     // Wait (bounded) for the worker's post_to_ui_alive_ continuation to land
     // in queue_, then run it on this thread, standing in for the UI thread.
@@ -120,6 +121,24 @@ struct NotificationReplyShell : NotificationReplyShellAccountManager, ShellBase
         for (auto& fn : pending)
             if (fn) fn();
         return got;
+    }
+
+    // Keep draining (bounded) until `done` holds. A send hops through several
+    // UI posts (SendPipeline's busy-delay timer, the failure notification,
+    // the pipeline's on_sent_), so one drain isn't enough.
+    bool drain_until(const std::function<bool()>& done,
+                     std::chrono::milliseconds timeout)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        while (!done())
+        {
+            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now());
+            if (left.count() <= 0)
+                return false;
+            wait_and_drain(left);
+        }
+        return true;
     }
 };
 
@@ -197,8 +216,14 @@ TEST_CASE("send_notification_reply_ reports a failure notification when the "
 
     // client is a fresh, unauthenticated tesseract::Client — send_message
     // deterministically fails ("not logged in"), so the async round trip
-    // through mut_pool_ + post_to_ui_ must land here.
-    REQUIRE(s.wait_and_drain(std::chrono::seconds(5)));
+    // through mut_pool_ + post_to_ui_ must land here. Also wait for the
+    // pipeline to go idle so the worker is done before the shell is torn down.
+    REQUIRE(s.drain_until(
+        [&] {
+            return !notifier->notifications.empty() &&
+                   s.send_pipeline_.outstanding("!r:x") == 0;
+        },
+        std::chrono::seconds(5)));
     REQUIRE(notifier->notifications.size() == 1);
     CHECK(notifier->notifications[0].room_id == "!r:x");
     CHECK(notifier->notifications[0].sender == tk::tr("Message not sent"));
@@ -216,7 +241,12 @@ TEST_CASE("send_notification_reply_ reports a failure notification when the "
     s.send_notification_reply_("@alice:example.org", "!r:x", "$event:x",
                                "hello");
 
-    REQUIRE(s.wait_and_drain(std::chrono::seconds(5)));
+    REQUIRE(s.drain_until(
+        [&] {
+            return !notifier->notifications.empty() &&
+                   s.send_pipeline_.outstanding("!r:x") == 0;
+        },
+        std::chrono::seconds(5)));
     REQUIRE(notifier->notifications.size() == 1);
     CHECK(notifier->notifications[0].room_id == "!r:x");
     CHECK(notifier->notifications[0].sender == tk::tr("Message not sent"));

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <map>
 #include <filesystem>
 
 // Runtime-mutable application settings. Today every field is hardcoded to
@@ -189,6 +191,27 @@ public:
     // user hasn't explicitly initiated.
     bool send_maps_urls_as_location = false;
 
+    // When true, outgoing text messages (sends, replies, thread messages,
+    // edits) carry MSC4095 bundled previews of their http(s) links, fetched
+    // via the homeserver's /preview_url before send. On by default: the
+    // homeserver already previews the user's own links for display, and
+    // bundling spares recipients' homeservers from learning the URL. Can
+    // delay sends that contain links by a few seconds.
+    bool send_bundled_url_previews = true;
+
+    // Only honoured with send_bundled_url_previews: fetch the linked pages
+    // from Tesseract itself (SSRF-guarded) instead of the homeserver,
+    // falling back to the homeserver on failure. Off by default since it
+    // exposes the user's IP address to every site they link.
+    bool fetch_url_previews_directly = false;
+
+    // MSC4153 "exclude insecure devices": share room keys only with devices
+    // their owner cross-signed, and hide messages sent from devices that
+    // aren't. Off by default while other clients catch up on cross-signing.
+    // Applied via Client::set_exclude_insecure_devices at launch; a change
+    // takes effect after restart.
+    bool exclude_insecure_devices = false;
+
     // ── MSC4278 media-preview controls ────────────────────────────────
     // In-memory mirror of the active account's global `m.media_preview_config`
     // account-data event. NOT persisted to app_settings.json — account_data is
@@ -226,6 +249,12 @@ public:
 
     WindowGeometry           main_window_geometry;
     std::vector<PopoutEntry> popout_windows;
+
+    // ── Encryption reminder ──────────────────────────────────────────
+    // user_id → unix seconds until which the "set up recovery / unlock this
+    // device" reminder strip (and the automatic encryption dialog) stay
+    // hidden. Device-local on purpose: it's this device that's locked.
+    std::map<std::string, std::int64_t> encryption_reminder_snoozed_until;
 
     // ── Room list ─────────────────────────────────────────────────────
     // Group rooms with no activity for `inactive_room_threshold_days` into a

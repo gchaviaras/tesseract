@@ -7,8 +7,10 @@ namespace tesseract
 HistoryExportController::HistoryExportController(
     tesseract::Client* client,
     std::function<void(std::function<void()>)> post_to_ui,
-    std::function<void(std::function<void()>)> run_async)
-    : client_(client), post_to_ui_(std::move(post_to_ui)), run_async_(std::move(run_async))
+    std::function<void(std::function<void()>)> run_async,
+    std::shared_ptr<void> client_owner)
+    : client_(client), client_owner_(std::move(client_owner)),
+      post_to_ui_(std::move(post_to_ui)), run_async_(std::move(run_async))
 {
 }
 
@@ -17,9 +19,26 @@ HistoryExportController::~HistoryExportController()
     invalidate_weak_self();
 }
 
-void HistoryExportController::set_client(tesseract::Client* client)
+void HistoryExportController::set_client(tesseract::Client* client,
+                                         std::shared_ptr<void> client_owner)
 {
+    if (client != client_ && active_)
+    {
+        // The export belongs to the outgoing account: stop it there and
+        // forget it, so its late progress/completion (still routed here by
+        // request id) can't be attributed to the new account.
+        if (client_)
+            client_->cancel_room_export(active_request_id_);
+        std::string out_path = std::move(active_out_path_);
+        active_ = false;
+        active_request_id_ = 0;
+        active_room_id_.clear();
+        active_out_path_.clear();
+        if (on_finished)
+            on_finished(false, true, std::move(out_path), 0, std::string{});
+    }
     client_ = client;
+    client_owner_ = std::move(client_owner);
 }
 
 std::string HistoryExportController::extension_for(Format format)
@@ -64,7 +83,7 @@ std::string HistoryExportController::suggested_folder_name(const Request& req)
 // composes English text itself. Both sides carry a count-assert test
 // against drift (this file's Catch2 test + labels.rs's own COUNT check).
 //
-// The membership entries (indices 10-31) intentionally reuse the exact
+// The membership entries (indices 10-32) intentionally reuse the exact
 // wording from MessageListView.cpp's membership_expanded_phrase(),
 // including its by-actor/no-actor split, so translators aren't asked to
 // translate the same sentiment twice and an exported room reads
@@ -107,6 +126,7 @@ std::vector<std::string> HistoryExportController::build_labels()
         tk::tr("{0}'s request to join was withdrawn"),
         tk::tr("{0}'s request to join was denied by {1}"),
         tk::tr("{0}'s join request was denied"),
+        tk::tr("{0}. Reason: {1}"),
     };
 }
 
@@ -143,6 +163,7 @@ void HistoryExportController::begin(Request req)
                     on_started(req.room_id, path);
 
                 auto* c = client_;
+                auto owner = client_owner_;
                 // A "fresh" request (no explicit resume point) must not
                 // silently resume from a stale checkpoint — Rust's
                 // start_room_export_async auto-matches any existing
@@ -156,15 +177,18 @@ void HistoryExportController::begin(Request req)
                 // checkpoint lookup — no race between a separate clear
                 // call and the start call landing on different threads.
                 const bool is_fresh_request = options.resume_from_event_id.empty();
-                run_async_(guarded(
-                    [c, request_id, room_id = req.room_id, options = std::move(options), is_fresh_request]() mutable
+                run_async_(
+                    [c, owner, request_id, room_id = req.room_id, options = std::move(options),
+                     is_fresh_request, alive = weak_flag()]() mutable
                     {
-                        if (!c)
+                        // Controller gone before the job started (e.g. its
+                        // account logged out): nothing would receive progress.
+                        if (!c || alive.expired())
                             return;
                         if (is_fresh_request)
                             c->clear_room_export_checkpoint(room_id);
                         c->start_room_export_async(request_id, room_id, options);
-                    }));
+                    });
             }));
 }
 
@@ -191,17 +215,19 @@ void HistoryExportController::query_resume(std::string room_id)
             on_resume_available(tesseract::RoomExportCheckpoint{});
         return;
     }
-    run_async_(guarded(
-        [this, c, room_id = std::move(room_id)]() mutable
+    run_async_(
+        [this, c, owner = client_owner_, room_id = std::move(room_id), ui = ui_poster(post_to_ui_)]() mutable
         {
+            if (!ui.owner_alive()) // owner gone before the job started
+                return;
             auto cp = c->room_export_checkpoint(room_id);
-            post_to_ui_(guarded(
+            ui(
                 [this, cp = std::move(cp)]() mutable
                 {
                     if (on_resume_available)
                         on_resume_available(std::move(cp));
-                }));
-        }));
+                });
+        });
 }
 
 void HistoryExportController::handle_progress(const tesseract::RoomExportProgress& progress)

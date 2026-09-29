@@ -28,36 +28,53 @@ RoomInfoPanelBody::RoomInfoPanelBody()
         topic_field_ = add_child(std::move(field));
     }
 
+    member_menu_ = add_child(std::make_unique<PopupMenu>());
+    member_menu_->on_dismissed = [this] { member_menu_->close(); };
+    member_menu_->on_layout_changed = [this]
+    {
+        if (auto* h = host())
+        {
+            h->request_relayout();
+            h->request_repaint();
+        }
+    };
+
     edit_topic_btn_ = add_child(
         tk::create_widget<tk::Button>(this, "\xE2\x9C\x8E", std::function<void()>{},
                                      tk::Button::Variant::Icon));
     edit_topic_btn_->set_icon(kEditSvg, 16.0f);
     edit_topic_btn_->set_accessible_name(tk::tr("Edit topic"));
     save_btn_ = add_child(
-        tk::create_widget<tk::Button>(this, "Save", std::function<void()>{},
+        tk::create_widget<tk::Button>(this, tk::tr("Save"), std::function<void()>{},
                                      tk::Button::Variant::Primary));
     cancel_btn_ = add_child(
-        tk::create_widget<tk::Button>(this, "Cancel", std::function<void()>{},
+        tk::create_widget<tk::Button>(this, tk::tr("Cancel"), std::function<void()>{},
                                      tk::Button::Variant::Subtle));
     expand_btn_ = add_child(
-        tk::create_widget<tk::Button>(this, "Show all \xE2\x96\xBE", std::function<void()>{},
+        tk::create_widget<tk::Button>(this, tk::tr("Show all \xE2\x96\xBE"), std::function<void()>{},
+                                     tk::Button::Variant::Subtle));
+    invite_btn_ = add_child(
+        tk::create_widget<tk::Button>(this, tk::tr("Invite people"), std::function<void()>{},
                                      tk::Button::Variant::Subtle));
     export_btn_ = add_child(
         tk::create_widget<tk::Button>(this, tk::tr("Export History"), std::function<void()>{},
                                      tk::Button::Variant::Subtle));
     leave_btn_ = add_child(
-        tk::create_widget<tk::Button>(this, "Leave Room", std::function<void()>{},
+        tk::create_widget<tk::Button>(this, tk::tr("Leave Room"), std::function<void()>{},
                                      tk::Button::Variant::Subtle));
+    invite_btn_->set_leading_icon(kUserRoundPlusSvg, 16.0f);
+    export_btn_->set_leading_icon(kDownloadSvg, 16.0f);
+    leave_btn_->set_leading_icon(kLeaveRoomSvg, 16.0f);
 
     // Favourite / Low-priority tag switches (mutually exclusive in the UI).
-    favourite_btn_ = add_child(tk::create_widget<tk::SwitchButton>(this, "Favourite"));
+    favourite_btn_ = add_child(tk::create_widget<tk::SwitchButton>(this, tk::tr("Favourite")));
     favourite_btn_->on_change = [this](bool on) {
         if (on && low_priority_btn_) low_priority_btn_->set_checked(false);
         if (on_favourite_changed) on_favourite_changed(room_id_, on);
         if (on_layout_changed) on_layout_changed(); // repaint both switches
     };
 
-    low_priority_btn_ = add_child(tk::create_widget<tk::SwitchButton>(this, "Low priority"));
+    low_priority_btn_ = add_child(tk::create_widget<tk::SwitchButton>(this, tk::tr("Low priority")));
     low_priority_btn_->on_change = [this](bool on) {
         if (on && favourite_btn_) favourite_btn_->set_checked(false);
         if (on_low_priority_changed) on_low_priority_changed(room_id_, on);
@@ -68,10 +85,10 @@ RoomInfoPanelBody::RoomInfoPanelBody()
     // ensuring its expanded dropdown captures pointer events before leave_btn_.
     auto notif_combo = tk::create_widget<tk::ComboBox>(this);
     notif_combo->set_options({
-        {.label = "Default",      .value = "default"},
-        {.label = "All messages", .value = "all"},
-        {.label = "Mentions",     .value = "mentions"},
-        {.label = "Off",          .value = "off"},
+        {.label = tk::tr("Default"),      .value = "default"},
+        {.label = tk::tr("All messages"), .value = "all"},
+        {.label = tk::tr("Mentions"),     .value = "mentions"},
+        {.label = tk::tr("Off"),          .value = "off"},
     });
     notif_combo->set_selected_value("default");
     notif_combo->on_changed = [this](std::string value) {
@@ -115,6 +132,12 @@ RoomInfoPanelBody::RoomInfoPanelBody()
     export_btn_->set_on_click([this]() {
         if (on_export_history_requested) on_export_history_requested(room_id_);
     });
+    invite_btn_->set_on_click([this]() {
+        if (on_invite_requested) on_invite_requested(room_id_);
+    });
+    // Hidden until the shell confirms the user may invite — see
+    // set_invite_visible().
+    invite_btn_->set_visible(false);
 
     // save, cancel, and expand are hidden until needed
     save_btn_->set_visible(false);
@@ -153,7 +176,7 @@ void RoomInfoPanelBody::open(const tesseract::RoomInfo& info)
     topic_spans_ = topic_html_.empty() ? autolink_plain_to_spans(topic_) :
                                          std::vector<tk::TextSpan>{};
 
-    expand_btn_->set_label("Show all \xE2\x96\xBE");
+    expand_btn_->set_label(tk::tr("Show all \xE2\x96\xBE"));
 
     if (notification_combo_)
     {
@@ -203,11 +226,32 @@ void RoomInfoPanelBody::close()
     // topic_field_ itself, so hide it directly here in case of a mid-edit close.
     editing_topic_ = false;
     if (topic_field_) topic_field_->set_visible(false);
+    if (member_menu_) member_menu_->close();
 }
 
 void RoomInfoPanelBody::set_avatar_provider(ImageProvider p)
 {
     image_provider_ = std::move(p);
+}
+
+void RoomInfoPanelBody::set_member_actions_provider(MemberActionsProvider p)
+{
+    member_actions_provider_ = std::move(p);
+}
+
+const std::vector<PopupMenu::Item>& RoomInfoPanelBody::member_menu_items_for_test() const
+{
+    static const std::vector<PopupMenu::Item> kEmpty;
+    return member_menu_ ? member_menu_->items_for_test() : kEmpty;
+}
+
+tk::Rect RoomInfoPanelBody::member_row_rect_for_test(int i) const
+{
+    if (i < 0 || i >= static_cast<int>(member_rects_.size()))
+        return {};
+    tk::Rect r = member_rects_[static_cast<std::size_t>(i)];
+    r.y -= scroll_y_;
+    return r;
 }
 
 void RoomInfoPanelBody::set_presence_provider(PresenceProvider p)
@@ -233,7 +277,7 @@ void RoomInfoPanelBody::set_members(std::vector<tesseract::RoomMember> members)
 
     const int total = static_cast<int>(members_.size());
     expand_btn_->set_label(
-        std::string("Show all (") + std::to_string(total) + ") \xE2\x96\xBE");
+        tk::trf(tk::tr("Show all ({0}) \xE2\x96\xBE"), {std::to_string(total)}));
 
     if (on_layout_changed) on_layout_changed();
 }
@@ -257,6 +301,13 @@ void RoomInfoPanelBody::set_knock_requests_visible(bool visible)
     if (visible == knock_row_visible_) return;
     knock_row_visible_ = visible;
     knock_row_layout_.reset();
+    if (on_layout_changed) on_layout_changed();
+}
+
+void RoomInfoPanelBody::set_invite_visible(bool visible)
+{
+    if (!invite_btn_ || visible == invite_btn_->own_visible()) return;
+    invite_btn_->set_visible(visible);
     if (on_layout_changed) on_layout_changed();
 }
 
@@ -298,7 +349,7 @@ float RoomInfoPanelBody::measure_topic_height_(tk::CanvasFactory& factory, float
     std::unique_ptr<tk::TextLayout> placeholder;
     if (!lo)
     {
-        placeholder = factory.build_text("No topic set.", st);
+        placeholder = factory.build_text(tk::tr("No topic set."), st);
         lo = placeholder.get();
     }
     if (!lo) return 20.0f; // defensive fallback (~1 Body line)
@@ -453,6 +504,15 @@ void RoomInfoPanelBody::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     {
         knock_row_rect_ = {0.0f, y, kPanelW, kMediaRowH};
         y += kMediaRowH + kPadY;
+    }
+
+    // Invite button: first of the action buttons, only when the user may
+    // invite (see set_invite_visible()).
+    if (invite_btn_ && invite_btn_->own_visible())
+    {
+        const float invite_y = y + kPadY;
+        invite_btn_->arrange(lc, {px + kPadX, origin_y + invite_y, iw, kButtonH});
+        y = invite_y + kButtonH;
     }
 
     // Export History button: flows after content, above the leave button
@@ -651,7 +711,7 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
         st.role      = tk::FontRole::Small;
         st.halign    = tk::TextHAlign::Leading;
         st.max_width = text_max_w;
-        auto lbl = ctx.factory.build_text("Topic", st);
+        auto lbl = ctx.factory.build_text(tk::tr("Topic"), st);
         if (lbl)
         {
             cv.draw_text(*lbl, {bounds_.x + kPadX, section_topic_y},
@@ -708,7 +768,7 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
             tk::TextStyle st{};
             st.role      = tk::FontRole::Body;
             st.max_width = text_max_w;
-            auto lbl = ctx.factory.build_text("No topic set.", st);
+            auto lbl = ctx.factory.build_text(tk::tr("No topic set."), st);
             if (lbl)
             {
                 cv.draw_text(*lbl, {topic_rect_w.x, topic_rect_w.y},
@@ -752,7 +812,8 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
         st.role      = tk::FontRole::Small;
         st.max_width = text_max_w;
         const std::string mem_hdr =
-            "Members (" + std::to_string(static_cast<int>(members_.size())) + ")";
+            tk::trf(tk::tr("Members ({0})"),
+                    {std::to_string(static_cast<int>(members_.size()))});
         auto lbl = ctx.factory.build_text(mem_hdr, st);
         if (lbl)
         {
@@ -888,7 +949,7 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
         st.role      = tk::FontRole::Small;
         st.halign    = tk::TextHAlign::Leading;
         st.max_width = kPanelW - kPadX * 2.0f;
-        auto lbl = ctx.factory.build_text("Notifications", st);
+        auto lbl = ctx.factory.build_text(tk::tr("Notifications"), st);
         if (lbl)
             cv.draw_text(*lbl, {bounds_.x + kPadX, hdr_y}, pal.text_muted);
     }
@@ -945,6 +1006,7 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
 
     // Export History + Leave buttons (painted before the notification combo
     // so the combo's expanded dropdown overlays them when open)
+    if (invite_btn_ && invite_btn_->own_visible()) invite_btn_->paint(ctx);
     if (export_btn_) export_btn_->paint(ctx);
     if (leave_btn_) leave_btn_->paint(ctx);
 
@@ -1185,9 +1247,95 @@ void RoomInfoPanelBody::on_pointer_leave()
     }
 }
 
+bool RoomInfoPanelBody::on_right_click(tk::Point local)
+{
+    if (!open_ || !member_menu_)
+        return false;
+
+    // Same viewport-local → content-local conversion as on_pointer_down.
+    const tk::Point c{local.x, local.y + scroll_y_};
+    int idx = -1;
+    for (int i = 0; i < static_cast<int>(member_rects_.size()) &&
+                    i < static_cast<int>(members_.size());
+         ++i)
+    {
+        if (rect_contains(member_rects_[static_cast<std::size_t>(i)], c))
+        {
+            idx = i;
+            break;
+        }
+    }
+    if (idx < 0)
+        return false;
+
+    const auto& mem = members_[static_cast<std::size_t>(idx)];
+    const std::string room_id = room_id_;
+    const std::string user_id = mem.user_id;
+    const std::string name    = mem.display_name;
+    const std::string avatar  = mem.avatar_url;
+    const MemberActions actions =
+        member_actions_provider_ ? member_actions_provider_(user_id) : MemberActions{};
+
+    std::vector<PopupMenu::Item> items;
+
+    PopupMenu::Item profile;
+    profile.svg_icon    = kUserRoundSvg;
+    profile.label       = tk::tr("Show profile");
+    profile.on_selected = [this, user_id, name, avatar]
+    {
+        if (on_member_clicked)
+            on_member_clicked(user_id, name, avatar);
+    };
+    items.push_back(std::move(profile));
+
+    PopupMenu::Item sep;
+    sep.is_separator = true;
+    items.push_back(std::move(sep));
+
+    PopupMenu::Item kick;
+    kick.svg_icon    = kUserRoundMinusSvg;
+    kick.label       = tk::tr("Kick user\xe2\x80\xa6");
+    kick.destructive = true;
+    kick.enabled     = actions.can_kick;
+    kick.on_selected = [this, room_id, user_id, name]
+    {
+        if (on_kick_member)
+            on_kick_member(room_id, user_id, name);
+    };
+    items.push_back(std::move(kick));
+
+    PopupMenu::Item ban;
+    ban.svg_icon    = kBanSvg;
+    ban.label       = tk::tr("Ban user\xe2\x80\xa6");
+    ban.destructive = true;
+    ban.enabled     = actions.can_ban;
+    ban.on_selected = [this, room_id, user_id, name]
+    {
+        if (on_ban_member)
+            on_ban_member(room_id, user_id, name);
+    };
+    items.push_back(std::move(ban));
+
+    // Anchor of width PopupMenu::kWidth starting at the click point, so the
+    // menu (right-aligned to the anchor) opens to the right of the cursor —
+    // same as RoomListView::on_right_click.
+    const tk::Rect anchor_world{bounds_.x + local.x, bounds_.y + local.y,
+                                PopupMenu::kWidth, 0.0f};
+    member_menu_->open(std::move(items), anchor_world);
+    return true;
+}
+
+void RoomInfoPanelBody::on_popup_dismiss()
+{
+    if (member_menu_)
+        member_menu_->close();
+}
+
 bool RoomInfoPanelBody::on_wheel(tk::Point /*local*/, float /*dx*/, float dy, bool /*is_touchpad*/)
 {
     if (!open_) return false;
+    // The menu is anchored to where the row was; don't leave it floating.
+    if (member_menu_) member_menu_->close();
     const float prev = scroll_y_;
     scroll_y_ += dy;
     clamp_scroll();
@@ -1222,6 +1370,9 @@ RoomInfoPanel::RoomInfoPanel()
     body_->on_save_topic = [this](std::string room_id, std::string t) {
         if (on_save_topic) on_save_topic(std::move(room_id), std::move(t));
     };
+    body_->on_invite_requested = [this](std::string room_id) {
+        if (on_invite_requested) on_invite_requested(std::move(room_id));
+    };
     body_->on_export_history_requested = [this](std::string room_id) {
         if (on_export_history_requested) on_export_history_requested(std::move(room_id));
     };
@@ -1253,6 +1404,16 @@ RoomInfoPanel::RoomInfoPanel()
     };
     body_->on_leave_room = [this](std::string room_id) {
         if (on_leave_room) on_leave_room(std::move(room_id));
+    };
+    body_->on_kick_member = [this](std::string room_id, std::string user_id,
+                                   std::string display_name) {
+        if (on_kick_member)
+            on_kick_member(std::move(room_id), std::move(user_id), std::move(display_name));
+    };
+    body_->on_ban_member = [this](std::string room_id, std::string user_id,
+                                  std::string display_name) {
+        if (on_ban_member)
+            on_ban_member(std::move(room_id), std::move(user_id), std::move(display_name));
     };
 
     close_btn_ = add_child(
@@ -1318,6 +1479,11 @@ void RoomInfoPanel::set_presence_provider(PresenceProvider p)
     if (body_) body_->set_presence_provider(std::move(p));
 }
 
+void RoomInfoPanel::set_member_actions_provider(MemberActionsProvider p)
+{
+    if (body_) body_->set_member_actions_provider(std::move(p));
+}
+
 void RoomInfoPanel::set_members(std::vector<tesseract::RoomMember> members)
 {
     if (body_) body_->set_members(std::move(members));
@@ -1336,6 +1502,11 @@ void RoomInfoPanel::set_media_count(int count)
 void RoomInfoPanel::set_knock_requests_visible(bool visible)
 {
     if (body_) body_->set_knock_requests_visible(visible);
+}
+
+void RoomInfoPanel::set_invite_visible(bool visible)
+{
+    if (body_) body_->set_invite_visible(visible);
 }
 
 tk::TextArea* RoomInfoPanel::topic_field() const

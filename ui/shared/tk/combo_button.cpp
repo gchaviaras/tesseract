@@ -2,6 +2,8 @@
 
 #include "access_tree.h"
 #include "host.h"
+#include "status_icons.h"
+#include "svg.h"
 
 #include <tesseract/visual.h>
 
@@ -136,17 +138,11 @@ public:
 
             if (opt.value == selected_value_)
             {
-                TextStyle st{};
-                st.role      = FontRole::Body;
-                st.max_width = kCBChevronW;
-                auto ck = ctx.factory.build_text("\xE2\x9C\x93", st); // U+2713 ✓
-                if (ck)
-                {
-                    const Size  sz  = ck->measure();
-                    const float ckx = row.x + row.w - kCBHPad - sz.w;
-                    const float cky = ry + (kDropRowH - sz.h) * 0.5f;
-                    ctx.canvas.draw_text(*ck, {ckx, cky}, pal.accent);
-                }
+                constexpr float kCheckPx = 14.0f;
+                const Rect ck{row.x + row.w - kCBHPad - kCheckPx,
+                              ry + (kDropRowH - kCheckPx) * 0.5f, kCheckPx, kCheckPx};
+                check_icon_.draw(ctx.canvas, ctx.factory, check_icon_svg(), ck,
+                                 kCheckPx, pal.accent);
             }
         }
     }
@@ -229,6 +225,7 @@ private:
     const std::vector<Option>* options_ = nullptr; // borrowed from the owning ComboButton
     std::string selected_value_;
     mutable std::vector<std::unique_ptr<TextLayout>> layouts_;
+    mutable IconCache check_icon_;
     int hovered_ = -1;
 };
 

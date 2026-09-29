@@ -35,6 +35,26 @@ UserProfilePanel::UserProfilePanel()
         tk::create_widget<tk::Button>(this, tk::tr("Ignore"), std::function<void()>{},
                                      tk::Button::Variant::Subtle));
 
+    trust_label_ = add_child(tk::create_widget<tk::Label>(this, "", tk::FontRole::Small));
+    trust_label_->set_halign(tk::TextHAlign::Leading);
+    trust_label_->set_trim(tk::TextTrim::Ellipsis);
+    trust_label_->set_visible(false);
+    verify_btn_ = add_child(
+        tk::create_widget<tk::Button>(this, tk::tr("Verify"), std::function<void()>{},
+                                     tk::Button::Variant::Subtle));
+    verify_btn_->set_visible(false);
+    verify_btn_->set_on_click([this]()
+    {
+        if (trust_ == tesseract::UserTrust::VerificationViolation)
+        {
+            if (on_withdraw_verification) on_withdraw_verification(user_id_);
+        }
+        else if (on_verify_user)
+        {
+            on_verify_user(user_id_, display_name_);
+        }
+    });
+
     close_btn_->set_accessible_name(tk::tr("Close"));
     close_btn_->set_on_click([this]() { if (on_close) on_close(); });
     dm_btn_->set_on_click([this]() { if (on_open_dm) on_open_dm(user_id_); });
@@ -74,6 +94,11 @@ void UserProfilePanel::open(std::string user_id, std::string display_name,
     bio_label_layout_.reset();      bio_value_layout_.reset();
     if (on_extended_profile_requested)
         on_extended_profile_requested(user_id_);
+
+    trust_ = tesseract::UserTrust::Unknown;
+    apply_trust_(false);
+    if (on_trust_requested)
+        on_trust_requested(user_id_);
 
     // Tells the shell to re-query rect accessors so the compose textarea +
     // room-search NativeTextField overlays hide while the panel is up.
@@ -137,6 +162,46 @@ void UserProfilePanel::set_extended_profile(const tesseract::ExtendedProfile& pr
     if (on_layout_changed) on_layout_changed();
 }
 
+void UserProfilePanel::set_trust(tesseract::UserTrust trust, bool can_verify)
+{
+    if (!open_) return;
+    trust_ = trust;
+    apply_trust_(can_verify);
+    if (on_layout_changed) on_layout_changed();
+}
+
+void UserProfilePanel::apply_trust_(bool can_verify)
+{
+    using tesseract::UserTrust;
+    const bool row = trust_row_visible_();
+    trust_label_->set_visible(row);
+    std::string text;
+    bool button = false;
+    switch (trust_)
+    {
+    case UserTrust::Verified:
+        text = tk::tr("Verified");
+        break;
+    case UserTrust::NotVerified:
+        text = can_verify ? tk::tr("Not verified")
+                          : tk::tr("Not verified \xc2\xb7 verify this device first");
+        verify_btn_->set_label(tk::tr("Verify"));
+        verify_btn_->set_enabled(can_verify);
+        button = true;
+        break;
+    case UserTrust::VerificationViolation:
+        text = tk::tr("Verified identity was reset");
+        verify_btn_->set_label(tk::tr("Withdraw verification"));
+        verify_btn_->set_enabled(true);
+        button = true;
+        break;
+    case UserTrust::Unknown:
+        break;
+    }
+    trust_label_->set_text(text);
+    verify_btn_->set_visible(button);
+}
+
 // ── layout ────────────────────────────────────────────────────────────────
 
 tk::Size UserProfilePanel::measure(tk::LayoutCtx&, tk::Size constraints)
@@ -170,11 +235,20 @@ void UserProfilePanel::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     const float ext_max_val_w = kCardW - kPadX * 2.0f - kExtLabelW - kExtFieldGap;
     const float ext_section_h = layout_ext_rows_(lc, ext_max_val_w);
 
+    // Trust row: status line, then its action button when there is one.
+    constexpr float kTrustH = 18.0f;
+    const bool  trust_row    = trust_row_visible_();
+    const bool  trust_button = verify_btn_ && verify_btn_->visible();
+    const float trust_section_h =
+        (trust_row ? kTrustH + kPadY * 0.5f : 0.0f) +
+        (trust_button ? kButtonH + kPadY * 0.5f : 0.0f);
+
     const float card_h = kHeaderH
                        + kAvatarD + kPadY
                        + kNameH   + kPadY * 0.5f
                        + kUidH    + kPadY
                        + ext_section_h
+                       + trust_section_h
                        + kButtonH + kPadY * 0.5f
                        + kButtonH + kPadY;
 
@@ -199,10 +273,16 @@ void UserProfilePanel::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     // Buttons: full inner width, stacked below text rows (and extended fields).
     const float btn_x = card_rect_.x + kPadX;
     const float btn_w = kCardW - kPadX * 2.0f;
-    const float btn_y_dm = av_y + kAvatarD + kPadY
-                         + kNameH + kPadY * 0.5f
-                         + kUidH  + kPadY
-                         + ext_section_h;
+    const float trust_y = av_y + kAvatarD + kPadY
+                        + kNameH + kPadY * 0.5f
+                        + kUidH  + kPadY
+                        + ext_section_h;
+    if (trust_row)
+        trust_label_->arrange(lc, {btn_x, trust_y, btn_w, kTrustH});
+    if (trust_button)
+        verify_btn_->arrange(lc, {btn_x, trust_y + (trust_row ? kTrustH + kPadY * 0.5f : 0.0f),
+                                  btn_w, kButtonH});
+    const float btn_y_dm = trust_y + trust_section_h;
     const float btn_y_ignore = btn_y_dm + kButtonH + kPadY * 0.5f;
 
     if (dm_btn_)
@@ -459,6 +539,14 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
                          close_btn_->bounds(), 16.0f,
                          ctx.theme.palette.text_secondary);
     }
+    if (trust_label_ && trust_label_->visible())
+    {
+        trust_label_->set_colour(trust_ == tesseract::UserTrust::VerificationViolation
+                                     ? ctx.theme.palette.destructive
+                                     : ctx.theme.palette.text_secondary);
+        trust_label_->paint(ctx);
+    }
+    if (verify_btn_ && verify_btn_->visible()) verify_btn_->paint(ctx);
     if (dm_btn_)     dm_btn_->paint(ctx);
     if (ignore_btn_) ignore_btn_->paint(ctx);
 }

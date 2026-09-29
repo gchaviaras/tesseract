@@ -179,14 +179,18 @@ public:
                                  const std::string& user_id,
                                  const std::string& device_id,
                                  bool incoming) override;
-    void on_sas_ready(const std::string& flow_id,
-                      std::vector<VerificationEmoji> emojis) override;
+    void on_sas_ready(const std::string& flow_id, VerificationSas sas) override;
     void on_verification_done(const std::string& flow_id) override;
     void on_verification_cancelled(const std::string& flow_id,
                                    const std::string& reason) override;
     void on_verification_state_changed(bool is_verified) override;
+    void on_recovery_state_changed(std::uint8_t state) override;
     void on_typing_changed(const std::string& room_id,
                            const std::vector<std::string>& names) override;
+    void on_identity_status_changed(
+        const std::string& room_id,
+        const std::vector<IdentityWarning>& warnings) override;
+    void on_user_identities_changed(const std::vector<std::string>& user_ids) override;
     void on_presence_changed(const std::string& user_id,
                              PresenceState state) override;
 

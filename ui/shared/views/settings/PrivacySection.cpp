@@ -2,6 +2,7 @@
 
 #include "SettingsGroup.h"
 
+#include "app/UpdateChecker.h"
 #include "tesseract/settings.h"
 #include "tk/i18n.h"
 
@@ -33,13 +34,11 @@ std::string privacy_format_bytes(std::uint64_t bytes)
     {
         double mb = static_cast<double>(bytes) / 1'000'000.0;
         char buf[32];
-        std::snprintf(buf, sizeof(buf), "~%.1f MB", mb);
-        return buf;
+        std::snprintf(buf, sizeof(buf), "%.1f", mb);
+        return "~" + tk::trf(tk::tr("{0} MB"), {buf});
     }
     std::uint64_t kb = (bytes + 999u) / 1000u;
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "~%llu KB", static_cast<unsigned long long>(kb));
-    return buf;
+    return "~" + tk::trf(tk::tr("{0} KB"), {std::to_string(kb)});
 }
 
 // "March 2024" from a Unix-ms timestamp; empty when 0.
@@ -54,13 +53,7 @@ std::string month_year(std::uint64_t ts_ms)
 #else
     localtime_r(&t, &tm);
 #endif
-    static const char* kMonths[] = {
-        "January", "February", "March",     "April",   "May",      "June",
-        "July",    "August",   "September", "October", "November", "December"};
-    int m = tm.tm_mon;
-    if (m < 0 || m > 11)
-        m = 0;
-    return tk::tr(kMonths[m]) + " " + std::to_string(tm.tm_year + 1900);
+    return tk::format_date(tm, tk::tr("%B %Y"));
 }
 } // namespace
 
@@ -72,7 +65,7 @@ PrivacySection::PrivacySection()
     auto* presence_group = add_group(tk::tr("Presence"));
 
     auto presence_cb = tk::create_widget<tk::CheckButton>(
-        this, "Send and receive presence status", s.send_presence);
+        this, tk::tr("Send and receive presence status"), s.send_presence);
     presence_cb_ = presence_group->add_widget(std::move(presence_cb));
     presence_cb_->on_change = [this](bool v)
     {
@@ -105,6 +98,74 @@ PrivacySection::PrivacySection()
     send_maps_urls_as_location_cb_->on_hover_leave = [this]
     {
         if (host_) host_->hide_tooltip(send_maps_urls_as_location_cb_);
+    };
+
+    // ── Link previews ─────────────────────────────────────────────────────────
+    auto* previews_group = add_group(tk::tr("Link previews"));
+
+    // Hidden until server info says the homeserver has /preview_url off.
+    auto unavailable_lbl = tk::create_widget<tk::Label>(
+        this,
+        tk::tr("Your homeserver doesn't provide link previews, so links you "
+               "receive won't show a preview."),
+        tk::FontRole::Small);
+    unavailable_lbl->set_wrap(true);
+    previews_unavailable_label_ = previews_group->add_widget(std::move(unavailable_lbl));
+    previews_unavailable_label_->set_visible(false);
+
+    auto bundled_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Include link previews in messages I send"),
+        s.send_bundled_url_previews);
+    bundled_url_previews_cb_ = previews_group->add_widget(std::move(bundled_cb));
+    auto direct_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Fetch link previews directly instead of through my homeserver"),
+        s.fetch_url_previews_directly);
+    url_previews_direct_cb_ = previews_group->add_widget(std::move(direct_cb));
+    url_previews_direct_cb_->set_enabled(s.send_bundled_url_previews);
+
+    auto fire_previews_changed = [this]
+    {
+        if (on_bundled_url_previews_changed)
+            on_bundled_url_previews_changed(bundled_url_previews_cb_->checked(),
+                                            url_previews_direct_cb_->checked());
+    };
+    bundled_url_previews_cb_->on_change = [this, fire_previews_changed](bool v)
+    {
+        url_previews_direct_cb_->set_enabled(v);
+        fire_previews_changed();
+    };
+    url_previews_direct_cb_->on_change = [fire_previews_changed](bool)
+    { fire_previews_changed(); };
+
+    bundled_url_previews_cb_->on_hover_enter = [this]
+    {
+        if (host_)
+            host_->show_tooltip(
+                bundled_url_previews_cb_,
+                tk::tr("Before sending a message that contains links, ask your "
+                       "homeserver for a preview of each link and attach it to the "
+                       "message, so recipients see it without fetching it themselves. "
+                       "Sending such messages can take a few seconds longer."),
+                bundled_url_previews_cb_->bounds());
+    };
+    bundled_url_previews_cb_->on_hover_leave = [this]
+    {
+        if (host_) host_->hide_tooltip(bundled_url_previews_cb_);
+    };
+    url_previews_direct_cb_->on_hover_enter = [this]
+    {
+        if (host_)
+            host_->show_tooltip(
+                url_previews_direct_cb_,
+                tk::tr("Fetch the linked pages from this device instead of asking "
+                       "your homeserver, falling back to the homeserver if that fails. "
+                       "Every site you link will see your IP address. Addresses on "
+                       "your local network are never fetched."),
+                url_previews_direct_cb_->bounds());
+    };
+    url_previews_direct_cb_->on_hover_leave = [this]
+    {
+        if (host_) host_->hide_tooltip(url_previews_direct_cb_);
     };
 
     // ── Search ────────────────────────────────────────────────────────────────
@@ -141,29 +202,59 @@ PrivacySection::PrivacySection()
 
     // ── Updates ───────────────────────────────────────────────────────────────
 #ifdef TESSERACT_UPDATE_CHECKS
-    auto* updates_group = add_group(tk::tr("Updates"));
-    auto updates_cb = tk::create_widget<tk::CheckButton>(
-        this, "Check for updates automatically", s.check_for_updates);
-    check_updates_cb_ = updates_group->add_widget(std::move(updates_cb));
-    check_updates_cb_->on_change = [this](bool v)
+    // Omitted entirely when checks were turned off at runtime (MSIX installs
+    // are updated by the Store / App Installer) — check_updates_cb_ stays
+    // null then.
+    if (tesseract::update_checks_enabled())
     {
-        if (on_check_for_updates_changed) on_check_for_updates_changed(v);
-    };
+        auto* updates_group = add_group(tk::tr("Updates"));
+        auto updates_cb = tk::create_widget<tk::CheckButton>(
+            this, tk::tr("Check for updates automatically"), s.check_for_updates);
+        check_updates_cb_ = updates_group->add_widget(std::move(updates_cb));
+        check_updates_cb_->on_change = [this](bool v)
+        {
+            if (on_check_for_updates_changed) on_check_for_updates_changed(v);
+        };
+    }
 #endif
 
     // ── Encryption ────────────────────────────────────────────────────────────
     auto* enc_group = add_group(tk::tr("Encryption"));
 
+    auto exclude_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Exclude insecure devices (takes effect after restart)"),
+        s.exclude_insecure_devices);
+    exclude_insecure_cb_ = enc_group->add_widget(std::move(exclude_cb));
+    exclude_insecure_cb_->on_change = [this](bool v)
+    {
+        if (on_exclude_insecure_devices_changed) on_exclude_insecure_devices_changed(v);
+    };
+    exclude_insecure_cb_->on_hover_enter = [this]
+    {
+        if (host_)
+            host_->show_tooltip(
+                exclude_insecure_cb_,
+                tk::tr("Only send encrypted messages to devices their owner has "
+                       "verified, and hide messages sent from devices that aren't. "
+                       "This device must be verified to send, and people whose "
+                       "clients don't verify their devices won't see your messages."),
+                exclude_insecure_cb_->bounds());
+    };
+    exclude_insecure_cb_->on_hover_leave = [this]
+    {
+        if (host_) host_->hide_tooltip(exclude_insecure_cb_);
+    };
+
     enc_group->add_widget(tk::create_widget<tk::Button>(
-        this, "Export room keys…",
+        this, tk::tr("Export room keys…"),
         [this] { if (on_export_keys) on_export_keys(); }));
 
     enc_group->add_widget(tk::create_widget<tk::Button>(
-        this, "Import room keys…",
+        this, tk::tr("Import room keys…"),
         [this] { if (on_import_keys) on_import_keys(); }));
 
     enc_group->add_widget(tk::create_widget<tk::Button>(
-        this, "Reset cryptographic identity…",
+        this, tk::tr("Reset encryption…"),
         [this] { if (on_reset_identity) on_reset_identity(); },
         tk::Button::Variant::Destructive));
 }
@@ -184,6 +275,23 @@ void PrivacySection::set_send_maps_urls_as_location(bool enabled)
     send_maps_urls_as_location_cb_->set_checked(enabled);
 }
 
+void PrivacySection::set_bundled_url_previews(bool enabled, bool direct)
+{
+    bundled_url_previews_cb_->set_checked(enabled);
+    url_previews_direct_cb_->set_checked(direct);
+    url_previews_direct_cb_->set_enabled(enabled);
+}
+
+void PrivacySection::set_homeserver_previews_available(bool available)
+{
+    previews_unavailable_label_->set_visible(!available);
+}
+
+void PrivacySection::set_exclude_insecure_devices(bool enabled)
+{
+    exclude_insecure_cb_->set_checked(enabled);
+}
+
 void PrivacySection::set_index_messages(bool enabled)
 {
     search_index_cb_->set_checked(enabled);
@@ -192,7 +300,8 @@ void PrivacySection::set_index_messages(bool enabled)
 #ifdef TESSERACT_UPDATE_CHECKS
 void PrivacySection::set_check_for_updates(bool enabled)
 {
-    check_updates_cb_->set_checked(enabled);
+    if (check_updates_cb_)
+        check_updates_cb_->set_checked(enabled);
 }
 #endif
 

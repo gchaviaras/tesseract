@@ -126,6 +126,15 @@ public:
 
     void set_enabled(bool e) override;
 
+    /// Show (or clear) the send button's busy spinner, used while this
+    /// room's earlier sends are still being prepared or sent. The button
+    /// stays usable: further sends queue behind the pending ones.
+    void set_send_busy(bool busy);
+    bool send_busy() const
+    {
+        return send_btn_ && send_btn_->busy();
+    }
+
     /// Hide or show the mic button. Pass false when no audio input device is
     /// detected at startup (capture_ == nullptr after make_audio_capture()).
     /// Defaults to true.
@@ -449,7 +458,7 @@ private:
     tk::Button* emoji_btn_ = nullptr;   // borrowed (owned by Widget tree)
     tk::Button* sticker_btn_ = nullptr; // borrowed
     tk::Button* mic_btn_ = nullptr;     // borrowed; hidden when no mic device
-    tk::Button* send_btn_ = nullptr;    // borrowed
+    tk::BusyButton* send_btn_ = nullptr; // borrowed
     tk::Button* remove_btn_ = nullptr;  // borrowed; hidden when no image
     // Emoji/sticker/mic SVG glyphs are now self-painted by tk::Button
     // (Button::set_icon()); ComposeBar just refreshes the hover tint (and,

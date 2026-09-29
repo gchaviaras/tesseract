@@ -1,6 +1,169 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-09-24**. 1936 C++ + 713 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**. 2038 C++ + 764 Rust tests.
+
+> **German translation (2026-09-28, v0.9.0).**
+> A German catalog (`i18n/de.po`) covers the whole UI, using Element
+> Web's German terminology (room → "Chat", session → "Gerät") and its
+> informal "du". It is selectable in Settings → Language. `msgfmt -c`
+> clean; pending review by a native speaker.
+
+<!-- -->
+
+> **User verification (2026-09-28, v0.9.0).**
+> A user's profile shows whether you've verified them, with a "Verify"
+> button that runs SAS verification in the encryption dialog (requests go
+> in-room through the DM, created if needed) and "Withdraw verification"
+> once a verified identity was reset. In-room verification requests from
+> other users are now received. The button is disabled until this device
+> is verified, and the row updates as the user's identity changes. Windows
+> build; ctest 2032/2032, cargo 763/763; user-verified live on Windows.
+> Qt6/GTK4/macOS unbuilt.
+
+<!-- -->
+
+> **Exclude insecure devices (MSC4153) (2026-09-28, v0.9.0).**
+> An opt-in setting (Settings → Privacy → Encryption, applies after
+> restart) shares room keys, including call keys, only with devices their
+> owner cross-signed, and hides messages from devices that aren't. In
+> encrypted rooms, a banner warns when a member's identity is reset ("OK"
+> accepts it, "Withdraw verification" for a verified user), and messages
+> held back by an encryption check offer Retry. Windows build; ctest
+> 2032/2032, cargo 763/763; user-verified live on Windows. Qt6/GTK4/macOS
+> unbuilt.
+
+<!-- -->
+
+> **SAS decimal verification (MSC4405) (2026-09-28, v0.9.0).**
+> The verification step shows the spec's `decimal` numbers first, since
+> MSC4405 deprecates emoji, with the emoji grid beneath when the other
+> device offers it. A peer that offers only `decimal` no longer leaves the
+> dialog waiting. Builds on all four platforms; ctest 2031/2031, cargo
+> 756/756. User-verified live against Element on the emoji path; the
+> decimal-only path is covered by tests only. Live testing in progress.
+
+<!-- -->
+
+> **Link-preview capability (MSC4452) (2026-09-28, v0.9.0).**
+> The `m.preview_url` capability (and unstable
+> `io.element.msc4452.preview_url`) is read from the homeserver. When the
+> server has link previews off, Settings → Privacy says so and Tesseract
+> stops calling `/preview_url`; direct fetches for sent messages still run.
+> Builds on all four platforms; user-verified on Windows. Live testing in
+> progress.
+
+<!-- -->
+
+> **Multi-account and background-job hardening (2026-09-28, v0.9.0).**
+> Pop-out windows stay bound to the account that opened them (sends,
+> replies, reactions, moderation, settings, receipts), each account can have
+> its own pop-out of the same room, and logging out closes only that
+> account's pop-outs. The inactive account's timeline, thread and typing
+> events no longer reach the active account's view. Session-token writes go
+> through one ordered background queue, a rejected credential-store update
+> falls back to the newer on-disk copy, and startup cleanup no longer
+> deletes account folders when `accounts.json` is missing or unreadable (it
+> is recovered from `accounts.json.bak`). Background jobs in settings, room
+> panes, history export and the update checkers post results through the
+> new `tk::UiPoster`, which checks the owner is still alive on the UI
+> thread. Builds on all four platforms; live testing in progress.
+
+<!-- -->
+
+> **Call tiles fit the view's shape (2026-09-27, v0.9.0).**
+> Participant tiles go in one row when the call view is wide, one column
+> when it is tall, and a balanced grid otherwise (`call_tile_layout`). A
+> pinned participant's strip moves below it when the view is taller than
+> 16:9. Builds on all four platforms; user-verified on Windows. Live testing
+> in progress.
+
+<!-- -->
+
+> **Link previews on sent messages; send-button spinner (2026-09-27, v0.9.0).**
+> The sending side of MSC4095: sends, replies, threads and edits carry
+> bundled link previews, fetched through the homeserver by default. An
+> opt-in setting fetches pages directly through an SSRF-guarded client
+> (`net_guard`, `scraper`-based parser), falling back to the homeserver.
+> Previews are generated on the read pool (`generate_url_previews` FFI), so
+> they never block a room switch. The send button shows a spinner
+> (`tk::BusyButton`) once a send takes longer than 200 ms; it stays usable,
+> and the per-room `SendPipeline` keeps later sends in order. A message
+> that fails before reaching the send queue shows "Message not sent" and
+> its text goes back into the composer. Builds on all four platforms;
+> ctest 2000/2000, cargo 747/747; user-verified on Windows. Live testing in
+> progress.
+
+<!-- -->
+
+> **Full UI translation; French (2026-09-26, v0.9.0).**
+> The whole UI now translates: the Qt6 and GTK4 shells had used
+> `QObject::tr` and unbound `gettext`, which always return English, and
+> about 150 shared strings were unwrapped. Adds `tk::N_`,
+> `tk::format_date`, `tk::format_size`, the `i18n_catalogs_complete` ctest
+> and a French catalog (`i18n/fr.po`, Element Web terminology). The chosen
+> language is saved again, and "Restart now" relaunches into it
+> (`--relaunch` waits for the old process's single-instance lock). Builds on
+> all four platforms; live testing in progress.
+
+<!-- -->
+
+> **One dialog for all of encryption (2026-09-26, v0.9.0).**
+> `EncryptionSetupOverlay` handles recovery-key setup, unlocking, resetting
+> and SAS verification. Setup creates a recovery key in one click (a
+> passphrase is optional), the key can be saved to a file, and new devices
+> choose between another device, the recovery key or a reset. Incoming
+> requests ("Was this you?") run inside the dialog, and the old
+> verification banner is now `EncryptionReminderBanner`, which reopens the
+> dialog and can be snoozed for 3 days. Verification handling moved from
+> the four shells into `ShellBase` + `EncryptionFlowController`. While a
+> fresh login's sync is held behind the dialog, an encryption-only sliding
+> sync (`start_encryption_sync`) uploads device keys and carries
+> verification traffic. A request arriving on a background account
+> switches to that account. Builds on all four platforms; ctest 1985/1985,
+> cargo 719/719; user-verified on Qt6. Live testing in progress.
+
+<!-- -->
+
+> **Invite people from the room info panel (2026-09-24, v0.9.0).**
+> An "Invite people" button (shown only with invite permission) opens a
+> dialog to pick known users or paste full mxids, which become pills once
+> resolved. Invites report per-user results (`invite_user_async` takes a
+> request id), so `/invite` failures show too. `tk::Button` gained a
+> leading SVG icon (`set_leading_icon`), used by the panel's Invite, Export
+> History and Leave Room buttons. Builds on all four platforms; ctest
+> 1949/1949, cargo 713/713; user-verified on Qt6. Live testing in progress.
+
+<!-- -->
+
+> **Calls: camera failures detected and explained (2026-09-26, v0.9.0).**
+> A missing, busy or blocked camera is reported by `tk::VideoCapture` and
+> explained in calls, the lobby and `/selfie`; the camera track stays muted
+> until a real frame arrives, and turning video on retries the device.
+> Builds on all four platforms; ctest 1993/1993; user-verified on Qt6. Live
+> testing in progress.
+
+<!-- -->
+
+> **Member moderation: kick, ban, unban (2026-09-24, v0.9.0).**
+> Right-clicking a member row in `RoomInfoPanelBody` opens a `PopupMenu`
+> with Show profile / Kick user… / Ban user…. Kick/Ban are enabled per
+> member through a `MemberActionsProvider` backed by the new
+> `Client::can_kick_user`/`can_ban_user` (ruma's target-aware
+> `user_can_kick_user`/`user_can_ban_user`, room-v12 creators included);
+> `RoomView::confirm_and_moderate_member_` confirms via `ConfirmDialog`'s
+> new optional reason field. Room Settings gains a Moderation tab
+> (`RoomModerationSection`, index 4) listing banned users from
+> `Client::get_banned_members` (member sync with a 10 s cap, then the
+> store), each with Unban; a successful unban removes its row locally,
+> since the store keeps the ban until sync delivers the change. All three
+> actions go through `ShellBase::moderate_member_` (`ModerationAction`
+> Kick/Ban/Unban, failures on the status line). Kick/ban reasons also show
+> on timeline membership lines (`with_membership_reason`) and in history
+> export (label slot 32). Builds on all four platforms; ctest 1960/1960,
+> cargo 715/715; user-tested on Qt6, unban row-removal fix unverified. Live
+> testing in progress.
+
+<!-- -->
 
 > **Mention pills: initials disc when there's no avatar (2026-09-24, v0.8.25).**
 > A pill's reserved avatar slot used to stay blank until an avatar loaded,
@@ -430,6 +593,15 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-24**
 > v0.8.21).** The key-verification dialog's recovery-key field now takes
 > keyboard focus as soon as its "Enter your recovery key" step opens,
 > instead of requiring a click first. Windows build-verified.
+
+<!-- -->
+
+> **Account picker: all accounts shown, scrolls past 8 (2026-09-26).**
+> The picker no longer keeps the row count from its first open, so
+> accounts added or removed later show up correctly; it shows at most 8
+> rows and scrolls the rest (`AccountPicker::kMaxVisibleRows`). Qt6
+> build + ctest 1987/1987, user-verified live; GTK4/Windows/macOS share
+> the code, unbuilt.
 
 <!-- -->
 
@@ -2014,10 +2186,14 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-24**
 
 <!-- -->
 
-> **Encryption-setup overlay.**
-> A shared overlay wired on all four shells guides new-account users
-> through enabling cross-signing, with separate flows for a fresh setup
-> (choose recovery key or passphrase) and recovering an existing identity.
+> **One encryption dialog.**
+> Every encryption interaction happens in a single shared dialog:
+> creating a recovery key (generated by default, with an optional
+> passphrase), unlocking a new device (another device, the recovery key,
+> or resetting encryption if both are lost), and answering verification
+> requests with the emoji comparison. A slim reminder strip reopens it for
+> users who skipped setup and can be snoozed for three days. The verification
+> logic is shared by all four shells.
 
 <!-- -->
 
@@ -2148,8 +2324,8 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 | Suite | Count |
 | ----- | ----- |
-| Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 630 |
-| C++ Catch2 tests via ctest (Qt6 preset) | 1707 |
+| Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 756 |
+| C++ Catch2 tests via ctest | 2031 |
 
 ## Platforms
 
@@ -2171,7 +2347,8 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 - **XDG data/config split** — account data (per-account `accounts/<uid>/` tree with `session.json` + the matrix-sdk SQLite store, plus the `accounts.json` index) lives under `data_dir()`: `~/.local/share/tesseract/` on Linux, `%APPDATA%/Tesseract/` on Windows, `~/Library/Application Support/Tesseract/` on macOS. Only `app_settings.json` stays in `config_dir()` (`~/.config/tesseract/` on Linux); `data_dir()` equals `config_dir()` on Windows/macOS. `migrate_legacy_layout()` runs on startup and handles both the pre-multi-account single-account layout and a multi-account `accounts/` tree left under `config_dir()` by older builds (Linux), moving each into `data_dir()` crash-safely.
 - **`logout`** — wipes Rust session, C++ wrapper state, and the SQLite store; surfaces back through the FFI.
 - **Soft logout** — `SessionChange::UnknownToken` threaded through `on_error` with a `soft_logout` flag so the UI can retry restore without clearing the store.
-- **Recovery key / device verification (Step 6)** — `needs_recovery`, `recover(key_or_passphrase)`, `backup_state` FFI; `on_backup_progress` callback; per-platform `RecoveryBanner` (in-toolkit; not a modal dialog).
+- **Recovery key / device verification (Step 6)** — `needs_recovery`, `recover(key_or_passphrase)`, `backup_state` FFI; `on_backup_progress` and `on_recovery_state_changed` callbacks. One shared `EncryptionSetupOverlay` (driven by `EncryptionFlowController` in `ShellBase`) handles recovery-key setup, unlocking, reset and SAS verification (decimal first per MSC4405, emoji when offered); `EncryptionReminderBanner` reopens it and can be snoozed. A fresh login's sync waits for the dialog, with an encryption-only sliding sync (`start_encryption_sync`) running meanwhile.
+- **Multi-account isolation** — pop-out windows are bound to the account that opened them; timeline, thread and typing events only reach views of their own account; session-token writes are serialized through one ordered queue; a missing `accounts.json` is recovered from `accounts.json.bak` instead of triggering folder cleanup.
 - **Server capabilities on login** — `tesseract::ServerInfo` struct captures homeserver URL, Matrix spec versions, MSC3030 (Jump-to-Date) support flag, capability bits (`can_change_password`, `can_set_displayname`, `can_set_avatar`), and default room version; fetched concurrently via `/_matrix/client/versions` (no-auth) + `/_matrix/client/v3/capabilities` (Bearer) after `RoomListState::Running`; stored in `ShellBase::server_info_` for feature-gating across all four shells; Settings "Server" tab shows the homeserver URL.
 - **Shutdown stability** — background workers are drained before the tokio runtime tears down, preventing use-after-free when a worker posts back to the UI thread after the EventHandler is destroyed; a separate guard prevents a double-callback segfault when `stop_sync` is called re-entrantly.
 - **Identity strip in sidebar** — circular avatar + display name + right-click "Log Out" on every platform.
@@ -2199,6 +2376,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 - **Low-power CPU optimisations** — the sync worker no longer fans out into matrix-sdk SQLite queries on every notable update. The room-info watcher coalesces `RoomInfoNotableUpdate` bursts in a 150 ms window and folds their reasons, skipping the image-pack/prefs rebuild when only read-receipt / latest-event / recency bits are set. `sync_room_subscriptions` is diff-aware — a re-selection of the already-open room or a thread toggle that lands in an already-subscribed room is a no-op. The presence polling loop reads a cached DM-counterpart set (refreshed from `RoomInfo.dm_counterpart_user_id` after every room-list rebuild) instead of walking every joined room with a `dm_other_user` lookup per tick, the tick interval is raised from 30 s to 60 s, and the loop is suspended entirely while the window is hidden/minimized/unfocused (re-enabled with an immediate one-shot kick on focus regain via `Client::poll_presence_now`). On low-end laptops these collapse a previously dominant `chunk_large_query_over` hotspot.
 - **One-time initial history fill per subscription** — revisiting an already-subscribed room no longer re-runs a 100-event `paginate_back_with_status` fetch on every visit; a one-time `initial_fill_done` flag gates it so the fill runs once per warm subscription and later revisits are free. `reply_details_requested_` clearing and the room-layout account-data `PUT` also moved from every switch to once (the layout write to window close).
 - **Right-click context menu on room list rows** — Open in tab / Open in window / Leave room (with confirmation), via the shared `PopupMenu` widget; the open-in items disable when the room is already open in that context.
+- **Invites and moderation** — the room info panel's "Invite people" dialog (known users or pasted mxids, per-user results); right-click a member to Show profile / Kick / Ban (enabled only when you outrank them, with an optional reason); Room Settings → Moderation lists banned users with Unban.
 
 ## Spaces (Step 7)
 
@@ -2295,17 +2473,18 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 - Multi-line expanding input via `tk::NativeTextArea` (auto-grows 56 → 160 px, clamped).
 - Send-on-Enter, Shift+Enter inserts a newline.
 - Emoji + sticker + send buttons painted by the toolkit.
-- Send button gates on trimmed non-empty content.
+- Send button gates on trimmed non-empty content; shows a spinner (`tk::BusyButton`) once a send takes over 200 ms, with the per-room `SendPipeline` keeping later sends in order. A send that fails before reaching the send queue puts its text back in the composer.
+- **Bundled link previews on send (MSC4095)** — fetched through the homeserver by default, or directly via the SSRF-guarded `net_guard` client when opted in. When the homeserver's `m.preview_url` capability (MSC4452) turns previews off, `/preview_url` is no longer called; direct fetches still run.
 - Clipboard image paste; clipboard file-list paste (files copied in a file manager, not dragged — Qt6/GTK4 shipped, macOS/Windows unbuilt); file drag-drop; pending-image / pending-file preview chip with clear button.
 - Reply-mode banner (`kReplyBandH = 44 px`) with sender + body snippet and "×" cancel; edit-mode banner (`kEditBandH = 44 px`) with "×" cancel; both modes mutually exclusive.
 - **Slash commands** — `SlashCommandEngine`/`SlashCommandPopup` autocomplete (typing `/` opens the popup); `dispatch_compose_send` routes recognised commands: `/me` + `/slap` → `m.emote`, `/shrug` appends `¯\_(ツ)_/¯`, `/spoiler [(reason)] <text>` → `m.text` with a `data-mx-spoiler` span (MSC2010; content rendered through inline markdown). Unknown `/foo` is sent verbatim.
 
 ## Internationalisation
 
-- **Qt6** — all shell strings wrapped with `QObject::tr()`; `QTranslator` loads `share/translations/tesseract_<locale>.qm` at startup. `i18n_extract_qt` CMake target (guarded by `find_program(lupdate)`) runs `lupdate src/ -ts i18n/qt/tesseract_LANG.ts` to produce a translation template.
-- **GTK4** — all shell strings wrapped with `_(s)` = `gettext(s)`; `bindtextdomain("tesseract", share/locale)` + `textdomain` called in `main()`. `i18n_extract_gtk` CMake target runs `xgettext` to produce `i18n/gtk/tesseract.pot`.
-- Shared views (`ui/shared/views/`) stay in English — translated via each platform's mechanism when strings are passed in by the host.
-- macOS (`NSLocalizedString`) and Win32 (`LoadString`) not yet wired.
+- One mechanism on every platform: `tk::tr` / `trn` / `trf` look strings up in gettext `.mo` catalogs compiled from `i18n/*.po` (English, Spanish, French, German, plus a pseudo-locale for QA). Shared views and all four shells use it; macOS wraps it as `TkTr()`. Qt's `QObject::tr` and GTK's `gettext` are not used.
+- Language picked in Settings → Language (Auto follows the OS); "Restart now" relaunches into it.
+- `tk::N_` marks literal tables translated at display time; `tk::format_date` formats dates from a translatable strftime-style pattern (so locales can reorder day and month) with catalog month/weekday names; `tk::format_size` gives translated byte units.
+- The `i18n_catalogs_complete` ctest (`i18n/check_i18n.py`) fails when a marked string is missing from any `.po`, or when a shell calls a bare `tr()` / `_()`.
 
 ## Theme
 

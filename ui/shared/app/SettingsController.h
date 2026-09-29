@@ -28,10 +28,15 @@ public:
         std::function<void(std::function<void(std::vector<uint8_t>,
                                               std::string)>)>               open_file_picker,
         std::function<std::shared_ptr<tk::Image>(const std::vector<uint8_t>&)>
-                                                                             decode_avatar_preview);
+                                                                             decode_avatar_preview,
+        std::shared_ptr<void> client_owner = {});
     ~SettingsController();
 
-    void set_client(tesseract::Client* client);
+    /// `client_owner` is whatever keeps `client` alive (the shell's
+    /// AccountSession). Every background job holds a copy while it runs, so
+    /// logout — which waits for those references to drop before destroying
+    /// the Client — can't destroy it under a blocking call.
+    void set_client(tesseract::Client* client, std::shared_ptr<void> client_owner = {});
 
     tesseract::Client* client() const { return client_; }
 
@@ -151,6 +156,7 @@ private:
     void release_device_op_(const std::string& device_id);
 
     tesseract::Client* client_;
+    std::shared_ptr<void> client_owner_;
     tesseract::IUpConnector* up_connector_ = nullptr;
     std::function<void(std::function<void()>)>                       post_to_ui_;
     std::function<void(std::function<void()>)>                       run_async_;

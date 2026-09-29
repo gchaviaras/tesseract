@@ -12,11 +12,9 @@ and in-progress work, as a single backlog ordered by priority/urgency.
   testers show up in the room.
 - **Screen sharing**: same testing-tail treatment, at whatever level of
   priority given it's explicitly YMMV/rougher than calls.
-## Tier 2 — The room-admin cluster, still incomplete
 
-- Invite UI (member list → invite), beyond the `/invite` slash command.
-- Member list with moderation actions (kick/ban) — related to but distinct
-  from the power-levels editor already built.
+## Tier 2 — Next up
+
 - **DM-counterpart avatar picks the bridge bot itself** when the bridge
   doesn't publish `io.element.functional_members` (MSC4171) — heisenbridge
   currently lacks the state event, so 1:1 control rooms show the bot's own
@@ -35,6 +33,10 @@ and in-progress work, as a single backlog ordered by priority/urgency.
   self-mention emphasis, device rename, new-device warnings, edit history
   viewer, GIF picker.
 - Room upgrades, alias management beyond viewing.
+- **MSC4153 follow-ups.** The MSC4350 bridge-bot annotation, a reason
+  tooltip on sends blocked by an encryption check (`pending_error` is
+  already on the row), and translating the Rust-side UTD reason strings
+  (`utd_message_for_cause`).
 - **MSC2545 pack management — manual order/sort.** List/subscribe UI, pack
   creation/removal, and sticker delete/rename inside the user pack all
   shipped 2026-07-11 (global "Emojis & Stickers" settings tab +

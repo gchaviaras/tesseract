@@ -469,7 +469,6 @@ const CHUNK_STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 /// timeout/stop race and supplies the appropriate size cap.
 #[cfg(not(test))]
 pub(super) async fn download_url(client: &reqwest::Client, url: &str, max_bytes: usize) -> Vec<u8> {
-    use futures_util::StreamExt;
     let resp = match client.get(url).send().await {
         Ok(r) => r,
         Err(_) => return Vec::new(),
@@ -478,6 +477,17 @@ pub(super) async fn download_url(client: &reqwest::Client, url: &str, max_bytes:
         Ok(r) => r,
         Err(_) => return Vec::new(),
     };
+    read_body_capped(resp, url, max_bytes).await
+}
+
+/// Stream an already-received response body into a byte buffer, enforcing
+/// `max_bytes` both up-front (Content-Length) and mid-stream, with the
+/// `CHUNK_STALL_TIMEOUT` idle abort. Returns an empty Vec on any error.
+/// `url` is only used for log lines. Split out of `download_url` so the
+/// guarded URL-preview fetch (which walks redirects itself) can share it.
+#[cfg(not(test))]
+pub(super) async fn read_body_capped(resp: reqwest::Response, url: &str, max_bytes: usize) -> Vec<u8> {
+    use futures_util::StreamExt;
     if let Some(len) = resp.content_length() {
         if len as usize > max_bytes {
             tracing::warn!("download_url: {url} declared {len} bytes > {max_bytes} cap; rejecting");

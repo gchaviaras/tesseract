@@ -78,6 +78,13 @@ public:
         /// file with a fresh empty set on the same run — it quarantines the
         /// original to `accounts.json.corrupt` first.
         bool corrupt = false;
+
+        /// True when this index was actually read from a valid
+        /// `accounts.json` (or recovered from `accounts.json.bak`). False for
+        /// an absent file and for a corrupt one. Destructive callers (the
+        /// orphan sweep) require it: an absent index says nothing about
+        /// which account folders are still in use.
+        bool present = false;
     };
 
     /// Replace `:` / `/` / `\` / `@` (anything that would be awkward in a
@@ -102,11 +109,14 @@ public:
     static std::filesystem::path sdk_store_dir(const std::string& user_id);
 
     /// Read `<data>/accounts.json`.
-    ///   * Absent / empty file ⇒ empty `AccountIndex`, `corrupt == false`
+    ///   * Absent file         ⇒ recovered from `accounts.json.bak` if that
+    ///     parses (the backup is renamed back into place); otherwise an
+    ///     empty `AccountIndex`, `corrupt == false`, `present == false`
     ///     (legitimately no accounts).
-    ///   * Valid JSON object   ⇒ parsed `AccountIndex`, `corrupt == false`.
-    ///   * Truncated / malformed / wrong-shape file, or an I/O read error ⇒
-    ///     empty `AccountIndex` with `corrupt == true`.
+    ///   * Valid JSON object   ⇒ parsed `AccountIndex`, `present == true`.
+    ///   * Empty, truncated, malformed or wrong-shape file, or a file that
+    ///     exists but can't be opened or read ⇒ empty `AccountIndex` with
+    ///     `corrupt == true`.
     /// Callers MUST check `corrupt`: an empty index with `corrupt == true` means
     /// "the file exists but is unreadable" — NOT "no accounts" — and must not be
     /// treated as a reason to drop every account or to persist an empty set.
@@ -167,8 +177,21 @@ public:
     static bool save_session_update(const std::string& user_id,
                                     const std::string& session_json);
 
+    /// Queue a `save_session_update` on the single background writer that
+    /// matrix-sdk's own save callback also uses. Every token-refresh write
+    /// goes through this one queue, so they land in arrival order (newest
+    /// wins per account) instead of racing a direct write.
+    static void queue_session_update(const std::string& user_id,
+                                     const std::string& session_json);
+
+    /// Block until every queued session write has landed. Used where the
+    /// caller needs the write on disk before continuing (clean shutdown).
+    static void flush_session_updates();
+
     /// Remove `<data>/accounts/<sanitize(user_id)>/` (session, SDK store,
-    /// everything). Idempotent.
+    /// everything). Idempotent. Drops any queued session write for the
+    /// account first (waiting for one already in flight), so it can't
+    /// recreate the credentials afterwards.
     static void clear_account(const std::string& user_id);
 
     /// Picks a folder for a brand-new login of `user_id`, persists the
@@ -207,11 +230,11 @@ public:
     /// touches a currently-referenced folder, even if this pass can't
     /// remove some other orphan — best-effort per entry, not all-or-nothing.
     ///
-    /// A no-op — deletes nothing — if `accounts.json` is currently corrupt
-    /// (`AccountIndex::corrupt`): that reads back as an empty index, and
-    /// treating "index empty" as "nothing is in use" would delete every
-    /// account folder, including every already-logged-in one, over a
-    /// merely-unreadable index file.
+    /// A no-op — deletes nothing — unless `accounts.json` was actually read
+    /// (`AccountIndex::present`): a corrupt, unreadable or absent index reads
+    /// back as empty, and treating "index empty" as "nothing is in use"
+    /// would delete every account folder, including every already-logged-in
+    /// one, over a merely-unreadable or lost index file.
     static void sweep_orphaned_account_dirs();
 
     /// One-shot, idempotent migration to the current `data_dir()` layout.

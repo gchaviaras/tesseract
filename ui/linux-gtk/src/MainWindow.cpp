@@ -6,6 +6,7 @@
 #include "LoginView.h"
 #include "views/BrandView.h"
 #include "SettingsWidget.h"
+#include "tk/i18n.h"
 #include "LinuxAutostartGtk.h"
 #include "LinuxPowerMonitorGtk.h"
 #include "LinuxScreenLockGtk.h"
@@ -52,7 +53,6 @@
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 
-#include "gettext_shorthand.h"
 
 namespace gtk4
 {
@@ -193,11 +193,13 @@ void MainWindow::on_inflight_ui_()
     const size_t sp = mut_pool_pending_count_();
     const size_t mp = pending_media_count_();
     gtk_widget_queue_draw(inflight_dot_);
-    char buf[128];
-    std::snprintf(buf, sizeof(buf),
-                  "%u request%s in flight\nmedia: %zu loading · fetch: %zu queued · send: %zu queued",
-                  n, n == 1u ? "" : "s", mp, fp, sp);
-    std::string tip(buf);
+    std::string tip =
+        tk::trf(tk::trn("{0} request in flight", "{0} requests in flight",
+                        static_cast<long>(n)),
+                {std::to_string(n)}) +
+        "\n" +
+        tk::trf(tk::tr("media: {0} loading · fetch: {1} queued · send: {2} queued"),
+                {std::to_string(mp), std::to_string(fp), std::to_string(sp)});
 #ifndef NDEBUG
     if (!last_inflight_urls_.empty()) {
         tip += "\n── requests ──\n";
@@ -352,121 +354,6 @@ void MainWindow::on_startup_restore_progress_ui_(const std::string& status)
     {
         branding_view_->set_status(status);
     }
-}
-
-void MainWindow::handle_verification_state_ui_(bool is_verified)
-{
-    if (!main_app_ || !verif_shared_)
-    {
-        return;
-    }
-    if (main_app_->user_info())
-    {
-        main_app_->user_info()->set_warning_dot(!is_verified);
-    }
-    if (is_verified)
-    {
-        main_app_->show_verif_banner(false);
-        main_app_surface_->relayout();
-        return;
-    }
-    // Only prompt when there is actually an identity to verify against. On a
-    // fresh/only device our own login-time bootstrap holds the cross-signing
-    // keys, so "verify this device" is a dead end — check_encryption_setup_
-    // drives the Fresh setup overlay instead.
-    if (!foreign_cross_signing_identity_())
-    {
-        main_app_->show_verif_banner(false);
-        main_app_surface_->relayout();
-        return;
-    }
-    if (verification_banner_dismissed_)
-    {
-        return;
-    }
-    if (!main_app_->verif_banner()->visible())
-    {
-        active_verification_flow_id_.clear();
-        verif_shared_->set_state(
-            tesseract::views::VerificationBanner::State::Prompt);
-        main_app_->show_verif_banner(true);
-        main_app_surface_->relayout();
-    }
-}
-
-void MainWindow::handle_verification_request_ui_(std::string flow_id,
-                                                 std::string /*user_id*/,
-                                                 std::string /*device_id*/,
-                                                 bool incoming)
-{
-    if (!main_app_ || !verif_shared_)
-    {
-        return;
-    }
-    active_verification_flow_id_ = flow_id;
-    if (incoming)
-    {
-        verif_shared_->set_state(
-            tesseract::views::VerificationBanner::State::IncomingRequest);
-    }
-    else
-    {
-        verif_shared_->set_state(
-            tesseract::views::VerificationBanner::State::Waiting);
-        if (client_)
-        {
-            client_->start_sas(flow_id);
-        }
-    }
-    main_app_->show_verif_banner(true);
-    main_app_surface_->relayout();
-}
-
-void MainWindow::handle_sas_ready_ui_(
-    std::string /*flow_id*/, std::vector<tesseract::VerificationEmoji> emojis)
-{
-    if (!main_app_ || !verif_shared_)
-    {
-        return;
-    }
-    verif_shared_->set_emojis(emojis);
-    main_app_->show_verif_banner(true);
-    main_app_surface_->relayout();
-}
-
-void MainWindow::handle_verification_done_ui_(std::string /*flow_id*/)
-{
-    dismiss_encryption_setup_after_verification_();
-    if (!main_app_ || !verif_shared_)
-    {
-        return;
-    }
-    verif_shared_->set_state(tesseract::views::VerificationBanner::State::Done);
-    main_app_surface_->relayout();
-    // Hide after 1.5 s. The payload is a guarded() closure — built here,
-    // synchronously (`this` is definitely alive) — so it no-ops instead of
-    // touching a freed window if this fires after the window is destroyed.
-    gtk_post_timeout(1500, guarded([this]
-    {
-        if (verif_shared_ && verif_shared_->on_done)
-        {
-            verif_shared_->on_done();
-        }
-    }));
-}
-
-void MainWindow::handle_verification_cancelled_ui_(std::string /*flow_id*/,
-                                                   std::string reason)
-{
-    if (!main_app_ || !verif_shared_)
-    {
-        return;
-    }
-    verif_shared_->set_state(
-        tesseract::views::VerificationBanner::State::Cancelled);
-    verif_shared_->set_cancel_reason(std::move(reason));
-    main_app_->show_verif_banner(true);
-    main_app_surface_->relayout();
 }
 
 // ---------------------------------------------------------------------------
@@ -706,7 +593,6 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         main_app_ = main_app_owner.get();
         room_list_view_ = main_app_->room_list_view();
         room_view_ = main_app_->room_view();
-        verif_shared_ = main_app_->verif_banner();
         img_viewer_ = main_app_->image_viewer();
         vid_viewer_ = main_app_->video_viewer();
         room_media_view_ = main_app_->room_media_view();
@@ -1518,7 +1404,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             [this](tesseract::views::FileDropOutcome outcome)
         {
             if (outcome == tesseract::views::FileDropOutcome::TooLarge)
-                show_status_message_(_("File exceeds the upload limit"));
+                show_status_message_(tk::tr("File exceeds the upload limit"));
         };
         main_app_surface_->set_on_file_drop_error(
             [this](std::string reason)
@@ -1797,7 +1683,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         {
             std::string suggested = filename_hint.empty() ? "image" : filename_hint;
             GtkFileDialog* dlg = gtk_file_dialog_new();
-            gtk_file_dialog_set_title(dlg, "Save image");
+            gtk_file_dialog_set_title(dlg, tk::tr("Save image").c_str());
             gtk_file_dialog_set_initial_name(dlg, suggested.c_str());
             struct ImgSaveCtx
             {
@@ -1860,7 +1746,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             if (slash != std::string::npos)
                 ext = "." + mime_type.substr(slash + 1);
             GtkFileDialog* dlg = gtk_file_dialog_new();
-            gtk_file_dialog_set_title(dlg, "Save video");
+            gtk_file_dialog_set_title(dlg, tk::tr("Save video").c_str());
             gtk_file_dialog_set_initial_name(dlg, ("video" + ext).c_str());
             struct VidSaveCtx
             {
@@ -1916,7 +1802,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             std::string suggested =
                 hit.file_name.empty() ? "download" : hit.file_name;
             GtkFileDialog* dlg = gtk_file_dialog_new();
-            gtk_file_dialog_set_title(dlg, "Save file");
+            gtk_file_dialog_set_title(dlg, tk::tr("Save file").c_str());
             gtk_file_dialog_set_initial_name(dlg, suggested.c_str());
             struct FileSaveCtx
             {
@@ -1985,70 +1871,6 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
                     client_->fetch_source_bytes_async(req_id, src);
                 }
             });
-
-        // Verification banner callbacks.
-        verif_shared_->on_verify = [this]
-        {
-            if (client_)
-            {
-                client_->request_self_verification();
-            }
-        };
-        verif_shared_->on_accept = [this]
-        {
-            if (client_ && !active_verification_flow_id_.empty())
-            {
-                client_->accept_verification(active_verification_flow_id_);
-                client_->start_sas(active_verification_flow_id_);
-            }
-        };
-        verif_shared_->on_match = [this]
-        {
-            if (client_ && !active_verification_flow_id_.empty())
-            {
-                if (verif_shared_)
-                {
-                    verif_shared_->set_state(
-                        tesseract::views::VerificationBanner::State::
-                            Confirming);
-                }
-                main_app_surface_->relayout();
-                client_->confirm_sas(active_verification_flow_id_);
-            }
-        };
-        verif_shared_->on_mismatch = [this]
-        {
-            if (client_ && !active_verification_flow_id_.empty())
-            {
-                client_->cancel_verification(active_verification_flow_id_);
-            }
-        };
-        verif_shared_->on_cancel = [this]
-        {
-            if (client_ && !active_verification_flow_id_.empty())
-            {
-                client_->cancel_verification(active_verification_flow_id_);
-            }
-        };
-        verif_shared_->on_dismiss = [this]
-        {
-            verification_banner_dismissed_ = true;
-            main_app_->show_verif_banner(false);
-            main_app_surface_->relayout();
-        };
-        verif_shared_->on_done = [this]
-        {
-            main_app_->show_verif_banner(false);
-            main_app_surface_->relayout();
-        };
-        verif_shared_->on_use_recovery_key = [this]
-        {
-            main_app_->show_verif_banner(false);
-            // The recovery-key entry path now lives in the encryption-setup
-            // overlay (Recover mode); the old inline RecoveryBanner was removed.
-            show_encryption_setup_overlay_(
-                tesseract::views::EncryptionSetupOverlay::Mode::Recover);
-        };
 
         // The room-list search field is wired in
         // ShellBase::wire_main_app_widget_() (shared across all four shells).
@@ -2302,7 +2124,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
 
     // Status bar floats below the main stack (outside the stack so it is
     // always visible regardless of which page is shown).
-    status_bar_ = gtk_label_new(_("Not logged in"));
+    status_bar_ = gtk_label_new(tk::tr("Not logged in").c_str());
     gtk_widget_set_hexpand(status_bar_, TRUE);
     gtk_widget_set_halign(status_bar_, GTK_ALIGN_START);
     gtk_widget_set_margin_start(status_bar_, 4);
@@ -2361,7 +2183,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         gtk_widget_set_margin_end(low_power_label_, 4);
         gtk_widget_set_margin_bottom(low_power_label_, 2);
         gtk_widget_set_tooltip_text(
-            low_power_label_, _("Low power mode — background sync paused"));
+            low_power_label_, tk::tr("Low power mode — background sync paused").c_str());
         gtk_widget_set_visible(low_power_label_, FALSE);
         refresh_low_power_icon_();
         gtk_box_append(GTK_BOX(status_row), status_bar_);
@@ -2545,7 +2367,7 @@ void MainWindow::start_screenshot_mode()
         }
     room_view_->set_messages(std::move(fixture.messages));
     populate_user_strip();
-    gtk_label_set_text(GTK_LABEL(status_bar_), _("Connected"));
+    gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Connected").c_str());
     show_main_content_();
     gtk_window_set_default_size(GTK_WINDOW(window_), 1100, 768);
 
@@ -3105,7 +2927,7 @@ void MainWindow::finish_login_ui_(const std::string& uid)
     ensure_settings_controller_();
     ensure_history_export_controller_();
     wire_history_export_dialog_callbacks_();
-    gtk_label_set_text(GTK_LABEL(status_bar_), _("Connected"));
+    gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Connected").c_str());
     show_main_content_();
     start_tray_if_needed_();
     start_search_provider_if_needed_();
@@ -3123,7 +2945,7 @@ void MainWindow::do_login()
         return;
     }
 
-    gtk_label_set_text(GTK_LABEL(status_bar_), _("Restoring session\xe2\x80\xa6"));
+    gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Restoring session\xe2\x80\xa6").c_str());
 
     // Pre-flight OS-level connectivity check — see tk::Host::
     // is_network_available()'s doc comment. Computed here, on the UI
@@ -3161,7 +2983,7 @@ void MainWindow::do_login()
             login_view_->set_mode(tesseract::views::LoginView::Mode::Initial);
             login_view_->reset();
             gtk_stack_set_visible_child_name(GTK_STACK(content_stack_), "login");
-            gtk_label_set_text(GTK_LABEL(status_bar_), _("Not logged in"));
+            gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Not logged in").c_str());
             if (restore.any_restore_failed)
             {
                 if (restore.network_unavailable)
@@ -3254,7 +3076,7 @@ void MainWindow::on_login_succeeded()
             {
                 gtk_label_set_text(
                     GTK_LABEL(status_bar_),
-                    ("Already signed in as " + fin.user_id).c_str());
+                    tk::trf(tk::tr("Already signed in as {0}"), {fin.user_id}).c_str());
                 if (pending_login_is_add_account_ && add_account_return_idx_ >= 0 &&
                     add_account_return_idx_ <
                         static_cast<int>(account_manager_.accounts().size()))
@@ -3274,7 +3096,7 @@ void MainWindow::on_login_succeeded()
             {
                 gtk_label_set_text(
                     GTK_LABEL(status_bar_),
-                    (std::string(_("Login error: ")) + fin.error).c_str());
+                    tk::trf(tk::tr("Sign-in failed: {0}"), {fin.error}).c_str());
                 return;
             }
 
@@ -3282,7 +3104,7 @@ void MainWindow::on_login_succeeded()
             ensure_settings_controller_();
             ensure_history_export_controller_();
             wire_history_export_dialog_callbacks_();
-            gtk_label_set_text(GTK_LABEL(status_bar_), _("Connected"));
+            gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Connected").c_str());
             show_main_content_();
             begin_gated_encryption_setup_if_needed_(fin);
             start_tray_if_needed_();
@@ -3332,7 +3154,7 @@ void MainWindow::wire_history_export_dialog_callbacks_()
         [this](std::string /*suggested_name*/, std::function<void(std::string)> cb)
     {
         GtkFileDialog* dlg = gtk_file_dialog_new();
-        gtk_file_dialog_set_title(dlg, "Choose a folder for the exported history");
+        gtk_file_dialog_set_title(dlg, tk::tr("Choose a folder for the exported history").c_str());
 
         struct FolderCtx { std::function<void(std::string)> cb; };
         auto* ctx = new FolderCtx{std::move(cb)};
@@ -3365,12 +3187,13 @@ void MainWindow::wire_key_dialog_callbacks_()
         G_GNUC_BEGIN_IGNORE_DEPRECATIONS
         GtkWidget* dlg = gtk_dialog_new_with_buttons(
             title.c_str(), GTK_WINDOW(window_), GTK_DIALOG_MODAL,
-            "_Cancel", GTK_RESPONSE_CANCEL, "_OK", GTK_RESPONSE_OK, nullptr);
+            tk::tr("_Cancel").c_str(), GTK_RESPONSE_CANCEL, tk::tr("_OK").c_str(),
+            GTK_RESPONSE_OK, nullptr);
         GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
         G_GNUC_END_IGNORE_DEPRECATIONS
         GtkWidget* entry = gtk_entry_new();
         gtk_entry_set_visibility(GTK_ENTRY(entry), FALSE);
-        gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Passphrase");
+        gtk_entry_set_placeholder_text(GTK_ENTRY(entry), tk::tr("Passphrase").c_str());
         gtk_widget_set_margin_start(entry, 12);
         gtk_widget_set_margin_end(entry, 12);
         gtk_widget_set_margin_top(entry, 8);
@@ -3405,7 +3228,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         [this](std::string suggested_name, std::function<void(std::string)> cb)
     {
         GtkFileDialog* dlg = gtk_file_dialog_new();
-        gtk_file_dialog_set_title(dlg, "Save room keys");
+        gtk_file_dialog_set_title(dlg, tk::tr("Save room keys").c_str());
         gtk_file_dialog_set_initial_name(dlg, suggested_name.c_str());
 
         struct SaveCtx { std::function<void(std::string)> cb; };
@@ -3434,7 +3257,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         [this](std::function<void(std::string)> cb)
     {
         GtkFileDialog* dlg = gtk_file_dialog_new();
-        gtk_file_dialog_set_title(dlg, "Open room keys");
+        gtk_file_dialog_set_title(dlg, tk::tr("Open room keys").c_str());
 
         struct OpenCtx { std::function<void(std::string)> cb; };
         auto* ctx = new OpenCtx{std::move(cb)};
@@ -3465,7 +3288,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         GtkWidget* dlg = gtk_message_dialog_new(
             GTK_WINDOW(window_), GTK_DIALOG_MODAL,
             ok ? GTK_MESSAGE_INFO : GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-            "%s", ok ? "Room keys exported successfully." : error.c_str());
+            "%s", ok ? tk::tr("Room keys exported successfully.").c_str() : error.c_str());
         G_GNUC_END_IGNORE_DEPRECATIONS
         g_signal_connect(dlg, "response",
                          G_CALLBACK(+[](GtkDialog* d, int, gpointer)
@@ -3481,7 +3304,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         GtkWidget* dlg = gtk_message_dialog_new(
             GTK_WINDOW(window_), GTK_DIALOG_MODAL,
             ok ? GTK_MESSAGE_INFO : GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-            "%s", ok ? "Room keys imported successfully." : error.c_str());
+            "%s", ok ? tk::tr("Room keys imported successfully.").c_str() : error.c_str());
         G_GNUC_END_IGNORE_DEPRECATIONS
         g_signal_connect(dlg, "response",
                          G_CALLBACK(+[](GtkDialog* d, int, gpointer)
@@ -4707,9 +4530,9 @@ void MainWindow::pick_image_file_(
     std::function<void(std::vector<uint8_t>, std::string)> cb)
 {
     GtkFileDialog* dlg = gtk_file_dialog_new();
-    gtk_file_dialog_set_title(dlg, "Select image");
+    gtk_file_dialog_set_title(dlg, tk::tr("Select image").c_str());
     GtkFileFilter* filt = gtk_file_filter_new();
-    gtk_file_filter_set_name(filt, "Images");
+    gtk_file_filter_set_name(filt, tk::tr("Images").c_str());
     gtk_file_filter_add_mime_type(filt, "image/png");
     gtk_file_filter_add_mime_type(filt, "image/jpeg");
     gtk_file_filter_add_mime_type(filt, "image/gif");
@@ -5384,29 +5207,6 @@ void MainWindow::cache_rgba_image_(const tk::CacheKey& key, int w, int h,
 }
 
 // ---------------------------------------------------------------------------
-// EncryptionSetupOverlay wiring (GTK4 shell)
-// ---------------------------------------------------------------------------
-
-void MainWindow::show_encryption_setup_overlay_(
-    tesseract::views::EncryptionSetupOverlay::Mode mode)
-{
-    if (!main_app_)
-        return;
-    auto* ov = main_app_->encryption_setup();
-    if (!ov)
-        return;
-
-    // Reconfigure the overlay (clears prior callbacks + field text) before
-    // wiring the shared callbacks via ShellBase.
-    ov->reset(mode);
-
-    wire_encryption_setup_callbacks_(*ov, main_app_surface_->host());
-
-    main_app_->show_encryption_setup(true);
-    main_app_surface_->relayout();
-}
-
-// ---------------------------------------------------------------------------
 
 void MainWindow::push_notification(const std::string& user_id,
                                    const std::string& room_id,
@@ -5549,7 +5349,7 @@ gboolean MainWindow::on_sync_status_debounce_(gpointer user_data)
     {
         self->sync_progress_shown_ = true;
         gtk_label_set_text(GTK_LABEL(self->status_bar_),
-                           _("Syncing rooms\xe2\x80\xa6"));
+                           tk::tr("Syncing rooms\xe2\x80\xa6").c_str());
     }
     return G_SOURCE_REMOVE;
 }
@@ -5578,7 +5378,7 @@ void MainWindow::refresh_sync_status()
         else if (sync_progress_shown_)
         {
             gtk_label_set_text(GTK_LABEL(status_bar_),
-                               _("Syncing rooms\xe2\x80\xa6"));
+                               tk::tr("Syncing rooms\xe2\x80\xa6").c_str());
         }
         return;
     }
@@ -5593,14 +5393,14 @@ void MainWindow::refresh_sync_status()
     {
         sync_progress_shown_ = true;
         gtk_label_set_text(GTK_LABEL(status_bar_),
-                           _("Reconnecting\xe2\x80\xa6"));
+                           tk::tr("Reconnecting\xe2\x80\xa6").c_str());
         return;
     }
     if (keys_busy)
     {
         sync_progress_shown_ = true;
-        std::string msg = std::string(_("Downloading encryption keys (")) +
-                          std::to_string(last_imported_keys_) + ")\xe2\x80\xa6";
+        std::string msg = tk::trf(tk::tr("Downloading encryption keys ({0})\xe2\x80\xa6"),
+                                  {std::to_string(last_imported_keys_)});
         gtk_label_set_text(GTK_LABEL(status_bar_), msg.c_str());
         return;
     }
@@ -5609,7 +5409,7 @@ void MainWindow::refresh_sync_status()
     if (has_status_override_())
         return;
     sync_progress_shown_ = false;
-    gtk_label_set_text(GTK_LABEL(status_bar_), _("Connected"));
+    gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Connected").c_str());
 }
 
 // ---------------------------------------------------------------------------
@@ -5897,7 +5697,7 @@ void MainWindow::hide_mention_popup_()
 void MainWindow::build_sticker_context_menu()
 {
     GMenu* menu = g_menu_new();
-    g_menu_append(menu, _("Add to Saved Stickers"), "sticker.save");
+    g_menu_append(menu, tk::tr("Add to Saved Stickers").c_str(), "sticker.save");
 
     sticker_ctx_menu_ = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
     gtk_popover_set_has_arrow(GTK_POPOVER(sticker_ctx_menu_), FALSE);
@@ -5921,7 +5721,7 @@ void MainWindow::build_sticker_context_menu()
 void MainWindow::build_copy_context_menu_()
 {
     GMenu* menu = g_menu_new();
-    g_menu_append(menu, _("Copy"), "copy-sel.copy");
+    g_menu_append(menu, tk::tr("Copy").c_str(), "copy-sel.copy");
 
     copy_ctx_menu_ = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
     gtk_popover_set_has_arrow(GTK_POPOVER(copy_ctx_menu_), FALSE);
@@ -6330,7 +6130,7 @@ void MainWindow::refresh_account_ui_after_switch_()
 
     if (main_app_)
     {
-        main_app_->show_verif_banner(false);
+        main_app_->show_encryption_reminder(false);
     }
     if (main_app_surface_)
     {
@@ -6404,14 +6204,13 @@ void MainWindow::logout_active_account()
             }
         }
     }
-    verification_banner_dismissed_ = false;
 
     // logged_out is already known true here (early-returned above
     // otherwise); a background logout failure still surfaces separately
     // via show_status_message_ once client_->logout() completes on
     // mut_pool_ — see LogoutResult's comment for why there's no synchronous
     // `ok` to gate this on.
-    gtk_label_set_text(GTK_LABEL(status_bar_), _("Signed out"));
+    gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Signed out").c_str());
 
     if (!result.has_remaining)
     {
@@ -6660,6 +6459,46 @@ void MainWindow::set_window_fullscreen_(bool on)
         gtk_window_fullscreen(GTK_WINDOW(window_));
     else
         gtk_window_unfullscreen(GTK_WINDOW(window_));
+}
+
+bool MainWindow::spawn_relaunch_(const std::vector<std::string>& args)
+{
+    // Inside an AppImage the running binary lives on a mount that goes away
+    // with this process; relaunch the .AppImage itself.
+    std::string program;
+    if (const char* appimage = g_getenv("APPIMAGE"); appimage && *appimage)
+    {
+        program = appimage;
+    }
+    else if (gchar* self = g_file_read_link("/proc/self/exe", nullptr))
+    {
+        program = self;
+        g_free(self);
+    }
+    if (program.empty())
+        return false;
+
+    std::vector<gchar*> argv;
+    argv.push_back(const_cast<gchar*>(program.c_str()));
+    for (const auto& a : args)
+        argv.push_back(const_cast<gchar*>(a.c_str()));
+    argv.push_back(nullptr);
+
+    GError* error = nullptr;
+    if (!g_spawn_async(nullptr, argv.data(), nullptr, G_SPAWN_DEFAULT, nullptr,
+                       nullptr, nullptr, &error))
+    {
+        g_warning("relaunch failed: %s", error ? error->message : "unknown");
+        g_clear_error(&error);
+        return false;
+    }
+    return true;
+}
+
+void MainWindow::quit_app_()
+{
+    tray_.reset();
+    g_application_quit(G_APPLICATION(app_));
 }
 
 void MainWindow::rebuild_tray_()

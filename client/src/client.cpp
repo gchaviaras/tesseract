@@ -247,6 +247,11 @@ void Client::cancel_qr_grant()
     impl_->ffi->qr_grant_cancel();
 }
 
+void Client::set_exclude_insecure_devices(bool enabled)
+{
+    tesseract_ffi::set_exclude_insecure_devices(enabled);
+}
+
 bool Client::open_in_browser(const std::string& url)
 {
 #if defined(_WIN32)
@@ -325,13 +330,21 @@ void Client::start_sync(IEventHandler* handler)
 {
     MUT_FFI;
     // Detach any prior slot (e.g. a previous start_sync without an intervening
-    // stop_sync) so its bridge stops dispatching, then publish a fresh slot.
-    if (impl_->handler_slot)
+    // stop_sync) so its bridge stops dispatching, then publish a fresh slot —
+    // unless it already routes to this same handler (attach_event_handler +
+    // start_encryption_sync during a gated login): callbacks registered then
+    // (the incoming-verification handler, an in-flight verification's
+    // watchers) hold that slot's bridge and must keep working after the
+    // handover.
+    if (!impl_->handler_slot || impl_->handler_slot->load() != handler)
     {
-        impl_->handler_slot->detach();
+        if (impl_->handler_slot)
+        {
+            impl_->handler_slot->detach();
+        }
+        impl_->handler_slot =
+            std::make_shared<tesseract_ffi::HandlerSlot>(handler);
     }
-    impl_->handler_slot =
-        std::make_shared<tesseract_ffi::HandlerSlot>(handler);
     impl_->ffi->start_sync(
         std::make_unique<tesseract_ffi::EventHandlerBridge>(
             impl_->handler_slot));
@@ -349,6 +362,12 @@ void Client::attach_event_handler(IEventHandler* handler)
     impl_->ffi->attach_event_handler(
         std::make_unique<tesseract_ffi::EventHandlerBridge>(
             impl_->handler_slot));
+}
+
+void Client::start_encryption_sync()
+{
+    MUT_FFI;
+    impl_->ffi->start_encryption_sync();
 }
 
 void Client::request_stop()
@@ -756,11 +775,13 @@ static std::string derive_formatted(const std::string& body,
 }
 
 Result Client::send_message(const std::string& room_id, const std::string& body,
-                            const std::string& formatted_body)
+                            const std::string& formatted_body,
+                            const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(impl_->ffi->send_message(
-        room_id, body, derive_formatted(body, formatted_body)));
+        room_id, body, derive_formatted(body, formatted_body),
+        url_previews_json));
 }
 
 Result Client::send_emote(const std::string& room_id, const std::string& body,
@@ -788,10 +809,10 @@ Result Client::send_bot_command(const std::string& room_id,
         arguments_json));
 }
 
-Result Client::retry_send(const std::string& room_id)
+Result Client::retry_send(const std::string& room_id, const std::string& txn_id)
 {
     SH_FFI;
-    return from_ffi(impl_->ffi->retry_send(room_id));
+    return from_ffi(impl_->ffi->retry_send(room_id, txn_id));
 }
 
 Result Client::abort_send(const std::string& room_id, const std::string& txn_id)
@@ -1062,33 +1083,38 @@ Result Client::redact_event(const std::string& room_id,
 
 Result Client::send_reply(const std::string& room_id,
                           const std::string& event_id, const std::string& body,
-                          const std::string& formatted_body)
+                          const std::string& formatted_body,
+                          const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(impl_->ffi->send_reply(
-        room_id, event_id, body, derive_formatted(body, formatted_body)));
+        room_id, event_id, body, derive_formatted(body, formatted_body),
+        url_previews_json));
 }
 
 Result Client::send_thread_message(const std::string& room_id,
                                    const std::string& thread_root,
                                    const std::string& body,
-                                   const std::string& formatted_body)
+                                   const std::string& formatted_body,
+                                   const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(impl_->ffi->send_thread_message(
-        room_id, thread_root, body, derive_formatted(body, formatted_body)));
+        room_id, thread_root, body, derive_formatted(body, formatted_body),
+        url_previews_json));
 }
 
 Result Client::send_thread_reply(const std::string& room_id,
                                  const std::string& thread_root,
                                  const std::string& in_reply_to_event_id,
                                  const std::string& body,
-                                 const std::string& formatted_body)
+                                 const std::string& formatted_body,
+                                 const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(impl_->ffi->send_thread_reply(
         room_id, thread_root, in_reply_to_event_id, body,
-        derive_formatted(body, formatted_body)));
+        derive_formatted(body, formatted_body), url_previews_json));
 }
 
 Result Client::fetch_reply_details(const std::string& room_id,
@@ -1123,12 +1149,14 @@ Result Client::send_location(const std::string& room_id, double lat, double lon,
 Result Client::send_edit(const std::string& room_id,
                          const std::string& event_id,
                          const std::string& new_body,
-                         const std::string& formatted_body)
+                         const std::string& formatted_body,
+                         const std::string& url_previews_json)
 {
     SH_FFI;
     return from_ffi(
         impl_->ffi->send_edit(room_id, event_id, new_body,
-                              derive_formatted(new_body, formatted_body)));
+                              derive_formatted(new_body, formatted_body),
+                              url_previews_json));
 }
 
 Result Client::send_caption_edit(const std::string& room_id,
@@ -2013,7 +2041,8 @@ void Client::leave_room_async(std::uint64_t request_id, const std::string& room_
     impl_->ffi->leave_room_async(request_id, room_id);
 }
 
-void Client::invite_user_async(const std::string& room_id,
+void Client::invite_user_async(std::uint64_t request_id,
+                                const std::string& room_id,
                                 const std::string& user_id,
                                 const std::string& reason)
 {
@@ -2022,7 +2051,46 @@ void Client::invite_user_async(const std::string& room_id,
         return;
     }
     SH_FFI;
-    impl_->ffi->invite_user_async(room_id, user_id, reason);
+    impl_->ffi->invite_user_async(request_id, room_id, user_id, reason);
+}
+
+void Client::kick_user_async(std::uint64_t request_id,
+                             const std::string& room_id,
+                             const std::string& user_id,
+                             const std::string& reason)
+{
+    if (!impl_)
+    {
+        return;
+    }
+    SH_FFI;
+    impl_->ffi->kick_user_async(request_id, room_id, user_id, reason);
+}
+
+void Client::ban_user_async(std::uint64_t request_id,
+                            const std::string& room_id,
+                            const std::string& user_id,
+                            const std::string& reason)
+{
+    if (!impl_)
+    {
+        return;
+    }
+    SH_FFI;
+    impl_->ffi->ban_user_async(request_id, room_id, user_id, reason);
+}
+
+void Client::unban_user_async(std::uint64_t request_id,
+                              const std::string& room_id,
+                              const std::string& user_id,
+                              const std::string& reason)
+{
+    if (!impl_)
+    {
+        return;
+    }
+    SH_FFI;
+    impl_->ffi->unban_user_async(request_id, room_id, user_id, reason);
 }
 
 std::vector<RoomMember> Client::get_room_members(const std::string& room_id)
@@ -2035,6 +2103,21 @@ std::vector<RoomMember> Client::get_room_members(const std::string& room_id)
     {
         out.push_back({std::string(m.user_id), std::string(m.display_name),
                        std::string(m.avatar_url), m.power_level});
+    }
+    return out;
+}
+
+std::vector<BannedMember> Client::get_banned_members(const std::string& room_id)
+{
+    SH_FFI;
+    auto raw = impl_->ffi->get_banned_members(room_id);
+    std::vector<BannedMember> out;
+    out.reserve(raw.size());
+    for (const auto& m : raw)
+    {
+        out.push_back({std::string(m.user_id), std::string(m.display_name),
+                       std::string(m.avatar_url), std::string(m.reason),
+                       std::string(m.banned_by), m.can_unban});
     }
     return out;
 }
@@ -2187,6 +2270,20 @@ bool Client::can_ban_users(const std::string& room_id)
 {
     SH_FFI;
     return impl_->ffi->can_ban_users(room_id);
+}
+
+bool Client::can_kick_user(const std::string& room_id,
+                           const std::string& target_user_id)
+{
+    SH_FFI;
+    return impl_->ffi->can_kick_user(room_id, target_user_id);
+}
+
+bool Client::can_ban_user(const std::string& room_id,
+                          const std::string& target_user_id)
+{
+    SH_FFI;
+    return impl_->ffi->can_ban_user(room_id, target_user_id);
 }
 
 bool Client::can_set_room_power_levels(const std::string& room_id)
@@ -2407,6 +2504,7 @@ tesseract::ServerInfo tesseract::ServerInfo::from_json(const std::string& json)
     info.can_set_avatar            = js_bool(j, "can_set_avatar", true);
     info.supports_profile_fields   = js_bool(j, "supports_profile_fields", false);
     info.profile_fields_enabled    = js_bool(j, "profile_fields_enabled", true);
+    info.preview_url_enabled       = js_bool(j, "preview_url_enabled", true);
     info.supports_qr_grant         = js_bool(j, "supports_qr_grant", false);
     info.supports_calls            = js_bool(j, "supports_calls", false);
     info.default_room_version      = js_str(j, "default_room_version");
@@ -2479,7 +2577,7 @@ void ExtendedProfile::apply_field(const std::string& key, const std::string& val
         return;
     }
 
-    if (key == "us.cloke.msc4175.tz")
+    if (key == "m.tz" || key == "us.cloke.msc4175.tz")
     {
         tz = v.is_string() ? v.get<std::string>() : std::string();
     }
@@ -2874,6 +2972,16 @@ bool Client::have_cross_signing_keys() const
     return impl_->ffi->have_cross_signing_keys();
 }
 
+bool Client::has_devices_to_verify_against() const
+{
+    if (!impl_)
+    {
+        return false;
+    }
+    SH_FFI;
+    return impl_->ffi->has_devices_to_verify_against();
+}
+
 Result Client::enable_recovery(const std::string& passphrase)
 {
     if (!impl_)
@@ -2934,6 +3042,19 @@ void Client::set_show_membership_events(bool enabled)
     impl_->ffi->set_show_membership_events(enabled);
 }
 
+void Client::set_bundled_url_previews(bool enabled, bool direct)
+{
+    SH_FFI;
+    impl_->ffi->set_bundled_url_previews(enabled, direct);
+}
+
+std::string Client::generate_url_previews(const std::string& room_id,
+                                          const std::string& body)
+{
+    SH_FFI;
+    return std::string(impl_->ffi->generate_url_previews(room_id, body));
+}
+
 void Client::set_msc2545_legacy_compat(bool enabled)
 {
     SH_FFI;
@@ -2950,6 +3071,31 @@ Result Client::request_self_verification()
 {
     SH_FFI;
     return from_ffi(impl_->ffi->request_self_verification());
+}
+
+Result Client::request_user_verification(const std::string& user_id)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->request_user_verification(user_id));
+}
+
+UserTrust Client::get_user_trust(const std::string& user_id)
+{
+    SH_FFI;
+    const std::uint8_t code = impl_->ffi->get_user_trust(user_id);
+    return code <= 3 ? static_cast<UserTrust>(code) : UserTrust::Unknown;
+}
+
+Result Client::pin_user_identity(const std::string& user_id)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->pin_user_identity(user_id));
+}
+
+Result Client::withdraw_user_verification(const std::string& user_id)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->withdraw_user_verification(user_id));
 }
 
 Result Client::accept_verification(const std::string& flow_id)
@@ -2976,18 +3122,10 @@ Result Client::cancel_verification(const std::string& flow_id)
     return from_ffi(impl_->ffi->cancel_verification(flow_id));
 }
 
-std::vector<VerificationEmoji>
-Client::get_sas_emojis(const std::string& flow_id) const
+VerificationSas Client::get_sas(const std::string& flow_id) const
 {
     SH_FFI;
-    auto ffi_vec = impl_->ffi->get_sas_emojis(flow_id);
-    std::vector<VerificationEmoji> result;
-    result.reserve(ffi_vec.size());
-    for (const auto& e : ffi_vec)
-    {
-        result.push_back({std::string(e.symbol), std::string(e.description)});
-    }
-    return result;
+    return from_ffi(impl_->ffi->get_sas(flow_id));
 }
 
 Result Client::register_pusher(const std::string& pushkey,

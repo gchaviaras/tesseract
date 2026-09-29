@@ -85,6 +85,29 @@ jobs:
       - name: Install NSIS
         run: choco install nsis --no-progress -y
 
+      # msgfmt compiles i18n/*.po into the .mo catalogs the installer ships;
+      # without it CMake configures fine but packages no translations. Same
+      # binaries as `winget install mlocati.GetText` (winget isn't on the
+      # runner image), pinned by version and checksum. The zip is cached by
+      # that checksum so most runs never touch the release URL, and the
+      # download retries because GitHub release downloads intermittently 500.
+      - name: Cache gettext download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\gettext.zip
+          key: gettext-2b999bc37b56fa052ff98578e9cb188152009f634e3a66aa8ff263a016e9c466
+
+      - name: Install gettext (msgfmt)
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP\gettext.zip"
+          if (-not (Test-Path $zip)) {
+            Invoke-WebRequest -Uri "https://github.com/mlocati/gettext-iconv-windows/releases/download/v1.0-v1.19/gettext1.0-iconv1.19-static-64.zip" -OutFile $zip -MaximumRetryCount 5 -RetryIntervalSec 15
+          }
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne "2b999bc37b56fa052ff98578e9cb188152009f634e3a66aa8ff263a016e9c466") { throw "gettext download checksum mismatch" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\gettext"
+          "$env:RUNNER_TEMP\gettext\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
       # The Ninja generator does not auto-activate MSVC like the Visual Studio
       # generator does. Without vcvars on PATH, CMake's compiler probe can't
       # find cl.exe and silently falls back to the runner's bundled MinGW gcc.
@@ -391,8 +414,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # GitHub Pages — publish docs/ (marketing site) to gh-pages on demand.
-  # Independent of the Flatpak inputs; package.yml's pages-docs job is the
-  # automatic tag-push equivalent. Layers with keep_files: true, same as
+  # Independent of the Flatpak inputs; publish-release.yml's docs job is the
+  # automatic on-release equivalent. Layers with keep_files: true, same as
   # that job, so it never disturbs a previously-published flatpak-repo/.
   # ---------------------------------------------------------------------------
   pages-docs:
@@ -417,8 +440,9 @@ jobs:
   # Linux x86_64 — Flatpak. Validate-only by default (offline build + smoke
   # test, no signing, no publish); with flatpak_publish also signs and
   # publishes to GitHub Pages on demand, for recovery/republishing/testing
-  # without needing a new tag push (package.yml's flatpak job is the fully
-  # automatic tag-push path — see packaging/flatpak/README.md).
+  # without needing a new tag push (package.yml's flatpak job plus
+  # publish-release.yml's flatpak-repo job are the automatic release path —
+  # see packaging/flatpak/README.md).
   # ---------------------------------------------------------------------------
   flatpak:
     if: ${{ inputs.flatpak }}

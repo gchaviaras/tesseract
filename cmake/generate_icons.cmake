@@ -12,7 +12,7 @@ foreach(_entry
         "copy|kCopySvg"
         "play|kPlaySvg" "join|kJoinSvg" "jump-to-date|kJumpToDateSvg"
         "threadlist|kThreadListSvg" "search|kSearchSvg" "chevron-up|kChevronUpSvg"
-        "chevron-down|kChevronDownSvg" "forward|kForwardSvg"
+        "chevron-down|kChevronDownSvg" "chevron-right|kChevronRightSvg" "forward|kForwardSvg"
         "arrow-left|kArrowLeftSvg"
         "phone|kPhoneSvg" "phone-off|kPhoneOffSvg" "mic-off|kMicOffSvg"
         "video|kVideoSvg" "video-off|kVideoOffSvg"
@@ -20,11 +20,12 @@ foreach(_entry
         "monitor|kMonitorSvg" "wrench|kWrenchSvg" "plus|kPlusSvg"
         "external-link|kOpenInTabSvg" "app-window|kOpenInWindowSvg"
         "log-out|kLeaveRoomSvg" "battery-low|kBatteryLowSvg"
-        "list-checks|kListChecksSvg" "check-check|kMarkReadSvg"
+        "list-checks|kListChecksSvg" "check-check|kMarkReadSvg" "check|kCheckSvg"
         "x|kTitlebarCloseSvg" "minus|kTitlebarMinimizeSvg"
         "square|kTitlebarMaximizeSvg" "copy|kTitlebarRestoreSvg"
         "lock-keyhole|kLockKeyholeSvg" "lock-keyhole-open|kLockKeyholeOpenSvg"
-        "eye|kEyeSvg" "cable|kCableSvg")
+        "eye|kEyeSvg" "cable|kCableSvg" "user-round-plus|kUserRoundPlusSvg"
+        "user-round|kUserRoundSvg" "user-round-minus|kUserRoundMinusSvg" "ban|kBanSvg")
     string(REPLACE "|" ";" _pair "${_entry}")
     list(GET _pair 0 _name)
     list(GET _pair 1 _var)

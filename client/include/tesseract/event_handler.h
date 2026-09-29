@@ -1,6 +1,7 @@
 #pragma once
 #include "types.h"
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -491,10 +492,11 @@ public:
     {
     }
 
-    /// The 7 SAS emoji are ready for display. Called after both devices
-    /// have exchanged keys; the UI switches to ShowEmojis state.
+    /// The SAS codes are ready for display. Called after both devices have
+    /// exchanged keys; the UI switches to its compare step. The decimals are
+    /// always set; `sas.emojis` is empty when only `decimal` was agreed.
     virtual void on_sas_ready(const std::string& /*flow_id*/,
-                              std::vector<VerificationEmoji> /*emojis*/)
+                              VerificationSas /*sas*/)
     {
     }
 
@@ -518,6 +520,14 @@ public:
     {
     }
 
+    /// The account's recovery state changed (0 = Unknown, 1 = Disabled,
+    /// 2 = Enabled, 3 = Incomplete) — e.g. after another device shared its
+    /// secrets following an emoji verification. No initial call; read
+    /// Client::recovery_state() for the current value.
+    virtual void on_recovery_state_changed(std::uint8_t /*state*/)
+    {
+    }
+
     /// Fired when the set of typing users in `room_id` changes. `names`
     /// contains each typing user's resolved display name (falling back to
     /// the Matrix-ID localpart when no member profile is cached), excluding
@@ -525,6 +535,25 @@ public:
     /// background thread.
     virtual void on_typing_changed(const std::string& /*room_id*/,
                                    const std::vector<std::string>& /*names*/)
+    {
+    }
+
+    /// Fired when the stored cross-signing identity of these users changed
+    /// (keys downloaded, a verification signature arrived, a reset). Re-read
+    /// `Client::get_user_trust` for any user being shown. Called on a
+    /// background thread.
+    virtual void on_user_identities_changed(const std::vector<std::string>& /*user_ids*/)
+    {
+    }
+
+    /// Fired while an encrypted room is subscribed, with the room's full
+    /// current set of members whose identity changed. Empty means no
+    /// warning. The first call after subscribing only happens when the set
+    /// is non-empty, so clear any shown warning on room switch. Called on a
+    /// background thread.
+    virtual void on_identity_status_changed(
+        const std::string& /*room_id*/,
+        const std::vector<IdentityWarning>& /*warnings*/)
     {
     }
 

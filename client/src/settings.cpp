@@ -67,6 +67,9 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
     notification_hide_content    = j.value("notification_hide_content",    false);
     prefetch_full_media          = j.value("prefetch_full_media",          false);
     send_maps_urls_as_location  = j.value("send_maps_urls_as_location",   false);
+    send_bundled_url_previews    = j.value("send_bundled_url_previews",    true);
+    fetch_url_previews_directly  = j.value("fetch_url_previews_directly",  false);
+    exclude_insecure_devices     = j.value("exclude_insecure_devices",     false);
     group_inactive_rooms         = j.value("group_inactive_rooms",         false);
     group_unread_rooms            = j.value("group_unread_rooms",            false);
     inactive_room_threshold_days = j.value("inactive_room_threshold_days", 30);
@@ -106,6 +109,15 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
         main_window_geometry.h     = mw.value("h", 0);
         main_window_geometry.dpi   = mw.value("dpi", 0);
         main_window_geometry.valid = (main_window_geometry.w > 0 && main_window_geometry.h > 0);
+    }
+
+    encryption_reminder_snoozed_until.clear();
+    if (j.contains("encryption_reminder_snoozed_until") &&
+        j["encryption_reminder_snoozed_until"].is_object())
+    {
+        for (const auto& [uid, until] : j["encryption_reminder_snoozed_until"].items())
+            if (until.is_number_integer())
+                encryption_reminder_snoozed_until[uid] = until.get<std::int64_t>();
     }
 
     popout_windows.clear();
@@ -204,6 +216,9 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         {"notification_hide_content",        notification_hide_content},
         {"prefetch_full_media",              prefetch_full_media},
         {"send_maps_urls_as_location",       send_maps_urls_as_location},
+        {"send_bundled_url_previews",        send_bundled_url_previews},
+        {"fetch_url_previews_directly",      fetch_url_previews_directly},
+        {"exclude_insecure_devices",         exclude_insecure_devices},
         {"group_inactive_rooms",             group_inactive_rooms},
         {"group_unread_rooms",            group_unread_rooms},
         {"inactive_room_threshold_days",     inactive_room_threshold_days},
@@ -275,6 +290,14 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
             pws.push_back(std::move(pw));
         }
         j["popout_windows"] = std::move(pws);
+    }
+
+    if (!encryption_reminder_snoozed_until.empty())
+    {
+        nlohmann::json snoozes = nlohmann::json::object();
+        for (const auto& [uid, until] : encryption_reminder_snoozed_until)
+            snoozes[uid] = until;
+        j["encryption_reminder_snoozed_until"] = std::move(snoozes);
     }
 
     auto path = config_dir / "app_settings.json";

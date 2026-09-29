@@ -9,10 +9,10 @@ using tesseract::HistoryExportController;
 TEST_CASE("HistoryExportController: build_labels has the exact count the Rust side expects",
           "[history_export][controller]")
 {
-    // Must track history_export::labels::ExportLabel::COUNT (32) on the
+    // Must track history_export::labels::ExportLabel::COUNT (33) on the
     // Rust side exactly — a mismatch silently misattributes prose to the
     // wrong slot rather than failing loudly, so both sides pin the count.
-    CHECK(HistoryExportController::build_labels().size() == 32);
+    CHECK(HistoryExportController::build_labels().size() == 33);
 }
 
 TEST_CASE("HistoryExportController: build_labels has no empty entries",
@@ -263,4 +263,41 @@ TEST_CASE("HistoryExportController: handle_progress for a stale request_id is ig
     ctrl.handle_progress(p);
 
     CHECK(progress_calls == 0);
+}
+
+TEST_CASE("HistoryExportController: set_client to another client abandons the active export",
+          "[history_export][controller]")
+{
+    auto post_inline = [](std::function<void()> fn) { fn(); };
+    auto run_inline  = [](std::function<void()> fn) { fn(); };
+
+    HistoryExportController ctrl(nullptr, post_inline, run_inline);
+    ctrl.show_save_folder_dialog =
+        [](std::string, std::function<void(std::string)> cb) { cb("/tmp/export"); };
+
+    HistoryExportController::Request req;
+    req.room_id = "!room:example.org";
+    ctrl.begin(req);
+    REQUIRE(ctrl.active());
+
+    int finished_count = 0;
+    bool finished_cancelled = false;
+    ctrl.on_finished = [&](bool, bool cancelled, std::string, std::uint64_t, std::string)
+    {
+        ++finished_count;
+        finished_cancelled = cancelled;
+    };
+
+    // Stand-in for the incoming account's client: only compared, never
+    // dereferenced (the outgoing client is null, so no cancel call is made).
+    int other_account = 0;
+    ctrl.set_client(reinterpret_cast<tesseract::Client*>(&other_account));
+
+    CHECK_FALSE(ctrl.active());
+    CHECK(finished_count == 1);
+    CHECK(finished_cancelled);
+
+    // The old export's late completion must not reach the UI again.
+    ctrl.handle_complete(1, true, false, true, "/tmp/export/history.html", 42, 1234, "");
+    CHECK(finished_count == 1);
 }

@@ -60,7 +60,7 @@ add_executable(tesseract_tests
     cpp/test_resizable_sidebar.cpp
     cpp/test_unread_prefetch.cpp
     cpp/test_tk_emoji_picker.cpp
-    cpp/test_tk_verification_banner.cpp
+    cpp/test_tk_encryption_reminder_banner.cpp
     cpp/test_tk_compose_bar.cpp
     cpp/test_tk_user_info.cpp
     cpp/test_tk_user_profile_panel.cpp
@@ -83,6 +83,7 @@ add_executable(tesseract_tests
     cpp/test_tk_quick_switcher.cpp
     cpp/test_html_spans.cpp
     cpp/test_table_layout.cpp
+    cpp/test_call_tile_layout.cpp
     cpp/test_prefs.cpp
     cpp/test_settings.cpp
     cpp/test_cli.cpp
@@ -120,6 +121,7 @@ add_executable(tesseract_tests
     cpp/test_settings_controller.cpp
     cpp/test_history_export_controller.cpp
     cpp/test_export_history_dialog.cpp
+    cpp/test_invite_dialog.cpp
     cpp/test_room_info_panel.cpp
     cpp/test_tk_devices_section.cpp
     cpp/test_tk_settings_page.cpp
@@ -175,6 +177,7 @@ add_executable(tesseract_tests
     cpp/test_code_highlight.cpp
     cpp/test_tk_room_view.cpp
     cpp/test_tk_room_view_thread_callbacks.cpp
+    cpp/test_send_pipeline.cpp
     cpp/test_slash_commands.cpp
     cpp/test_slash_command_engine.cpp
     cpp/test_bot_commands.cpp
@@ -198,8 +201,17 @@ add_executable(tesseract_tests
     cpp/test_tk_join_room_view.cpp
     cpp/test_tk_room_directory_view.cpp
     cpp/test_call_overlay_controls.cpp
+    cpp/test_video_capture_errors.cpp
     cpp/test_call_room_navigation.cpp
 )
+
+# tk::clean_device_display_name() lives in tk/gst_device_listing.cpp, which is
+# a Linux-only source in tesseract_tk (see the guard in ui/shared/CMakeLists.txt).
+# Keep the test with it: listed unconditionally above, the Win32 and macOS test
+# binaries would reference a symbol that isn't defined there.
+if(TESSERACT_UI STREQUAL "qt6" OR TESSERACT_UI STREQUAL "gtk" OR TESSERACT_UI STREQUAL "linux")
+    target_sources(tesseract_tests PRIVATE cpp/test_tk_gst_device_listing.cpp)
+endif()
 
 # tk_test_surface implementation is per-backend; only the one matching
 # the active TESSERACT_UI is compiled in so the test binary has exactly
@@ -487,3 +499,13 @@ catch_discover_tests(tesseract_tests
 catch_discover_tests(tesseract_tests
     TEST_SPEC "~[keychain]"
 )
+
+# Every translatable UI string has an entry in every i18n/*.po, and the native
+# shells only translate through tk::tr (see i18n/check_i18n.py).
+find_package(Python3 COMPONENTS Interpreter)
+find_program(XGETTEXT_FOR_TESTS xgettext)
+if(Python3_Interpreter_FOUND AND XGETTEXT_FOR_TESTS)
+    add_test(NAME i18n_catalogs_complete
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/i18n/check_i18n.py
+                ${CMAKE_SOURCE_DIR})
+endif()

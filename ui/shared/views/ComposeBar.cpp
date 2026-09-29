@@ -200,8 +200,8 @@ ComposeBar::ComposeBar()
     sticker->set_accessible_name(tk::tr("Stickers"));
     sticker_btn_ = add_child(std::move(sticker));
 
-    auto send = tk::create_widget<tk::Button>(this, tk::tr("Send"), std::function<void()>{},
-                                             tk::Button::Variant::Primary);
+    auto send = tk::create_widget<tk::BusyButton>(this, tk::tr("Send"), std::function<void()>{},
+                                                 tk::Button::Variant::Primary);
     send->set_on_click(
         [this]
         {
@@ -472,6 +472,16 @@ void ComposeBar::on_theme_changed(const tk::Theme& t)
                                         t.palette.avatar_initials_bg,
                                         t.palette.avatar_initials_text});
     }
+}
+
+void ComposeBar::set_send_busy(bool busy)
+{
+    if (!send_btn_ || send_btn_->busy() == busy)
+    {
+        return;
+    }
+    send_btn_->set_busy(busy);
+    send_btn_->set_accessible_name(busy ? tk::tr("Sending\xe2\x80\xa6") : tk::tr("Send"));
 }
 
 void ComposeBar::set_enabled(bool e)

@@ -6,7 +6,8 @@
 //   "Presence"   — checkbox to enable/disable sending and polling presence
 //   "Location"   — checkbox to send composed Google Maps / OpenStreetMap
 //                   links as interactive m.location events
-//   "Encryption" — "Export room keys…" and "Import room keys…" buttons
+//   "Encryption" — "Exclude insecure devices" (MSC4153) checkbox, and
+//                   "Export room keys…" / "Import room keys…" buttons
 //
 // Reads initial presence state from Settings::instance(). The export/import
 // flows are orchestrated by SettingsController (called from SettingsView).
@@ -42,6 +43,19 @@ public:
     // checkbox is toggled.
     std::function<void(bool)> on_send_maps_urls_as_location_changed;
 
+    // Silently update the two bundled-URL-preview checkboxes without firing
+    // the callback. The "fetch directly" box is disabled while `enabled` is
+    // false.
+    void set_bundled_url_previews(bool enabled, bool direct);
+
+    // Fired with both checkbox states when either bundled-URL-preview
+    // checkbox is toggled.
+    std::function<void(bool enabled, bool direct)> on_bundled_url_previews_changed;
+
+    // Show the "homeserver doesn't provide link previews" note (MSC4452
+    // m.preview_url capability) when `available` is false.
+    void set_homeserver_previews_available(bool available);
+
     // Silently update the message-search-index checkbox without firing.
     void set_index_messages(bool enabled);
 
@@ -67,6 +81,13 @@ public:
     std::function<void(bool)> on_check_for_updates_changed;
 #endif
 
+    // Silently update the "exclude insecure devices" checkbox without firing.
+    void set_exclude_insecure_devices(bool enabled);
+
+    // Fired with the new state when "exclude insecure devices" is toggled.
+    // Takes effect after restart.
+    std::function<void(bool)> on_exclude_insecure_devices_changed;
+
     // Fired when the user clicks "Export room keys…".
     std::function<void()> on_export_keys;
 
@@ -79,7 +100,11 @@ public:
 private:
     tk::CheckButton* presence_cb_ = nullptr;
     tk::CheckButton* send_maps_urls_as_location_cb_ = nullptr;
+    tk::CheckButton* bundled_url_previews_cb_ = nullptr;
+    tk::CheckButton* url_previews_direct_cb_ = nullptr;
+    tk::Label* previews_unavailable_label_ = nullptr;
     tk::CheckButton* search_index_cb_ = nullptr;
+    tk::CheckButton* exclude_insecure_cb_ = nullptr;
     tk::Label* search_stats_label_ = nullptr; // counts + status
     tk::Label* search_date_label_ = nullptr;  // "covers messages since …"
 #ifdef TESSERACT_UPDATE_CHECKS

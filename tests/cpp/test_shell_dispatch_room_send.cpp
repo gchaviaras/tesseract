@@ -22,6 +22,16 @@ struct ShellDispatchRoomSendWithAccountManager { tesseract::AccountManager am_; 
 struct SendShell : ShellDispatchRoomSendWithAccountManager, ShellBase
 {
     SendShell() : ShellBase(am_) {}
+    // Like the real shells' destructors: finish queued work (e.g. the plain-
+    // text send's pipeline job) while post_to_ui_ is still overridden. Left
+    // to ~ShellBase, a job completing mid-join calls the now pure-virtual
+    // post_to_ui_ and aborts.
+    ~SendShell() override
+    {
+        pool_.drain();
+        mut_pool_.drain();
+        media_prefetch_pool_.drain();
+    }
 
     bool avatar_picker_opened = false;
 
@@ -71,8 +81,15 @@ struct SendShell : ShellDispatchRoomSendWithAccountManager, ShellBase
     void apply_thread_message_remove_(const std::string&,
                                       std::size_t) override {}
 
+    void on_show_status_message_ui_(const std::string& msg) override
+    {
+        status_messages.push_back(msg);
+    }
+    std::vector<std::string> status_messages;
+
     using ShellBase::client_;
     using ShellBase::dispatch_room_send_;
+    using ShellBase::report_unsent_message_;
     using ShellBase::pending_room_actions_;
     using ShellBase::RoomActionKind;
 };
@@ -91,8 +108,9 @@ TEST_CASE("dispatch_room_send_ with no client is treated as handled",
 TEST_CASE("dispatch_room_send_ routes /myroomavatar to the avatar picker",
           "[shell][dispatch_room_send]")
 {
-    SendShell s;
+    // Declared first so it outlives the shell's queued work, which uses it.
     tesseract::Client client;
+    SendShell s;
     s.client_ = &client;
 
     auto out = s.dispatch_room_send_("!r:x", "/myroomavatar", "");
@@ -105,8 +123,9 @@ TEST_CASE("dispatch_room_send_ routes /myroomavatar to the avatar picker",
 TEST_CASE("dispatch_room_send_ routes /leave to a Leave room action",
           "[shell][dispatch_room_send]")
 {
-    SendShell s;
+    // Declared first so it outlives the shell's queued work, which uses it.
     tesseract::Client client;
+    SendShell s;
     s.client_ = &client;
 
     auto out = s.dispatch_room_send_("!r:x", "/leave", "");
@@ -122,8 +141,9 @@ TEST_CASE("dispatch_room_send_ routes /leave to a Leave room action",
 TEST_CASE("dispatch_room_send_ falls through to a normal send for plain text",
           "[shell][dispatch_room_send]")
 {
-    SendShell s;
+    // Declared first so it outlives the shell's queued work, which uses it.
     tesseract::Client client;
+    SendShell s;
     s.client_ = &client;
 
     auto out = s.dispatch_room_send_("!r:x", "just a message", "");
@@ -132,4 +152,21 @@ TEST_CASE("dispatch_room_send_ falls through to a normal send for plain text",
     CHECK_FALSE(out.handled_as_command);
     CHECK(s.avatar_picker_opened == false);
     CHECK(s.pending_room_actions_.empty());
+}
+
+TEST_CASE("report_unsent_message_ surfaces a failed send and ignores success "
+          "and cancellation",
+          "[shell][dispatch_room_send]")
+{
+    SendShell s;
+
+    s.report_unsent_message_("@a:x", "!r:x", "hello", tesseract::Result{true, ""});
+    s.report_unsent_message_("@a:x", "!r:x", "hello",
+                             tesseract::Result{false, "cancelled"});
+    CHECK(s.status_messages.empty());
+
+    s.report_unsent_message_("@a:x", "!r:x", "hello",
+                             tesseract::Result{false, "boom"});
+    REQUIRE_FALSE(s.status_messages.empty());
+    CHECK(s.status_messages.front() == "Message not sent: boom");
 }

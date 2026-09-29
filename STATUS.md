@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-09-28**. 2032 C++ + 763 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**. 2038 C++ + 764 Rust tests.
 
 > **German translation (2026-09-28, v0.9.0).**
 > A German catalog (`i18n/de.po`) covers the whole UI, using Element

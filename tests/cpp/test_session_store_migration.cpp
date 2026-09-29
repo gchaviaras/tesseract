@@ -101,7 +101,7 @@ TEST_CASE("SessionStore: save_account and load_account round-trip",
 }
 
 TEST_CASE("SessionStore: load_account migrates legacy plaintext to SecretStore",
-          "[session][migration]")
+          "[session][migration][keychain]")
 {
     TmpConfig cfg;
     const std::string uid  = "@bob:matrix.org";
@@ -137,7 +137,7 @@ TEST_CASE("SessionStore: load_account migrates legacy plaintext to SecretStore",
 }
 
 TEST_CASE("SessionStore: clear_account removes SecretStore entry",
-          "[session][migration]")
+          "[session][migration][keychain]")
 {
     TmpConfig cfg;
     const std::string uid  = "@carol:server.net";
@@ -152,7 +152,7 @@ TEST_CASE("SessionStore: clear_account removes SecretStore entry",
 }
 
 TEST_CASE("SessionStore: sentinel file suppresses stale plaintext reads",
-          "[session][migration]")
+          "[session][migration][keychain]")
 {
     TmpConfig cfg;
     const std::string uid = "@dave:homeserver.tld";

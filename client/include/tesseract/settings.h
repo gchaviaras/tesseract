@@ -304,6 +304,37 @@ public:
     // OS registration itself fails or is removed outside the app. Default off.
     bool launch_at_login = false;
 
+    // What closing the main window does. Only consulted by the window that
+    // owns the app-wide tray icon — spawned per-account windows always close
+    // for real. Shells fall back to a real quit when HideToTray is selected
+    // but no tray icon exists (ITrayIcon::is_available() is false, e.g. Linux
+    // without a StatusNotifierItem host, or before an account is signed in),
+    // so the app can never be stranded with no way to reach it.
+    enum class CloseAction
+    {
+        // Hide the window; the app keeps running in the tray. This is the
+        // historical behaviour (FEATURES.md: "minimize-to-tray (default)").
+        HideToTray,
+        // Minimise to the taskbar / dock, leaving a reachable button. Note
+        // this describes what *close* does — the minimise button itself is
+        // never hijacked into hiding to the tray.
+        Minimize,
+        // Destroy the window; the app quits once the last window is gone.
+        Quit
+    };
+    CloseAction close_action = CloseAction::HideToTray;
+
+    // Start every launch — icon, taskbar or OS login item — with the window
+    // hidden in the tray rather than showing it. Independent of close_action:
+    // with HideToTray this makes a tray-resident app; with Quit it gives a
+    // window that appears on launch and really exits when closed.
+    //
+    // Off by default, so enabling an OS login item no longer silently hides
+    // the app: a login launch only stays hidden when the user has asked for
+    // this. The --hidden/--minimized flag (an explicit per-launch request)
+    // and --autostart (an OS-started launch) still force a hidden window.
+    bool start_minimized = false;
+
     // ── Privacy ───────────────────────────────────────────────────────
     // When false, the app neither publishes its own presence status to the
     // server nor polls other users' presence. Default on.

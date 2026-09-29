@@ -76,6 +76,16 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
     autoscroll_unread_rooms      = j.value("autoscroll_unread_rooms",       true);
     prefetch_unread_rooms        = j.value("prefetch_unread_rooms",          true);
     launch_at_login               = j.value("launch_at_login",              false);
+
+    auto close_action_str = j.value("close_action", std::string("tray"));
+    if (close_action_str == "quit")
+        close_action = CloseAction::Quit;
+    else if (close_action_str == "minimize")
+        close_action = CloseAction::Minimize;
+    else
+        close_action = CloseAction::HideToTray;
+    start_minimized               = j.value("start_minimized",             false);
+
     send_presence                = j.value("send_presence",                true);
     index_messages_for_search    = j.value("index_messages_for_search",   false);
     check_for_updates            = j.value("check_for_updates",            true);
@@ -207,6 +217,13 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         low_power_pref == LowPowerPreference::On  ? "on"  :
         low_power_pref == LowPowerPreference::Off ? "off" : "auto";
 
+    // Unknown/absent values fall back to HideToTray, matching the field
+    // default, so a hand-edited or older settings.json never quits the app
+    // unexpectedly on close.
+    const char* close_action_str =
+        close_action == CloseAction::Quit     ? "quit"     :
+        close_action == CloseAction::Minimize ? "minimize" : "tray";
+
     nlohmann::json j = {
         {"theme",                            theme_str},
         {"theme_accent",                     theme_accent_str},
@@ -225,6 +242,8 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         {"autoscroll_unread_rooms",          autoscroll_unread_rooms},
         {"prefetch_unread_rooms",            prefetch_unread_rooms},
         {"launch_at_login",                  launch_at_login},
+        {"close_action",                     close_action_str},
+        {"start_minimized",                  start_minimized},
         {"send_presence",                    send_presence},
         {"index_messages_for_search",        index_messages_for_search},
         {"check_for_updates",                check_for_updates},

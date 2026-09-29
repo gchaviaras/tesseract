@@ -458,6 +458,9 @@ bool EncryptionSetupOverlay::busy() const
 void EncryptionSetupOverlay::choose_other_device_()
 {
     can_retry_ = true; // this device started it, so it can start it again
+    // Our own devices this time: drop any other user a previous flow named.
+    peer_.clear();
+    incoming_own_device_ = true;
     advance_step_(Step::WaitingForOtherDevice);
     if (on_request_sas) on_request_sas();
 }

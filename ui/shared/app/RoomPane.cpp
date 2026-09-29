@@ -338,6 +338,45 @@ void RoomPane::wire_room_view_()
         resolve_identity_warning_(w);
     };
 
+    // Encryption trust row on the profile panel (user verification). Wired
+    // per pane so pop-outs get it too, each on its own account.
+    if (auto* panel = rv->user_profile_panel())
+    {
+        panel->on_trust_requested = [this](std::string user_id)
+        {
+            refresh_profile_trust_(user_id);
+        };
+        panel->on_verify_user = [this](std::string user_id, std::string name)
+        {
+            // The encryption dialog and its flow belong to the active account.
+            if (session_() != shell_->active_account_)
+            {
+                shell_show_status_message_(
+                    tk::tr("Switch to this account to verify users."));
+                return;
+            }
+            shell_->start_user_verification_(user_id, name);
+        };
+        panel->on_withdraw_verification = [this](std::string user_id)
+        {
+            run_async_mut_(
+                [this, shell = shell_, sess = session_(), user_id, alive = weak_flag()]
+                {
+                    if (!sess || !sess->client) return;
+                    auto r = sess->client->withdraw_user_verification(user_id);
+                    shell->post_to_ui_(
+                        [this, alive, user_id, ok = r.ok, msg = r.message]
+                        {
+                            if (!alive.lock()) return;
+                            if (!ok)
+                                shell_show_status_message_(tk::trf(
+                                    tk::tr("Couldn't update the identity: {0}"), {msg}));
+                            refresh_profile_trust_(user_id);
+                        });
+                });
+        };
+    }
+
     // ── RoomView providers ────────────────────────────────────────────────
     rv->set_avatar_provider(
         [this](const std::string& mxc) -> const tk::Image*
@@ -2518,6 +2557,38 @@ void RoomPane::on_identity_status_changed(
     if (room_id != room_id_ || !room_view_)
         return;
     room_view_->set_identity_warnings(warnings);
+}
+
+void RoomPane::on_user_identities_changed(const std::vector<std::string>& user_ids)
+{
+    auto* panel = room_view_ ? room_view_->user_profile_panel() : nullptr;
+    if (!panel || !panel->is_open()) return;
+    if (std::find(user_ids.begin(), user_ids.end(), panel->user_id()) != user_ids.end())
+        refresh_profile_trust_(panel->user_id());
+}
+
+void RoomPane::refresh_profile_trust_(const std::string& user_id)
+{
+    if (!shell_ || user_id.empty()) return;
+    run_async_(
+        [this, shell = shell_, sess = session_(), user_id, alive = weak_flag()]
+        {
+            if (!sess || !sess->client) return;
+            const auto trust = sess->client->get_user_trust(user_id);
+            const bool can_verify = sess->client->device_verified();
+            shell->post_to_ui_(
+                [this, alive, user_id, trust, can_verify]
+                {
+                    if (!alive.lock()) return;
+                    // The panel may have moved on to another user (or closed)
+                    // while the store was read.
+                    auto* panel = room_view_ ? room_view_->user_profile_panel() : nullptr;
+                    if (!panel || !panel->is_open() || panel->user_id() != user_id)
+                        return;
+                    panel->set_trust(trust, can_verify);
+                    deps_.relayout();
+                });
+        });
 }
 
 void RoomPane::resolve_identity_warning_(const tesseract::IdentityWarning& w)

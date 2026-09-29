@@ -134,7 +134,8 @@ pub(crate) fn utd_message_for_cause(
 
 /// Machine-readable `pending_error` for a local echo that matrix-sdk parked
 /// because of an MSC4153 encryption check, or `None` for any other failure.
-/// The C++ side translates these codes.
+/// It reaches the UI as `pending_error`, which no view shows yet (the
+/// reason-tooltip follow-up in ROADMAP.md).
 #[cfg(not(test))]
 fn crypto_send_block_code(error: &matrix_sdk::Error) -> Option<&'static str> {
     use matrix_sdk_base::store::QueueWedgeError;

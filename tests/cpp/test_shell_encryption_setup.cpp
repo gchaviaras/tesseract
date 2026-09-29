@@ -366,3 +366,21 @@ TEST_CASE("Background-account events that aren't new requests are ignored",
     CHECK(shell.switched_to_.empty());
     CHECK(shell.raised_ == 0);
 }
+
+TEST_CASE("Another user's request to a background account doesn't switch or raise",
+          "[shell][encryption]")
+{
+    ShellEncryptionSetupTestShell shell;
+    auto alice = make_account("@alice:example.org");
+    auto bob   = make_account("@bob:example.org");
+    shell.am_.add_account(alice);
+    shell.am_.add_account(bob);
+    shell.active_account_ = alice;
+
+    // @mallory asks background account @bob to verify, in a shared room.
+    shell.handle_verification_request_ui_("@bob:example.org", "flow1",
+                                          "@mallory:example.org", "LAPTOP", true);
+    CHECK(shell.switched_to_.empty());
+    CHECK(shell.raised_ == 0);
+    CHECK(shell.active_account_ == alice);
+}

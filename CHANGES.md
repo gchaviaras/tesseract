@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(security): verification follow-ups. A verification request from another user no longer switches to a background account or raises the window; only your own devices can do that. Pop-out windows' profiles now show the trust row and Verify button. Self-verification no longer names the last user you verified. The identity banner no longer shows a stale warning after a room switch while hidden, and it now also appears in rooms whose encryption state wasn't loaded yet. Retry on a failed message re-enables the room's queue even if that message can't be retried. Qt6 build + ctest 2038/2038, cargo 764/764; user-verified live on Qt6. GTK4/Windows/macOS unbuilt
 - feat(i18n): German translation (`i18n/de.po`, Element Web terminology and informal "du"), selectable in Settings → Language. `msgfmt -c` clean, Windows build + ctest; pending native-speaker review
 - feat(security): verify other users from their profile (a "Verify" button next to their trust state, "Withdraw verification" after a verified identity is reset); requests go in-room via the DM, and in-room requests from other users are now received. The trust row updates when the verification signature arrives. Windows build + ctest 2032/2032, cargo 763/763; user-verified live. Qt6/GTK4/macOS unbuilt
 - fix(timeline): Retry and ✕ on a failed message now work in the main window; they were only wired for pop-out windows. Windows build; user-verified live. Qt6/GTK4/macOS unbuilt

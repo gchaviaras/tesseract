@@ -2586,8 +2586,6 @@ protected:
     // Send the request to encryption_flow_.outgoing_target() (async); the
     // shared body of the two above and of "Try again".
     void start_outgoing_verification_();
-    // Read `user_id`'s trust (async) into `panel` if it still shows them.
-    void refresh_profile_trust_(views::UserProfilePanel* panel, const std::string& user_id);
     // Cancel the in-progress interactive verification, if any (async).
     void cancel_active_verification_();
     // Wall-clock seconds since the epoch, for the reminder snooze. Virtual so

@@ -586,3 +586,29 @@ TEST_CASE("RoomView::dispatch_pointer_down redirects a click on a real "
     Widget* claimed = view.dispatch_pointer_down({150.0f, 130.0f});
     CHECK(claimed == view.compose_bar()->text_area());
 }
+
+TEST_CASE("RoomView clears the identity warning even while hidden",
+          "[tk][view][room]")
+{
+    TkRoomViewStage st;
+    auto view_owner = tk::create_root_widget<RoomView>(nullptr);
+    RoomView& view = *view_owner;
+
+    tesseract::RoomInfo info;
+    info.id = "!room:example.org";
+    info.name = "Test Room";
+    view.set_room(info);
+    view.set_identity_warnings({{.user_id = "@alice:example.org",
+                                 .display_name = "Alice",
+                                 .kind = tesseract::IdentityWarning::Kind::Changed}});
+    st.run(view, {0, 0, 800, 600});
+    REQUIRE(view.identity_warning_shown());
+
+    // Room switch while RoomView is hidden (e.g. behind the landing page):
+    // the clear must still land, or the old room's warning comes back.
+    view.set_visible(false);
+    view.set_identity_warnings({});
+    view.set_visible(true);
+    st.run(view, {0, 0, 800, 600});
+    CHECK_FALSE(view.identity_warning_shown());
+}

@@ -1003,7 +1003,7 @@ impl ClientFfi {
                         Arc::clone(&self.thread_chip_overrides),
                     );
                     existing.abort_tasks = vec![abort, fetch_abort];
-                    existing.abort_tasks.extend(super::identity::spawn_identity_watcher(
+                    existing.abort_tasks.push(super::identity::spawn_identity_watcher(
                         &room,
                         room_id.to_string(),
                         &handler,
@@ -1150,7 +1150,7 @@ impl ClientFfi {
             }
         });
         let mut abort_tasks = vec![abort, fetch_abort, warm_check.abort_handle()];
-        abort_tasks.extend(super::identity::spawn_identity_watcher(
+        abort_tasks.push(super::identity::spawn_identity_watcher(
             &room,
             room_id.to_string(),
             &handler,
@@ -1796,7 +1796,7 @@ impl ClientFfi {
         );
 
         let mut abort_tasks = vec![abort, fetch_abort];
-        abort_tasks.extend(super::identity::spawn_identity_watcher(
+        abort_tasks.push(super::identity::spawn_identity_watcher(
             &room,
             room_id.to_string(),
             &handler,

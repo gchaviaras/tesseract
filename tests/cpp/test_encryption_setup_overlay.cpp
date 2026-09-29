@@ -465,6 +465,25 @@ TEST_CASE("Recover: 'Use another device' fires on_request_sas and waits",
     CHECK(ov->in_verification_step());
 }
 
+TEST_CASE("Recover: self-verification after verifying a user no longer names them",
+          "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(nullptr, EncryptionSetupOverlay::Mode::Recover);
+    st.run(*ov, {0, 0, 800, 600});
+    ov->set_has_verified_other_device(true);
+    ov->show_outgoing_user_request("Alice");
+    CHECK(ov->peer() == "Alice");
+    CHECK_FALSE(ov->peer_is_own_device());
+    ov->verification_failed({}, true);
+    ov->return_to_start();
+    REQUIRE(ov->step() == EncryptionSetupOverlay::Step::Choose);
+    ov->simulate_sas_link();
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::WaitingForOtherDevice);
+    CHECK(ov->peer().empty());
+    CHECK(ov->peer_is_own_device());
+}
+
 TEST_CASE("Recover: Cancel while waiting cancels and returns to Choose",
           "[encryption][overlay]")
 {

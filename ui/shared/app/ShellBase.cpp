@@ -5708,49 +5708,10 @@ void ShellBase::setup_dm_callbacks()
         {
             ensure_viewer_fullres_(mxc);
         };
-
-        // Encryption trust row (user verification).
-        panel->on_trust_requested = [this, panel](std::string user_id)
-        {
-            refresh_profile_trust_(panel, user_id);
-        };
-        panel->on_verify_user = [this](std::string user_id, std::string name)
-        {
-            start_user_verification_(user_id, name);
-        };
-        panel->on_withdraw_verification = [this, panel](std::string user_id)
-        {
-            auto sess = active_account_;
-            run_async_mut_([this, sess, panel, user_id]() {
-                if (!sess || !sess->client) return;
-                auto r = sess->client->withdraw_user_verification(user_id);
-                post_to_ui_alive_([this, panel, user_id, ok = r.ok, msg = r.message]() {
-                    if (!ok)
-                        show_status_message_(tk::trf(
-                            tk::tr("Couldn't update the identity: {0}"), {msg}));
-                    refresh_profile_trust_(panel, user_id);
-                });
-            });
-        };
+        // The trust row's callbacks are wired per pane (RoomPane::
+        // wire_room_view_, via main_room_pane_->attach()) — don't set
+        // on_trust_requested / on_verify_user / on_withdraw_verification here.
     }
-}
-
-void ShellBase::refresh_profile_trust_(views::UserProfilePanel* panel,
-                                       const std::string& user_id)
-{
-    auto sess = active_account_;
-    if (!panel || !sess || user_id.empty()) return;
-    run_async_([this, sess, panel, user_id]() {
-        if (!sess || !sess->client) return;
-        const auto trust = sess->client->get_user_trust(user_id);
-        post_to_ui_alive_([this, panel, user_id, trust]() {
-            // The panel lives as long as room_view_; it may have moved on to
-            // another user (or closed) while the store was read.
-            if (!panel->is_open() || panel->user_id() != user_id) return;
-            panel->set_trust(trust, read_device_verified_());
-            request_relayout_();
-        });
-    });
 }
 
 void ShellBase::handle_open_dm_(const std::string& user_id, const std::string& reason)
@@ -10960,11 +10921,13 @@ void ShellBase::handle_identity_status_changed_ui_(
 
 void ShellBase::handle_user_identities_changed_ui_(std::vector<std::string> user_ids)
 {
-    if (!event_is_for_active_account_() || !room_view_) return;
-    auto* panel = room_view_->user_profile_panel();
-    if (!panel || !panel->is_open()) return;
-    if (std::find(user_ids.begin(), user_ids.end(), panel->user_id()) != user_ids.end())
-        refresh_profile_trust_(panel, panel->user_id());
+    // Every pane of this account (main window and pop-outs) re-reads its
+    // open profile's trust row if it shows one of these users.
+    if (event_is_for_active_account_() && main_room_pane_)
+        main_room_pane_->on_user_identities_changed(user_ids);
+    for (const auto& w : owned_secondary_windows_)
+        if (w && w->pane() && popout_accepts_event_(w.get()))
+            w->pane()->on_user_identities_changed(user_ids);
 }
 
 void ShellBase::handle_presence_changed_ui_(const std::string& user_id,
@@ -14179,6 +14142,17 @@ void ShellBase::handle_verification_request_ui_(std::string account_uid, std::st
         // belong to a background account's (never shown) dialog.
         if (!incoming || !target || !target->client)
             return;
+        // Switching accounts and raising the window is only for the user's
+        // own other device. Anyone sharing a room could otherwise do it at
+        // will; leave their request pending (it times out, or is answered
+        // from another client) rather than cancel it on the user's behalf.
+        if (user_id != account_uid)
+        {
+            std::fprintf(stderr,
+                         "[verify] request from %s to background account %s left pending\n",
+                         user_id.c_str(), account_uid.c_str());
+            return;
+        }
         if (ov && ov->visible() && ov->busy())
         {
             // Switching now would throw away e.g. a just-created recovery key
@@ -14290,11 +14264,10 @@ void ShellBase::handle_verification_done_ui_(std::string flow_id)
 
     if (auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr; ov && ov->visible())
         ov->verification_done(kind);
-    // A just-verified user's open profile should say so.
-    if (!flow.own_user && room_view_)
-        if (auto* panel = room_view_->user_profile_panel();
-            panel && panel->is_open() && panel->user_id() == flow.user_id)
-            refresh_profile_trust_(panel, flow.user_id);
+    // A just-verified user's open profile should say so. The flow ran on the
+    // active account, which is who untagged dispatches address.
+    if (!flow.own_user)
+        handle_user_identities_changed_ui_({flow.user_id});
     refresh_encryption_reminder_();
     request_relayout_();
 }

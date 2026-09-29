@@ -1840,6 +1840,10 @@ msgstr ""
 msgid "Finish the current verification first."
 msgstr ""
 
+#: ui/shared/app/RoomPane.cpp
+msgid "Switch to this account to verify users."
+msgstr ""
+
 #: ui/shared/views/UserProfilePanel.cpp
 msgid "Not verified"
 msgstr ""

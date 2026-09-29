@@ -5095,6 +5095,10 @@ msgstr "[Çhéçk thàt {0} séés thé sàmé ñùmbérs ïñ thé sàmé örd�
 msgid "Finish the current verification first."
 msgstr "[Fïñïsh thé çùrréñt vérïfïçàtïöñ fïrst.xxxxxxx]"
 
+#: ui/shared/app/RoomPane.cpp
+msgid "Switch to this account to verify users."
+msgstr "[Swïtçh tö thïs àççöùñt tö vérïfy ùsérs.xxxxxxx]"
+
 #: ui/shared/views/UserProfilePanel.cpp
 msgid "Not verified"
 msgstr "[Ñöt vérïfïédxx]"

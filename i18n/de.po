@@ -4901,6 +4901,10 @@ msgstr "Prüfe, ob {0} dieselben Zahlen in derselben Reihenfolge sieht."
 msgid "Finish the current verification first."
 msgstr "Schließe zuerst die aktuelle Verifizierung ab."
 
+#: ui/shared/app/RoomPane.cpp
+msgid "Switch to this account to verify users."
+msgstr "Wechsle zu diesem Konto, um Benutzer zu verifizieren."
+
 #: ui/shared/views/UserProfilePanel.cpp
 msgid "Not verified"
 msgstr "Nicht verifiziert"

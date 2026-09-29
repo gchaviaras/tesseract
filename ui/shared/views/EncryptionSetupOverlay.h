@@ -177,6 +177,10 @@ public:
     std::string progress_label()const { return progress_label_; }
     DoneKind    done_kind()     const { return done_kind_; }
     const VerificationSas& sas() const { return sas_; }
+    // The other party the verification steps name, and whether that party is
+    // one of our own devices (then the steps say "your other device").
+    const std::string& peer() const { return peer_; }
+    bool        peer_is_own_device() const { return incoming_own_device_; }
     // Key-backup upload progress in [0, 1], or < 0 when there is no count to
     // show (every stage except "backing up keys").
     float       progress_fraction() const { return progress_fraction_; }

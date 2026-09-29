@@ -412,6 +412,9 @@ public:
     // Identity-change warnings (MSC4153 pinning) for the shown room. An empty
     // set hides the strip. The shell clears it on room switch.
     void set_identity_warnings(std::vector<tesseract::IdentityWarning> warnings);
+    // Whether the identity-change strip holds a warning (whether or not
+    // RoomView itself is currently visible).
+    bool identity_warning_shown() const;
     // Fired when the user clicks the strip's button for `w`: pin the new
     // identity (Kind::Changed) or withdraw verification (VerificationBroken).
     std::function<void(const tesseract::IdentityWarning& w)> on_resolve_identity_warning;

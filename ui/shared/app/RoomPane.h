@@ -261,6 +261,9 @@ public:
     void on_identity_status_changed(
         const std::string& room_id,
         const std::vector<tesseract::IdentityWarning>& warnings);
+    // Cross-signing identities changed for `user_ids` (this pane's account):
+    // re-read the profile panel's trust row if it shows one of them.
+    void on_user_identities_changed(const std::vector<std::string>& user_ids);
 
     // Thread view delivery — called by the owner when SDK events arrive for
     // the thread this pane has open (thread_root() matches).
@@ -464,6 +467,9 @@ public:
     void abort_send_(const std::string& txn_id);
     // Pin the changed identity or withdraw verification, per `w.kind`.
     void resolve_identity_warning_(const tesseract::IdentityWarning& w);
+    // Read `user_id`'s trust (async) into the profile panel if it still
+    // shows them.
+    void refresh_profile_trust_(const std::string& user_id);
     void pin_event_(const std::string& event_id);
     void unpin_event_(const std::string& event_id);
     // Resolve/create a DM with user_id, then open (or focus) a SEPARATE

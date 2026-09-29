@@ -1547,11 +1547,17 @@ bool RoomView::call_banner_visible() const
     return call_banner_ && call_banner_->visible();
 }
 
+bool RoomView::identity_warning_shown() const
+{
+    return identity_banner_ && identity_banner_->has_warning();
+}
+
 void RoomView::set_identity_warnings(std::vector<tesseract::IdentityWarning> warnings)
 {
     if (!identity_banner_) return;
-    const bool was_visible = identity_banner_->visible();
-    if (!was_visible && warnings.empty()) return;
+    // has_warning(), not visible(): the latter is false while RoomView itself
+    // is hidden, and skipping the clear then would resurface a stale warning.
+    if (!identity_banner_->has_warning() && warnings.empty()) return;
     identity_banner_->set_warnings(std::move(warnings));
     // Relayout (and repaint): the strip's height or its text changed.
     if (on_layout_changed) on_layout_changed();

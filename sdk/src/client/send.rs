@@ -679,6 +679,9 @@ impl ClientFfi {
                     }
                 });
                 if let Err(e) = unwedged {
+                    // Still re-enable the queue: the room's other pending
+                    // messages shouldn't stay stuck on this one's failure.
+                    room.send_queue().set_enabled(true);
                     return err(e);
                 }
             }

@@ -61,9 +61,9 @@ pub(crate) const IDENTITY_PIN_VIOLATION: u8 = 1;
 pub(crate) const IDENTITY_VERIFICATION_VIOLATION: u8 = 2;
 
 /// Watch `room`'s members for identity changes and report the room's full
-/// current set of violations to the UI on every change (an empty set clears
-/// the banner). Returns `None` for unencrypted rooms, which have nothing to
-/// warn about.
+/// current set of violations to the UI: once right away (usually empty, which
+/// clears any banner left from before) and then on every change. Rooms that
+/// turn out not to be encrypted get that one empty report and nothing more.
 #[cfg(not(test))]
 pub(super) fn spawn_identity_watcher(
     room: &matrix_sdk::Room,
@@ -71,17 +71,32 @@ pub(super) fn spawn_identity_watcher(
     handler: &Arc<Mutex<SendHandler>>,
     rt: &tokio::runtime::Runtime,
     cancelled: Arc<AtomicBool>,
-) -> Option<tokio::task::AbortHandle> {
+) -> tokio::task::AbortHandle {
     use futures_util::StreamExt;
+    use matrix_sdk::ruma::OwnedUserId;
     use matrix_sdk_base::crypto::IdentityState;
     use std::collections::BTreeMap;
 
-    if !room.encryption_state().is_encrypted() {
-        return None;
-    }
     let room = room.clone();
     let h = Arc::clone(handler);
     let task = rt.spawn(async move {
+        // user_id → violation kind; users back in Pinned/Verified are removed.
+        let mut violations: BTreeMap<OwnedUserId, u8> = BTreeMap::new();
+        // encryption_state() is Unknown until the room's state is loaded
+        // (fresh joins, sliding sync); this asks the server when needed.
+        let encrypted = match room.latest_encryption_state().await {
+            Ok(state) => state.is_encrypted(),
+            Err(e) => {
+                tracing::warn!("encryption state unavailable for {room_id}: {e}");
+                false
+            }
+        };
+        // matrix-sdk's stream only yields its initial state when non-empty,
+        // so start from an explicit empty report.
+        let sent = report_violations(&room, &room_id, &h, &cancelled, &violations).await;
+        if !sent || !encrypted {
+            return;
+        }
         let stream = match room.subscribe_to_identity_status_changes().await {
             Ok(s) => s,
             Err(e) => {
@@ -90,46 +105,52 @@ pub(super) fn spawn_identity_watcher(
             }
         };
         let mut stream = std::pin::pin!(stream);
-        // user_id → violation kind; users back in Pinned/Verified are removed.
-        let mut violations: BTreeMap<String, u8> = BTreeMap::new();
         while let Some(changes) = stream.next().await {
             for change in changes {
-                let uid = change.user_id.to_string();
                 match change.changed_to {
                     IdentityState::PinViolation => {
-                        violations.insert(uid, IDENTITY_PIN_VIOLATION);
+                        violations.insert(change.user_id, IDENTITY_PIN_VIOLATION);
                     }
                     IdentityState::VerificationViolation => {
-                        violations.insert(uid, IDENTITY_VERIFICATION_VIOLATION);
+                        violations.insert(change.user_id, IDENTITY_VERIFICATION_VIOLATION);
                     }
                     IdentityState::Pinned | IdentityState::Verified => {
-                        violations.remove(&uid);
+                        violations.remove(&change.user_id);
                     }
                 }
             }
-            let mut user_ids = Vec::with_capacity(violations.len());
-            let mut names = Vec::with_capacity(violations.len());
-            let mut kinds = Vec::with_capacity(violations.len());
-            for (uid, kind) in &violations {
-                let name = match matrix_sdk::ruma::UserId::parse(uid.as_str()) {
-                    Ok(parsed) => match room.get_member_no_sync(&parsed).await {
-                        Ok(Some(m)) => m.display_name().unwrap_or_default().to_owned(),
-                        _ => String::new(),
-                    },
-                    Err(_) => String::new(),
-                };
-                user_ids.push(uid.clone());
-                names.push(name);
-                kinds.push(*kind);
-            }
-            if cancelled.load(Ordering::Acquire) {
+            if !report_violations(&room, &room_id, &h, &cancelled, &violations).await {
                 return;
             }
-            let guard = h.lock();
-            guard.on_identity_status_changed(&room_id, &user_ids, &names, &kinds);
         }
     });
-    Some(task.abort_handle())
+    task.abort_handle()
+}
+
+/// Send `room_id`'s current violations to the UI, named as room members.
+/// Returns false once the timeline was torn down (nothing is sent then).
+#[cfg(not(test))]
+async fn report_violations(
+    room: &matrix_sdk::Room,
+    room_id: &str,
+    h: &Arc<Mutex<SendHandler>>,
+    cancelled: &AtomicBool,
+    violations: &std::collections::BTreeMap<matrix_sdk::ruma::OwnedUserId, u8>,
+) -> bool {
+    let mut user_ids = Vec::with_capacity(violations.len());
+    let mut names = Vec::with_capacity(violations.len());
+    let mut kinds = Vec::with_capacity(violations.len());
+    for (uid, kind) in violations {
+        names.push(super::member_display_name(room, uid).await);
+        user_ids.push(uid.to_string());
+        kinds.push(*kind);
+    }
+    if cancelled.load(Ordering::Acquire) {
+        return false;
+    }
+    let guard = h.lock();
+    guard.on_identity_status_changed(room_id, &user_ids, &names, &kinds);
+    true
 }
 
 /// Wire encoding of `get_user_trust`.
@@ -188,25 +209,7 @@ impl ClientFfi {
     /// thread.
     #[cfg(not(test))]
     pub fn pin_user_identity(&self, user_id: &str) -> OpResult {
-        let Some(client) = self.client.clone() else {
-            return err("not logged in");
-        };
-        let uid = match matrix_sdk::ruma::OwnedUserId::try_from(user_id) {
-            Ok(u) => u,
-            Err(e) => return err(format!("invalid user id: {e}")),
-        };
-        match self.rt.block_on(async move {
-            let identity = client
-                .encryption()
-                .get_user_identity(&uid)
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("no identity known for user"))?;
-            identity.pin().await?;
-            Ok::<(), anyhow::Error>(())
-        }) {
-            Ok(()) => ok(""),
-            Err(e) => err(e.to_string()),
-        }
+        self.with_user_identity(user_id, |identity| async move { identity.pin().await })
     }
 
     #[cfg(test)]
@@ -219,6 +222,18 @@ impl ClientFfi {
     /// sending in exclude-insecure-devices mode. Blocks — worker thread.
     #[cfg(not(test))]
     pub fn withdraw_user_verification(&self, user_id: &str) -> OpResult {
+        self.with_user_identity(user_id, |identity| async move {
+            identity.withdraw_verification().await
+        })
+    }
+
+    /// Look up `user_id`'s cross-signing identity and run `op` on it.
+    #[cfg(not(test))]
+    fn with_user_identity<F, Fut>(&self, user_id: &str, op: F) -> OpResult
+    where
+        F: FnOnce(matrix_sdk::encryption::identities::UserIdentity) -> Fut,
+        Fut: std::future::Future<Output = Result<(), matrix_sdk::encryption::CryptoStoreError>>,
+    {
         let Some(client) = self.client.clone() else {
             return err("not logged in");
         };
@@ -232,7 +247,7 @@ impl ClientFfi {
                 .get_user_identity(&uid)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("no identity known for user"))?;
-            identity.withdraw_verification().await?;
+            op(identity).await?;
             Ok::<(), anyhow::Error>(())
         }) {
             Ok(()) => ok(""),

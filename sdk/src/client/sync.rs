@@ -2071,8 +2071,11 @@ async fn watch_room_list_state(
     }
 }
 
-/// Verification-state watcher: emit an initial snapshot, then notify the UI
-/// whenever the cross-signing verified status of this account changes.
+/// User-identity watcher: tell the UI whose already-known cross-signing
+/// identity changed (a signature we uploaded after verifying them came back,
+/// or they reset it), so an open profile can re-read its trust row. `new`
+/// identities are skipped: that's every tracked user on a first key download,
+/// and `get_user_trust` already fetches an unknown identity itself.
 async fn watch_user_identities(
     h: Arc<Mutex<SendHandler>>,
     client: Client,
@@ -2093,12 +2096,8 @@ async fn watch_user_identities(
                 if *stop_rx.borrow() { break; }
             }
             Some(updates) = stream.next() => {
-                let user_ids: Vec<String> = updates
-                    .new
-                    .keys()
-                    .chain(updates.changed.keys())
-                    .map(|u| u.to_string())
-                    .collect();
+                let user_ids: Vec<String> =
+                    updates.changed.keys().map(|u| u.to_string()).collect();
                 if !user_ids.is_empty() {
                     let guard = h.lock();
                     guard.on_user_identities_changed(&user_ids);
@@ -2109,6 +2108,8 @@ async fn watch_user_identities(
     }
 }
 
+/// Verification-state watcher: emit an initial snapshot, then notify the UI
+/// whenever the cross-signing verified status of this account changes.
 async fn watch_verification_state(
     h: Arc<Mutex<SendHandler>>,
     client: Client,

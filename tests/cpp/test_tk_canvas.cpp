@@ -377,12 +377,26 @@ TEST_CASE("tk::initials_of applies the shared word-split policy",
     // Empty / whitespace-only → sentinel.
     CHECK(initials_of("") == "?");
     CHECK(initials_of("   ") == "?");
-    // Leading @ / # are content, not separators: they ARE the initial.
-    CHECK(initials_of("@neo") == "@");
-    // Shared policy preserves source case (backends uppercase natively), so
-    // "#room name" → '#' (first word's first grapheme) + 'n' (second word's),
-    // unchanged case.
-    CHECK(initials_of("#room name") == "#n");
+    // Sigils, brackets and punctuation are skipped within a word.
+    CHECK(initials_of("@neo") == "n");
+    CHECK(initials_of("#room name") == "rn");
+    CHECK(initials_of("!abc:example.org") == "a");
+    CHECK(initials_of("(Bob) Smith") == "BS");
+    CHECK(initials_of("[Bot] Alice") == "BA");
+    CHECK(initials_of("{x}") == "x");
+    CHECK(initials_of("<Tag> 'quoted'") == "Tq");
+    // A word of nothing but punctuation contributes no initial.
+    CHECK(initials_of("Alice - Work") == "AW");
+    CHECK(initials_of("Alice | ~ Work") == "AW");
+    CHECK(initials_of("()") == "?");
+    CHECK(initials_of("-- ...") == "?");
+    // Non-ASCII punctuation: curly quotes, em dash, CJK brackets.
+    CHECK(initials_of("\xE2\x80\x9CQuoted\xE2\x80\x9D Name") == "QN");
+    CHECK(initials_of("Ann \xE2\x80\x94 Lee") == "AL");
+    CHECK(initials_of("\xE3\x80\x8C\xE6\x9D\xB1\xE4\xBA\xAC\xE3\x80\x8D") ==
+          "\xE6\x9D\xB1"); // 「東京」 → 東
+    // Digits count.
+    CHECK(initials_of("42 Club") == "4C");
 
     // The shared policy preserves source case (backends uppercase natively).
     // Lowercase input therefore stays lowercase here.
@@ -399,6 +413,33 @@ TEST_CASE("tk::initials_of applies the shared word-split policy",
         const std::string r = initials_of("\xF0\x9F\x98\x80 face"); // 😀 face
         CHECK(r == "\xF0\x9F\x98\x80\x66");                          // 😀 + 'f'
     }
+    // Multi-code-point emoji keep their whole cluster.
+    {
+        // 🇫🇷 Paris → both regional indicators + 'P'.
+        const std::string flag = "\xF0\x9F\x87\xAB\xF0\x9F\x87\xB7";
+        CHECK(initials_of(flag + " Paris") == flag + "P");
+        // Scottish flag: black flag + tag sequence + cancel tag.
+        const std::string scot =
+            "\xF0\x9F\x8F\xB4\xF3\xA0\x81\xA7\xF3\xA0\x81\xA2"
+            "\xF3\xA0\x81\xB3\xF3\xA0\x81\xA3\xF3\xA0\x81\xB4"
+            "\xF3\xA0\x81\xBF";
+        CHECK(initials_of(scot + " Scot") == scot + "S");
+        // 👍🏽 → thumbs up + skin tone.
+        const std::string thumb = "\xF0\x9F\x91\x8D\xF0\x9F\x8F\xBD";
+        CHECK(initials_of(thumb + " ok") == thumb + "o");
+        // ❤️ → heart + VS16.
+        const std::string heart = "\xE2\x9D\xA4\xEF\xB8\x8F";
+        CHECK(initials_of(heart + " Love") == heart + "L");
+        // 👨‍👩‍👧 → full ZWJ family.
+        const std::string family =
+            "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9"
+            "\xE2\x80\x8D\xF0\x9F\x91\xA7";
+        CHECK(initials_of(family + " Fam") == family + "F");
+        // An emoji in brackets is still found.
+        CHECK(initials_of("(" + heart + ")") == heart);
+    }
+    // Decomposed accent: 'e' + U+0301 stays together.
+    CHECK(initials_of("e\xCC\x81lise") == "e\xCC\x81");
     // NBSP (U+00A0, C2 A0) is treated as a separator.
     CHECK(initials_of("Ada\xC2\xA0Lovelace") == "AL");
 }

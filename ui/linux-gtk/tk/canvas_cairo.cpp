@@ -75,9 +75,10 @@ PangoFontDescription* desc_for(FontRole role, bool monospace = false)
 
 // The word-split policy is shared (tk::initials_of); apply Pango/GLib's
 // locale-aware uppercasing to the result before drawing.
-std::string initials_upper(std::string_view name)
+std::string initials_upper(std::string_view name, AvatarText text)
 {
-    std::string base = initials_of(name);
+    std::string base =
+        text == AvatarText::Literal ? std::string(name) : initials_of(name);
     char* up = g_utf8_strup(base.c_str(), static_cast<gssize>(base.size()));
     std::string out(up);
     g_free(up);
@@ -635,8 +636,9 @@ public:
         cairo_restore(cr_);
     }
 
-    void draw_initials_circle(std::string_view name, Point centre,
-                              float diameter, Color bg, Color fg) override
+    void draw_initials_circle_(std::string_view name, Point centre,
+                               float diameter, Color bg, Color fg,
+                               AvatarText text) override
     {
         set_source(bg);
         cairo_arc(cr_, centre.x, centre.y, diameter * 0.5f, 0.0, 2.0 * M_PI);
@@ -645,7 +647,7 @@ public:
         // Build a one-shot Pango layout for the initials. Per-frame cost
         // is small (≤ a handful of avatars on screen) and saves us from
         // caching across resizes.
-        std::string s = initials_upper(name);
+        std::string s = initials_upper(name, text);
         PangoLayout* lay = pango_cairo_create_layout(cr_);
         PangoFontDescription* d = pango_font_description_new();
         pango_font_description_set_weight(d, PANGO_WEIGHT_SEMIBOLD);

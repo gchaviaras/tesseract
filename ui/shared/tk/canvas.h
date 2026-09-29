@@ -218,15 +218,28 @@ inline constexpr double kEmojiSizeAdjust = 1.0;
 inline constexpr float kAvatarInitialsFontRatio = 0.42f;
 
 // Avatar initials policy: split `name` on whitespace and return the first
-// grapheme of the first word followed by the first grapheme of the second
-// word (1–2 code points total), as UTF-8. Returns "?" when `name` has no
-// non-space content. UTF-8-correct: never splits a multibyte code point.
+// usable grapheme of the first two words that have one, as UTF-8. Punctuation,
+// brackets and symbols ("(Bob) Smith" → "BS", "@neo" → "n") are skipped, and a
+// word made only of them ("Alice - Work" → "AW") contributes nothing. Letters of
+// any script, digits and emoji are usable; an emoji initial keeps its whole
+// cluster (flags, ZWJ sequences, skin tones, VS16). Returns "?" when nothing
+// usable is found. UTF-8-correct: never splits a multibyte code point.
 //
 // This is the shared *word-split* policy only. The result is left in the
 // source case; each backend applies its own locale-aware uppercasing before
 // drawing (so e.g. Turkish casing stays correct). For the common ASCII case
 // the result is already what gets drawn.
 std::string initials_of(std::string_view name);
+
+// What Canvas::draw_initials_circle does with its text: derive initials from
+// a display name (initials_of), or draw a short literal glyph as-is ("@" for
+// an @room pill, "+3" for a call banner's overflow count), which initials_of
+// would otherwise strip as punctuation.
+enum class AvatarText
+{
+    Initials,
+    Literal
+};
 
 enum class TextHAlign
 {
@@ -678,11 +691,16 @@ public:
     virtual void draw_circle_image(const Image&, Point centre,
                                    float diameter) = 0;
 
-    // Initials-fallback avatar — backend renders the first 1–2 grapheme
-    // clusters of `name` centred in a filled circle. Lives on the canvas
-    // because each backend already owns the font path the initials need.
-    virtual void draw_initials_circle(std::string_view name, Point centre,
-                                      float diameter, Color bg, Color fg) = 0;
+    // Initials-fallback avatar — backend renders initials_of(`name`) (or
+    // `name` itself with AvatarText::Literal), uppercased, centred in a
+    // filled circle. Lives on the canvas because each backend already owns
+    // the font path the initials need.
+    void draw_initials_circle(std::string_view name, Point centre,
+                              float diameter, Color bg, Color fg,
+                              AvatarText text = AvatarText::Initials)
+    {
+        draw_initials_circle_(name, centre, diameter, bg, fg, text);
+    }
 
     virtual void draw_text(const TextLayout&, Point origin, Color) = 0;
 
@@ -713,6 +731,13 @@ public:
     }
 
     virtual float scale_factor() const = 0;
+
+protected:
+    // Backend hook behind draw_initials_circle (kept non-virtual so its
+    // default argument can't diverge between overrides).
+    virtual void draw_initials_circle_(std::string_view name, Point centre,
+                                       float diameter, Color bg, Color fg,
+                                       AvatarText text) = 0;
 };
 
 } // namespace tk

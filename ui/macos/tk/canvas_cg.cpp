@@ -362,9 +362,10 @@ CFAttributedStringRef build_attr_string(std::string_view utf8, CTFontRef font,
 // The word-split policy is shared (tk::initials_of), which converges away the
 // old fragile `>= 8` byte bound. Apply CoreText's locale-aware uppercasing to
 // the result before drawing.
-std::string initials_upper(std::string_view name)
+std::string initials_upper(std::string_view name, AvatarText text)
 {
-    std::string base = initials_of(name);
+    std::string base =
+        text == AvatarText::Literal ? std::string(name) : initials_of(name);
     CFRetained<CFStringRef> s{cfstr_from_utf8(base)};
     if (!s.get())
     {
@@ -1222,15 +1223,16 @@ public:
         CGContextRestoreGState(ctx_);
     }
 
-    void draw_initials_circle(std::string_view name, Point centre,
-                              float diameter, Color bg, Color fg) override
+    void draw_initials_circle_(std::string_view name, Point centre,
+                               float diameter, Color bg, Color fg,
+                               AvatarText text) override
     {
         set_fill(ctx_, bg);
         CGContextFillEllipseInRect(ctx_, CGRectMake(centre.x - diameter * 0.5f,
                                                     centre.y - diameter * 0.5f,
                                                     diameter, diameter));
 
-        std::string initials = initials_upper(name);
+        std::string initials = initials_upper(name, text);
         CFRetained<CTFontRef> font{CTFontCreateUIFontForLanguage(
             kCTFontUIFontEmphasizedSystem,
             diameter * kAvatarInitialsFontRatio, nullptr)};

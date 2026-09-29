@@ -80,9 +80,10 @@ void apply_monospace(QFont& f)
 
 // The word-split policy is shared (tk::initials_of); apply Qt's locale-aware
 // uppercasing to the result before drawing.
-QString initials_upper(std::string_view name)
+QString initials_upper(std::string_view name, AvatarText text)
 {
-    std::string base = initials_of(name);
+    std::string base =
+        text == AvatarText::Literal ? std::string(name) : initials_of(name);
     return QString::fromUtf8(base.data(), static_cast<int>(base.size()))
         .toUpper();
 }
@@ -688,8 +689,9 @@ public:
         p_.restore();
     }
 
-    void draw_initials_circle(std::string_view name, Point centre,
-                              float diameter, Color bg, Color fg) override
+    void draw_initials_circle_(std::string_view name, Point centre,
+                               float diameter, Color bg, Color fg,
+                               AvatarText text) override
     {
         p_.save();
         p_.setBrush(to_qcolor(bg));
@@ -702,7 +704,7 @@ public:
         f.setWeight(QFont::DemiBold);
         p_.setFont(f);
         p_.setPen(to_qcolor(fg));
-        QString s = initials_upper(name);
+        QString s = initials_upper(name, text);
         QRectF box(centre.x - diameter * 0.5, centre.y - diameter * 0.5,
                    diameter, diameter);
         p_.drawText(box, Qt::AlignCenter, s);

@@ -3,6 +3,12 @@
 Newest first. Unreleased work is listed per day, one bullet per change.
 Tagged releases summarize all changes since the previous tag.
 
+## Unreleased
+
+### 2026-09-29
+
+- fix(tk): avatar initials skip punctuation and brackets and keep whole emoji; `@room` pills, the mention popup and the call banner's "+N" draw their glyph as-is. Qt6 build + ctest 2038/2038
+
 ## v0.9.0 — 2026-09-29
 
 ### Summary

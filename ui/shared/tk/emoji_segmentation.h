@@ -20,6 +20,12 @@ namespace tk
 
 struct TextSpan; // ui/shared/tk/canvas.h
 
+// True for an emoji *base* codepoint (mirrors the Twemoji fallback table):
+// pictographs, dingbats, regional indicators, (C) (R) TM etc. Excludes the
+// cluster-continuation codepoints (ZWJ, variation selectors, skin tones, tags,
+// U+20E3) and the bare keycap bases [0-9*#].
+bool is_emoji_codepoint(char32_t cp);
+
 // Returns true when every non-whitespace character in `utf8` is a Unicode
 // emoji codepoint (ZWJ sequences, skin-tone modifiers, variation selectors,
 // regional indicators, keycap sequences). Used to pick the 2x BigEmoji font

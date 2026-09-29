@@ -14,13 +14,21 @@
 # ---------------------------------------------------------------------------
 find_program(XGETTEXT_EXECUTABLE xgettext)
 if(XGETTEXT_EXECUTABLE)
-    file(GLOB_RECURSE _i18n_sources
+    # RELATIVE + WORKING_DIRECTORY keep the "#:" source references
+    # repo-relative, so the committed .pot doesn't embed the developer's
+    # checkout path (and doesn't churn between machines).
+    file(GLOB_RECURSE _i18n_sources RELATIVE "${CMAKE_SOURCE_DIR}"
         "${CMAKE_SOURCE_DIR}/ui/*.cpp"
         "${CMAKE_SOURCE_DIR}/ui/*.h"
         "${CMAKE_SOURCE_DIR}/ui/*.hpp"
         "${CMAKE_SOURCE_DIR}/ui/*.mm"
     )
-    list(FILTER _i18n_sources EXCLUDE REGEX "/third_party/")
+    list(FILTER _i18n_sources EXCLUDE REGEX "(^|/)third_party/")
+    # client/ files whose literals reach the UI (N_-marked, translated by
+    # the caller). Listed individually so non-UI client strings stay out.
+    list(APPEND _i18n_sources
+        client/src/emoji.cpp
+    )
 
     add_custom_target(i18n-extract
         COMMAND ${XGETTEXT_EXECUTABLE}
@@ -31,6 +39,7 @@ if(XGETTEXT_EXECUTABLE)
             --package-name=tesseract
             --output=${CMAKE_SOURCE_DIR}/i18n/tesseract.pot
             ${_i18n_sources}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Extract translatable strings to i18n/tesseract.pot"
         VERBATIM
     )

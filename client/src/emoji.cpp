@@ -23,6 +23,13 @@ const std::vector<Entry>& table()
     return data;
 }
 
+// Marks a literal for xgettext (i18n-extract scans this file for N_) without
+// translating it; the UI runs category_name() through tk::tr() when shown.
+constexpr const char* N_(const char* s)
+{
+    return s;
+}
+
 bool ascii_iequal(char a, char b)
 {
     return std::tolower(static_cast<unsigned char>(a)) ==
@@ -164,21 +171,21 @@ const char* category_name(Category c)
     switch (c)
     {
     case Category::SmileysPeople:
-        return "Smileys & People";
+        return N_("Smileys & People");
     case Category::AnimalsNature:
-        return "Animals & Nature";
+        return N_("Animals & Nature");
     case Category::FoodDrink:
-        return "Food & Drink";
+        return N_("Food & Drink");
     case Category::Activities:
-        return "Activities";
+        return N_("Activities");
     case Category::TravelPlaces:
-        return "Travel & Places";
+        return N_("Travel & Places");
     case Category::Objects:
-        return "Objects";
+        return N_("Objects");
     case Category::Symbols:
-        return "Symbols";
+        return N_("Symbols");
     case Category::Flags:
-        return "Flags";
+        return N_("Flags");
     }
     return "?";
 }

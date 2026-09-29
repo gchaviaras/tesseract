@@ -43,22 +43,6 @@ msgstr "Error al editar: {0}"
 msgid "Image decode failed"
 msgstr "Error al decodificar la imagen"
 
-#: ui/linux-qt/src/MainWindow.cpp:771
-msgid "Send image failed: %1"
-msgstr "Error al enviar imagen: %1"
-
-#: ui/linux-qt/src/MainWindow.cpp:802
-msgid "Send video failed: %1"
-msgstr "Error al enviar vídeo: %1"
-
-#: ui/linux-qt/src/MainWindow.cpp:828
-msgid "Send audio failed: %1"
-msgstr "Error al enviar audio: %1"
-
-#: ui/linux-qt/src/MainWindow.cpp:853
-msgid "Send file failed: %1"
-msgstr "Error al enviar archivo: %1"
-
 #: ui/linux-qt/src/MainWindow.cpp:957
 #: ui/linux-qt/src/RoomWindow.cpp:54
 msgid "Save image"
@@ -178,52 +162,20 @@ msgstr "Restaurando sesiones…"
 msgid "Restoring session…"
 msgstr "Restaurando sesión…"
 
-#: ui/linux-qt/src/MainWindow.cpp:2161
-msgid "Account %1 expired: %2"
-msgstr "Cuenta %1 caducada: %2"
-
 #: ui/linux-qt/src/MainWindow.cpp:2264
 #: ui/linux-qt/src/MainWindow.cpp:2473
 #: ui/linux-qt/src/MainWindow.cpp:3656
 msgid "Connected"
 msgstr "Conectado"
 
-#: ui/linux-qt/src/MainWindow.cpp:2305
-msgid "Sign-in failed: no user id"
-msgstr "Error al iniciar sesión: sin identificador de usuario"
-
 #: ui/linux-qt/src/MainWindow.cpp:2316
 msgid "Already signed in as %1"
 msgstr "Ya has iniciado sesión como %1"
-
-#: ui/linux-qt/src/MainWindow.cpp:2341
-msgid "Sign-in failed: empty session"
-msgstr "Error al iniciar sesión: sesión vacía"
-
-#: ui/linux-qt/src/MainWindow.cpp:2370
-msgid "Sign-in failed: couldn't persist matrix store: %1"
-msgstr "Error al iniciar sesión: no se pudo guardar el almacén de Matrix: %1"
-
-#: ui/linux-qt/src/MainWindow.cpp:2383
-msgid "Sign-in failed: couldn't persist session"
-msgstr "Error al iniciar sesión: no se pudo guardar la sesión"
-
-#: ui/linux-qt/src/MainWindow.cpp:2399
-msgid "Sign-in failed at restore: %1"
-msgstr "Error al iniciar sesión al restaurar: %1"
-
-#: ui/linux-qt/src/MainWindow.cpp:2684
-msgid "Subscribe failed: %1"
-msgstr "Error al suscribirse: %1"
 
 #: ui/linux-qt/src/MainWindow.cpp:2742
 #: ui/shared/views/RoomHeader.cpp:657
 msgid "Jump to Date"
 msgstr "Ir a fecha"
-
-#: ui/linux-qt/src/MainWindow.cpp:2775
-msgid "Jump to date failed: %1"
-msgstr "Error al ir a la fecha: %1"
 
 #: ui/linux-qt/src/MainWindow.cpp:3045
 msgid "Select image"
@@ -242,10 +194,6 @@ msgstr "Sincronizando salas…"
 msgid "Reconnecting…"
 msgstr "Reconectando…"
 
-#: ui/linux-qt/src/MainWindow.cpp:3648
-msgid "Downloading encryption keys (%1)…"
-msgstr "Descargando claves de cifrado (%1)…"
-
 #: ui/linux-qt/src/MainWindow.cpp:3684
 msgid "Add Account…"
 msgstr "Añadir cuenta…"
@@ -257,10 +205,6 @@ msgstr "Configuración…"
 #: ui/shared/app/ShellBase.cpp:7484
 msgid "Verify this session…"
 msgstr "Verificar esta sesión…"
-
-#: ui/linux-qt/src/MainWindow.cpp:3687
-msgid "Log Out %1"
-msgstr "Cerrar sesión de %1"
 
 #: ui/linux-qt/src/MainWindow.cpp:3892
 msgid "Sync error: reconnecting…"
@@ -277,18 +221,6 @@ msgstr "Reconectado"
 #: ui/linux-qt/src/MainWindow.cpp:3942
 msgid "Session expired; please log in again."
 msgstr "La sesión ha caducado; vuelve a iniciar sesión."
-
-#: ui/linux-qt/src/MainWindow.cpp:3948
-msgid "Sync error: %1"
-msgstr "Error de sincronización: %1"
-
-#: ui/linux-qt/src/MainWindow.cpp:4159
-msgid "1 request in flight"
-msgstr "1 solicitud en curso"
-
-#: ui/linux-qt/src/MainWindow.cpp:4160
-msgid "%1 requests in flight"
-msgstr "%1 solicitudes en curso"
 
 #: ui/linux-qt/src/MainWindow.cpp:4350
 msgid "Add Account"
@@ -362,10 +294,6 @@ msgstr "Pronombres"
 #: ui/shared/views/settings/PronounsEditor.cpp
 msgid "Pronouns (e.g. she/her)"
 msgstr "Pronombres (p. ej. ella/su)"
-
-#: ui/shared/views/settings/PronounsEditor.cpp
-msgid "Add language"
-msgstr "Añadir idioma"
 
 #: ui/shared/views/settings/PronounsEditor.cpp
 msgid "+ Add language"
@@ -920,54 +848,13 @@ msgstr "Verificar"
 msgid "Decline"
 msgstr "Rechazar"
 
-#: ui/shared/views/VerificationBanner.cpp:116
-msgid "Use recovery key"
-msgstr "Usar clave de recuperación"
-
-#: ui/shared/views/VerificationBanner.cpp:169
-msgid "Verify this device to confirm your identity."
-msgstr "Verifica este dispositivo para confirmar tu identidad."
-
-#: ui/shared/views/VerificationBanner.cpp:171
-msgid "Another device wants to verify. Accept to compare emoji."
-msgstr "Otro dispositivo quiere verificar. Acepta para comparar los emojis."
-
-#: ui/shared/views/VerificationBanner.cpp:173
-msgid "Waiting for the other device to accept…"
-msgstr "Esperando a que el otro dispositivo acepte…"
-
-#: ui/shared/views/VerificationBanner.cpp:175
-msgid "Do these emoji match what the other device shows?"
-msgstr "¿Coinciden estos emojis con los que muestra el otro dispositivo?"
-
 #: ui/shared/views/VerificationBanner.cpp:177
 msgid "Confirming…"
 msgstr "Confirmando…"
 
-#: ui/shared/views/VerificationBanner.cpp:179
-msgid "Device verified ✓"
-msgstr "Dispositivo verificado ✓"
-
-#: ui/shared/views/VerificationBanner.cpp:182
-msgid "Verification cancelled."
-msgstr "Verificación cancelada."
-
-#: ui/shared/views/VerificationBanner.cpp:183
-#, c++-format
-msgid "Verification cancelled: {0}"
-msgstr "Verificación cancelada: {0}"
-
 #: ui/shared/views/VerificationBanner.cpp:211
 msgid "Accept"
 msgstr "Aceptar"
-
-#: ui/shared/views/VerificationBanner.cpp:221
-msgid "They Match"
-msgstr "Coinciden"
-
-#: ui/shared/views/VerificationBanner.cpp:223
-msgid "No Match"
-msgstr "No coinciden"
 
 #: ui/shared/views/settings/LanguageSection.cpp:17
 msgid "Auto"
@@ -1450,10 +1337,6 @@ msgstr "¡Hola, amigo!"
 msgid "Hi! How are you?"
 msgstr "¡Hola! ¿Cómo estás?"
 
-#: ui/shared/views/IncomingCallBanner.cpp
-msgid "is calling"
-msgstr "está llamando"
-
 #: ui/shared/views/settings/MediaSection.cpp
 msgid "Microphone"
 msgstr "Micrófono"
@@ -1637,10 +1520,6 @@ msgstr "Todavía no hay contenido multimedia en esta sala"
 #: ui/shared/views/ScreenPickerWidget.cpp ui/shared/views/CallOverlayWidget.cpp
 msgid "Share screen"
 msgstr "Compartir pantalla"
-
-#: ui/shared/views/ScreenPickerWidget.cpp ui/shared/views/CallOverlayWidget.cpp
-msgid "Stop sharing"
-msgstr "Dejar de compartir"
 
 #: ui/shared/views/ScreenPickerWidget.cpp
 msgid "Select what to share"
@@ -1873,32 +1752,8 @@ msgid "Emojis & Stickers"
 msgstr "Emojis y stickers"
 
 #: ui/shared/views/ImagePackEditorView.cpp
-msgid "Image pack"
-msgstr "Paquete de imágenes"
-
-#: ui/shared/views/ImagePackEditorView.cpp
 msgid "Pack name"
 msgstr "Nombre del paquete"
-
-#: ui/shared/views/ImagePackEditorView.cpp
-msgid "Usage"
-msgstr "Uso"
-
-#: ui/shared/views/ImagePackEditorView.cpp
-msgid "Emoji & stickers"
-msgstr "Emojis y stickers"
-
-#: ui/shared/views/ImagePackEditorView.cpp
-msgid "Emoji only"
-msgstr "Solo emojis"
-
-#: ui/shared/views/ImagePackEditorView.cpp
-msgid "Stickers only"
-msgstr "Solo stickers"
-
-#: ui/shared/views/ImagePackEditorView.cpp
-msgid "Create new pack"
-msgstr "Crear paquete nuevo"
 
 #: ui/shared/views/ImagePackEditorView.cpp
 msgid "Unnamed pack"
@@ -2998,10 +2853,6 @@ msgid "If you set a passphrase instead, enter that."
 msgstr "Si configuraste una frase de contraseña, introdúcela."
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Use another device instead"
-msgstr "Usar otro dispositivo"
-
-#: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Unlock"
 msgstr "Desbloquear"
 
@@ -3052,10 +2903,6 @@ msgstr "¿Restablecer el cifrado?"
 #: ui/shared/views/SettingsView.cpp
 msgid "Only do this if you've lost your recovery key and have no other signed-in device. Messages you can't read now will stay unreadable, and your other devices and the people you chat with will need to confirm you again. You'll get a new recovery key right after."
 msgstr "Hazlo solo si has perdido tu clave de recuperación y no tienes otro dispositivo con la sesión iniciada. Los mensajes que ahora no puedes leer seguirán sin poder leerse, y tus otros dispositivos y las personas con las que hablas tendrán que volver a confirmarte. Recibirás una nueva clave de recuperación justo después."
-
-#: ui/shared/views/VerificationBanner.cpp
-msgid "Confirm it's you to read your encrypted messages on this device."
-msgstr "Confirma que eres tú para leer tus mensajes cifrados en este dispositivo."
 
 #: ui/shared/views/VerificationBanner.cpp
 msgid "Confirm"
@@ -3245,117 +3092,113 @@ msgstr "Haz clic en cualquier lugar para cerrar"
 msgid "Click anywhere to cancel"
 msgstr "Haz clic en cualquier lugar para cancelar"
 
-#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:2823
+#: ui/linux-qt/src/MainWindow.cpp:2823
 msgid "Sign-in failed: %1"
 msgstr "Error al iniciar sesión: %1"
 
 msgid "Choose a folder for the exported history"
 msgstr "Elige una carpeta para el historial exportado"
 
-#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:4465
-msgid "\nmedia: %1 loading · fetch: %2 queued · send: %3 queued"
-msgstr "\nmultimedia: %1 cargando · descarga: %2 en cola · envío: %3 en cola"
-
-#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:513
-#: /home/rayden/src/tesseract/ui/macos/src/MainWindowController.mm:5037
-#: /home/rayden/src/tesseract/ui/windows/src/MainWindow.cpp:2617
+#: ui/linux-qt/src/MainWindow.cpp:513
+#: ui/macos/src/MainWindowController.mm:5037
+#: ui/windows/src/MainWindow.cpp:2617
 msgid "File exceeds the upload limit"
 msgstr "El archivo supera el límite de subida"
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:5066
+#: ui/shared/app/ShellBase.cpp:5066
 msgid "Jump to date failed: {0}"
 msgstr "Error al ir a la fecha: {0}"
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:5470
+#: ui/shared/app/ShellBase.cpp:5470
 msgid "Add device via QR…"
 msgstr "Añadir dispositivo mediante QR…"
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:6013
+#: ui/shared/app/ShellBase.cpp:6013
 msgid "Sign out failed: {0}"
 msgstr "Error al cerrar sesión: {0}"
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:8698
+#: ui/shared/app/ShellBase.cpp:8698
 msgid "Subscribe failed: {0}"
 msgstr "Error al suscribirse: {0}"
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9980
+#: ui/shared/app/ShellBase.cpp:9980
 msgid "Call disconnected due to a network error."
 msgstr "La llamada se desconectó por un error de red."
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9982
+#: ui/shared/app/ShellBase.cpp:9982
 msgid "Call ended due to a media error."
 msgstr "La llamada finalizó por un error multimedia."
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9984
+#: ui/shared/app/ShellBase.cpp:9984
 msgid "This call is not supported on your device."
 msgstr "Esta llamada no es compatible con tu dispositivo."
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9986
+#: ui/shared/app/ShellBase.cpp:9986
 msgid "Call ended due to an encryption error."
 msgstr "La llamada finalizó por un error de cifrado."
 
-#: /home/rayden/src/tesseract/ui/shared/app/ShellBase.cpp:9988
+#: ui/shared/app/ShellBase.cpp:9988
 msgid "The call ended unexpectedly."
 msgstr "La llamada finalizó inesperadamente."
 
-#: /home/rayden/src/tesseract/ui/shared/tk/screen_capture_gst.cpp:28
+#: ui/shared/tk/screen_capture_gst.cpp:28
 msgid "Entire Screen"
 msgstr "Pantalla completa"
 
-#: /home/rayden/src/tesseract/ui/shared/tk/screen_capture_gst.cpp:29
+#: ui/shared/tk/screen_capture_gst.cpp:29
 msgid "Select Window"
 msgstr "Seleccionar ventana"
 
-#: /home/rayden/src/tesseract/ui/shared/tk/screen_capture_portal.cpp:153
+#: ui/shared/tk/screen_capture_portal.cpp:153
 msgid "Share Screen"
 msgstr "Compartir pantalla"
 
 msgid "Join call"
 msgstr "Unirse a la llamada"
 
-#: /home/rayden/src/tesseract/ui/shared/views/ImagePackEditorView.cpp:1144
+#: ui/shared/views/ImagePackEditorView.cpp:1144
 msgid "New pack name"
 msgstr "Nombre del paquete nuevo"
 
-#: /home/rayden/src/tesseract/ui/shared/views/ImagePackEditorView.cpp:1163
+#: ui/shared/views/ImagePackEditorView.cpp:1163
 msgid "No image packs yet — create one above."
 msgstr "Aún no hay paquetes de imágenes: crea uno arriba."
 
-#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:134
+#: ui/shared/views/LoginView.cpp:134
 msgid "New here? Create an account"
 msgstr "¿Eres nuevo? Crea una cuenta"
 
-#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:565
-#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:605
-#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:785
+#: ui/shared/views/LoginView.cpp:565
+#: ui/shared/views/LoginView.cpp:605
+#: ui/shared/views/LoginView.cpp:785
 msgid "Sign-in failed: {0}"
 msgstr "Error al iniciar sesión: {0}"
 
-#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:617
+#: ui/shared/views/LoginView.cpp:617
 msgid "Cancelling…"
 msgstr "Cancelando…"
 
-#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:893
+#: ui/shared/views/LoginView.cpp:893
 msgid "Connection Error"
 msgstr "Error de conexión"
 
-#: /home/rayden/src/tesseract/ui/shared/views/LoginView.cpp:896
+#: ui/shared/views/LoginView.cpp:896
 msgid "Sign In"
 msgstr "Iniciar sesión"
 
-#: /home/rayden/src/tesseract/ui/shared/views/MainAppWidget.cpp:305
+#: ui/shared/views/MainAppWidget.cpp:305
 msgid "No internet connection — reconnecting…"
 msgstr "Sin conexión a internet: reconectando…"
 
-#: /home/rayden/src/tesseract/ui/shared/views/MessageListView.cpp:2404
+#: ui/shared/views/MessageListView.cpp:2404
 msgid "started a video call"
 msgstr "inició una videollamada"
 
-#: /home/rayden/src/tesseract/ui/shared/views/MessageListView.cpp:2406
+#: ui/shared/views/MessageListView.cpp:2406
 msgid "started a voice call"
 msgstr "inició una llamada de voz"
 
-#: /home/rayden/src/tesseract/ui/shared/views/MessageListView.cpp:2407
+#: ui/shared/views/MessageListView.cpp:2407
 msgid "started a call"
 msgstr "inició una llamada"
 
@@ -3396,77 +3239,73 @@ msgstr "Mensaje de audio"
 msgid "Video"
 msgstr "Vídeo"
 
-#: /home/rayden/src/tesseract/ui/shared/views/MessageSearchView.cpp:178
+#: ui/shared/views/MessageSearchView.cpp:178
 msgid "Search your messages…"
 msgstr "Buscar en tus mensajes…"
 
-#: /home/rayden/src/tesseract/ui/shared/views/MessageSearchView.cpp:413
+#: ui/shared/views/MessageSearchView.cpp:413
 msgid "Type to search your messages"
 msgstr "Escribe para buscar en tus mensajes"
 
-#: /home/rayden/src/tesseract/ui/shared/views/MessageSearchView.cpp:414
-#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:132
+#: ui/shared/views/MessageSearchView.cpp:414
+#: ui/shared/views/RoomSearchBar.cpp:132
 msgid "No matches"
 msgstr "Sin coincidencias"
 
-#: /home/rayden/src/tesseract/ui/shared/views/MessageSearchView.cpp:415
-#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:124
+#: ui/shared/views/MessageSearchView.cpp:415
+#: ui/shared/views/RoomSearchBar.cpp:124
 msgid "Searching…"
 msgstr "Buscando…"
 
-#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:122
+#: ui/shared/views/QRGrantView.cpp:122
 msgid "Setting up secure channel…"
 msgstr "Estableciendo canal seguro…"
 
-#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:126
+#: ui/shared/views/QRGrantView.cpp:126
 msgid "Scan this QR code with your Matrix app"
 msgstr "Escanea este código QR con tu aplicación de Matrix"
 
-#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:134
+#: ui/shared/views/QRGrantView.cpp:134
 msgid "Enter the numeric code shown on the new device:"
 msgstr "Introduce el código numérico que aparece en el nuevo dispositivo:"
 
-#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:145
+#: ui/shared/views/QRGrantView.cpp:145
 msgid "Approve the sign-in in your browser…"
 msgstr "Aprueba el inicio de sesión en tu navegador…"
 
-#: /home/rayden/src/tesseract/ui/shared/views/QRGrantView.cpp:151
+#: ui/shared/views/QRGrantView.cpp:151
 msgid "Device added successfully."
 msgstr "Dispositivo añadido correctamente."
 
-#: /home/rayden/src/tesseract/ui/shared/views/QuickSwitcher.cpp:199
+#: ui/shared/views/QuickSwitcher.cpp:199
 msgid "Jump to a room, or @user to start a chat…"
 msgstr "Ir a una sala, o @usuario para iniciar un chat…"
 
 msgid "Invitation"
 msgstr "Invitación"
 
-#: /home/rayden/src/tesseract/ui/shared/views/RoomListView.cpp:1004
+#: ui/shared/views/RoomListView.cpp:1004
 msgid "Fetching room details…"
 msgstr "Obteniendo detalles de la sala…"
 
-#: /home/rayden/src/tesseract/ui/shared/views/RoomListView.cpp:1008
-msgid "members"
-msgstr "miembros"
-
-#: /home/rayden/src/tesseract/ui/shared/views/RoomListView.cpp:1010
-#: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:82
+#: ui/shared/views/RoomListView.cpp:1010
+#: ui/shared/views/RoomPreviewView.cpp:82
 msgid "Invite-only"
 msgstr "Solo por invitación"
 
-#: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:81
+#: ui/shared/views/RoomPreviewView.cpp:81
 msgid "Knock to join"
 msgstr "Solicitar unirse"
 
-#: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:84
+#: ui/shared/views/RoomPreviewView.cpp:84
 msgid "Knock (restricted)"
 msgstr "Solicitar unirse (restringida)"
 
-#: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:157
+#: ui/shared/views/RoomPreviewView.cpp:157
 msgid "{0} members · {1}"
 msgstr "{0} miembros · {1}"
 
-#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:28
+#: ui/shared/views/RoomSearchBar.cpp:28
 msgid "Find in conversation…"
 msgstr "Buscar en la conversación…"
 
@@ -3476,65 +3315,65 @@ msgstr "Coincidencia anterior"
 msgid "Next match"
 msgstr "Coincidencia siguiente"
 
-#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:56
+#: ui/shared/views/RoomSearchBar.cpp:56
 msgid "Paginate"
 msgstr "Cargar historial"
 
-#: /home/rayden/src/tesseract/ui/shared/views/RoomSearchBar.cpp:74
+#: ui/shared/views/RoomSearchBar.cpp:74
 msgid "Type to search"
 msgstr "Escribe para buscar"
 
-#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:279
+#: ui/shared/views/SettingsView.cpp:279
 msgid "Log out?"
 msgstr "¿Cerrar sesión?"
 
-#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:280
+#: ui/shared/views/SettingsView.cpp:280
 msgid "You will need to sign in again to access your messages."
 msgstr "Tendrás que volver a iniciar sesión para acceder a tus mensajes."
 
-#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:281
+#: ui/shared/views/SettingsView.cpp:281
 msgid "Log Out"
 msgstr "Cerrar sesión"
 
-#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:291
+#: ui/shared/views/SettingsView.cpp:291
 msgid "Clear all caches?"
 msgstr "¿Borrar todas las cachés?"
 
-#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:295
+#: ui/shared/views/SettingsView.cpp:295
 msgid "Clear"
 msgstr "Borrar"
 
-#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:311
+#: ui/shared/views/SettingsView.cpp:311
 msgid "Reset"
 msgstr "Restablecer"
 
-#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:25
-#: /home/rayden/src/tesseract/ui/shared/views/settings/PronounsEditor.cpp:76
+#: ui/shared/views/UserProfilePanel.cpp:25
+#: ui/shared/views/settings/PronounsEditor.cpp:76
 msgid "×"
 msgstr "×"
 
-#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:28
-#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:97
+#: ui/shared/views/UserProfilePanel.cpp:28
+#: ui/shared/views/UserProfilePanel.cpp:97
 msgid "Message"
 msgstr "Mensaje"
 
-#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:31
+#: ui/shared/views/UserProfilePanel.cpp:31
 msgid "Ignore"
 msgstr "Ignorar"
 
-#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:101
+#: ui/shared/views/UserProfilePanel.cpp:101
 msgid "Open DM"
 msgstr "Abrir mensaje directo"
 
-#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:105
+#: ui/shared/views/UserProfilePanel.cpp:105
 msgid "Sending…"
 msgstr "Enviando…"
 
-#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:303
+#: ui/shared/views/UserProfilePanel.cpp:303
 msgid "Timezone"
 msgstr "Zona horaria"
 
-#: /home/rayden/src/tesseract/ui/shared/views/UserProfilePanel.cpp:304
+#: ui/shared/views/UserProfilePanel.cpp:304
 msgid "Bio"
 msgstr "Biografía"
 
@@ -3543,26 +3382,6 @@ msgstr "Elegir emoji de estado"
 
 msgid "Clear status emoji"
 msgstr "Quitar emoji de estado"
-
-#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:783
-msgid "Send reply failed: %1"
-msgstr "Error al enviar respuesta: %1"
-
-#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:807
-msgid "Edit failed: %1"
-msgstr "Error al editar: %1"
-
-#: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:1171
-msgid "Failed to set topic: %1"
-msgstr "Error al establecer el tema: %1"
-
-#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:306
-msgid "Reset your cryptographic identity?"
-msgstr "¿Restablecer tu identidad criptográfica?"
-
-#: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:307
-msgid "This creates a brand-new identity and replaces your key backup. Your other sessions and the people you chat with will need to verify you again. You'll set up a new recovery key right after."
-msgstr "Esto crea una identidad completamente nueva y reemplaza la copia de seguridad de tus claves. Tus otras sesiones y las personas con las que hablas tendrán que volver a verificarte. Configurarás una nueva clave de recuperación justo después."
 
 #: ui/shared/views/settings/LanguageSection.cpp
 msgid "French"

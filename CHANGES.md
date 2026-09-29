@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-09-29
 
+- fix(i18n): `i18n-extract` now writes repo-relative `#:` references instead of the developer's absolute checkout path, and `tesseract.pot` is regenerated (428 → 1189 msgids). The emoji picker's category names in `client/src/emoji.cpp` are now extracted too; 45 dead entries are dropped from `de.po`/`es.po`/`fr.po` and `pseudo.po` is regenerated. Qt6 build + ctest 2038/2038
 - fix(tk): avatar initials skip punctuation and brackets and keep whole emoji; `@room` pills, the mention popup and the call banner's "+N" draw their glyph as-is. Qt6 build + ctest 2038/2038
 
 ## v0.9.0 — 2026-09-29

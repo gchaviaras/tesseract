@@ -57,7 +57,7 @@ endif()
 # ---------------------------------------------------------------------------
 find_program(MSGFMT_EXECUTABLE msgfmt)
 if(MSGFMT_EXECUTABLE)
-    file(GLOB _po_files "${CMAKE_SOURCE_DIR}/i18n/*.po")
+    file(GLOB _po_files CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/i18n/*.po")
     set(_mo_files "")
     foreach(_po ${_po_files})
         get_filename_component(_lang "${_po}" NAME_WE)   # e.g. "es", "pseudo"

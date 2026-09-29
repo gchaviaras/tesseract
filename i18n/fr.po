@@ -420,7 +420,7 @@ msgstr "Inconnu"
 
 #: ui/shared/views/JoinRoomView.cpp:83
 msgid "#room:server.org"
-msgstr "#salon:serveur.org"
+msgstr "#salon:server.org"
 
 #: ui/shared/views/JoinRoomView.cpp:84
 msgid "Look up"
@@ -649,7 +649,7 @@ msgstr "Impossible de joindre ce serveur"
 
 #: ui/shared/views/LoginView.cpp:327
 msgid "@user:example.org"
-msgstr "@utilisateur:exemple.org"
+msgstr "@utilisateur:example.org"
 
 #: ui/shared/views/LoginView.cpp:709
 msgid "Please enter your Matrix ID and password."
@@ -1482,7 +1482,7 @@ msgstr "3 derniers mois"
 
 #: ui/shared/views/ExportHistoryDialog.cpp
 msgid "Last year"
-msgstr "Dernière année"
+msgstr "12 derniers mois"
 
 #: ui/shared/views/ExportHistoryDialog.cpp
 msgid "Stop & save"
@@ -3930,7 +3930,7 @@ msgstr "Inactifs"
 
 #: ui/shared/views/RoomListView.h:218
 msgid "Available to Join"
-msgstr "Disponibles"
+msgstr "Disponibles à rejoindre"
 
 #: ui/shared/views/RoomListView.h:219
 msgid "Requests to Join"

@@ -158,11 +158,11 @@ msgstr "Buscar salas…"
 
 #: ui/linux-qt/src/MainWindow.cpp:1632
 msgid "Already in Saved Stickers"
-msgstr "Ya está en pegatinas guardadas"
+msgstr "Ya está en stickers guardados"
 
 #: ui/linux-qt/src/MainWindow.cpp:1633
 msgid "Add to Saved Stickers"
-msgstr "Añadir a pegatinas guardadas"
+msgstr "Añadir a stickers guardados"
 
 #: ui/linux-qt/src/MainWindow.cpp:1750
 #: ui/linux-qt/src/MainWindow.cpp:2132
@@ -252,7 +252,7 @@ msgstr "Añadir cuenta…"
 
 #: ui/linux-qt/src/MainWindow.cpp:3685
 msgid "Settings…"
-msgstr "Ajustes…"
+msgstr "Configuración…"
 
 #: ui/shared/app/ShellBase.cpp:7484
 msgid "Verify this session…"
@@ -304,7 +304,7 @@ msgstr "Sesión de %1 cerrada"
 
 #: ui/shared/views/StickerPicker.cpp:43
 msgid "Search stickers"
-msgstr "Buscar pegatinas"
+msgstr "Buscar stickers"
 
 #: ui/shared/views/StickerPicker.cpp:308
 msgid "Favorites"
@@ -406,7 +406,7 @@ msgstr "Pública"
 
 #: ui/shared/views/JoinRoomView.cpp:58 ui/shared/views/settings/RoomSecuritySection.cpp
 msgid "Knock"
-msgstr "Llamar"
+msgstr "Solicitar unirse"
 
 #: ui/shared/views/JoinRoomView.cpp:62 ui/shared/views/settings/RoomSecuritySection.cpp
 msgid "Restricted"
@@ -414,7 +414,7 @@ msgstr "Restringida"
 
 #: ui/shared/views/JoinRoomView.cpp:66 ui/shared/views/settings/RoomSecuritySection.cpp
 msgid "Knock+Restricted"
-msgstr "Llamar+Restringida"
+msgstr "Solicitar unirse+Restringida"
 
 #: ui/shared/views/JoinRoomView.cpp:70 ui/shared/views/settings/RoomSecuritySection.cpp
 msgid "Invite only"
@@ -430,7 +430,7 @@ msgstr "Desconocida"
 
 #: ui/shared/views/JoinRoomView.cpp:83
 msgid "#room:server.org"
-msgstr "#sala:servidor.org"
+msgstr "#sala:server.org"
 
 #: ui/shared/views/JoinRoomView.cpp:84
 msgid "Look up"
@@ -567,12 +567,7 @@ msgid ""
 "Private: invite-only, unlisted. Public: anyone can join, listed. "
 "Fine-grained options (Knock, Restricted) can be set afterward in Room "
 "Settings → Security & Privacy."
-msgstr ""
-"Define la regla de acceso inicial, la visibilidad del historial y si "
-"aparece en el directorio. Privada: solo por invitación, no aparece en el "
-"directorio. Pública: cualquiera puede unirse, aparece en el directorio. "
-"Las opciones más detalladas (Llamar, Restringida) se pueden configurar "
-"después en Ajustes de la sala → Seguridad y privacidad."
+msgstr "Define la regla de acceso inicial, la visibilidad del historial y si aparece en el directorio. Privada: solo por invitación, no aparece en el directorio. Pública: cualquiera puede unirse, aparece en el directorio. Las opciones más detalladas (Solicitar unirse, Restringida) se pueden configurar después en Configuración de la sala → Seguridad y privacidad."
 
 #: ui/shared/views/CreateRoomView.cpp:175
 msgid "Creating room…"
@@ -641,7 +636,7 @@ msgstr "?"
 
 #: ui/shared/views/LoginView.cpp:116
 msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? matrix.org is a good default and works with anyone on Matrix."
-msgstr "Tu servidor de inicio es donde vive tu cuenta, algo similar a elegir un proveedor de correo electrónico. ¿No estás seguro? matrix.org es una buena opción por defecto y funciona con cualquier persona en Matrix."
+msgstr "Tu servidor es donde vive tu cuenta, algo similar a elegir un proveedor de correo electrónico. ¿No estás seguro? matrix.org es una buena opción por defecto y funciona con cualquier persona en Matrix."
 
 #: ui/shared/views/LoginView.cpp:317
 msgid "matrix.org"
@@ -677,7 +672,7 @@ msgstr "No se pudo conectar con este servidor"
 
 #: ui/shared/views/LoginView.cpp:327
 msgid "@user:example.org"
-msgstr "@usuario:ejemplo.org"
+msgstr "@usuario:example.org"
 
 #: ui/shared/views/LoginView.cpp:709
 msgid "Please enter your Matrix ID and password."
@@ -722,7 +717,7 @@ msgstr "Reintentar"
 
 #: ui/shared/views/RoomInfoPanel.cpp
 msgid "Room settings"
-msgstr "Ajustes de la sala"
+msgstr "Configuración de la sala"
 
 #: ui/shared/views/RoomInfoPanel.cpp
 msgid "Edit topic"
@@ -935,7 +930,7 @@ msgstr "Verifica este dispositivo para confirmar tu identidad."
 
 #: ui/shared/views/VerificationBanner.cpp:171
 msgid "Another device wants to verify. Accept to compare emoji."
-msgstr "Otro dispositivo quiere verificar. Acepta para comparar los emoji."
+msgstr "Otro dispositivo quiere verificar. Acepta para comparar los emojis."
 
 #: ui/shared/views/VerificationBanner.cpp:173
 msgid "Waiting for the other device to accept…"
@@ -943,7 +938,7 @@ msgstr "Esperando a que el otro dispositivo acepte…"
 
 #: ui/shared/views/VerificationBanner.cpp:175
 msgid "Do these emoji match what the other device shows?"
-msgstr "¿Coinciden estos emoji con los que muestra el otro dispositivo?"
+msgstr "¿Coinciden estos emojis con los que muestra el otro dispositivo?"
 
 #: ui/shared/views/VerificationBanner.cpp:177
 msgid "Confirming…"
@@ -1109,11 +1104,11 @@ msgstr "Más opciones"
 
 #: ui/shared/views/ComposeBar.cpp
 msgid "Emoji"
-msgstr "Emoji"
+msgstr "Emojis"
 
 #: ui/shared/views/ComposeBar.cpp
 msgid "Stickers"
-msgstr "Adhesivos"
+msgstr "Stickers"
 
 #: ui/shared/views/ComposeBar.cpp
 msgid "Stop recording"
@@ -1379,7 +1374,7 @@ msgstr "Cargar imagen"
 
 #: ui/shared/views/MessageListView.cpp
 msgid "Load sticker"
-msgstr "Cargar pegatina"
+msgstr "Cargar sticker"
 
 #: ui/shared/views/MessageListView.cpp
 msgid "Load video"
@@ -1437,9 +1432,7 @@ msgstr ""
 msgid ""
 "A monospaced, mIRC-style timeline: every line is \"[time] <nick>\" with a "
 "colour per person."
-msgstr ""
-"Una cronología monoespaciada al estilo de mIRC: cada línea es «[hora] "
-"<apodo>» con un color por persona."
+msgstr "Una línea de tiempo monoespaciada al estilo de mIRC: cada línea es «[hora] <apodo>» con un color por persona."
 
 #: ui/shared/views/settings/MessageLayoutPreview.cpp
 msgid "Alex"
@@ -1659,11 +1652,11 @@ msgstr "Pantalla"
 
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Room Settings"
-msgstr "Ajustes de la sala"
+msgstr "Configuración de la sala"
 
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Space Settings"
-msgstr "Ajustes del espacio"
+msgstr "Configuración del espacio"
 
 #: ui/shared/views/settings/RoomGeneralSection.cpp
 msgid "General"
@@ -1832,7 +1825,7 @@ msgstr "Expulsar usuarios"
 
 #: ui/shared/views/settings/RoomPermissionsSection.cpp
 msgid "Ban users"
-msgstr "Vetar usuarios"
+msgstr "Banear usuarios"
 
 #: ui/shared/views/settings/RoomPermissionsSection.cpp
 msgid "Calls"
@@ -2008,7 +2001,7 @@ msgstr "Establecer tu avatar en esta sala"
 
 #: ui/shared/app/SlashCommands.cpp:141
 msgid "Join a room by alias or ID"
-msgstr "Unirte a una sala por alias o ID"
+msgstr "Unirse a una sala por alias o ID"
 
 #: ui/shared/app/SlashCommands.cpp:142
 msgid "Leave the current room"
@@ -2024,7 +2017,7 @@ msgstr "Buscar un GIF para enviar"
 
 #: ui/shared/app/SlashCommands.cpp:145
 msgid "Take a selfie and attach it"
-msgstr "Hacerte un selfie y adjuntarlo"
+msgstr "Hacerse un selfie y adjuntarlo"
 
 #: ui/shared/app/SlashCommands.cpp:146
 msgid "Share your current location"
@@ -2168,11 +2161,11 @@ msgstr "Marcar como leída"
 
 #: ui/shared/views/RoomListView.cpp
 msgid "Leave room"
-msgstr "Abandonar sala"
+msgstr "Salir de la sala"
 
 #: ui/shared/views/SpaceRootView.cpp
 msgid "Leave Space"
-msgstr "Abandonar espacio"
+msgstr "Salir del espacio"
 
 #: ui/shared/app/ShellBase.cpp ui/shared/views/RoomView.cpp
 msgid "this room"
@@ -2181,7 +2174,7 @@ msgstr "esta sala"
 #: ui/shared/app/ShellBase.cpp ui/shared/views/RoomView.cpp
 #, c++-format
 msgid "Leave {0}?"
-msgstr "¿Abandonar {0}?"
+msgstr "¿Salir de {0}?"
 
 #: ui/shared/app/ShellBase.cpp ui/shared/views/RoomView.cpp
 msgid "You will stop receiving messages and need to be re-invited to rejoin."
@@ -2189,7 +2182,7 @@ msgstr "Dejarás de recibir mensajes y necesitarás una nueva invitación para v
 
 #: ui/shared/app/ShellBase.cpp ui/shared/views/RoomView.cpp
 msgid "Leave"
-msgstr "Abandonar"
+msgstr "Salir"
 
 #: ui/windows/src/Win32Taskbar.cpp
 msgid "Mentions"
@@ -2316,7 +2309,7 @@ msgstr "¿Denegar y banear a este usuario?"
 
 #: ui/shared/views/RoomView.cpp:858
 msgid "They will be removed from the room and unable to rejoin or knock again unless unbanned."
-msgstr "Se les eliminará de la sala y no podrán volver a unirse ni a llamar a la puerta a menos que se les desbanee."
+msgstr "Se les expulsará de la sala y no podrán volver a unirse ni solicitarlo de nuevo a menos que se les desbanee."
 
 #: ui/shared/views/ThreadListView.cpp:146
 msgid "Search threads…"
@@ -2472,7 +2465,7 @@ msgstr "Búsqueda deshabilitada: la indexación está desactivada"
 
 #: ui/shared/views/MessageSearchView.cpp
 msgid "Message search is disabled. Enable indexing in Settings to search your messages."
-msgstr "La búsqueda de mensajes está deshabilitada. Activa la indexación en Ajustes para buscar en tus mensajes."
+msgstr "La búsqueda de mensajes está deshabilitada. Activa la indexación en Configuración para buscar en tus mensajes."
 
 #: ui/macos/src/AppDelegate.mm
 msgid "File"
@@ -2492,7 +2485,7 @@ msgstr "Buscar…"
 
 #: ui/macos/src/AppDelegate.mm
 msgid "Search Your Messages…"
-msgstr "Busca en tus mensajes…"
+msgstr "Buscar en tus mensajes…"
 
 #: ui/macos/src/AppDelegate.mm
 msgid "Go"
@@ -2621,7 +2614,7 @@ msgstr "Bajo demanda"
 
 #: ui/shared/views/ActivityMonitorView.cpp
 msgid "Thread pool"
-msgstr "Grupo de hilos"
+msgstr "Grupo de subprocesos"
 
 #: ui/shared/views/ActivityMonitorView.cpp
 #, c++-format
@@ -2731,7 +2724,7 @@ msgstr "Abrir la búsqueda de mensajes"
 
 #: ui/shared/app/Launch.cpp
 msgid "Open Settings"
-msgstr "Abrir Ajustes"
+msgstr "Abrir configuración"
 
 #: ui/shared/app/Launch.cpp
 msgid "Sign out of every account and exit"
@@ -2775,7 +2768,7 @@ msgstr "Invitar personas"
 
 #: ui/shared/views/RoomInfoPanel.cpp
 msgid "Leave Room"
-msgstr "Abandonar sala"
+msgstr "Salir de la sala"
 
 #: ui/shared/views/InviteDialog.cpp
 msgid "Search people or enter @user:server"
@@ -2842,20 +2835,20 @@ msgstr "Expulsar usuario…"
 
 #: ui/shared/views/RoomInfoPanel.cpp
 msgid "Ban user…"
-msgstr "Vetar usuario…"
+msgstr "Banear usuario…"
 
 #: ui/shared/views/RoomView.cpp
 #, c++-format
 msgid "Ban {0}?"
-msgstr "¿Vetar a {0}?"
+msgstr "¿Banear a {0}?"
 
 #: ui/shared/views/RoomView.cpp
 msgid "They will be removed from the room and unable to rejoin unless unbanned."
-msgstr "Se le expulsará de la sala y no podrá volver a unirse a menos que se le retire el veto."
+msgstr "Se le expulsará de la sala y no podrá volver a unirse a menos que se le desbanee."
 
 #: ui/shared/views/RoomView.cpp
 msgid "Ban"
-msgstr "Vetar"
+msgstr "Banear"
 
 #: ui/shared/views/RoomView.cpp
 #, c++-format
@@ -2873,7 +2866,7 @@ msgstr "Expulsar"
 #: ui/shared/app/ShellBase.cpp
 #, c++-format
 msgid "Couldn't ban {0}"
-msgstr "No se pudo vetar a {0}"
+msgstr "No se pudo banear a {0}"
 
 #: ui/shared/app/ShellBase.cpp
 #, c++-format
@@ -2891,29 +2884,29 @@ msgstr "Moderación"
 
 #: ui/shared/views/settings/RoomModerationSection.cpp
 msgid "Banned users"
-msgstr "Usuarios vetados"
+msgstr "Usuarios baneados"
 
 #: ui/shared/views/settings/RoomModerationSection.cpp
 msgid "No banned users"
-msgstr "No hay usuarios vetados"
+msgstr "No hay usuarios baneados"
 
 #: ui/shared/views/settings/RoomModerationSection.cpp
 msgid "Unban"
-msgstr "Retirar veto"
+msgstr "Desbanear"
 
 #: ui/shared/views/settings/RoomModerationSection.cpp
 msgid "Unban (you don't have permission to lift this ban)"
-msgstr "Retirar veto (no tienes permiso para retirar este veto)"
+msgstr "Desbanear (no tienes permiso para retirar este baneo)"
 
 #: ui/shared/views/settings/RoomModerationSection.cpp
 #, c++-format
 msgid "Banned by {0}"
-msgstr "Vetado por {0}"
+msgstr "Baneado por {0}"
 
 #: ui/shared/app/ShellBase.cpp
 #, c++-format
 msgid "Couldn't unban {0}"
-msgstr "No se pudo retirar el veto a {0}"
+msgstr "No se pudo desbanear a {0}"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Save to file…"
@@ -3168,7 +3161,7 @@ msgstr "Comprueba que el otro dispositivo muestra los mismos números en el mism
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Or compare these emoji:"
-msgstr "O compara estos emoji:"
+msgstr "O compara estos emojis:"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "They match"
@@ -3395,7 +3388,7 @@ msgid "Image"
 msgstr "Imagen"
 
 msgid "Sticker"
-msgstr "Pegatina"
+msgstr "Sticker"
 
 msgid "Audio message"
 msgstr "Mensaje de audio"
@@ -3463,11 +3456,11 @@ msgstr "Solo por invitación"
 
 #: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:81
 msgid "Knock to join"
-msgstr "Llamar para unirse"
+msgstr "Solicitar unirse"
 
 #: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:84
 msgid "Knock (restricted)"
-msgstr "Llamar (restringida)"
+msgstr "Solicitar unirse (restringida)"
 
 #: /home/rayden/src/tesseract/ui/shared/views/RoomPreviewView.cpp:157
 msgid "{0} members · {1}"
@@ -3715,7 +3708,7 @@ msgstr "Aceptar"
 
 #: ui/macos/src/MainWindowController.mm:8367
 msgid "Could Not Save Sticker"
-msgstr "No se pudo guardar la pegatina"
+msgstr "No se pudo guardar el sticker"
 
 #: ui/macos/tk/screen_capture_macos.mm:140
 msgid "Display {0}"
@@ -4050,7 +4043,7 @@ msgstr "{0} envió un mensaje de voz"
 
 #: ui/shared/views/RoomListView.cpp:109
 msgid "{0} sent a sticker"
-msgstr "{0} envió una pegatina"
+msgstr "{0} envió un sticker"
 
 #: ui/shared/views/RoomListView.h:216
 msgid "Invitations"

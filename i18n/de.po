@@ -470,7 +470,7 @@ msgstr "Chat wird gesucht …"
 
 #: ui/shared/views/JoinRoomView.cpp:192
 msgid "Joining room…"
-msgstr "Trete dem Chat bei …"
+msgstr "Beitritt zum Chat …"
 
 #: ui/shared/views/JoinRoomView.cpp:193
 msgid "Sending request…"
@@ -573,7 +573,7 @@ msgstr "Chat erstellen"
 
 #: ui/shared/app/ShellBase.cpp:4239
 msgid "complete room action"
-msgstr "Chat-Aktion abschließen"
+msgstr "Chataktion abschließen"
 
 #: ui/shared/app/ShellBase.cpp:4243
 msgid "accept invite"
@@ -613,7 +613,7 @@ msgstr "?"
 
 #: ui/shared/views/LoginView.cpp:116
 msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? matrix.org is a good default and works with anyone on Matrix."
-msgstr "Bei deinem Kontoanbieter befindet sich dein Konto – ähnlich wie bei der Wahl eines E-Mail-Anbieters. Nicht sicher? matrix.org ist eine gute Standardwahl und funktioniert mit allen auf Matrix."
+msgstr "Dein Homeserver ist der Ort, an dem dein Konto liegt – ähnlich wie bei der Wahl eines E-Mail-Anbieters. Nicht sicher? matrix.org ist eine gute Standardwahl und funktioniert mit allen auf Matrix."
 
 #: ui/shared/views/LoginView.cpp:317
 msgid "matrix.org"
@@ -641,7 +641,7 @@ msgstr "Zurück"
 
 #: ui/shared/views/LoginView.cpp:289
 msgid "Checking…"
-msgstr "Überprüfe …"
+msgstr "Wird überprüft …"
 
 #: ui/shared/views/LoginView.cpp:305
 msgid "Could not reach this server"
@@ -899,7 +899,7 @@ msgstr "Ein anderes Gerät möchte eine Verifizierung durchführen. Akzeptiere, 
 
 #: ui/shared/views/VerificationBanner.cpp:173
 msgid "Waiting for the other device to accept…"
-msgstr "Warte darauf, dass das andere Gerät akzeptiert …"
+msgstr "Warten, bis das andere Gerät akzeptiert …"
 
 #: ui/shared/views/VerificationBanner.cpp:175
 msgid "Do these emoji match what the other device shows?"
@@ -907,7 +907,7 @@ msgstr "Stimmen diese Emojis mit denen auf dem anderen Gerät überein?"
 
 #: ui/shared/views/VerificationBanner.cpp:177
 msgid "Confirming…"
-msgstr "Bestätige …"
+msgstr "Wird bestätigt …"
 
 #: ui/shared/views/VerificationBanner.cpp:179
 msgid "Device verified ✓"
@@ -959,11 +959,11 @@ msgstr "Nachricht löschen"
 
 #: ui/shared/views/RoomView.cpp
 msgid "Unpin message"
-msgstr "Nachricht lösen"
+msgstr "Nachricht nicht mehr anheften"
 
 #: ui/shared/views/RoomView.cpp
 msgid "Pin message"
-msgstr "Nachricht fixieren"
+msgstr "Nachricht anheften"
 
 #: ui/shared/views/ForwardRoomPicker.cpp:392
 msgid "Forward"
@@ -1295,8 +1295,8 @@ msgstr[1] "{0} haben ihre Einladungen abgelehnt"
 #: ui/shared/views/MessageListView.cpp
 msgid "{0} had {1} invitation revoked"
 msgid_plural "{0} had {1} invitations revoked"
-msgstr[0] "Für {0} wurde {1} Einladung widerrufen"
-msgstr[1] "Für {0} wurden {1} Einladungen widerrufen"
+msgstr[0] "Die Einladung für {0} wurde widerrufen"
+msgstr[1] "Die Einladungen für {0} wurden widerrufen"
 
 #: ui/shared/views/MessageListView.cpp
 msgid "{0}'s request to join was approved"
@@ -1307,8 +1307,8 @@ msgstr[1] "Die Beitrittsanfragen von {0} wurden angenommen"
 #: ui/shared/views/MessageListView.cpp
 msgid "{0} cancelled {1} request to join"
 msgid_plural "{0} cancelled {1} requests to join"
-msgstr[0] "{0} hat {1} Beitrittsanfrage zurückgezogen"
-msgstr[1] "{0} hat {1} Beitrittsanfragen zurückgezogen"
+msgstr[0] "{0} hat die Beitrittsanfrage zurückgezogen"
+msgstr[1] "{0} haben ihre Beitrittsanfragen zurückgezogen"
 
 #: ui/shared/views/MessageListView.cpp
 msgid "{0}'s request to join was denied"
@@ -1374,7 +1374,7 @@ msgstr "Jede Nachricht ist linksbündig, mit dem Profilbild des Absenders am Ran
 
 #: ui/shared/views/settings/AppearanceSection.cpp
 msgid "A monospaced, mIRC-style timeline: every line is \"[time] <nick>\" with a colour per person."
-msgstr "Ein Verlauf in Festbreitenschrift im mIRC-Stil: Jede Zeile lautet \"[Uhrzeit] <Nick>\", mit einer eigenen Farbe pro Person."
+msgstr "Ein Verlauf in Festbreitenschrift im mIRC-Stil: Jede Zeile lautet „[Uhrzeit] <Nick>“, mit einer eigenen Farbe pro Person."
 
 #: ui/shared/views/settings/MessageLayoutPreview.cpp
 msgid "Alex"
@@ -1446,7 +1446,7 @@ msgstr "Verlauf wird exportiert … {0} Nachrichten"
 
 #: ui/shared/views/ExportHistoryDialog.cpp
 msgid "Plain text"
-msgstr "Klartext"
+msgstr "Nur-Text"
 
 #: ui/shared/views/ExportHistoryDialog.cpp
 msgid "HTML"
@@ -1482,7 +1482,7 @@ msgstr "Letzte 3 Monate"
 
 #: ui/shared/views/ExportHistoryDialog.cpp
 msgid "Last year"
-msgstr "Letztes Jahr"
+msgstr "Letzte 12 Monate"
 
 #: ui/shared/views/ExportHistoryDialog.cpp
 msgid "Stop & save"
@@ -1594,7 +1594,7 @@ msgstr "Bildschirm"
 
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Room Settings"
-msgstr "Chat-Einstellungen"
+msgstr "Chateinstellungen"
 
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Space Settings"
@@ -1638,7 +1638,7 @@ msgstr "Brückenerkennung"
 
 #: ui/shared/views/settings/RoomBridgeSection.cpp
 msgid "Tesseract flagged this room as bridged to another chat network because it found a bridge indicator (MSC2346) published by a bridge bot in the room. That indicator isn't always published correctly, so if this room isn't actually bridged, turn the override on below to stop treating it as one."
-msgstr "Tesseract hat diesen Chat als mit einem anderen Chat-Netzwerk überbrückt markiert, weil ein Brücken-Bot im Chat einen Brückenhinweis (MSC2346) veröffentlicht hat. Dieser Hinweis wird nicht immer korrekt veröffentlicht. Falls dieser Chat nicht wirklich überbrückt ist, aktiviere unten die Überschreibung, damit er nicht mehr als überbrückt behandelt wird."
+msgstr "Tesseract hat diesen Chat als mit einem anderen Chatnetzwerk überbrückt markiert, weil ein Brücken-Bot im Chat einen Brückenhinweis (MSC2346) veröffentlicht hat. Dieser Hinweis wird nicht immer korrekt veröffentlicht. Falls dieser Chat nicht wirklich überbrückt ist, aktiviere unten die Überschreibung, damit er nicht mehr als überbrückt behandelt wird."
 
 #: ui/shared/views/settings/RoomBridgeSection.cpp
 msgid "This room isn't actually bridged"
@@ -1758,7 +1758,7 @@ msgstr "Mitgliedschaft"
 
 #: ui/shared/views/settings/RoomPermissionsSection.cpp
 msgid "Invite users"
-msgstr "Person einladen"
+msgstr "Personen einladen"
 
 #: ui/shared/views/settings/RoomPermissionsSection.cpp
 msgid "Kick users"
@@ -2356,7 +2356,7 @@ msgstr "Die Nachrichtensuche ist deaktiviert. Aktiviere die Indizierung in den E
 
 #: ui/macos/src/AppDelegate.mm
 msgid "File"
-msgstr "Ablage"
+msgstr "Datei"
 
 #: ui/macos/src/AppDelegate.mm
 msgid "Add Room…"
@@ -2465,15 +2465,15 @@ msgstr "Hinzufügen"
 
 #: ui/shared/views/settings/NotificationsSection.cpp
 msgid "Remove keyword \"{0}\""
-msgstr "Schlüsselwort \"{0}\" entfernen"
+msgstr "Schlüsselwort „{0}“ entfernen"
 
 #: ui/shared/views/SettingsView.cpp
 msgid "Could not add keyword \"{0}\""
-msgstr "Schlüsselwort \"{0}\" konnte nicht hinzugefügt werden"
+msgstr "Schlüsselwort „{0}“ konnte nicht hinzugefügt werden"
 
 #: ui/shared/views/SettingsView.cpp
 msgid "Could not remove keyword \"{0}\""
-msgstr "Schlüsselwort \"{0}\" konnte nicht entfernt werden"
+msgstr "Schlüsselwort „{0}“ konnte nicht entfernt werden"
 
 #: ui/shared/views/settings/AdvancedSection.cpp
 msgid "Open Activity Monitor"
@@ -2563,7 +2563,7 @@ msgstr "Sprachanruf läuft"
 
 #: ui/shared/views/RoomListView.h
 msgid "Call Rooms"
-msgstr "Anruf-Chats"
+msgstr "Anrufchats"
 
 #: ui/shared/app/Launch.cpp
 msgid "Show this help and exit"
@@ -2902,11 +2902,11 @@ msgstr "Bestätige das Zurücksetzen im gerade geöffneten Browserfenster. Danac
 
 #: ui/shared/views/settings/PrivacySection.cpp
 msgid "Export room keys…"
-msgstr "Chat-Schlüssel exportieren …"
+msgstr "Chatschlüssel exportieren …"
 
 #: ui/shared/views/settings/PrivacySection.cpp
 msgid "Import room keys…"
-msgstr "Chat-Schlüssel importieren …"
+msgstr "Chatschlüssel importieren …"
 
 #: ui/shared/views/settings/PrivacySection.cpp
 msgid "Reset encryption…"
@@ -3254,7 +3254,7 @@ msgid "Sticker"
 msgstr "Sticker"
 
 msgid "Audio message"
-msgstr "Sprachnachricht"
+msgstr "Audionachricht"
 
 msgid "Video"
 msgstr "Video"
@@ -3306,7 +3306,7 @@ msgstr "Einladung"
 
 #: /home/rayden/src/tesseract/ui/shared/views/RoomListView.cpp:1004
 msgid "Fetching room details…"
-msgstr "Chat-Details werden abgerufen …"
+msgstr "Chatdetails werden abgerufen …"
 
 #: /home/rayden/src/tesseract/ui/shared/views/RoomListView.cpp:1008
 msgid "members"
@@ -3361,11 +3361,11 @@ msgstr "Abmelden"
 
 #: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:291
 msgid "Clear all caches?"
-msgstr "Alle Zwischenspeicher löschen?"
+msgstr "Alle Zwischenspeicher leeren?"
 
 #: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:295
 msgid "Clear"
-msgstr "Löschen"
+msgstr "Leeren"
 
 #: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:311
 msgid "Reset"
@@ -3417,7 +3417,7 @@ msgstr "Bearbeiten fehlgeschlagen: %1"
 
 #: /home/rayden/src/tesseract/ui/linux-qt/src/MainWindow.cpp:1171
 msgid "Failed to set topic: %1"
-msgstr "Fehler beim Festlegen des Themas: %1"
+msgstr "Thema konnte nicht festgelegt werden: %1"
 
 #: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:306
 msgid "Reset your cryptographic identity?"
@@ -3425,7 +3425,7 @@ msgstr "Deine digitale Identität zurücksetzen?"
 
 #: /home/rayden/src/tesseract/ui/shared/views/SettingsView.cpp:307
 msgid "This creates a brand-new identity and replaces your key backup. Your other sessions and the people you chat with will need to verify you again. You'll set up a new recovery key right after."
-msgstr "Dadurch wird eine völlig neue Identität erstellt und dein Schlüssel-Backup ersetzt. Deine anderen Sitzungen und deine Chatpartner müssen dich erneut verifizieren. Direkt danach richtest du einen neuen Wiederherstellungsschlüssel ein."
+msgstr "Dadurch wird eine völlig neue Identität erstellt und dein Schlüssel-Backup ersetzt. Deine anderen Geräte und deine Chatpartner müssen dich erneut verifizieren. Direkt danach richtest du einen neuen Wiederherstellungsschlüssel ein."
 
 #: ui/shared/views/settings/LanguageSection.cpp
 msgid "French"
@@ -3475,19 +3475,19 @@ msgstr "_OK"
 
 #: ui/linux-gtk/src/MainWindow.cpp:3231
 msgid "Save room keys"
-msgstr "Chat-Schlüssel speichern"
+msgstr "Chatschlüssel speichern"
 
 #: ui/linux-gtk/src/MainWindow.cpp:3260
 msgid "Open room keys"
-msgstr "Chat-Schlüssel öffnen"
+msgstr "Chatschlüssel öffnen"
 
 #: ui/linux-gtk/src/MainWindow.cpp:3291 ui/linux-qt/src/SettingsWidget.cpp:181
 msgid "Room keys exported successfully."
-msgstr "Chat-Schlüssel erfolgreich exportiert."
+msgstr "Chatschlüssel erfolgreich exportiert."
 
 #: ui/linux-gtk/src/MainWindow.cpp:3307 ui/linux-qt/src/SettingsWidget.cpp:190
 msgid "Room keys imported successfully."
-msgstr "Chat-Schlüssel erfolgreich importiert."
+msgstr "Chatschlüssel erfolgreich importiert."
 
 #: ui/linux-gtk/src/MainWindow.cpp:4535 ui/windows/src/MainWindow.cpp:3201
 msgid "Images"
@@ -3503,11 +3503,11 @@ msgstr "Datei konnte nicht gelesen werden"
 
 #: ui/linux-qt/src/SettingsWidget.cpp:166
 msgid "Export room keys"
-msgstr "Chat-Schlüssel exportieren"
+msgstr "Chatschlüssel exportieren"
 
 #: ui/linux-qt/src/SettingsWidget.cpp:173
 msgid "Import room keys"
-msgstr "Chat-Schlüssel importieren"
+msgstr "Chatschlüssel importieren"
 
 #: ui/linux-qt/src/SettingsWidget.cpp:189
 msgid "Import complete"
@@ -4043,7 +4043,7 @@ msgstr "Abmelden"
 
 #: ui/shared/views/settings/DevicesSection.cpp:342
 msgid "Complete sign-out in the browser, then click \"I've confirmed\"."
-msgstr "Schließe die Abmeldung im Browser ab und klicke dann auf \"Ich habe bestätigt\"."
+msgstr "Schließe die Abmeldung im Browser ab und klicke dann auf „Ich habe bestätigt“."
 
 #: ui/shared/views/settings/DevicesSection.cpp:356
 msgid "Working…"
@@ -4851,11 +4851,11 @@ msgstr "Dein Homeserver stellt keine Linkvorschauen bereit, daher wird für empf
 
 #: ui/shared/views/settings/PrivacySection.cpp
 msgid "Before sending a message that contains links, ask your homeserver for a preview of each link and attach it to the message, so recipients see it without fetching it themselves. Sending such messages can take a few seconds longer."
-msgstr "Bevor eine Nachricht mit Links gesendet wird, frage deinen Homeserver nach einer Vorschau für jeden Link und hänge sie an die Nachricht an, damit Empfänger sie sehen, ohne sie selbst abzurufen. Das Senden solcher Nachrichten kann einige Sekunden länger dauern."
+msgstr "Bevor eine Nachricht mit Links gesendet wird, wird dein Homeserver nach einer Vorschau für jeden Link gefragt und diese an die Nachricht angehängt, damit Empfänger sie sehen, ohne sie selbst abzurufen. Das Senden solcher Nachrichten kann einige Sekunden länger dauern."
 
 #: ui/shared/views/settings/PrivacySection.cpp
 msgid "Fetch the linked pages from this device instead of asking your homeserver, falling back to the homeserver if that fails. Every site you link will see your IP address. Addresses on your local network are never fetched."
-msgstr "Rufe verlinkte Seiten von diesem Gerät ab, statt deinen Homeserver zu fragen; schlägt das fehl, wird der Homeserver verwendet. Jede verlinkte Website sieht deine IP-Adresse. Adressen in deinem lokalen Netzwerk werden nie abgerufen."
+msgstr "Ruft verlinkte Seiten von diesem Gerät ab, statt deinen Homeserver zu fragen; schlägt das fehl, wird der Homeserver verwendet. Jede verlinkte Website sieht deine IP-Adresse. Adressen in deinem lokalen Netzwerk werden nie abgerufen."
 
 #: ui/shared/app/ShellBase.cpp
 msgid "Message not sent: {0}"
@@ -4903,7 +4903,7 @@ msgstr "Schließe zuerst die aktuelle Verifizierung ab."
 
 #: ui/shared/app/RoomPane.cpp
 msgid "Switch to this account to verify users."
-msgstr "Wechsle zu diesem Konto, um Benutzer zu verifizieren."
+msgstr "Wechsle zu diesem Konto, um Nutzer zu verifizieren."
 
 #: ui/shared/views/UserProfilePanel.cpp
 msgid "Not verified"
@@ -4919,7 +4919,7 @@ msgstr "Verifizierte Identität wurde zurückgesetzt"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Waiting for {0}"
-msgstr "Warte auf {0}"
+msgstr "Warten auf {0}"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "{0} needs to accept the verification request in their Matrix app."

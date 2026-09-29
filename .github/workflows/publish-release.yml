@@ -250,11 +250,11 @@ jobs:
             --clientId ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }} `
             --clientSecret ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
 
-      # The positional argument is a project directory msstore would try to
-      # detect a WinUI/MAUI/Electron/... project in; a prebuilt package goes
-      # through --inputFile instead.
+      # A path to a prebuilt .msix as the positional argument selects
+      # msstore's MSIX publisher (there is no --inputFile option). That
+      # publisher only handles updates, not an app's first submission.
       - name: Publish to Store
-        run: msstore publish --inputFile "${{ github.workspace }}/msix/Tesseract-store-x64.msix" --appId ${{ vars.TESSERACT_MSIX_STORE_PRODUCT_ID }}
+        run: msstore publish "${{ github.workspace }}/msix/Tesseract-store-x64.msix" --appId ${{ vars.TESSERACT_MSIX_STORE_PRODUCT_ID }}
 
   # ---------------------------------------------------------------------------
   # winget — open the winget-pkgs manifest update PR for the NSIS installer.

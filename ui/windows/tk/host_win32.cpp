@@ -4473,9 +4473,9 @@ public:
     {
         tk::Point pt{phys_to_dip(static_cast<float>(x)),
                      phys_to_dip(static_cast<float>(y))};
-        if (root_)
-            root_->dispatch_right_click(pt);
-        if (on_right_click_)
+        const bool in_popup = popup_contains(pt);
+        dispatch_right_click(pt);
+        if (!in_popup && on_right_click_)
             on_right_click_(pt);
     }
     // Drag-hover entry points for DropTarget::DragOver/DragLeave (a plain

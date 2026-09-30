@@ -3169,6 +3169,7 @@ void MainWindow::on_create(HWND hwnd)
             sch.fetch_image = [this](const std::string& url)
             { ensure_media_image_(url, 28, 28); };
             sch.resolve_image = make_static_image_provider_with_fetch_(28, 28);
+            sch.skin_tone = [this] { return emoji_skin_tone_(); };
             shortcode_controller_ =
                 std::make_unique<tesseract::views::ShortcodeController>(
                     room_text_area_, shortcode_popup_widget_,

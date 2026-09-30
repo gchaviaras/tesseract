@@ -425,6 +425,10 @@ TabbedGridPicker::TabbedGridPicker()
         }
         on_item_activated(idx);
     };
+    grid->on_cell_context_requested = [this](int idx)
+    {
+        return idx >= 0 && on_item_context_requested(idx, grid_->rect_at(idx));
+    };
     grid_ = add_child(std::move(grid));
     // Cell/spacing/padding are applied in the first arrange(); virtuals can't
     // be called from the constructor.

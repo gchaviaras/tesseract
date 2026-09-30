@@ -4746,3 +4746,31 @@ msgstr "En attente de {0}"
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "{0} needs to accept the verification request in their Matrix app."
 msgstr "{0} doit accepter la demande de vérification dans son application Matrix."
+
+#: ui/shared/views/SkinTonePopover.cpp:19
+msgid "Default skin tone"
+msgstr "Teinte de peau par défaut"
+
+#: ui/shared/views/SkinTonePopover.cpp:19
+msgid "Light skin tone"
+msgstr "Peau claire"
+
+#: ui/shared/views/SkinTonePopover.cpp:20
+msgid "Medium-light skin tone"
+msgstr "Peau moyennement claire"
+
+#: ui/shared/views/SkinTonePopover.cpp:20
+msgid "Medium skin tone"
+msgstr "Peau légèrement mate"
+
+#: ui/shared/views/SkinTonePopover.cpp:21
+msgid "Medium-dark skin tone"
+msgstr "Peau mate"
+
+#: ui/shared/views/SkinTonePopover.cpp:21
+msgid "Dark skin tone"
+msgstr "Peau foncée"
+
+#: ui/shared/views/SkinTonePopover.cpp:176
+msgid "Skin tone"
+msgstr "Teinte de peau"

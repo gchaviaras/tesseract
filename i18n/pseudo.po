@@ -5193,3 +5193,31 @@ msgstr "[Symbölsx]"
 #: client/src/emoji.cpp:188
 msgid "Flags"
 msgstr "[Flàgsx]"
+
+#: ui/shared/views/SkinTonePopover.cpp:19
+msgid "Default skin tone"
+msgstr "[Défàùlt skïñ töñéxxx]"
+
+#: ui/shared/views/SkinTonePopover.cpp:19
+msgid "Light skin tone"
+msgstr "[Lïght skïñ töñéxxx]"
+
+#: ui/shared/views/SkinTonePopover.cpp:20
+msgid "Medium-light skin tone"
+msgstr "[Médïùm-lïght skïñ töñéxxxx]"
+
+#: ui/shared/views/SkinTonePopover.cpp:20
+msgid "Medium skin tone"
+msgstr "[Médïùm skïñ töñéxxx]"
+
+#: ui/shared/views/SkinTonePopover.cpp:21
+msgid "Medium-dark skin tone"
+msgstr "[Médïùm-dàrk skïñ töñéxxxx]"
+
+#: ui/shared/views/SkinTonePopover.cpp:21
+msgid "Dark skin tone"
+msgstr "[Dàrk skïñ töñéxx]"
+
+#: ui/shared/views/SkinTonePopover.cpp:176
+msgid "Skin tone"
+msgstr "[Skïñ töñéx]"

@@ -5289,3 +5289,31 @@ msgstr ""
 #: client/src/emoji.cpp:188
 msgid "Flags"
 msgstr ""
+
+#: ui/shared/views/SkinTonePopover.cpp:19
+msgid "Default skin tone"
+msgstr ""
+
+#: ui/shared/views/SkinTonePopover.cpp:19
+msgid "Light skin tone"
+msgstr ""
+
+#: ui/shared/views/SkinTonePopover.cpp:20
+msgid "Medium-light skin tone"
+msgstr ""
+
+#: ui/shared/views/SkinTonePopover.cpp:20
+msgid "Medium skin tone"
+msgstr ""
+
+#: ui/shared/views/SkinTonePopover.cpp:21
+msgid "Medium-dark skin tone"
+msgstr ""
+
+#: ui/shared/views/SkinTonePopover.cpp:21
+msgid "Dark skin tone"
+msgstr ""
+
+#: ui/shared/views/SkinTonePopover.cpp:176
+msgid "Skin tone"
+msgstr ""

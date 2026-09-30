@@ -408,6 +408,10 @@ SettingsView::SettingsView()
         if (auto* se = status_editor()) se->set_emoji(glyph);
         hide_status_emoji_picker_();
     };
+    status_emoji_picker_->on_skin_tone_changed = [this](tesseract::emoji::SkinTone tone)
+    {
+        if (on_emoji_skin_tone_changed) on_emoji_skin_tone_changed(tone);
+    };
 }
 
 SettingsView::~SettingsView()
@@ -986,6 +990,8 @@ void SettingsView::show_status_emoji_picker_(tk::Rect world_anchor)
     if (!status_emoji_picker_)
         return;
 
+    if (emoji_skin_tone_provider)
+        status_emoji_picker_->set_skin_tone(emoji_skin_tone_provider());
     status_emoji_picker_->refresh_frequents();
     status_emoji_picker_->set_search_query("");
 

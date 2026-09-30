@@ -144,6 +144,11 @@ RoomView::RoomView()
             compose_bar_->focus();
         }
     };
+    emoji_picker_->on_skin_tone_changed = [this](tesseract::emoji::SkinTone tone)
+    {
+        if (on_emoji_skin_tone_changed)
+            on_emoji_skin_tone_changed(tone);
+    };
     emoji_picker_->on_emoticon_selected =
         [this](const tesseract::ImagePackImage& img)
     {
@@ -1220,6 +1225,8 @@ void RoomView::show_emoji_picker_(tk::Rect anchor, bool for_reaction,
         sticker_picker_->set_visible(false);
     pending_reaction_event_id_ = for_reaction ? reaction_event_id : std::string();
 
+    if (emoji_skin_tone_provider)
+        emoji_picker_->set_skin_tone(emoji_skin_tone_provider());
     emoji_picker_->refresh_frequents();
     emoji_picker_->set_search_query("");
     if (auto* sf = emoji_picker_->search_field())

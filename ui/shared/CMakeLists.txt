@@ -59,6 +59,8 @@ set(_tk_sources
     tk/canvas_common.cpp
     tk/emoji_segmentation.h
     tk/emoji_segmentation.cpp
+    tk/emoji_support.h
+    tk/emoji_support.cpp
     tk/host.h
     tk/host.cpp
     tk/theme.h
@@ -244,6 +246,8 @@ set(_tk_sources
     views/PopupMenu.cpp
     views/ShortcodePopup.h
     views/ShortcodePopup.cpp
+    views/SkinTonePopover.h
+    views/SkinTonePopover.cpp
     views/ShortcodeController.h
     views/ShortcodeController.cpp
     views/GifEngine.h

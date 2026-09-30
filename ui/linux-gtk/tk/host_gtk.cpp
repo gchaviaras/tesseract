@@ -2,6 +2,7 @@
 #include "anim_image_cache.h"
 #include "i18n.h"
 #include "canvas_cairo.h"
+#include "emoji_support.h"
 #include "device_listing.h"
 #include "gst_device_listing.h"
 #include "gtk_accessible.h"
@@ -3127,7 +3128,7 @@ public:
         if (!root_)
             return;
         Point pt{static_cast<float>(x), static_cast<float>(y)};
-        if (root_->dispatch_right_click(pt))
+        if (dispatch_right_click(pt))
             request_repaint();
     }
 
@@ -3213,6 +3214,14 @@ public:
 
 protected:
     Widget* input_root_() const override { return root_.get(); }
+
+public:
+    std::uint16_t supported_emoji_version() override
+    {
+        return tk::cached_emoji_version([] { return tk::cairo_pango::make_factory(); });
+    }
+
+protected:
 
     // Announces ordinary tk-level Tab-focus moves to AT-SPI/Orca — without
     // this, only ListView/GridView row navigation was ever reported (see

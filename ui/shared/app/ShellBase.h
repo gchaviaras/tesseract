@@ -2150,6 +2150,8 @@ protected:
         std::string                 last_room;
         std::vector<std::string>    open_rooms;
         std::vector<std::string>    bridge_not_bridged_overrides;
+        tesseract::emoji::SkinTone  emoji_skin_tone = tesseract::emoji::SkinTone::None;
+        std::string                 prefs_json = "{}";
     };
 
     // Output of the blocking half of startup restore.
@@ -5104,6 +5106,14 @@ protected:
     // button, threads button, open info panels) without waiting for the next
     // sync tick. Called from RoomGeneralSection's override checkbox.
     void set_bridge_override_(const std::string& room_id, bool not_bridged);
+    // The active account's default emoji skin tone (None when no account).
+    // Pickers and :shortcode: autocomplete read it when they open / look up.
+    tesseract::emoji::SkinTone emoji_skin_tone_();
+    // Adopts a synced tone parked during the post-change echo window once
+    // that window has passed (see AccountSession::emoji_skin_tone_set_at).
+    void settle_emoji_skin_tone_();
+    // Set it from a picker's tone menu and persist it to account data.
+    void set_emoji_skin_tone_(tesseract::emoji::SkinTone tone);
 
     // Re-evaluates call-button / threads-button visibility and refreshes any
     // open info panel for `room_id` (main window + matching pop-outs) after

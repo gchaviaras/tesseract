@@ -33,6 +33,8 @@ class Client;
 namespace tesseract::views
 {
 
+class SkinTonePopover;
+
 class EmojiPicker : public TabbedGridPicker
 {
 protected:
@@ -101,6 +103,41 @@ public:
     /// Fires when the user picks a Unicode glyph.
     std::function<void(const std::string&)> on_selected;
 
+    /// Default skin tone for every tone-capable glyph on the Unicode pages
+    /// (Frequents entries only when they were used untoned). Hosts set it
+    /// before each presentation from the account preference.
+    void set_skin_tone(tesseract::emoji::SkinTone tone);
+    tesseract::emoji::SkinTone skin_tone() const
+    {
+        return skin_tone_;
+    }
+
+    /// Fires when the user picks a new tone from a cell's tone menu (long
+    /// press / right-click / Shift+Enter). The picker has already re-toned
+    /// itself; the host persists the choice. `on_selected` then fires with
+    /// the picked variant, so choosing a tone also inserts / reacts with it.
+    std::function<void(tesseract::emoji::SkinTone)> on_skin_tone_changed;
+
+    /// The tone menu (null-safe accessor for tests).
+    SkinTonePopover* skin_tone_popover() const
+    {
+        return tone_popover_;
+    }
+
+    // Shadows TabbedGridPicker::set_visible (itself a non-virtual shadow)
+    // so hiding the picker also closes an open tone menu.
+    void set_visible(bool v);
+
+    void paint(tk::PaintCtx&) override;
+    bool on_key_down(const tk::KeyEvent&) override;
+    void on_popup_dismiss() override;
+    // While the tone menu is open, a press / right-click / wheel elsewhere
+    // in the picker closes it and is consumed.
+    tk::Widget* dispatch_pointer_down(tk::Point world) override;
+    tk::Widget* dispatch_right_click(tk::Point world) override;
+    bool dispatch_wheel(tk::Point world, float dx, float dy,
+                        bool is_touchpad = false) override;
+
     /// Fires when the user picks a custom (MSC2545) emoticon from a pack
     /// tab. For now hosts insert `:shortcode:` into the compose field;
     /// the MSC2545 Phase B "rich emoticon" sending path lives in a
@@ -145,6 +182,7 @@ protected:
     void paint_cell(std::size_t index, tk::PaintCtx& ctx, tk::Rect bounds,
                     bool selected, bool hovered) override;
     void on_item_activated(int index) override;
+    bool on_item_context_requested(int index, tk::Rect cell) override;
     std::string cell_tooltip(int index) const override;
 
     // Tab model.
@@ -172,6 +210,9 @@ private:
     void switch_to_custom_pack(int idx);
     void switch_to_search();
     void rebuild_current_items();
+    std::uint16_t supported_emoji_version_() const;
+    void activate_glyph_(const std::string& glyph);
+    bool close_tone_popover_if_outside_(tk::Point world);
 
     // Tab layout. Visual indexes:
     //   0          → Frequents (only when has_frequents_tab())
@@ -202,6 +243,9 @@ private:
         current_emoticons_; // image-cell items
     std::vector<std::string>
         current_shortcodes_; // parallel to current_glyphs_ / current_emoticons_
+
+    tesseract::emoji::SkinTone skin_tone_ = tesseract::emoji::SkinTone::None;
+    SkinTonePopover* tone_popover_ = nullptr; // borrowed child
 };
 
 } // namespace tesseract::views

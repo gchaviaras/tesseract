@@ -203,6 +203,15 @@ public:
 
     std::function<void(int /*index*/)> on_cell_clicked;
 
+    // A cell's secondary action: long press (kLongPressMs without moving
+    // more than kLongPressSlop), right-click, or Shift+Enter on the selected
+    // cell. Return true when the cell had one to show; a long press that was
+    // handled suppresses the release's click, an unhandled one leaves it a
+    // normal (slow) click. Long press is only armed while this is set.
+    std::function<bool(int /*index*/)> on_cell_context_requested;
+    static constexpr int kLongPressMs = 500;
+    static constexpr float kLongPressSlop = 6.0f;
+
     // Fired whenever selected_index_ actually changes (arrow-key movement,
     // set_selected_index()) — not on click (on_cell_clicked already covers
     // that). Lets a platform accessibility bridge fire an AT-SPI/UIA
@@ -226,6 +235,7 @@ public:
     void on_pointer_drag(Point local) override;
     bool on_pointer_move(Point local) override;
     void on_pointer_leave() override;
+    bool on_right_click(Point local) override;
 
     // Keyboard-focusable whenever there's at least one cell. Left/Right
     // move by one cell, Up/Down by a full row; Enter/Space fires
@@ -293,6 +303,11 @@ private:
     int selected_index_ = -1;
     int hovered_index_ = -1;
     int pressed_index_ = -1;
+
+    // Long press: bumping the generation cancels the pending timer.
+    Point press_point_{};
+    int long_press_gen_ = 0;
+    bool long_press_fired_ = false;
 };
 
 // [lo, hi] item-index range visible in `grid` plus `lookahead` cells of

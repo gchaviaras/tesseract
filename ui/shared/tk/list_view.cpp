@@ -1207,6 +1207,7 @@ void GridView::paint(PaintCtx& ctx)
 
 bool GridView::on_wheel(Point /*local*/, float /*dx*/, float dy, bool is_touchpad)
 {
+    ++long_press_gen_; // scrolling under a held press isn't a long press
     if (!adapter_)
     {
         return false;
@@ -1234,16 +1235,55 @@ bool GridView::on_pointer_down(Point local)
         return false;
     }
     pressed_index_ = idx;
+    long_press_fired_ = false;
+    const int gen = ++long_press_gen_;
+    if (on_cell_context_requested && host())
+    {
+        press_point_ = local;
+        host()->post_delayed(kLongPressMs, guarded([this, gen, idx] {
+            if (gen != long_press_gen_ || pressed_index_ != idx)
+                return;
+            if (on_cell_context_requested && on_cell_context_requested(idx))
+                long_press_fired_ = true;
+        }));
+    }
     return true;
 }
 
 void GridView::on_pointer_drag(Point local)
 {
+    if (std::abs(local.x - press_point_.x) > kLongPressSlop ||
+        std::abs(local.y - press_point_.y) > kLongPressSlop)
+    {
+        ++long_press_gen_;
+    }
     scrollbar_on_pointer_drag(local);
+}
+
+bool GridView::on_right_click(Point local)
+{
+    if (!adapter_ || !on_cell_context_requested)
+    {
+        return false;
+    }
+    int idx = index_at(local);
+    if (idx == kInvalidIndex || !adapter_->is_selectable(idx))
+    {
+        return false;
+    }
+    return on_cell_context_requested(idx);
 }
 
 void GridView::on_pointer_up(Point local, bool inside_self)
 {
+    ++long_press_gen_;
+    if (long_press_fired_)
+    {
+        // The long press already acted on this press; don't also click.
+        long_press_fired_ = false;
+        pressed_index_ = kInvalidIndex;
+        return;
+    }
     if (scrollbar_on_pointer_up())
     {
         return;
@@ -1321,6 +1361,11 @@ bool GridView::on_key_down(const KeyEvent& e)
         if (selected_index_ < 0 || !adapter_->is_selectable(selected_index_))
         {
             return false;
+        }
+        if (e.key == Key::Enter && e.shift && on_cell_context_requested &&
+            on_cell_context_requested(selected_index_))
+        {
+            return true;
         }
         if (on_cell_clicked)
         {

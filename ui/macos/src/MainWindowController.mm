@@ -32,6 +32,7 @@
 #include "tk/status_icons.h"
 #include "tk/svg.h"
 #include "tk/video_decode.h"
+#include "tk/emoji_support.h"
 #include "tk/host.h"
 #include "tk/host_macos.h"
 #include "tk/theme.h"
@@ -550,6 +551,7 @@ public:
     void schedule_relayout();
     std::vector<tesseract::ImagePackImage>
     emoticons_for_room(const std::string& room_id) const;
+    tesseract::emoji::SkinTone emoji_skin_tone() { return emoji_skin_tone_(); }
     std::string gif_src_disk_key(const std::string& url) const;
     const tesseract::ServerInfo& server_info_ref() const;
     using CacheSizeCallback =
@@ -4742,6 +4744,12 @@ void MacShell::apply_window_title_ui_(const std::string& title)
 
                 // ── Shortcode detection ─────────────────────────────────────────
 
+                // Same tone + font-version limit the shared ShortcodeController
+                // applies (see tk/emoji_support.h).
+                const std::uint16_t emoji_max_version =
+                    c->_roomTextArea && c->_roomTextArea->host()
+                        ? c->_roomTextArea->host()->supported_emoji_version()
+                        : tk::kAllEmojiVersions;
                 auto complete =
                     c->_shell->shortcode_engine_.find_complete(s, cursor);
                 if (complete)
@@ -4749,7 +4757,7 @@ void MacShell::apply_window_title_ui_(const std::string& title)
                     auto hits = c->_shell->shortcode_engine_.lookup(
                         complete->prefix,
                         c->_shell->emoticons_for_room(c->_shell->current_room_id_),
-                        1);
+                        1, c->_shell->emoji_skin_tone(), emoji_max_version);
                     if (!hits.empty() && !hits.front().glyph.empty())
                     {
                         c->_roomTextArea->replace_range(
@@ -4782,7 +4790,8 @@ void MacShell::apply_window_title_ui_(const std::string& title)
                     c->_shell->shortcode_current_suggestions_ =
                         c->_shell->shortcode_engine_.lookup(
                             prefix_match->prefix,
-                            c->_shell->emoticons_for_room(c->_shell->current_room_id_));
+                            c->_shell->emoticons_for_room(c->_shell->current_room_id_),
+                            8, c->_shell->emoji_skin_tone(), emoji_max_version);
                     if (!c->_shell->shortcode_current_suggestions_.empty())
                     {
                         [c hideMentionPopup];

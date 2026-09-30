@@ -339,6 +339,11 @@ public:
 
     // Fired when the user selects a different accent color.
     std::function<void(tesseract::Settings::ThemeAccent)> on_theme_accent_changed;
+    // The account's default emoji skin tone, read each time the status-emoji
+    // picker opens; on_emoji_skin_tone_changed fires when the user picks a
+    // new one from that picker's tone menu.
+    std::function<tesseract::emoji::SkinTone()> emoji_skin_tone_provider;
+    std::function<void(tesseract::emoji::SkinTone)> on_emoji_skin_tone_changed;
 
     // Fired when the user changes the Low power mode selector (Auto/On/Off).
     std::function<void(tesseract::Settings::LowPowerPreference)>

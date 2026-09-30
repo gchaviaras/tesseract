@@ -53,6 +53,8 @@ public:
         // when null (or the lookup misses), accepting a custom emoticon falls
         // back to literal ":shortcode:" text, same as before this existed.
         std::function<const tk::Image*(const std::string& url)> resolve_image;
+        // The account's default emoji skin tone, applied to suggestions.
+        std::function<tesseract::emoji::SkinTone()> skin_tone;
     };
 
     ShortcodeController(tk::TextArea* text_area, ShortcodePopup* popup,

@@ -1,6 +1,7 @@
 #include "host_qt.h"
 #include "anim_image_cache.h"
 #include "canvas_qpainter.h"
+#include "emoji_support.h"
 #include "controls.h"
 #include "pill.h"
 #include "pixmap_cache.h"
@@ -2616,8 +2617,7 @@ public:
 
     void on_right_click(Point local)
     {
-        if (root_)
-            root_->dispatch_right_click(local);
+        dispatch_right_click(local);
     }
 
     void on_pointer_up(Point local) { dispatch_pointer_up(local); }
@@ -2669,6 +2669,14 @@ public:
 
 protected:
     Widget* input_root_() const override { return root_.get(); }
+
+public:
+    std::uint16_t supported_emoji_version() override
+    {
+        return tk::cached_emoji_version([] { return tk::qt6::make_factory(); });
+    }
+
+protected:
 
     // See tk::Host::claim_native_focus_container_'s doc comment: the newly
     // tk-focused widget has no native Qt control of its own (e.g. a plain

@@ -5,6 +5,14 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-09-30
+
+- feat(emoji): skin tones in the emoji picker. Long-press, right-click or Shift+Enter opens a tone menu; the picked tone becomes the default for the picker and `:shortcode:` autocomplete, synced across devices. Qt6 build + ctest 2066/2066
+- feat(emoji): Emoji 18.0; renamed flags keep their old `:flag_…:` shortcodes. Qt6 build + ctest 2066/2066
+- feat(emoji): the picker and autocomplete hide emoji newer than the system emoji font can draw. Qt6 build + ctest 2066/2066
+- fix(rooms): manual "not bridged" overrides are now saved to account data instead of being lost on restart. Qt6 build + ctest 2066/2066
+- fix(windows): the vendored Noto Color Emoji is now a dependency of the resource compile, so replacing the font re-embeds it (Ninja kept a stale 2.051 in incremental builds, drawing Emoji 18.0 as tofu). User-verified on Win32
+
 ### 2026-09-29
 
 - fix(i18n): `i18n-extract` now writes repo-relative `#:` references instead of the developer's absolute checkout path, and `tesseract.pot` is regenerated (428 → 1189 msgids). The emoji picker's category names in `client/src/emoji.cpp` are now extracted too; 45 dead entries are dropped from `de.po`/`es.po`/`fr.po` and `pseudo.po` is regenerated. Qt6 build + ctest 2038/2038

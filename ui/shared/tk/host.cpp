@@ -14,6 +14,21 @@
 namespace tk
 {
 
+// Right-click — see host.h. Popup first, like dispatch_pointer_down below.
+Widget* Host::dispatch_right_click(Point world)
+{
+    fire_user_activity_();
+    cancel_tooltip_();
+    if (auto p = popup_.lock(); p && p->contains_world(world))
+    {
+        Widget* hit = p->dispatch_right_click(world);
+        request_repaint();
+        return hit ? hit : p.get();
+    }
+    Widget* root = input_root_();
+    return root ? root->dispatch_right_click(world) : nullptr;
+}
+
 // Pointer-event dispatch. We keep simple capture semantics: a pointer-down on
 // a Button stamps it as the captured widget; the matching up-on-the-same-button
 // fires its click. This isn't a generic capture protocol — it's the minimum

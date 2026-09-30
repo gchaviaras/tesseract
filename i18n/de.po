@@ -4744,3 +4744,31 @@ msgstr "Warten auf {0}"
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "{0} needs to accept the verification request in their Matrix app."
 msgstr "{0} muss die Verifizierungsanfrage in der eigenen Matrix-App annehmen."
+
+#: ui/shared/views/SkinTonePopover.cpp:19
+msgid "Default skin tone"
+msgstr "Standard-Hautfarbe"
+
+#: ui/shared/views/SkinTonePopover.cpp:19
+msgid "Light skin tone"
+msgstr "Helle Hautfarbe"
+
+#: ui/shared/views/SkinTonePopover.cpp:20
+msgid "Medium-light skin tone"
+msgstr "Mittelhelle Hautfarbe"
+
+#: ui/shared/views/SkinTonePopover.cpp:20
+msgid "Medium skin tone"
+msgstr "Mittlere Hautfarbe"
+
+#: ui/shared/views/SkinTonePopover.cpp:21
+msgid "Medium-dark skin tone"
+msgstr "Mitteldunkle Hautfarbe"
+
+#: ui/shared/views/SkinTonePopover.cpp:21
+msgid "Dark skin tone"
+msgstr "Dunkle Hautfarbe"
+
+#: ui/shared/views/SkinTonePopover.cpp:176
+msgid "Skin tone"
+msgstr "Hautfarbe"

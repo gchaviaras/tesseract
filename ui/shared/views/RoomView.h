@@ -602,6 +602,11 @@ public:
     // doc comment (local-only preference, applied right away, not staged).
     std::function<void(std::string room_id, bool not_bridged)>
         on_bridge_override_changed;
+    // The account's default emoji skin tone, read each time the emoji picker
+    // opens; on_emoji_skin_tone_changed fires when the user picks a new one
+    // from the picker's tone menu.
+    std::function<tesseract::emoji::SkinTone()> emoji_skin_tone_provider;
+    std::function<void(tesseract::emoji::SkinTone)> on_emoji_skin_tone_changed;
     // Room Settings → Moderation's Unban button (applies immediately — see
     // RoomSettingsView::on_unban_requested).
     std::function<void(std::string room_id, std::string user_id,

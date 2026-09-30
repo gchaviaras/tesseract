@@ -604,6 +604,17 @@ public:
         return build_rich_text({one, 1}, s);
     }
 
+    // True when `glyph` (one emoji, possibly a multi-codepoint sequence)
+    // lays out at FontRole::EmojiPickerCell, with this backend's normal font
+    // fallback, as one real glyph: no missing-glyph box, and not broken up
+    // into several visible pieces (e.g. a base plus a separate tone swatch).
+    // Used by tk::detect_emoji_version(). Default: true (Win32 bundles an
+    // emoji font that covers the whole table).
+    virtual bool can_render_emoji(std::string_view /*glyph*/)
+    {
+        return true;
+    }
+
     // An offscreen render target: draw into canvas() with the exact same
     // Canvas API used for on-screen painting, then call finish() once to get
     // the rasterized result as a portable tk::Image. Used by tk::pill.h's

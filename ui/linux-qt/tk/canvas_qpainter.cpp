@@ -8,6 +8,8 @@
 #include <QtGui/QFont>
 #include <QtGui/QFontDatabase>
 #include <QtGui/QFontMetricsF>
+#include <QtGui/QGlyphRun>
+#include <QtGui/QRawFont>
 #include <QtGui/QImage>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
@@ -1636,6 +1638,40 @@ public:
         img.setDevicePixelRatio(scale_factor);
         img.fill(Qt::transparent);
         return std::make_unique<QtOffscreenSurface>(std::move(img));
+    }
+
+    bool can_render_emoji(std::string_view glyph) override
+    {
+        // Same font the picker cell asks for; Qt's fallback supplies the
+        // emoji face, or a .notdef (glyph 0) from the primary font when no
+        // installed font has the codepoint.
+        QTextLayout layout(
+            QString::fromUtf8(glyph.data(), static_cast<qsizetype>(glyph.size())),
+            font_cache_[static_cast<std::size_t>(FontRole::EmojiPickerCell)]);
+        layout.beginLayout();
+        QTextLine line = layout.createLine();
+        if (line.isValid())
+            line.setLineWidth(1.0e6);
+        layout.endLayout();
+
+        // Zero-advance glyphs (a shaped-away VS16/ZWJ) don't count; a
+        // sequence the font doesn't know falls apart into several visible
+        // glyphs.
+        int visible = 0;
+        for (const QGlyphRun& run : layout.glyphRuns())
+        {
+            const QList<quint32> ids = run.glyphIndexes();
+            const QList<QPointF> adv = run.rawFont().advancesForGlyphIndexes(ids);
+            for (qsizetype i = 0; i < ids.size() && i < adv.size(); ++i)
+            {
+                if (adv[i].x() <= 0.0)
+                    continue;
+                if (ids[i] == 0)
+                    return false;
+                ++visible;
+            }
+        }
+        return visible == 1;
     }
 };
 

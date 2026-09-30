@@ -1,7 +1,10 @@
 #include "tesseract/emoji.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <functional>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace tesseract::emoji
@@ -212,6 +215,142 @@ const char* category_tab_glyph(Category c)
         return "\xF0\x9F\x8F\xB3\xEF\xB8\x8F"; // 🏳️
     }
     return "?";
+}
+
+namespace
+{
+
+struct ToneVariant
+{
+    std::string_view glyph;
+    std::uint16_t version;
+};
+
+struct ToneRow
+{
+    std::string_view base;
+    ToneVariant variants[5]; // Light .. Dark (C array: brace-elided rows in the .inc)
+};
+
+// Regenerate with `emoji_data.gen.py --skin-tones`.
+const std::vector<ToneRow>& tone_table()
+{
+    static const std::vector<ToneRow> data = {
+#include "emoji_skin_tones.inc"
+    };
+    return data;
+}
+
+// Maps base glyphs and every toned variant to their row.
+const std::unordered_map<std::string_view, const ToneRow*>& tone_index()
+{
+    static const auto index = []
+    {
+        std::unordered_map<std::string_view, const ToneRow*> m;
+        for (const auto& row : tone_table())
+        {
+            m.emplace(row.base, &row);
+            for (const auto& v : row.variants)
+                m.emplace(v.glyph, &row);
+        }
+        return m;
+    }();
+    return index;
+}
+
+const ToneRow* find_tone_row(std::string_view glyph)
+{
+    const auto& index = tone_index();
+    auto it = index.find(glyph);
+    return it == index.end() ? nullptr : it->second;
+}
+
+constexpr const char* kSkinToneKeys[] = {
+    "", "light", "medium_light", "medium", "medium_dark", "dark",
+};
+
+} // namespace
+
+bool supports_skin_tone(std::string_view glyph)
+{
+    return find_tone_row(glyph) != nullptr;
+}
+
+std::string_view base_glyph(std::string_view glyph)
+{
+    const ToneRow* row = find_tone_row(glyph);
+    return row ? row->base : glyph;
+}
+
+std::string_view with_skin_tone(std::string_view glyph, SkinTone tone)
+{
+    const ToneRow* row = find_tone_row(glyph);
+    if (!row)
+        return glyph;
+    if (tone == SkinTone::None)
+        return row->base;
+    return row->variants[static_cast<std::size_t>(tone) - 1].glyph;
+}
+
+std::uint16_t emoji_version(std::string_view glyph)
+{
+    static const auto index = []
+    {
+        std::unordered_map<std::string_view, std::uint16_t> m;
+        for (const auto& e : table())
+            m.emplace(e.glyph, e.version);
+        for (const auto& row : tone_table())
+            for (const auto& v : row.variants)
+                m.emplace(v.glyph, v.version);
+        return m;
+    }();
+    auto it = index.find(glyph);
+    return it == index.end() ? 0 : it->second;
+}
+
+const std::vector<std::uint16_t>& emoji_versions()
+{
+    static const auto versions = []
+    {
+        std::vector<std::uint16_t> out;
+        for (const auto& e : table())
+            out.push_back(e.version);
+        for (const auto& row : tone_table())
+            for (const auto& v : row.variants)
+                out.push_back(v.version);
+        std::sort(out.begin(), out.end(), std::greater<>());
+        out.erase(std::unique(out.begin(), out.end()), out.end());
+        return out;
+    }();
+    return versions;
+}
+
+std::vector<std::string_view> glyphs_introduced_in(std::uint16_t version)
+{
+    std::vector<std::string_view> out;
+    for (const auto& e : table())
+        if (e.version == version)
+            out.push_back(e.glyph);
+    for (const auto& row : tone_table())
+        for (const auto& v : row.variants)
+            if (v.version == version)
+                out.push_back(v.glyph);
+    return out;
+}
+
+const char* skin_tone_key(SkinTone tone)
+{
+    return kSkinToneKeys[static_cast<std::size_t>(tone)];
+}
+
+SkinTone skin_tone_from_key(std::string_view key)
+{
+    for (SkinTone t : kSkinTones)
+    {
+        if (t != SkinTone::None && key == kSkinToneKeys[static_cast<std::size_t>(t)])
+            return t;
+    }
+    return SkinTone::None;
 }
 
 } // namespace tesseract::emoji

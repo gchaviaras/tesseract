@@ -1425,6 +1425,36 @@ public:
         return out;
     }
 
+    bool can_render_emoji(std::string_view glyph) override
+    {
+        PangoLayout* lay = pango_layout_new(ctx_);
+        PangoFontDescription* d = desc_for(FontRole::EmojiPickerCell);
+        pango_layout_set_font_description(lay, d);
+        pango_font_description_free(d);
+        pango_layout_set_text(lay, glyph.data(), static_cast<int>(glyph.size()));
+
+        // No installed font has a codepoint → an unknown-glyph box.
+        bool ok = pango_layout_get_unknown_glyphs_count(lay) == 0;
+        // A sequence the font doesn't know falls apart into several visible
+        // glyphs; zero-width ones (a shaped-away VS16/ZWJ) don't count.
+        int visible = 0;
+        PangoLayoutIter* it = pango_layout_get_iter(lay);
+        do
+        {
+            PangoLayoutRun* run = pango_layout_iter_get_run_readonly(it);
+            if (!run)
+                continue;
+            for (int i = 0; i < run->glyphs->num_glyphs; ++i)
+            {
+                if (run->glyphs->glyphs[i].geometry.width > 0)
+                    ++visible;
+            }
+        } while (pango_layout_iter_next_run(it));
+        pango_layout_iter_free(it);
+        g_object_unref(lay);
+        return ok && visible == 1;
+    }
+
 private:
     PangoContext* ctx_ = nullptr;
 

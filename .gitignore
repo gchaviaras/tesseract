@@ -34,3 +34,8 @@ corrosion/required_libs/Cargo.lock
 # The winget manifests are generated to the build tree (build/<preset>/winget/),
 # not in-source — see the comment above the configure_file() loop in the root
 # CMakeLists.txt for why.
+
+# Python bytecode caches. i18n/gen_pseudo.py and i18n/check_i18n.py are
+# imported as well as executed, which leaves a __pycache__/ next to them.
+/__pycache__/
+*.pyc

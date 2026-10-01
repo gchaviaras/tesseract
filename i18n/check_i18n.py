@@ -78,6 +78,11 @@ def strip_comments(src):
 
 
 BARE_TR = re.compile(r'(?<![\w:.>])(tr|_)\s*\(')
+# A qualified call whose qualifier isn't tk:: (e.g. QObject::tr) or a
+# member/instance call (this->tr(...), obj.tr(...)) -- both resolve to
+# QObject::tr with no QTranslator installed, same dead end as a bare tr().
+QUALIFIED_TR = re.compile(r'(\w+)::tr\s*\(')
+MEMBER_TR = re.compile(r'[.>]\s*tr\s*\(')
 
 
 def bare_translator_calls(root):
@@ -90,6 +95,16 @@ def bare_translator_calls(root):
             for m in BARE_TR.finditer(code):
                 line = code.count('\n', 0, m.start()) + 1
                 problems.append(f'{path.relative_to(root)}:{line}: bare {m.group(1)}() '
+                                f'-- use tk::tr()')
+            for m in QUALIFIED_TR.finditer(code):
+                if m.group(1) == 'tk':
+                    continue
+                line = code.count('\n', 0, m.start()) + 1
+                problems.append(f'{path.relative_to(root)}:{line}: {m.group(1)}::tr() '
+                                f'-- use tk::tr()')
+            for m in MEMBER_TR.finditer(code):
+                line = code.count('\n', 0, m.start()) + 1
+                problems.append(f'{path.relative_to(root)}:{line}: member tr() call '
                                 f'-- use tk::tr()')
     return problems
 

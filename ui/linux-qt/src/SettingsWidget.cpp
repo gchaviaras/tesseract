@@ -74,6 +74,11 @@ void SettingsWidget::set_launch_at_login_pref(bool enabled)
     settings_view_->set_launch_at_login_pref(enabled);
 }
 
+void SettingsWidget::set_tray_available(bool available)
+{
+    settings_view_->set_tray_available(available);
+}
+
 void SettingsWidget::set_show_membership_events_pref(bool enabled)
 {
     settings_view_->set_show_membership_events_pref(enabled);

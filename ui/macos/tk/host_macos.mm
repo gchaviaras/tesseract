@@ -3,6 +3,7 @@
 #include "anim_image_cache.h"
 #include "i18n.h"
 #include "canvas_cg.h"
+#include "emoji_support.h"
 #include "controls.h"
 #include "macos_accessible.h"
 #include "emoji_segmentation.h"
@@ -189,6 +190,14 @@ public:
 
 protected:
     Widget* input_root_() const override { return root_.get(); }
+
+public:
+    std::uint16_t supported_emoji_version() override
+    {
+        return tk::cached_emoji_version([] { return tk::cg::make_factory(); });
+    }
+
+protected:
 
     // See tk::Host::claim_native_focus_container_'s doc comment: the newly
     // tk-focused widget has no native AppKit control of its own (e.g. a
@@ -3648,9 +3657,9 @@ void Host::on_wheel(NSPoint p, CGFloat dx, CGFloat dy, bool is_touchpad)
 void Host::on_right_click(NSPoint p)
 {
     tk::Point pt{static_cast<float>(p.x), static_cast<float>(p.y)};
-    if (root_)
-        root_->dispatch_right_click(pt);
-    if (on_right_click_)
+    const bool in_popup = popup_contains(pt);
+    dispatch_right_click(pt);
+    if (!in_popup && on_right_click_)
         on_right_click_(pt);
 }
 

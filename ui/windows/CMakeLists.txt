@@ -55,12 +55,13 @@ configure_file(
     @ONLY
 )
 
-# Tell CMake the resource depends on the .ico, so rebuilding the SVG forces
-# rc.exe to re-run.
+# Tell CMake the resource depends on the .ico files and the embedded emoji
+# font, so rebuilding the SVG or replacing the vendored TTF forces rc.exe to
+# re-run (Ninja doesn't scan RCDATA references on its own).
 set_source_files_properties(
     "${CMAKE_CURRENT_BINARY_DIR}/Tesseract.rc"
     PROPERTIES OBJECT_DEPENDS
-        "${TESSERACT_ICO_PATH};${TASK_NEXT_ICO_PATH};${TASK_MIC_ICO_PATH};${TASK_MIC_OFF_ICO_PATH};${TASK_VIDEO_ICO_PATH};${TASK_VIDEO_OFF_ICO_PATH};${TASK_HANGUP_ICO_PATH}"
+        "${TESSERACT_ICO_PATH};${TASK_NEXT_ICO_PATH};${TASK_MIC_ICO_PATH};${TASK_MIC_OFF_ICO_PATH};${TASK_VIDEO_ICO_PATH};${TASK_VIDEO_OFF_ICO_PATH};${TASK_HANGUP_ICO_PATH};${_noto_emoji_ttf}"
 )
 
 add_executable(tesseract_win32 WIN32

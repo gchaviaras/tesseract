@@ -146,9 +146,10 @@ std::wstring utf8_to_wide(std::string_view s)
 // letter from the first word.
 // The word-split policy is shared (tk::initials_of); apply Win32's
 // locale-aware uppercasing (towupper) to the result before drawing.
-std::wstring initials_upper(std::string_view name)
+std::wstring initials_upper(std::string_view name, AvatarText text)
 {
-    std::wstring out = utf8_to_wide(initials_of(name));
+    std::wstring out = utf8_to_wide(
+        text == AvatarText::Literal ? std::string(name) : initials_of(name));
     for (wchar_t& ch : out)
     {
         ch = static_cast<wchar_t>(towupper(ch));
@@ -1463,14 +1464,15 @@ public:
         rt_->PopLayer();
     }
 
-    void draw_initials_circle(std::string_view name, Point centre,
-                              float diameter, Color bg, Color fg) override
+    void draw_initials_circle_(std::string_view name, Point centre,
+                               float diameter, Color bg, Color fg,
+                               AvatarText text) override
     {
         D2D1_ELLIPSE e =
             D2D1::Ellipse(to_d2d(centre), diameter * 0.5f, diameter * 0.5f);
         rt_->FillEllipse(e, brush(bg));
 
-        std::wstring initials = initials_upper(name);
+        std::wstring initials = initials_upper(name, text);
         // Pick a font size proportional to the diameter — matches the
         // GDI+ initials-disc code that used to live in MainWindow.cpp.
         float font_dip = diameter * kAvatarInitialsFontRatio;

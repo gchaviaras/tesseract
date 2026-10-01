@@ -203,6 +203,7 @@ add_executable(tesseract_tests
     cpp/test_call_overlay_controls.cpp
     cpp/test_video_capture_errors.cpp
     cpp/test_call_room_navigation.cpp
+    cpp/test_emoji_skin_tone.cpp
 )
 
 # tk::clean_device_display_name() lives in tk/gst_device_listing.cpp, which is

@@ -362,9 +362,10 @@ CFAttributedStringRef build_attr_string(std::string_view utf8, CTFontRef font,
 // The word-split policy is shared (tk::initials_of), which converges away the
 // old fragile `>= 8` byte bound. Apply CoreText's locale-aware uppercasing to
 // the result before drawing.
-std::string initials_upper(std::string_view name)
+std::string initials_upper(std::string_view name, AvatarText text)
 {
-    std::string base = initials_of(name);
+    std::string base =
+        text == AvatarText::Literal ? std::string(name) : initials_of(name);
     CFRetained<CFStringRef> s{cfstr_from_utf8(base)};
     if (!s.get())
     {
@@ -1222,15 +1223,16 @@ public:
         CGContextRestoreGState(ctx_);
     }
 
-    void draw_initials_circle(std::string_view name, Point centre,
-                              float diameter, Color bg, Color fg) override
+    void draw_initials_circle_(std::string_view name, Point centre,
+                               float diameter, Color bg, Color fg,
+                               AvatarText text) override
     {
         set_fill(ctx_, bg);
         CGContextFillEllipseInRect(ctx_, CGRectMake(centre.x - diameter * 0.5f,
                                                     centre.y - diameter * 0.5f,
                                                     diameter, diameter));
 
-        std::string initials = initials_upper(name);
+        std::string initials = initials_upper(name, text);
         CFRetained<CTFontRef> font{CTFontCreateUIFontForLanguage(
             kCTFontUIFontEmphasizedSystem,
             diameter * kAvatarInitialsFontRatio, nullptr)};
@@ -1885,6 +1887,56 @@ public:
         CGContextScaleCTM(bctx, scale_factor, -scale_factor);
         return std::make_unique<CGOffscreenSurface>(
             bctx, std::make_unique<CGCanvas>(bctx));
+    }
+
+    bool can_render_emoji(std::string_view glyph) override
+    {
+        CFRetained<CTFontRef> font{create_font(FontRole::EmojiPickerCell)};
+        if (!font.get())
+            return false;
+        CFRetained<CFAttributedStringRef> attr{
+            build_attr_string(glyph, font.get(), kCTTextAlignmentLeft)};
+        if (!attr.get())
+            return false;
+        CFRetained<CTLineRef> line{CTLineCreateWithAttributedString(attr.get())};
+        if (!line.get())
+            return false;
+
+        // A codepoint no font has lands on .LastResort (a hex box); a
+        // sequence the font doesn't know falls apart into several visible
+        // glyphs. Zero-advance glyphs (a shaped-away VS16/ZWJ) don't count.
+        int visible = 0;
+        CFArrayRef runs = CTLineGetGlyphRuns(line.get());
+        for (CFIndex r = 0; r < CFArrayGetCount(runs); ++r)
+        {
+            auto run = static_cast<CTRunRef>(CFArrayGetValueAtIndex(runs, r));
+            auto run_font = static_cast<CTFontRef>(CFDictionaryGetValue(
+                CTRunGetAttributes(run), kCTFontAttributeName));
+            if (run_font)
+            {
+                CFRetained<CFStringRef> name{CTFontCopyPostScriptName(run_font)};
+                if (name.get() &&
+                    CFStringFind(name.get(), CFSTR("LastResort"), 0).location !=
+                        kCFNotFound)
+                {
+                    return false;
+                }
+            }
+            const CFIndex n = CTRunGetGlyphCount(run);
+            std::vector<CGGlyph> glyphs(static_cast<std::size_t>(n));
+            std::vector<CGSize> adv(static_cast<std::size_t>(n));
+            CTRunGetGlyphs(run, CFRangeMake(0, 0), glyphs.data());
+            CTRunGetAdvances(run, CFRangeMake(0, 0), adv.data());
+            for (CFIndex i = 0; i < n; ++i)
+            {
+                if (adv[static_cast<std::size_t>(i)].width <= 0)
+                    continue;
+                if (glyphs[static_cast<std::size_t>(i)] == 0)
+                    return false;
+                ++visible;
+            }
+        }
+        return visible == 1;
     }
 };
 

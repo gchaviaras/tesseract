@@ -48,7 +48,8 @@ inline bool rect_contains(const tk::Rect& r, tk::Point p)
 // `diameter`. When `img` is non-null it is centre-fit and clipped to the
 // circle (exactly as `Canvas::draw_circle_image`); otherwise an initials
 // disc is drawn from `initials_name` with the supplied background/foreground
-// colours (exactly as `Canvas::draw_initials_circle`).
+// colours (exactly as `Canvas::draw_initials_circle`; pass
+// tk::AvatarText::Literal to draw a glyph like "#" as-is).
 //
 // Image resolution stays at the call site because it diverges widely
 // (lazy-fetch on miss, MSC4278 invite-avatar gating, presence lookups, the
@@ -57,7 +58,8 @@ inline bool rect_contains(const tk::Rect& r, tk::Point p)
 inline void draw_avatar(tk::Canvas& canvas, const tk::Image* img,
                         tk::Point centre, float diameter,
                         std::string_view initials_name, tk::Color initials_bg,
-                        tk::Color initials_fg)
+                        tk::Color initials_fg,
+                        tk::AvatarText text = tk::AvatarText::Initials)
 {
     if (img)
     {
@@ -66,7 +68,7 @@ inline void draw_avatar(tk::Canvas& canvas, const tk::Image* img,
     else
     {
         canvas.draw_initials_circle(initials_name, centre, diameter,
-                                    initials_bg, initials_fg);
+                                    initials_bg, initials_fg, text);
     }
 }
 

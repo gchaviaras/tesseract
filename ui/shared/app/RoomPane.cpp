@@ -620,6 +620,11 @@ void RoomPane::wire_room_view_()
     {
         shell_->set_bridge_override_(room_id, not_bridged);
     };
+    rv->emoji_skin_tone_provider = [this] { return shell_->emoji_skin_tone_(); };
+    rv->on_emoji_skin_tone_changed = [this](tesseract::emoji::SkinTone tone)
+    {
+        shell_->set_emoji_skin_tone_(tone);
+    };
 
     // ── Requests to join (MSC2403, admin side) ──────────────────────────────
     // ShellBase's knock_requests_panel_room_id_/current_room_knock_requests_
@@ -3415,6 +3420,7 @@ void RoomPane::wire_shortcode_hooks_(
     { shell_ensure_media_image_(url, 28, 28); };
     hooks.resolve_image = [this](const std::string& url) -> const tk::Image*
     { return shell_image_(url); };
+    hooks.skin_tone = [this] { return shell_->emoji_skin_tone_(); };
 }
 
 void RoomPane::fetch_banned_members_(views::RoomView* rv, const std::string& room_id)

@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "tk/emoji_support.h"
+#include <tesseract/emoji.h>
 #include <tesseract/image_pack.h>
 
 namespace tesseract::views
@@ -41,10 +43,15 @@ public:
     /// Unicode results ranked by exact/prefix/substring match quality, then
     /// custom emoticons appended. Filtered to `any(usage & Emoticon)`.
     /// Returns at most `max_results` suggestions. Returns empty for empty prefix.
+    /// Unicode glyphs that support skin tones come back in `tone`; glyphs
+    /// newer than `max_version` (the platform font's Emoji version, see
+    /// tk/emoji_support.h) fall back to their base or are left out.
     std::vector<ShortcodeSuggestion>
     lookup(std::string_view prefix,
            const std::vector<tesseract::ImagePackImage>& packs,
-           int max_results = 8) const;
+           int max_results = 8,
+           tesseract::emoji::SkinTone tone = tesseract::emoji::SkinTone::None,
+           std::uint16_t max_version = tk::kAllEmojiVersions) const;
 };
 
 } // namespace tesseract::views

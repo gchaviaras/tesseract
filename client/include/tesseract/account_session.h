@@ -1,11 +1,14 @@
 #pragma once
 
 #include "tesseract/client.h"
+#include "tesseract/emoji.h"
 #include "tesseract/event_handler.h"
 #include "tesseract/notifier.h"
 #include "tesseract/up_connector.h"
 
+#include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -68,6 +71,23 @@ struct AccountSession
     /// `ShellBase::room_effectively_bridged_()`.
     std::vector<std::string> bridge_not_bridged_overrides;
 
+    /// Default emoji skin tone, restored from (and saved to) the
+    /// `im.gnomos.tesseract` account-data event so it follows the account.
+    emoji::SkinTone emoji_skin_tone = emoji::SkinTone::None;
+    /// Last known raw content of the `im.gnomos.tesseract` event (restored,
+    /// synced, or our own latest save). Saves overlay onto it so keys this
+    /// build doesn't write survive, without a blocking store read.
+    std::string prefs_json = "{}";
+
+    /// When the tone was last changed locally (default = not recently). For
+    /// a short window afterwards a differing synced value may be a stale
+    /// echo of an earlier save, so it is parked in `emoji_skin_tone_deferred`
+    /// instead of applied; our own echo clears it, otherwise it is adopted
+    /// once the window has passed (another device wrote after us, or our
+    /// save never landed). See apply_synced_emoji_skin_tone() below.
+    std::chrono::steady_clock::time_point emoji_skin_tone_set_at{};
+    std::optional<emoji::SkinTone> emoji_skin_tone_deferred;
+
     /// True once `client->start_sync(bridge.get())` has been called for this
     /// session — guards against double-starts and lets the destructor know to
     /// call `stop_sync` for clean shutdown.
@@ -80,5 +100,59 @@ struct AccountSession
     bool unverified = false;
 
 };
+
+/// How long after a local tone change a differing synced tone is treated as
+/// a possible stale echo of an earlier save rather than applied.
+inline constexpr std::chrono::seconds kSkinToneEchoWindow{15};
+
+/// Local tone change: apply it and open the echo window.
+inline void set_local_emoji_skin_tone(AccountSession& a, emoji::SkinTone tone,
+                                      std::chrono::steady_clock::time_point now)
+{
+    a.emoji_skin_tone = tone;
+    a.emoji_skin_tone_set_at = now;
+    a.emoji_skin_tone_deferred.reset();
+}
+
+/// A tone arrived via sync (another device, or an echo of one of our saves).
+/// Our own value closes the echo window; inside the window a differing value
+/// is parked, outside it the value is applied.
+inline void apply_synced_emoji_skin_tone(AccountSession& a, emoji::SkinTone synced,
+                                         std::chrono::steady_clock::time_point now)
+{
+    const bool in_window =
+        a.emoji_skin_tone_set_at != std::chrono::steady_clock::time_point{} &&
+        now - a.emoji_skin_tone_set_at < kSkinToneEchoWindow;
+    if (synced == a.emoji_skin_tone)
+    {
+        a.emoji_skin_tone_deferred.reset();
+        a.emoji_skin_tone_set_at = {};
+    }
+    else if (in_window)
+    {
+        a.emoji_skin_tone_deferred = synced;
+    }
+    else
+    {
+        a.emoji_skin_tone = synced;
+        a.emoji_skin_tone_deferred.reset();
+        a.emoji_skin_tone_set_at = {};
+    }
+}
+
+/// Adopt a parked synced tone once the echo window has passed without our
+/// own echo arriving (another device wrote after us, or our save failed).
+inline void settle_emoji_skin_tone(AccountSession& a,
+                                   std::chrono::steady_clock::time_point now)
+{
+    if (!a.emoji_skin_tone_deferred ||
+        now - a.emoji_skin_tone_set_at < kSkinToneEchoWindow)
+    {
+        return;
+    }
+    a.emoji_skin_tone = *a.emoji_skin_tone_deferred;
+    a.emoji_skin_tone_deferred.reset();
+    a.emoji_skin_tone_set_at = {};
+}
 
 } // namespace tesseract

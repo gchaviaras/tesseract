@@ -139,6 +139,13 @@ protected:
     virtual void paint_cell(std::size_t index, tk::PaintCtx& ctx, tk::Rect bounds,
                             bool selected, bool hovered) = 0;
     virtual void on_item_activated(int index) = 0;
+    // Secondary action on cell `index` (long press / right-click /
+    // Shift+Enter); `cell` is its world rect. Return true if it opened
+    // something — see tk::GridView::on_cell_context_requested.
+    virtual bool on_item_context_requested(int /*index*/, tk::Rect /*cell*/)
+    {
+        return false;
+    }
 
     // ── Tab model ─────────────────────────────────────────────────────────
     virtual int tab_count() const = 0;

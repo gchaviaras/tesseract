@@ -1,5 +1,7 @@
 #include "EmojiPicker.h"
 
+#include "SkinTonePopover.h"
+#include "tk/emoji_support.h"
 #include "tk/i18n.h"
 #include "tk/theme.h"
 #include "views/image_pack_order.h"
@@ -9,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <string_view>
+#include <unordered_set>
 
 namespace tesseract::views
 {
@@ -51,7 +54,94 @@ EmojiPicker::~EmojiPicker() = default;
 EmojiPicker::EmojiPicker()
 {
     set_search_placeholder(tk::tr("Search emoji"));
+    // Added last so it sits above the grid for input as well as paint.
+    auto popover = tk::create_widget<SkinTonePopover>(this);
+    popover->on_picked = [this](tesseract::emoji::SkinTone tone)
+    {
+        const std::string glyph = tone_popover_->glyph_for(tone);
+        set_skin_tone(tone);
+        if (on_skin_tone_changed)
+            on_skin_tone_changed(tone);
+        activate_glyph_(glyph);
+    };
+    tone_popover_ = add_child(std::move(popover));
     rebuild_current_items();
+}
+
+void EmojiPicker::set_skin_tone(tesseract::emoji::SkinTone tone)
+{
+    if (tone == skin_tone_)
+        return;
+    skin_tone_ = tone;
+    // Unicode pages only — a custom pack's images have no tones, and
+    // rebuilding would needlessly reset its grid.
+    if (page_ != Page::CustomPack)
+        rebuild_current_items();
+}
+
+void EmojiPicker::set_visible(bool v)
+{
+    if (!v && tone_popover_)
+        tone_popover_->close();
+    TabbedGridPicker::set_visible(v);
+}
+
+void EmojiPicker::paint(tk::PaintCtx& ctx)
+{
+    TabbedGridPicker::paint(ctx);
+    if (tone_popover_ && tone_popover_->is_open())
+        tone_popover_->paint(ctx);
+}
+
+bool EmojiPicker::on_key_down(const tk::KeyEvent& e)
+{
+    if (tone_popover_ && tone_popover_->handle_key(e))
+        return true;
+    return TabbedGridPicker::on_key_down(e);
+}
+
+void EmojiPicker::on_popup_dismiss()
+{
+    if (tone_popover_)
+        tone_popover_->close();
+    TabbedGridPicker::on_popup_dismiss();
+}
+
+bool EmojiPicker::close_tone_popover_if_outside_(tk::Point world)
+{
+    if (!tone_popover_ || !tone_popover_->is_open() ||
+        tone_popover_->contains_world(world))
+    {
+        return false;
+    }
+    tone_popover_->close();
+    return true;
+}
+
+tk::Widget* EmojiPicker::dispatch_pointer_down(tk::Point world)
+{
+    if (close_tone_popover_if_outside_(world))
+        return this;
+    return TabbedGridPicker::dispatch_pointer_down(world);
+}
+
+tk::Widget* EmojiPicker::dispatch_right_click(tk::Point world)
+{
+    if (close_tone_popover_if_outside_(world))
+        return this;
+    return TabbedGridPicker::dispatch_right_click(world);
+}
+
+bool EmojiPicker::dispatch_wheel(tk::Point world, float dx, float dy,
+                                 bool is_touchpad)
+{
+    // Scrolling would move the cell out from under the menu.
+    if (tone_popover_ && tone_popover_->is_open())
+    {
+        tone_popover_->close();
+        return true;
+    }
+    return TabbedGridPicker::dispatch_wheel(world, dx, dy, is_touchpad);
 }
 
 void EmojiPicker::set_client(tesseract::Client* c)
@@ -273,7 +363,11 @@ void EmojiPicker::on_item_activated(int idx)
     {
         return;
     }
-    std::string glyph = current_glyphs_[idx];
+    activate_glyph_(current_glyphs_[idx]);
+}
+
+void EmojiPicker::activate_glyph_(const std::string& glyph)
+{
     if (client_)
     {
         client_->recent_emoji_bump(glyph);
@@ -282,6 +376,32 @@ void EmojiPicker::on_item_activated(int idx)
     {
         on_selected(glyph);
     }
+}
+
+bool EmojiPicker::on_item_context_requested(int idx, tk::Rect cell)
+{
+    if (page_ == Page::CustomPack || !tone_popover_ || idx < 0 ||
+        static_cast<std::size_t>(idx) >= current_glyphs_.size())
+    {
+        return false;
+    }
+    const std::string& glyph = current_glyphs_[idx];
+    // Only when the font can draw every tone — a menu with a box in it
+    // would let the user send something they can't see.
+    if (!tesseract::emoji::supports_skin_tone(glyph) ||
+        !tk::all_skin_tones_supported(glyph, supported_emoji_version_()))
+    {
+        return false;
+    }
+    // Clear the grid's hover + tooltip under the menu.
+    if (grid_)
+    {
+        grid_->on_pointer_leave();
+        if (host())
+            host()->hide_tooltip(grid_);
+    }
+    tone_popover_->open(glyph, skin_tone_, cell, bounds_);
+    return true;
 }
 
 std::string EmojiPicker::cell_tooltip(int index) const
@@ -496,25 +616,50 @@ void EmojiPicker::switch_to_custom_pack(int idx)
     rebuild_current_items();
 }
 
+std::uint16_t EmojiPicker::supported_emoji_version_() const
+{
+    return host() ? host()->supported_emoji_version() : tk::kAllEmojiVersions;
+}
+
 void EmojiPicker::rebuild_current_items()
 {
     current_glyphs_.clear();
     current_emoticons_.clear();
     current_shortcodes_.clear();
+    // Glyphs newer than the platform's emoji font are never offered — see
+    // tk/emoji_support.h.
+    const std::uint16_t max_version = supported_emoji_version_();
     switch (page_)
     {
     case Page::Frequents:
     {
-        current_glyphs_ = frequents_glyphs_;
+        // Entries used untoned follow the default tone; ones used with an
+        // explicit tone stay as used (or drop to the base when the font is
+        // too old for that tone). Toning can make two entries equal
+        // (👍 and 👍🏽), so keep the first.
+        std::unordered_set<std::string> seen;
+        for (const auto& glyph : frequents_glyphs_)
+        {
+            const bool untoned = tesseract::emoji::base_glyph(glyph) == glyph;
+            auto shown = tk::offered_emoji(
+                glyph,
+                untoned ? skin_tone_ : tesseract::emoji::SkinTone::None,
+                max_version);
+            if (!untoned && tesseract::emoji::emoji_version(glyph) <= max_version)
+                shown = glyph;
+            if (shown && seen.insert(std::string(*shown)).second)
+                current_glyphs_.emplace_back(*shown);
+        }
         // Look up each frequent glyph in the emoji table to get its canonical
-        // shortcode.
+        // shortcode (via its base, since the table holds untoned glyphs).
         const auto& table = tesseract::emoji::all();
         for (const auto& glyph : current_glyphs_)
         {
+            const auto base = tesseract::emoji::base_glyph(glyph);
             std::string sc;
             for (const auto& e : table)
             {
-                if (e.glyph == glyph && !e.shortcodes.empty())
+                if (e.glyph == base && !e.shortcodes.empty())
                 {
                     sc = format_shortcode(e.shortcodes);
                     break;
@@ -531,7 +676,10 @@ void EmojiPicker::rebuild_current_items()
         current_shortcodes_.reserve(entries.size());
         for (const auto* e : entries)
         {
-            current_glyphs_.emplace_back(e->glyph);
+            auto shown = tk::offered_emoji(e->glyph, skin_tone_, max_version);
+            if (!shown)
+                continue;
+            current_glyphs_.emplace_back(*shown);
             current_shortcodes_.push_back(format_shortcode(e->shortcodes));
         }
         break;
@@ -567,7 +715,10 @@ void EmojiPicker::rebuild_current_items()
         current_shortcodes_.reserve(entries.size());
         for (const auto* e : entries)
         {
-            current_glyphs_.emplace_back(e->glyph);
+            auto shown = tk::offered_emoji(e->glyph, skin_tone_, max_version);
+            if (!shown)
+                continue;
+            current_glyphs_.emplace_back(*shown);
             current_shortcodes_.push_back(format_shortcode(e->shortcodes));
         }
         break;

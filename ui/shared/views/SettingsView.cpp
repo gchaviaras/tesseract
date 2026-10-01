@@ -70,6 +70,15 @@ SettingsView::SettingsView()
     {
         if (on_launch_at_login_changed) on_launch_at_login_changed(v);
     };
+    general->on_start_minimized_changed = [this](bool v)
+    {
+        if (on_start_minimized_changed) on_start_minimized_changed(v);
+    };
+    general->on_close_action_changed =
+        [this](tesseract::Settings::CloseAction action)
+    {
+        if (on_close_action_changed) on_close_action_changed(action);
+    };
     general->on_low_power_changed =
         [this](tesseract::Settings::LowPowerPreference pref)
     {
@@ -408,6 +417,10 @@ SettingsView::SettingsView()
         if (auto* se = status_editor()) se->set_emoji(glyph);
         hide_status_emoji_picker_();
     };
+    status_emoji_picker_->on_skin_tone_changed = [this](tesseract::emoji::SkinTone tone)
+    {
+        if (on_emoji_skin_tone_changed) on_emoji_skin_tone_changed(tone);
+    };
 }
 
 SettingsView::~SettingsView()
@@ -655,6 +668,22 @@ void SettingsView::set_launch_at_login_pref(bool enabled)
     }
 }
 
+void SettingsView::set_start_minimized_pref(bool enabled)
+{
+    if (general_)
+    {
+        general_->set_start_minimized(enabled);
+    }
+}
+
+void SettingsView::set_tray_available(bool available)
+{
+    if (general_)
+    {
+        general_->set_tray_available(available);
+    }
+}
+
 void SettingsView::set_low_power_pref(tesseract::Settings::LowPowerPreference pref)
 {
     if (general_)
@@ -734,6 +763,7 @@ void SettingsView::load_persisted_settings()
     // (actual OS state) right after showing the Settings view, since this cached
     // bool can drift from what's actually registered with the OS.
     set_launch_at_login_pref(s.launch_at_login);
+    set_start_minimized_pref(s.start_minimized);
     set_low_power_pref(s.low_power_pref);
     set_theme_pref(s.theme_pref);
     set_theme_accent(s.theme_accent);
@@ -986,6 +1016,8 @@ void SettingsView::show_status_emoji_picker_(tk::Rect world_anchor)
     if (!status_emoji_picker_)
         return;
 
+    if (emoji_skin_tone_provider)
+        status_emoji_picker_->set_skin_tone(emoji_skin_tone_provider());
     status_emoji_picker_->refresh_frequents();
     status_emoji_picker_->set_search_query("");
 

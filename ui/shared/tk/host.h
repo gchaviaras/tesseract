@@ -16,6 +16,7 @@
 #include "audio_playback.h"
 #include "canvas.h"
 #include "device_listing.h"
+#include "emoji_support.h"
 #include "toast.h"
 #include "tooltip.h"
 #include "video.h"
@@ -931,6 +932,15 @@ public:
     virtual bool
     set_clipboard_image(std::span<const std::uint8_t> encoded_bytes) = 0;
 
+    // Newest Emoji version (tk/emoji_support.h) the platform's emoji font can
+    // draw; the picker and :shortcode: autocomplete hide newer glyphs.
+    // Default: everything (Win32 bundles a font covering the whole table;
+    // test hosts). Qt6/GTK4/macOS detect it once per process.
+    virtual std::uint16_t supported_emoji_version()
+    {
+        return kAllEmojiVersions;
+    }
+
     // ── Popup management ─────────────────────────────────────────────────────
     // A widget that wants to render and receive input above the entire widget
     // tree (e.g. an open ComboBox dropdown) calls register_popup(this) during
@@ -955,6 +965,14 @@ public:
 
     // Returns the currently active popup (valid between paint frames).
     Widget* popup() const { return popup_.lock().get(); }
+    // True when `world` lies inside the open popup — backends check this
+    // before dispatch_right_click() so a right-click the popup handles
+    // doesn't also reach their shell-level right-click hook.
+    bool popup_contains(Point world) const
+    {
+        auto p = popup_.lock();
+        return p && p->contains_world(world);
+    }
 
     // Closes the currently registered popup (if any) immediately, the same
     // way an outside click would via dispatch_pointer_down()'s implicit
@@ -1081,6 +1099,12 @@ protected:
     // otherwise dismiss the popup and hit-test the tree, capturing the pressed
     // widget so subsequent moves drag it and the matching up fires its click.
     void dispatch_pointer_down(Point world);
+
+    // Right-click: an open popup gets it (and absorbs it) when it lands
+    // inside the popup — the popup isn't part of the tree, so the plain
+    // root dispatch would hand it to whatever is painted underneath.
+    // Otherwise the tree dispatch as before. Returns the consuming widget.
+    Widget* dispatch_right_click(Point world);
 
     // Pointer-move: drag the captured widget if one is held; otherwise route
     // hover into an open popup (when inside it) or update Button / widget hover

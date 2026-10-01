@@ -1,4 +1,5 @@
 #include "views/ShortcodeEngine.h"
+#include "tk/emoji_support.h"
 #include <tesseract/emoji.h>
 #include <algorithm>
 #include <cctype>
@@ -153,7 +154,8 @@ ShortcodeEngine::find_complete(std::string_view text, int cursor) const
 std::vector<ShortcodeSuggestion>
 ShortcodeEngine::lookup(std::string_view prefix,
                         const std::vector<tesseract::ImagePackImage>& packs,
-                        int max_results) const
+                        int max_results, tesseract::emoji::SkinTone tone,
+                        std::uint16_t max_version) const
 {
     if (prefix.empty())
     {
@@ -166,10 +168,13 @@ ShortcodeEngine::lookup(std::string_view prefix,
     auto sc_pairs = tesseract::emoji::by_shortcode_prefix(prefix);
     for (auto [entry, matched_sc] : sc_pairs)
     {
+        auto shown = tk::offered_emoji(entry->glyph, tone, max_version);
+        if (!shown)
+            continue;
         int r = match_rank(matched_sc, prefix);
         ShortcodeSuggestion s;
         s.shortcode = std::string(matched_sc);
-        s.glyph = std::string(entry->glyph);
+        s.glyph = std::string(*shown);
         ranked.emplace_back(r, std::move(s));
     }
 

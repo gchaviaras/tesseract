@@ -3792,6 +3792,29 @@ void ShellBase::set_bridge_override_(const std::string& room_id, bool not_bridge
     refresh_bridge_dependent_ui_(room_id);
 }
 
+tesseract::emoji::SkinTone ShellBase::emoji_skin_tone_()
+{
+    settle_emoji_skin_tone_();
+    return active_account_ ? active_account_->emoji_skin_tone
+                           : tesseract::emoji::SkinTone::None;
+}
+
+void ShellBase::settle_emoji_skin_tone_()
+{
+    if (active_account_)
+        tesseract::settle_emoji_skin_tone(*active_account_,
+                                          std::chrono::steady_clock::now());
+}
+
+void ShellBase::set_emoji_skin_tone_(tesseract::emoji::SkinTone tone)
+{
+    if (!active_account_ || active_account_->emoji_skin_tone == tone)
+        return;
+    tesseract::set_local_emoji_skin_tone(*active_account_, tone,
+                                         std::chrono::steady_clock::now());
+    persist_room_layout_pref_();
+}
+
 void ShellBase::refresh_bridge_dependent_ui_(const std::string& room_id)
 {
     const auto* r = room_by_id_(room_id);
@@ -5108,6 +5131,11 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     if (!view)
         return;
 
+    view->emoji_skin_tone_provider = [this] { return emoji_skin_tone_(); };
+    view->on_emoji_skin_tone_changed = [this](tesseract::emoji::SkinTone tone)
+    {
+        set_emoji_skin_tone_(tone);
+    };
     view->on_theme_preference_changed =
         [this](tesseract::Settings::ThemePreference pref)
     {
@@ -5180,6 +5208,14 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     view->on_launch_at_login_changed = [this](bool enabled)
     {
         handle_launch_at_login_toggle_(enabled);
+    };
+    view->on_start_minimized_changed = [this](bool enabled)
+    {
+        handle_start_minimized_toggle_(enabled);
+    };
+    view->on_close_action_changed = [this](tesseract::Settings::CloseAction action)
+    {
+        handle_close_action_toggle_(action);
     };
     view->on_send_presence_changed = [this](bool enabled)
     {
@@ -8127,10 +8163,12 @@ ShellBase::RestoreIOResult ShellBase::restore_all_accounts_blocking_(bool networ
         acc.display_name = acc.client->get_display_name();
         acc.avatar_url   = acc.client->get_avatar_url();
         {
-            auto prefs = tesseract::Prefs::parse(acc.client->load_prefs_json());
+            acc.prefs_json = acc.client->load_prefs_json();
+            auto prefs = tesseract::Prefs::parse(acc.prefs_json);
             acc.last_room  = prefs.last_room;
             acc.open_rooms = prefs.open_rooms;
             acc.bridge_not_bridged_overrides = prefs.bridge_not_bridged_overrides;
+            acc.emoji_skin_tone = tesseract::emoji::skin_tone_from_key(prefs.emoji_skin_tone);
         }
 
         // Bridge construction + start_sync are the expensive part of restore
@@ -8175,6 +8213,8 @@ ShellBase::finish_restore_accounts_ui_(RestoreIOResult&& io)
         session->last_room   = acc.last_room;
         session->open_rooms  = std::move(acc.open_rooms);
         session->bridge_not_bridged_overrides = std::move(acc.bridge_not_bridged_overrides);
+        session->emoji_skin_tone = acc.emoji_skin_tone;
+        session->prefs_json = std::move(acc.prefs_json);
 
         // Bridge already built + sync already started on the worker thread
         // in restore_all_accounts_blocking_(), which also already applied the
@@ -8329,10 +8369,12 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     session->display_name = session->client->get_display_name();
     session->avatar_url   = session->client->get_avatar_url();
     {
-        auto prefs = tesseract::Prefs::parse(session->client->load_prefs_json());
+        session->prefs_json = session->client->load_prefs_json();
+        auto prefs = tesseract::Prefs::parse(session->prefs_json);
         session->last_room  = prefs.last_room;
         session->open_rooms = prefs.open_rooms;
         session->bridge_not_bridged_overrides = prefs.bridge_not_bridged_overrides;
+        session->emoji_skin_tone = tesseract::emoji::skin_tone_from_key(prefs.emoji_skin_tone);
     }
 
     // Per-account event bridge (native type) + background sync. Both are
@@ -9647,6 +9689,13 @@ void ShellBase::handle_account_prefs_updated_ui_(std::string user_id,
         return;
     }
     auto prefs = tesseract::Prefs::parse(json);
+    active_account_->prefs_json = json;
+
+    // Another device (or our own save's echo) may have changed the default
+    // emoji skin tone; pickers and autocomplete read it on their next use.
+    tesseract::apply_synced_emoji_skin_tone(
+        *active_account_, tesseract::emoji::skin_tone_from_key(prefs.emoji_skin_tone),
+        std::chrono::steady_clock::now());
 
     // Bridge overrides can change from another device (or echo our own
     // save); keep this account's copy and every room referencing it in sync,
@@ -12374,8 +12423,18 @@ void ShellBase::restart_sdk_begin_(
     // Forget the open-tab layout entirely: clear it locally now, and Phase B
     // pushes an empty im.gnomos.tesseract account-data event (while sync is
     // still live) so the resync can't bring the tabs back.
-    const std::string empty_layout =
-        tesseract::Prefs::serialize(tesseract::Prefs::room_layout(std::string{}, {}));
+    // Only the layout is forgotten — bridge overrides, the emoji skin tone
+    // and any keys this build doesn't write are carried over.
+    auto empty_layout_data = tesseract::Prefs::room_layout(std::string{}, {});
+    if (active_account_)
+    {
+        empty_layout_data.bridge_not_bridged_overrides =
+            active_account_->bridge_not_bridged_overrides;
+        empty_layout_data.emoji_skin_tone =
+            tesseract::emoji::skin_tone_key(active_account_->emoji_skin_tone);
+    }
+    const std::string empty_layout = tesseract::Prefs::serialize(
+        empty_layout_data, active_account_ ? active_account_->prefs_json : std::string{});
     current_room_id_.clear();
     tabs_.clear();
     active_tab_idx_ = 0;
@@ -12971,15 +13030,37 @@ void ShellBase::persist_room_layout_pref_(bool blocking)
     }
 
     std::vector<std::string> open;
-    open.reserve(tabs_.size());
-    for (const auto& t : tabs_)
-        open.push_back(t.room_id);
-    auto prefs_data = tesseract::Prefs::room_layout(current_room_id_, open);
+    std::string last_room = current_room_id_;
+    if (!pending_restore_rooms_.empty())
+    {
+        // The saved layout hasn't been reopened yet (startup): keep it rather
+        // than writing the still-empty tab strip over it — a non-layout save
+        // (e.g. a skin-tone change) can land here this early.
+        open = pending_restore_rooms_;
+        last_room = pending_restore_rooms_.front();
+    }
+    else
+    {
+        open.reserve(tabs_.size());
+        for (const auto& t : tabs_)
+            open.push_back(t.room_id);
+    }
+    auto prefs_data = tesseract::Prefs::room_layout(last_room, open);
     // room_layout() only fills in the tab-layout fields; carry the bridge
     // overrides through unchanged so a tab switch doesn't wipe them.
+    settle_emoji_skin_tone_();
     if (active_account_)
+    {
         prefs_data.bridge_not_bridged_overrides = active_account_->bridge_not_bridged_overrides;
-    const std::string json = tesseract::Prefs::serialize(prefs_data);
+        prefs_data.emoji_skin_tone =
+            tesseract::emoji::skin_tone_key(active_account_->emoji_skin_tone);
+    }
+    // Overlay onto the last known event so keys this build doesn't write
+    // survive.
+    const std::string json = tesseract::Prefs::serialize(
+        prefs_data, active_account_ ? active_account_->prefs_json : std::string{});
+    if (active_account_)
+        active_account_->prefs_json = json;
 
     if (blocking)
     {

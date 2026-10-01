@@ -2150,6 +2150,8 @@ protected:
         std::string                 last_room;
         std::vector<std::string>    open_rooms;
         std::vector<std::string>    bridge_not_bridged_overrides;
+        tesseract::emoji::SkinTone  emoji_skin_tone = tesseract::emoji::SkinTone::None;
+        std::string                 prefs_json = "{}";
     };
 
     // Output of the blocking half of startup restore.
@@ -3860,6 +3862,50 @@ protected:
     // overrides to forward into its SettingsWidget/SettingsView instance;
     // default no-op covers headless/test builds.
     virtual void on_launch_at_login_pref_ui_(bool /*enabled*/) {}
+
+    // Settings → General → "Start minimized to tray" toggle handler. Pure
+    // preference write — no OS call, unlike launch-at-login. Takes effect on
+    // the next launch.
+    void handle_start_minimized_toggle_(bool enabled)
+    {
+        tesseract::Settings::instance().start_minimized = enabled;
+        tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
+    }
+
+    // Settings → General → "When I close the window" handler. Pure preference
+    // write; takes effect on the next close.
+    void handle_close_action_toggle_(tesseract::Settings::CloseAction action)
+    {
+        tesseract::Settings::instance().close_action = action;
+        tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
+    }
+
+    // Whether a system tray icon currently exists. Each shell overrides this
+    // to report its own ITrayIcon::is_available(); the default says no, which
+    // matches a headless/test build with no tray.
+    virtual bool tray_available_() const { return false; }
+
+    // Called by push_tray_available_ui_() to forward into the Settings view.
+    // Default no-op covers headless/test builds.
+    virtual void on_tray_available_ui_(bool /*available*/) {}
+
+    // Push the live tray-availability state into Settings → General so the
+    // close-action dropdown can drop "hide to tray" on a machine without one,
+    // and resolve an already-stored HideToTray to Quit. Without this the app
+    // could persist a choice whose only outcome — hiding with no way back —
+    // is impossible on that system.
+    void push_tray_available_ui_()
+    {
+        const bool available = tray_available_();
+        auto& s = tesseract::Settings::instance();
+        if (!available && s.close_action == tesseract::Settings::CloseAction::HideToTray)
+        {
+            s.close_action = tesseract::Settings::CloseAction::Quit;
+            s.save_to_disk(tesseract::config_dir());
+        }
+        on_tray_available_ui_(available);
+    }
+
     // Centralised notification-image privacy gate. Each shell calls this
     // when building the Notification: the message picture is shown only
     // when previews are enabled in settings AND the screen is unlocked.
@@ -5104,6 +5150,14 @@ protected:
     // button, threads button, open info panels) without waiting for the next
     // sync tick. Called from RoomGeneralSection's override checkbox.
     void set_bridge_override_(const std::string& room_id, bool not_bridged);
+    // The active account's default emoji skin tone (None when no account).
+    // Pickers and :shortcode: autocomplete read it when they open / look up.
+    tesseract::emoji::SkinTone emoji_skin_tone_();
+    // Adopts a synced tone parked during the post-change echo window once
+    // that window has passed (see AccountSession::emoji_skin_tone_set_at).
+    void settle_emoji_skin_tone_();
+    // Set it from a picker's tone menu and persist it to account data.
+    void set_emoji_skin_tone_(tesseract::emoji::SkinTone tone);
 
     // Re-evaluates call-button / threads-button visibility and refreshes any
     // open info panel for `room_id` (main window + matching pop-outs) after

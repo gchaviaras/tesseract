@@ -31,6 +31,7 @@ PrefsData parse(const std::string& json_str)
         p.last_room  = j.value("last_room", std::string{});
         p.open_rooms = j.value("open_rooms", std::vector<std::string>{});
         p.bridge_not_bridged_overrides = j.value("bridge_overrides", std::vector<std::string>{});
+        p.emoji_skin_tone = j.value("emoji_skin_tone", std::string{});
     }
     catch (...)
     {
@@ -41,11 +42,25 @@ PrefsData parse(const std::string& json_str)
     return p;
 }
 
-std::string serialize(const PrefsData& p)
+std::string serialize(const PrefsData& p, const std::string& base_json)
 {
-    nlohmann::json j;
+    nlohmann::json j = nlohmann::json::object();
+    if (!base_json.empty())
+    {
+        auto base = nlohmann::json::parse(base_json, nullptr, /*allow_exceptions=*/false);
+        if (base.is_object())
+            j = std::move(base);
+    }
     j["last_room"]  = p.last_room;
     j["open_rooms"] = p.open_rooms;
+    if (p.bridge_not_bridged_overrides.empty())
+        j.erase("bridge_overrides");
+    else
+        j["bridge_overrides"] = p.bridge_not_bridged_overrides;
+    if (p.emoji_skin_tone.empty())
+        j.erase("emoji_skin_tone");
+    else
+        j["emoji_skin_tone"] = p.emoji_skin_tone;
     return j.dump();
 }
 

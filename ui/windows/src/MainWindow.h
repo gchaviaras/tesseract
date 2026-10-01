@@ -169,6 +169,8 @@ public:
     void on_low_power_mode_ui_(bool active) override;
     std::uint64_t shell_extra_memory_bytes_() const override;
     void on_launch_at_login_pref_ui_(bool enabled) override;
+    bool tray_available_() const override;
+    void on_tray_available_ui_(bool available) override;
     void on_server_info_ready_ui_() override;
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override { open_settings_(); }

@@ -102,25 +102,7 @@ EmojiOnlyClassification classify_emoji_only_utf8(std::string_view utf8)
             }
             return {false, false}; // bare digit / * / # → not emoji-only
         }
-        // Emoji codepoint ranges (mirrors the Twemoji fallback table).
-        if (cp == 0x00A9 || cp == 0x00AE || cp == 0x203C || cp == 0x2049 ||
-            cp == 0x2122 || cp == 0x2139 ||
-            (cp >= 0x2194 && cp <= 0x2199) ||
-            (cp >= 0x21A9 && cp <= 0x21AA) ||
-            (cp >= 0x231A && cp <= 0x231B) || cp == 0x2328 ||
-            cp == 0x23CF || (cp >= 0x23E9 && cp <= 0x23FA) ||
-            cp == 0x24C2 || (cp >= 0x25AA && cp <= 0x25FE) ||
-            (cp >= 0x2600 && cp <= 0x27BF) ||
-            (cp >= 0x2934 && cp <= 0x2935) ||
-            (cp >= 0x2B05 && cp <= 0x2B55) || cp == 0x3030 ||
-            cp == 0x303D || cp == 0x3297 || cp == 0x3299 || cp == 0x1F004 ||
-            cp == 0x1F0CF || (cp >= 0x1F170 && cp <= 0x1F171) ||
-            (cp >= 0x1F17E && cp <= 0x1F17F) || cp == 0x1F18E ||
-            (cp >= 0x1F191 && cp <= 0x1F19A) ||
-            (cp >= 0x1F1E0 && cp <= 0x1F1FF) || // regional indicators
-            (cp >= 0x1F201 && cp <= 0x1F251) ||
-            (cp >= 0x1F300 && cp <= 0x1F9FF) || // main emoji block
-            (cp >= 0x1FA00 && cp <= 0x1FAFF))   // extended
+        if (is_emoji_codepoint(cp))
         {
             has_emoji = true;
             ++i;
@@ -132,6 +114,28 @@ EmojiOnlyClassification classify_emoji_only_utf8(std::string_view utf8)
 }
 
 } // namespace
+
+bool is_emoji_codepoint(char32_t cp)
+{
+    return cp == 0x00A9 || cp == 0x00AE || cp == 0x203C || cp == 0x2049 ||
+           cp == 0x2122 || cp == 0x2139 ||
+           (cp >= 0x2194 && cp <= 0x2199) ||
+           (cp >= 0x21A9 && cp <= 0x21AA) ||
+           (cp >= 0x231A && cp <= 0x231B) || cp == 0x2328 ||
+           cp == 0x23CF || (cp >= 0x23E9 && cp <= 0x23FA) ||
+           cp == 0x24C2 || (cp >= 0x25AA && cp <= 0x25FE) ||
+           (cp >= 0x2600 && cp <= 0x27BF) ||
+           (cp >= 0x2934 && cp <= 0x2935) ||
+           (cp >= 0x2B05 && cp <= 0x2B55) || cp == 0x3030 ||
+           cp == 0x303D || cp == 0x3297 || cp == 0x3299 || cp == 0x1F004 ||
+           cp == 0x1F0CF || (cp >= 0x1F170 && cp <= 0x1F171) ||
+           (cp >= 0x1F17E && cp <= 0x1F17F) || cp == 0x1F18E ||
+           (cp >= 0x1F191 && cp <= 0x1F19A) ||
+           (cp >= 0x1F1E0 && cp <= 0x1F1FF) || // regional indicators
+           (cp >= 0x1F201 && cp <= 0x1F251) ||
+           (cp >= 0x1F300 && cp <= 0x1F9FF) || // main emoji block
+           (cp >= 0x1FA00 && cp <= 0x1FAFF);   // extended
+}
 
 bool is_emoji_only(const std::string& utf8)
 {
@@ -195,24 +199,6 @@ std::vector<TextSpan> segment_emoji_runs(const TextSpan& src)
                (cp >= 0x1F3FB && cp <= 0x1F3FF) ||
                (cp >= 0xE0000 && cp <= 0xE007F); // tag characters (flag sequences)
     };
-    // Emoji base codepoints (same ranges as is_emoji_only above).
-    auto is_emoji_base = [](uint32_t cp) -> bool {
-        return cp == 0x00A9 || cp == 0x00AE || cp == 0x203C || cp == 0x2049 ||
-               cp == 0x2122 || cp == 0x2139 ||
-               (cp >= 0x2194 && cp <= 0x2199) || (cp >= 0x21A9 && cp <= 0x21AA) ||
-               (cp >= 0x231A && cp <= 0x231B) || cp == 0x2328 ||
-               cp == 0x23CF || (cp >= 0x23E9 && cp <= 0x23FA) ||
-               cp == 0x24C2 || (cp >= 0x25AA && cp <= 0x25FE) ||
-               (cp >= 0x2600 && cp <= 0x27BF) || (cp >= 0x2934 && cp <= 0x2935) ||
-               (cp >= 0x2B05 && cp <= 0x2B55) || cp == 0x3030 ||
-               cp == 0x303D || cp == 0x3297 || cp == 0x3299 || cp == 0x1F004 ||
-               cp == 0x1F0CF || (cp >= 0x1F170 && cp <= 0x1F171) ||
-               (cp >= 0x1F17E && cp <= 0x1F17F) || cp == 0x1F18E ||
-               (cp >= 0x1F191 && cp <= 0x1F19A) || (cp >= 0x1F1E0 && cp <= 0x1F1FF) ||
-               (cp >= 0x1F201 && cp <= 0x1F251) ||
-               (cp >= 0x1F300 && cp <= 0x1F9FF) ||
-               (cp >= 0x1FA00 && cp <= 0x1FAFF);
-    };
 
     // Build runs: (is_emoji, byte_end_of_last_cp_in_run).
     // Cluster-continuation codepoints extend the current run.
@@ -246,7 +232,7 @@ std::vector<TextSpan> segment_emoji_runs(const TextSpan& src)
                 continue;
             }
         }
-        const bool emoji = is_emoji_base(cp);
+        const bool emoji = is_emoji_codepoint(cp);
         if (!runs.empty() && runs.back().emoji == emoji)
             runs.back().end = cps[i].byte_end;
         else

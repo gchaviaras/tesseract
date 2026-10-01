@@ -362,6 +362,107 @@ TEST_CASE("Settings launch_at_login missing key defaults to false", "[settings]"
     fs::remove_all(dir);
 }
 
+TEST_CASE("Settings close_action round-trip: each value", "[settings]")
+{
+    using CA = tesseract::Settings::CloseAction;
+    for (const CA v : {CA::Quit, CA::Minimize, CA::HideToTray})
+    {
+        reset_settings();
+        auto dir = make_tmp_dir("close_action_round_trip");
+
+        auto& s = tesseract::Settings::instance();
+        s.close_action = v;
+        s.save_to_disk(dir);
+
+        // Dirty it to a different value so the load can't pass by accident.
+        s.close_action = CA::Minimize;
+        s.load_from_disk(dir);
+        CHECK(s.close_action == v);
+
+        fs::remove_all(dir);
+    }
+}
+
+TEST_CASE("Settings close_action missing key defaults to HideToTray", "[settings]")
+{
+    using CA = tesseract::Settings::CloseAction;
+    reset_settings();
+    auto dir = make_tmp_dir("close_action_missing_key");
+    write_file(dir / "app_settings.json", "{\"theme\":\"dark\"}");
+
+    auto& s = tesseract::Settings::instance();
+    s.close_action = CA::Quit; // dirty it first to prove load resets it
+    s.load_from_disk(dir);
+    CHECK(s.close_action == CA::HideToTray);
+
+    fs::remove_all(dir);
+}
+
+// An older build, or a hand-edited file, could carry a value this build does
+// not know. It must not silently become Quit — that would make closing the
+// window start killing the app for users who never asked for that.
+TEST_CASE("Settings close_action unknown value defaults to HideToTray", "[settings]")
+{
+    using CA = tesseract::Settings::CloseAction;
+    reset_settings();
+    auto dir = make_tmp_dir("close_action_unknown");
+    write_file(dir / "app_settings.json",
+               "{\"close_action\":\"definitely-not-a-real-action\"}");
+
+    auto& s = tesseract::Settings::instance();
+    s.close_action = CA::Quit;
+    s.load_from_disk(dir);
+    CHECK(s.close_action == CA::HideToTray);
+
+    fs::remove_all(dir);
+}
+
+TEST_CASE("Settings start_minimized round-trip: true", "[settings]")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("start_minimized_true");
+
+    auto& s = tesseract::Settings::instance();
+    s.start_minimized = true;
+    s.save_to_disk(dir);
+
+    s.start_minimized = false;
+    s.load_from_disk(dir);
+    CHECK(s.start_minimized == true);
+
+    fs::remove_all(dir);
+}
+
+TEST_CASE("Settings start_minimized round-trip: false", "[settings]")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("start_minimized_false");
+
+    auto& s = tesseract::Settings::instance();
+    s.start_minimized = false;
+    s.save_to_disk(dir);
+
+    s.start_minimized = true;
+    s.load_from_disk(dir);
+    CHECK(s.start_minimized == false);
+
+    fs::remove_all(dir);
+}
+
+TEST_CASE("Settings start_minimized missing key defaults to false", "[settings]")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("start_minimized_missing_key");
+    write_file(dir / "app_settings.json", "{\"theme\":\"dark\"}");
+
+    auto& s = tesseract::Settings::instance();
+    s.start_minimized = true; // dirty it first to prove load resets it
+    s.load_from_disk(dir);
+    CHECK(s.start_minimized == false);
+
+    fs::remove_all(dir);
+}
+
 TEST_CASE("Settings persist group_inactive_rooms + threshold", "[settings]")
 {
     auto dir = std::filesystem::temp_directory_path() /

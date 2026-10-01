@@ -19,6 +19,10 @@ EXTRA = [
     ("🥃", "whiskey"),
     ("🥃", "whisky"),
     ("🥃", "bourbon"),
+    # Canonical shortcodes before Emoji 18.0 renamed these flags.
+    ("🇭🇲", "flag_heard_mcdonald_islands"),
+    ("🇸🇭", "flag_st_helena"),
+    ("🇹🇫", "flag_french_southern_territories"),
 ]
 
 ROW = re.compile(
@@ -32,7 +36,7 @@ def main():
     with open(os.path.join(here, "emoji_data.inc"), encoding="utf-8") as f:
         data = f.read()
     known = {}
-    for m in re.finditer(r'\{"([^"]+)", "[^"]*", "[^"]*", Category::\w+, "([^"]*)"\}', data):
+    for m in re.finditer(r'\{"([^"]+)", "[^"]*", "[^"]*", Category::\w+, "([^"]*)", \d+\}', data):
         known[m.group(1)] = set(m.group(2).split())
 
     out = []

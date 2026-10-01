@@ -116,3 +116,16 @@ TEST_CASE("Prefs serialize single tab produces open_rooms of size 1")
     REQUIRE(p2.open_rooms.size() == 1);
     CHECK(p2.open_rooms[0] == "!only:host");
 }
+
+TEST_CASE("Prefs serialize writes bridge overrides and parse reads them back")
+{
+    PrefsData p;
+    p.bridge_not_bridged_overrides = {"!a:x", "!b:x"};
+    auto back = parse(serialize(p));
+    CHECK(back.bridge_not_bridged_overrides == std::vector<std::string>{"!a:x", "!b:x"});
+
+    // Clearing the last override removes it from the stored event too.
+    p.bridge_not_bridged_overrides.clear();
+    auto cleared = parse(serialize(p, R"({"bridge_overrides":["!a:x"]})"));
+    CHECK(cleared.bridge_not_bridged_overrides.empty());
+}

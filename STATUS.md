@@ -1,6 +1,36 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**. 2038 C++ + 764 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-09-30**. 2066 C++ + 765 Rust tests.
+
+> **Emoji picker: skin tones, Emoji 18.0, font-coverage filtering; "not
+> bridged" override persists (2026-09-30).**
+> Long-press, right-click or Shift+Enter on a tone-capable emoji opens a
+> `SkinTonePopover`; the picked tone becomes the default for both the
+> picker and `:shortcode:` autocomplete, synced across devices via
+> `im.gnomos.tesseract` account data (a 15 s stale-echo window
+> distinguishes our own save round-tripping from a genuinely newer value
+> from another device). Emoji 18.0 data is in (renamed flags keep their
+> old `:flag_…:` shortcodes), and both the picker and autocomplete now
+> hide any emoji newer than the system emoji font can actually draw.
+> Separately, a room's manual "not bridged" override is now saved to
+> account data instead of being lost on restart. Qt6 build + ctest
+> 2066/2066.
+
+<!-- -->
+
+> **i18n-extract: repo-relative references, regenerated template, emoji
+> category extraction (2026-09-29).**
+> `i18n-extract` wrote absolute checkout paths into every catalog's `#:`
+> source reference, churning the whole file on every regeneration; it now
+> runs from a repo-relative file list. `tesseract.pot` was stale (428 vs
+> ~1200 msgids in the catalogs) and is regenerated (1189); 45 dead entries
+> with no surviving source reference are dropped from `de.po`/`es.po`/
+> `fr.po`, and the emoji picker's category names (`client/src/emoji.cpp`,
+> previously untracked since the extractor only scanned `ui/`) are now
+> marked with a local `N_()` and extracted too. Qt6 build + ctest
+> 2038/2038.
+
+<!-- -->
 
 > **German translation (2026-09-28, v0.9.0).**
 > A German catalog (`i18n/de.po`) covers the whole UI, using Element
@@ -18,7 +48,6 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > other users are now received. The button is disabled until this device
 > is verified, and the row updates as the user's identity changes. Windows
 > build; ctest 2032/2032, cargo 763/763; user-verified live on Windows.
-> Qt6/GTK4/macOS unbuilt.
 
 <!-- -->
 
@@ -29,8 +58,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > encrypted rooms, a banner warns when a member's identity is reset ("OK"
 > accepts it, "Withdraw verification" for a verified user), and messages
 > held back by an encryption check offer Retry. Windows build; ctest
-> 2032/2032, cargo 763/763; user-verified live on Windows. Qt6/GTK4/macOS
-> unbuilt.
+> 2032/2032, cargo 763/763; user-verified live on Windows.
 
 <!-- -->
 
@@ -173,7 +201,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > `PillSpec::initials_bg`/`initials_fg`. Composers get the colors through
 > `NativeTextArea::set_mention_colors(const tk::MentionColors&)`, which
 > replaces the old `(bg, fg)` overload on all four backends. Windows build +
-> pill/mention ctest 63/63; user-verified live. Qt6/GTK4/macOS unbuilt.
+> pill/mention ctest 63/63; user-verified live.
 
 <!-- -->
 
@@ -203,7 +231,6 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > interactive fixes (grid cell shape, stale/unknown room filtering,
 > scrollbar-vs-drag conflicts, tooltip offset, a sidebar-resize-grip
 > regression). No automated tests yet for the two new widgets themselves.
-> Windows/macOS share the code, unbuilt.
 
 <!-- -->
 
@@ -220,8 +247,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > systems can never be confused. Framework only, no product call site yet —
 > first consumer will be dragging rooms onto Spaces in `RoomListView`, which
 > also needs a still-missing client API to mutate `m.space.child`. Linux
-> (Qt6 + GTK4) build + full ctest 1906/1906 (+8); Windows/macOS share the
-> code, unbuilt this session.
+> (Qt6 + GTK4) build + full ctest 1906/1906 (+8).
 
 <!-- -->
 
@@ -234,7 +260,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > two call rooms leaves the old call and joins the new one. Docked/
 > DockedExpanded mode controls now hide while the call's room isn't the one
 > being viewed. Linux (Qt6 + GTK4) build + full ctest 1898/1898 (+15);
-> unverified live this session. Windows/macOS share the code, unbuilt.
+> unverified live this session.
 > Since 2026-09-24, call rooms can also be created from the Create Room
 > dialog's split button ("Create Call Room"); the new room opens its
 > pre-call lobby once sync delivers it. Windows build + ctest 1935/1935;
@@ -248,7 +274,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > message did; a custom emoji mid-sentence also renders larger than the
 > surrounding text (`FontRole::InlineCustomEmoji`, native inline emoji
 > unchanged). Linux Qt6 build + full ctest 1883/1883 (+6); user-verified
-> live. GTK4/Windows/macOS share the code, unbuilt this session.
+> live.
 
 <!-- -->
 
@@ -279,8 +305,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > jobs and the three worker pools register in `ActivityRegistry`, with
 > `run_async_(label, fn)` for labeled tasks. Hosted by a new generic
 > `AuxWindowBase` secondary window. Linux Qt6 build + full ctest
-> 1866/1866, +4 Rust tests; unverified live. GTK4/Windows/macOS windows
-> written by analogy, unbuilt; not all jobs are instrumented yet
+> 1866/1866, +4 Rust tests; unverified live; not all jobs are instrumented yet
 > (one-shot FFI calls, OS listeners).
 
 <!-- -->
@@ -294,7 +319,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > mode re-encoded photos without applying EXIF orientation, so portrait
 > shots arrived sideways; every platform's `encode_for_send` now bakes it
 > in. Linux Qt6 build + full ctest 1856/1856, +5 Rust tests; unverified
-> live. GTK4/Windows/macOS unbuilt this session.
+> live.
 
 <!-- -->
 
@@ -306,8 +331,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > cached — e.g. Qt memoizing extra pre-scaled copies of the same image as
 > it's painted at different sizes elsewhere. Now computed by summing live
 > frame sizes on demand instead of trusting a running total. Windows build
-> + full ctest, 1823/1823; unverified live, no clean repro. Qt6/GTK4/macOS
-> share the fix, unbuilt.
+> + full ctest, 1823/1823; unverified live, no clean repro.
 
 <!-- -->
 
@@ -319,7 +343,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > tooltips) rather than adding new UI. Skipped for autolinked plain URLs,
 > where the display text already is the URL, and for `@mention`/`#room`
 > pills. Linux (Qt6 + GTK4) build + full ctest, 1855/1855; user-verified
-> live. Windows/macOS share the code, unbuilt.
+> live.
 
 <!-- -->
 
@@ -332,7 +356,6 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > fixed-header-plus-scrollable-body composition. Public API unchanged — no
 > call-site changes in `RoomView.cpp` or any platform shell. Linux (Qt6 +
 > GTK4) build + full ctest, 1850/1850; unverified live this session.
-> Windows/macOS share the code, unbuilt.
 
 <!-- -->
 
@@ -346,7 +369,6 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > a wheel delta the platform host already scales to pixels — now matches
 > `tk::ScrollableBase`'s plain 1:1 delta. Linux (Qt6 + GTK4) build + full
 > ctest, 1850/1850; cargo test 667/667; unverified live this session.
-> Windows/macOS share the code, unbuilt.
 
 <!-- -->
 
@@ -358,8 +380,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > unconditional re-show every pass, a self-sustaining relayout storm that
 > starved `WM_PAINT`. Both overlays are now included in that gate, matching
 > every other modal. Windows build + full ctest, 1824/1824; user-verified
-> live. Qt6/GTK4/macOS share the fix, unbuilt this session (macOS had the
-> identical latent gap, not yet reported there).
+> live. macOS had the identical latent gap, not yet reported there.
 
 <!-- -->
 
@@ -368,7 +389,6 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > identically to Blue. All four platforms now also live-update on an OS
 > accent-color change without an app restart. Linux (Qt6 + GTK4) build +
 > full ctest, 1855/1855 (+5); user-verified live on Qt6 (KDE Plasma).
-> Windows/macOS unbuilt this session.
 
 <!-- -->
 
@@ -409,7 +429,6 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > per-user analogue, `pending_mention_avatars_`) that didn't match how
 > media arrival is handled anywhere else in the codebase. Linux (Qt6 +
 > GTK4) build + full ctest, 1834/1834; unverified live this session.
-> Windows/macOS share the code, unbuilt.
 
 <!-- -->
 
@@ -422,7 +441,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > fallback branches in `MessageListView`'s `body_layout_for()`/
 > `assemble_emote_spans_()` too, without ever parsing `m.body` as HTML.
 > Linux (Qt6 + GTK4) build + full ctest, 1834/1834 (+3); unverified live
-> this session. Windows/macOS share the code, unbuilt.
+> this session.
 
 <!-- -->
 
@@ -442,7 +461,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > concurrent `/sync` response that can clobber it with a stale pre-change
 > snapshot, the same self-echo class of bug that previously hit thread read
 > receipts. Linux (Qt6 + GTK4) build + full ctest, 1831/1831; cargo test,
-> 667/667 (+3); user-verified live on Windows. macOS unbuilt this session.
+> 667/667 (+3); user-verified live on Windows.
 
 <!-- -->
 
@@ -453,7 +472,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > badges and a Join/Go action, backed by matrix-sdk's
 > `RoomDirectorySearch`. Linux (Qt6) build + full ctest, 1824/1824 C++ +
 > 664 Rust; user-verified live on Qt6. GTK4 blocked by a pre-existing,
-> unrelated build break; Windows/macOS unbuilt.
+> unrelated build break.
 
 <!-- -->
 
@@ -485,8 +504,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > paint actually draws, mirroring the existing `sticker_fit_box_()`
 > measure/paint pattern. `image_w`/`image_h` are finally used, as the
 > pre-decode sizing fallback. Linux (Qt6 + GTK4) build + full ctest,
-> 1781/1781; user-verified live on Qt6. Windows/macOS share the code,
-> unbuilt.
+> 1781/1781; user-verified live on Qt6.
 
 <!-- -->
 
@@ -502,7 +520,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > `Settings::sidebar_width` / `sidebar_collapsed` persist it; 3-state
 > `on_sidebar_cursor` wired through all four shells (new Win32
 > `Cursor::SizeWE`). Linux (Qt6 + GTK4) build + full ctest, 1780/1780 (+14),
-> user-verified Qt6; Windows/macOS unbuilt.
+> user-verified Qt6.
 
 <!-- -->
 
@@ -520,7 +538,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > when the event carries no bundled field; an empty array suppresses
 > previews. Sending side not implemented. Linux (Qt6 + GTK4) build + full
 > ctest, 1781/1781 (+1) C++ + 658 (+6) Rust; user-verified on Qt6 against
-> mautrix-bridged rooms. Windows/macOS unbuilt.
+> mautrix-bridged rooms.
 
 <!-- -->
 
@@ -583,9 +601,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > compose-draft restore existed nowhere on `ShellBase` itself, only
 > duplicated across all four platform shells. No user-facing feature
 > change beyond those two fixes. Linux (Qt6 + GTK4) build + full ctest,
-> 1748/1748; user-verified live. Windows/macOS share the code (all four
-> shells touched by the compose-draft and MSC3030 wiring cleanup),
-> unbuilt.
+> 1748/1748; user-verified live.
 
 <!-- -->
 
@@ -600,8 +616,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > The picker no longer keeps the row count from its first open, so
 > accounts added or removed later show up correctly; it shows at most 8
 > rows and scrolls the rest (`AccountPicker::kMaxVisibleRows`). Qt6
-> build + ctest 1987/1987, user-verified live; GTK4/Windows/macOS share
-> the code, unbuilt.
+> build + ctest 1987/1987, user-verified live.
 
 <!-- -->
 
@@ -631,7 +646,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > messages, each picker row flags that account specifically. Reuses
 > `per_account_rooms_` and `RoomListView`'s presence-dot visual pattern.
 > macOS build + full ctest, 1748/1748 (2 pre-existing unrelated failures
-> reproduced against baseline); GTK4/Qt6/Windows share the code, unbuilt.
+> reproduced against baseline).
 
 <!-- -->
 
@@ -643,8 +658,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > a Space no longer vanishes from that space's "available to join"
 > list — `space_children()`'s membership filter checked only that the
 > room was known to the local store, not that it was still joined.
-> Linux (Qt6 + GTK4) build + full ctest, 1748/1748; macOS/Windows share
-> the code, unbuilt.
+> Linux (Qt6 + GTK4) build + full ctest, 1748/1748.
 
 <!-- -->
 
@@ -812,8 +826,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > hit-test and Tab traversal) at itself instead of relying on its own
 > handler to reject the event — clicks/hover/drops no longer fall through
 > to whatever is behind or inside a disabled control, and clicking one no
-> longer clears keyboard focus. Linux (Qt6 + GTK4) build + full ctest;
-> macOS/Windows share the code, unbuilt.
+> longer clears keyboard focus. Linux (Qt6 + GTK4) build + full ctest.
 
 <!-- -->
 
@@ -902,7 +915,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > gate backs this, gated per-item by hover so unrelated on-screen
 > animations stay frozen. The image/video viewers are exempt and always
 > play. Linux (Qt6 + GTK4) build + full ctest, 1829/1829 (+5); user-verified
-> live. Windows/macOS share the code, unbuilt this session.
+> live.
 
 <!-- -->
 
@@ -2318,14 +2331,14 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > plain monospace.
 
 
-For build instructions, architectural overview, and the open-roadmap items, see [CLAUDE.md](CLAUDE.md). For tracked open issues / known gaps, see the "Known gaps" section at the bottom of CLAUDE.md.
+For build instructions, architectural overview, and the open-roadmap items, see [CLAUDE.md](CLAUDE.md). For tracked open issues / known gaps, see [ROADMAP.md](ROADMAP.md).
 
 ## Test coverage
 
 | Suite | Count |
 | ----- | ----- |
-| Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 756 |
-| C++ Catch2 tests via ctest | 2031 |
+| Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 765 |
+| C++ Catch2 tests via ctest | 2066 |
 
 ## Platforms
 
@@ -2390,9 +2403,9 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 - **`tk::Canvas`** — abstract 2D backend with four concrete impls (`canvas_d2d`, `canvas_qpainter`, `canvas_cairo`, `canvas_cg`). Color / Rect / Point / Image / TextLayout primitives; rounded-rect, stroke, push/pop clip; circle-cropped image draw; initials disc helper.
 - **`tk::Widget`** — measure / arrange / paint + pointer / wheel dispatch with `dispatch_pointer_down` + `world_to_local` capture semantics. Every subclass is constructed exclusively through `tk::create_widget()`/`create_root_widget()` (a Host-aware factory backed by a thread-local pending-`Host*` stack), never directly — constructors are `protected` and friend the factory via `TK_WIDGET_FACTORY_FRIEND`, so `host()` is valid from the first line of any constructor with no manual parameter plumbing.
-- **`tk::Host`** — per-platform integration surface (repaint scheduling, post-to-UI, native edit overlays). `request_repaint`, `post_to_ui`, `make_text_field`, `make_text_area`, `make_audio_player`, `make_audio_capture`, `encode_for_send`.
+- **`tk::Host`** — per-platform integration surface (repaint scheduling, post-to-UI, canvas-composited native text controls). `request_repaint`, `post_to_ui`, `make_text_field`, `make_text_area`, `make_audio_player`, `make_audio_capture`, `encode_for_send`.
 - **Keyboard focus** — real Tab/Shift-Tab traversal (`Host::advance_focus`/`request_focus`/`clear_focus`) with a `:focus-visible`-style ring shown only after keyboard navigation, not a mouse click. Traversal order follows each widget's own `bounds()` in reading order (top-to-bottom rows, left-to-right within a row via a row-overlap comparator), not `add_child()` insertion order, so `Stack`/rect-positioned widgets (grids, pickers) traverse sensibly too. `Host::set_focus_scope()`/`clear_focus_scope()` lets an open modal (Room Settings, an overlay, ...) scope Tab traversal to its own subtree. The compose box is focused by default whenever nothing else needs attention. Native text fields (`tk::TextField`/`tk::TextArea`) participate directly as self-positioning widgets in the tree rather than shell-polled overlays.
-- **Native text overlays** — `NativeTextField` (`QLineEdit` / `GtkEntry` / Win32 EDIT / `NSTextField`) and `NativeTextArea` (`QTextEdit` / `GtkTextView` / multi-line EDIT / `NSTextView`) for IME-friendly input. `set_placeholder` is implemented on all four platforms (GTK4 uses a `dim-label` `GtkLabel` overlay child since `GtkTextView` has no native placeholder API).
+- **Canvas-composited native text controls** — `NativeTextField` (`QLineEdit` / `GtkEntry` / `BetterTextField` / `NSTextField`) and `NativeTextArea` (`QTextEdit` / `GtkTextView` / `BetterTextArea` / `NSTextView`) back text input for IME/selection correctness, but render *into* the canvas rather than floating on top of it: each control's native surface is captured via `rendered_image()` and composited with `Canvas::draw_image()`, so it participates in clipping, opacity, and paint order like any other canvas content. Windows uses the bundled BetterText control (`third_party/bettertext`) rather than a plain Win32 EDIT. `set_placeholder` is implemented on all four platforms (GTK4 uses a `dim-label` `GtkLabel` overlay child since `GtkTextView` has no native placeholder API).
 - **Shared views** — `LoginView`, `RoomListView`, `MessageListView`, `EmojiPicker`, `StickerPicker`, `RecoveryBanner`, `ComposeBar` mounted identically on every platform.
 - **`AlertDialog`** — modal overlay widget (not backdrop-dismissible) with a title, body, and up to two configurable action buttons (`open(Options, primary_cb, secondary_cb)` / `close()` / `is_open()`). Used by `LoginView` to surface startup restore errors; available for other blocking error prompts.
 - **Drag-and-drop ingest (OS-inbound files)** — `tk::Widget` virtuals (`on_file_drop`/`dispatch_file_drop`, `on_native_drag_hover`/`dispatch_native_drag_hover`) mirror the existing pointer-event dispatch shape, so each drop target (`ComposeBar`, `RoomView`, `ImagePackEditorView`, `UserPackEditor`) claims its own drop and paints its own localized hover highlight instead of one whole-surface overlay; image-data MIME types route to the compose bar's image preview, generic files route to the file chip. Distinct from the in-app drag-and-drop framework below.
@@ -2447,7 +2460,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 ## Pickers
 
-- **Emoji picker** — Unicode-category tabs + per-pack custom tabs; search; virtualised grid via `tk::GridView`. Hovering a cell shows an inline `:shortcode:` tooltip (centred above the cell, flipped below near the top edge).
+- **Emoji picker** — Unicode-category tabs + per-pack custom tabs; search; virtualised grid via `tk::GridView`. Hovering a cell shows an inline `:shortcode:` tooltip (centred above the cell, flipped below near the top edge). Emoji 18.0 data (renamed flags keep their old `:flag_…:` shortcodes); emoji newer than the system emoji font can draw are hidden from both the picker and `:shortcode:` autocomplete. **Skin tones** — long-press, right-click, or Shift+Enter on a tone-capable emoji opens `SkinTonePopover`; the picked tone becomes the default for the picker and autocomplete, synced across devices via `im.gnomos.tesseract` account data (a 15 s window distinguishes our own save echoing back from a genuinely newer value from another device).
 - **Sticker picker** — Favorites tab + per-pack tabs; search; virtualised grid. Floating panel on every platform (Qt6 `QFrame`, GTK4 `GtkPopover`, macOS `NSPanel`, Win32 `WS_POPUP` HWND). Same `:shortcode:` hover tooltip as emoji picker.
 - **GridView hover tracking** — `GridView::on_pointer_move` / `on_pointer_leave` update `hovered_index_` and expose `hovered_index()` + `rect_at()` accessors; cell highlight on hover now works correctly (was silently broken).
 - **Recent emoji (MSC4356)** — `m.recent_emoji` + `io.github.johennes.msc4356.recent_emoji` account-data, dual-written on every bump; reads stable → unstable → legacy `io.element.recent_emoji` so existing Element users keep their picker rank. 100-entry cap, move-to-front-and-increment semantics, count-desc top-N for the Frequents tab.
@@ -2475,7 +2488,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 - Emoji + sticker + send buttons painted by the toolkit.
 - Send button gates on trimmed non-empty content; shows a spinner (`tk::BusyButton`) once a send takes over 200 ms, with the per-room `SendPipeline` keeping later sends in order. A send that fails before reaching the send queue puts its text back in the composer.
 - **Bundled link previews on send (MSC4095)** — fetched through the homeserver by default, or directly via the SSRF-guarded `net_guard` client when opted in. When the homeserver's `m.preview_url` capability (MSC4452) turns previews off, `/preview_url` is no longer called; direct fetches still run.
-- Clipboard image paste; clipboard file-list paste (files copied in a file manager, not dragged — Qt6/GTK4 shipped, macOS/Windows unbuilt); file drag-drop; pending-image / pending-file preview chip with clear button.
+- Clipboard image paste; clipboard file-list paste (files copied in a file manager, not dragged — Qt6/GTK4 shipped); file drag-drop; pending-image / pending-file preview chip with clear button.
 - Reply-mode banner (`kReplyBandH = 44 px`) with sender + body snippet and "×" cancel; edit-mode banner (`kEditBandH = 44 px`) with "×" cancel; both modes mutually exclusive.
 - **Slash commands** — `SlashCommandEngine`/`SlashCommandPopup` autocomplete (typing `/` opens the popup); `dispatch_compose_send` routes recognised commands: `/me` + `/slap` → `m.emote`, `/shrug` appends `¯\_(ツ)_/¯`, `/spoiler [(reason)] <text>` → `m.text` with a `data-mx-spoiler` span (MSC2010; content rendered through inline markdown). Unknown `/foo` is sent verbatim.
 
@@ -2529,6 +2542,29 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 - **Per-room notification settings** — a Notifications section in `RoomInfoPanel` with a four-option dropdown (Default / All messages / Mentions / Off) mapped to Matrix per-room push rules (`RuleKind::Override` + `EventMatch` for "off", `RuleKind::Room` for "all"/"mentions", no rule for "default"); backed by a new shared `tk::ComboBox` widget and wired through both the main window and pop-out room windows; Rust `client.rs` reads/writes `m.push_rules`.
 - All platforms suppress the notification when the window is focused and the target room is already open.
 - **Quick-reply** — Windows toast `<input>`/`<action>` XML with foreground activation (unpackaged apps can't get true background activation); macOS `UNNotificationCategory` + `UNTextInputNotificationAction` without the `.foreground` option so replying doesn't raise the app; Linux implements both the KDE-only legacy D-Bus "inline-reply" extension (now reachable on Wayland too, since the legacy interface is used everywhere except Flatpak — see Wayland foreground activation above) and the portal's standardized "im.reply-with-text" button purpose (interface v2+, gracefully inert until Plasma implements it; only exercised via Flatpak now). `event_id` is threaded through the notification pipeline so a reply sends as a proper threaded reply (`m.in_reply_to`); `ShellBase::send_notification_reply_` dispatches the send and reports a failure via a follow-up notification.
+
+## matrix-sdk & ruma feature flags
+
+Cargo features enabled on the Rust SDK crates (`sdk/Cargo.toml`), stable and unstable. The MSCs these unstable flags unlock are described in context elsewhere in this file and in README.md's "Supported MSCs" section; this list tracks the crate-level flags themselves.
+
+- **matrix-sdk** `e2e-encryption` (stable) — end-to-end encryption, cross-signing, key backup.
+- **matrix-sdk** `bundled-sqlite` (stable) — vendors SQLite so the app has no system SQLite dependency; see Build & packaging below.
+- **matrix-sdk** `local-server` (stable) — the ephemeral loopback HTTP listener `sdk/src/oauth.rs` drives for the RFC 8252 OAuth redirect; Tesseract runs no HTTP server of its own otherwise.
+- **matrix-sdk** `markdown` (stable) — cascades to ruma's markdown support; backs `markdown_to_html`/`markdown_inline_to_html` (`sdk/src/markdown.rs`), the Rust-side Markdown→HTML conversion used by the compose bar.
+- **matrix-sdk** `qrcode` (stable) — QR-code login grant (MSC4108, `sdk/src/client/qr_grant.rs`).
+- **matrix-sdk** `experimental-send-custom-to-device` (unstable) — `encrypt_and_send_raw_to_device` for MatrixRTC call-key delivery (`sdk/src/client/rtc/e2ee.rs`).
+- **matrix-sdk-base** — pulled in only for `UtdCause` in the timeline converter; matrix-sdk doesn't re-export the crypto types module. No extra features enabled.
+- **matrix-sdk-ui** — sliding sync (`SyncService`/`RoomListService`) and the timeline/event-cache layer the FFI is built on. No extra features enabled.
+- **ruma** `api` (stable) — base client-server API types; always required.
+- **ruma** `html` (stable) — HTML parsing for formatted message bodies.
+- **ruma** `compat-encrypted-stickers` (unstable, MSC2545) — decrypts `m.sticker` events sent with an `EncryptedFile` media source.
+- **ruma** `unstable-msc3245-v1-compat` (unstable, MSC3245) — voice-message receive path (`m.voice`, MSC1767 waveform).
+- **ruma** `unstable-msc2448` (unstable, MSC2448) — BlurHash placeholders for gated/suppressed media previews.
+- **ruma** `unstable-msc4075` (unstable, MSC4075) — MatrixRTC ring notifications (`org.matrix.msc4075.rtc.notification` + `m.call.ring.ack`).
+- **ruma** `unstable-msc4095` (unstable, MSC4095) — sender-bundled URL previews, both receive and send.
+- **ruma** `unstable-msc3417` (unstable, MSC3417) — call rooms (room-list section, auto-join, lifecycle).
+
+`sdk/Cargo.toml` carries a comment on every feature explaining why it's enabled; treat this list as a snapshot that can drift as MSCs land in-spec (ruma drops the `unstable-` prefix) or are superseded — check the Cargo.toml comments for the current word on each one before relying on this list.
 
 ## Build & packaging
 

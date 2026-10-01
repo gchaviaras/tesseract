@@ -75,16 +75,23 @@ void paint_pill_leading_visual(Canvas& canvas, CanvasFactory& /*factory*/,
         // Plain filled circle (pill's own colors) behind the glyph — there is
         // no per-user identity here to derive initials from, just an icon.
         canvas.draw_initials_circle(spec.fallback_glyph, centre, diameter,
-                                    spec.bg, spec.fg);
+                                    spec.bg, spec.fg, AvatarText::Literal);
     }
     else if (spec.reserve_leading_visual)
     {
         // Stand-in avatar for a slot whose image hasn't resolved (or never
         // will): initials, like every other avatar without an image.
-        const std::string_view name =
-            spec.kind == PillKind::Room ? std::string_view("@") : spec.text;
-        canvas.draw_initials_circle(name, centre, diameter, spec.initials_bg,
-                                    spec.initials_fg);
+        if (spec.kind == PillKind::Room)
+        {
+            canvas.draw_initials_circle("@", centre, diameter,
+                                        spec.initials_bg, spec.initials_fg,
+                                        AvatarText::Literal);
+        }
+        else
+        {
+            canvas.draw_initials_circle(spec.text, centre, diameter,
+                                        spec.initials_bg, spec.initials_fg);
+        }
     }
 }
 

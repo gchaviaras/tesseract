@@ -1,5 +1,7 @@
 #include "LinuxQtTrayIcon.h"
 
+#include "tk/i18n.h"
+
 #include <QAction>
 #include <QApplication>
 #include <QCoreApplication>
@@ -29,8 +31,8 @@ LinuxQtTrayIcon::LinuxQtTrayIcon(std::function<void()> on_show,
     tray_->setToolTip(QCoreApplication::applicationName());
 
     menu_ = std::make_unique<QMenu>();
-    QAction* show_action = menu_->addAction(QObject::tr("Show App"));
-    QAction* quit_action = menu_->addAction(QObject::tr("Quit"));
+    QAction* show_action = menu_->addAction(QString::fromStdString(tk::tr("Show App")));
+    QAction* quit_action = menu_->addAction(QString::fromStdString(tk::tr("Quit")));
     tray_->setContextMenu(menu_.get());
 
     QObject::connect(show_action, &QAction::triggered, this,
@@ -89,7 +91,7 @@ void LinuxQtTrayIcon::rebuild_menu(
         return;
 
     auto new_menu = std::make_unique<QMenu>();
-    QAction* show_action = new_menu->addAction(QObject::tr("Show App"));
+    QAction* show_action = new_menu->addAction(QString::fromStdString(tk::tr("Show App")));
     QObject::connect(show_action, &QAction::triggered, this,
                      [this] { if (on_show_) on_show_(); });
 
@@ -103,7 +105,7 @@ void LinuxQtTrayIcon::rebuild_menu(
     }
     new_menu->addSeparator();
 
-    QAction* quit_action = new_menu->addAction(QObject::tr("Quit"));
+    QAction* quit_action = new_menu->addAction(QString::fromStdString(tk::tr("Quit")));
     QObject::connect(quit_action, &QAction::triggered, this,
                      [this] { if (on_quit_) on_quit_(); });
 

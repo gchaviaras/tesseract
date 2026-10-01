@@ -32,6 +32,7 @@
 #include "tk/status_icons.h"
 #include "tk/svg.h"
 #include "tk/video_decode.h"
+#include "tk/emoji_support.h"
 #include "tk/host.h"
 #include "tk/host_macos.h"
 #include "tk/theme.h"
@@ -218,6 +219,8 @@ protected:
     void on_low_power_mode_ui_(bool active) override;
     std::uint64_t shell_extra_memory_bytes_() const override;
     void on_launch_at_login_pref_ui_(bool enabled) override;
+    bool tray_available_() const override;
+    void on_tray_available_ui_(bool available) override;
     void on_server_info_ready_ui_() override;
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override;
@@ -413,6 +416,9 @@ public:
     void set_power_monitor(std::unique_ptr<tesseract::IPowerMonitor> pm);
     void set_autostart(std::unique_ptr<tesseract::IAutostart> autostart);
     void refresh_launch_at_login_pref() { refresh_launch_at_login_pref_(); }
+    // Public shim for the same reason: MainWindowController is an Objective-C
+    // class, not a ShellBase subclass, so it cannot reach a protected member.
+    void push_tray_available() { push_tray_available_ui_(); }
     void apply_space_child_counts(std::vector<tesseract::RoomInfo>& rooms);
     void clear_focused_state(const std::string& room_id);
 
@@ -550,6 +556,7 @@ public:
     void schedule_relayout();
     std::vector<tesseract::ImagePackImage>
     emoticons_for_room(const std::string& room_id) const;
+    tesseract::emoji::SkinTone emoji_skin_tone() { return emoji_skin_tone_(); }
     std::string gif_src_disk_key(const std::string& url) const;
     const tesseract::ServerInfo& server_info_ref() const;
     using CacheSizeCallback =
@@ -929,6 +936,8 @@ using TkImagePtr = std::unique_ptr<tk::Image>;
 - (void)_onStatusLabelClicked:(NSClickGestureRecognizer*)sender;
 - (void)_onStartupRestoreProgress:(const std::string&)status;
 - (void)_setLaunchAtLoginPref:(bool)enabled;
+- (void)_setTrayAvailable:(bool)available;
+- (BOOL)_trayAvailable;
 - (void)_onInflightChanged;
 - (void)_onLowPowerModeChanged:(bool)active;
 - (uint64_t)_extraMemoryBytes;
@@ -2016,6 +2025,16 @@ void MacShell::on_launch_at_login_pref_ui_(bool enabled)
     [ctrl_ _setLaunchAtLoginPref:enabled];
 }
 
+bool MacShell::tray_available_() const
+{
+    return [ctrl_ _trayAvailable];
+}
+
+void MacShell::on_tray_available_ui_(bool available)
+{
+    [ctrl_ _setTrayAvailable:available];
+}
+
 void MacShell::on_restore_status_ui_()
 {
     [ctrl_ _refreshSyncStatus];
@@ -3091,15 +3110,29 @@ void MacShell::apply_window_title_ui_(const std::string& title)
     [self _saveWindowGeometry];
 }
 
-// Intercept the red traffic-light / Cmd-W. If the tray icon is up, hide the
-// window instead of closing it; the user can bring it back via the menu-bar
-// item. Returns NO to swallow the close.
+// Intercept the red traffic-light / Cmd-W. Only the window that owns the
+// app-wide tray icon consults CloseAction — spawned per-account windows have
+// no _tray and always close for real below. HideToTray/Minimize are
+// intercepted here (returning NO to swallow the close); Quit falls through to
+// the normal close/terminate path. Hiding is only reachable when the tray
+// icon actually exists, so CloseAction::HideToTray can never strand the app
+// unreachable. Note this app is not an LSUIElement agent, so hiding leaves a
+// Dock icon — the user can still reach the window from there.
 - (BOOL)windowShouldClose:(NSWindow*)sender
 {
     if (_tray && _tray->is_available())
     {
-        [sender orderOut:nil];
-        return NO;
+        switch (tesseract::Settings::instance().close_action)
+        {
+        case tesseract::Settings::CloseAction::HideToTray:
+            [sender orderOut:nil];
+            return NO; // the user can bring it back via the menu-bar item
+        case tesseract::Settings::CloseAction::Minimize:
+            [sender miniaturize:nil];
+            return NO;
+        case tesseract::Settings::CloseAction::Quit:
+            break;
+        }
     }
     // Hand this window's account bridge back to the primary, release its
     // dedicated mapping and tray ownership (multi-window), then unregister.
@@ -4742,6 +4775,12 @@ void MacShell::apply_window_title_ui_(const std::string& title)
 
                 // ── Shortcode detection ─────────────────────────────────────────
 
+                // Same tone + font-version limit the shared ShortcodeController
+                // applies (see tk/emoji_support.h).
+                const std::uint16_t emoji_max_version =
+                    c->_roomTextArea && c->_roomTextArea->host()
+                        ? c->_roomTextArea->host()->supported_emoji_version()
+                        : tk::kAllEmojiVersions;
                 auto complete =
                     c->_shell->shortcode_engine_.find_complete(s, cursor);
                 if (complete)
@@ -4749,7 +4788,7 @@ void MacShell::apply_window_title_ui_(const std::string& title)
                     auto hits = c->_shell->shortcode_engine_.lookup(
                         complete->prefix,
                         c->_shell->emoticons_for_room(c->_shell->current_room_id_),
-                        1);
+                        1, c->_shell->emoji_skin_tone(), emoji_max_version);
                     if (!hits.empty() && !hits.front().glyph.empty())
                     {
                         c->_roomTextArea->replace_range(
@@ -4782,7 +4821,8 @@ void MacShell::apply_window_title_ui_(const std::string& title)
                     c->_shell->shortcode_current_suggestions_ =
                         c->_shell->shortcode_engine_.lookup(
                             prefix_match->prefix,
-                            c->_shell->emoticons_for_room(c->_shell->current_room_id_));
+                            c->_shell->emoticons_for_room(c->_shell->current_room_id_),
+                            8, c->_shell->emoji_skin_tone(), emoji_max_version);
                     if (!c->_shell->shortcode_current_suggestions_.empty())
                     {
                         [c hideMentionPopup];
@@ -7075,6 +7115,10 @@ void MacShell::apply_window_title_ui_(const std::string& title)
     // real OS state off the UI thread and pushes it in when it returns, so the
     // SMAppService round-trip never stalls the Settings-window open.
     _shell->refresh_launch_at_login_pref();
+    // Tray availability is local state, so it can be pushed synchronously.
+    // Needed before the user can pick "hide to tray" — without a menu-bar item
+    // that option would order the window out with no way to bring it back.
+    _shell->push_tray_available();
     _settingsSurface->relayout();
 
     // own_extended_profile() may have been fetched (or changed) while
@@ -7846,6 +7890,17 @@ void MacShell::apply_window_title_ui_(const std::string& title)
 {
     if (_settingsView)
         _settingsView->set_launch_at_login_pref(enabled);
+}
+
+- (void)_setTrayAvailable:(bool)available
+{
+    if (_settingsView)
+        _settingsView->set_tray_available(available);
+}
+
+- (BOOL)_trayAvailable
+{
+    return _tray && _tray->is_available();
 }
 
 - (void)_onStatusLabelClicked:(NSClickGestureRecognizer*)sender

@@ -1,4 +1,6 @@
 #include "views/ShortcodeController.h"
+#include "tk/emoji_support.h"
+#include "tk/host.h"
 
 #include <algorithm>
 #include <utility>
@@ -36,12 +38,17 @@ bool ShortcodeController::on_text_changed(const std::string& text, int cursor)
 
     const std::vector<tesseract::ImagePackImage> packs =
         hooks_.emoticons ? hooks_.emoticons() : empty_emoticons();
+    const auto tone =
+        hooks_.skin_tone ? hooks_.skin_tone() : tesseract::emoji::SkinTone::None;
+    const std::uint16_t max_version = text_area_ && text_area_->host()
+                                          ? text_area_->host()->supported_emoji_version()
+                                          : tk::kAllEmojiVersions;
 
     // Auto-expand: ":smile:" followed by a space / EOT → replace with the
     // glyph (Unicode) or an inline pill (custom emoticon).
     if (auto complete = engine_.find_complete(text, cursor))
     {
-        auto hits = engine_.lookup(complete->prefix, packs, 1);
+        auto hits = engine_.lookup(complete->prefix, packs, 1, tone, max_version);
         if (!hits.empty())
         {
             const auto& hit = hits.front();
@@ -73,7 +80,7 @@ bool ShortcodeController::on_text_changed(const std::string& text, int cursor)
         }
         return false;
     }
-    suggestions_ = engine_.lookup(m->prefix, packs);
+    suggestions_ = engine_.lookup(m->prefix, packs, 8, tone, max_version);
     if (suggestions_.empty())
     {
         if (visible_)

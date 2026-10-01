@@ -140,9 +140,10 @@ void CallBanner::paint_before_children(tk::PaintCtx& ctx)
         if (overflow && i + 1 == slots)
         {
             const std::size_t hidden = members_.size() - (slots - 1);
-            draw_avatar(ctx.canvas, nullptr, centre, kAvatarD,
-                        "+" + std::to_string(hidden), pal.avatar_initials_bg,
-                        pal.avatar_initials_text);
+            ctx.canvas.draw_initials_circle(
+                "+" + std::to_string(hidden), centre, kAvatarD,
+                pal.avatar_initials_bg, pal.avatar_initials_text,
+                tk::AvatarText::Literal);
             continue;
         }
         const Member& m = members_[i];

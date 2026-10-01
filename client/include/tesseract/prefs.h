@@ -17,6 +17,9 @@ struct PrefsData
     /// the MSC2346 auto-detection (`RoomInfo::is_bridged`) for that room. See
     /// `ShellBase::room_effectively_bridged_()`. Empty by default.
     std::vector<std::string> bridge_not_bridged_overrides;
+    /// Default emoji skin tone as an `emoji::skin_tone_key()` string
+    /// ("medium", …). Empty = default (yellow) presentation.
+    std::string emoji_skin_tone;
 };
 
 /// Parse / serialize helpers for the `im.gnomos.tesseract` JSON content object.
@@ -28,7 +31,10 @@ namespace Prefs
 PrefsData parse(const std::string& json);
 
 /// Encode `p` as a JSON object suitable for `Client::save_prefs_json()`.
-std::string serialize(const PrefsData& p);
+/// When `base_json` is a JSON object (normally the currently stored event
+/// content), `p`'s fields are overlaid onto it so keys this build doesn't
+/// know about survive the save instead of being wiped.
+std::string serialize(const PrefsData& p, const std::string& base_json = {});
 
 /// Build the room-layout prefs to persist after a room switch / tab change.
 /// `last_room` is the active room; `open_room_ids` are the open tabs in visual

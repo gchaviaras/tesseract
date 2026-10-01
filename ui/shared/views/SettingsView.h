@@ -83,6 +83,14 @@ public:
     // Settings bool directly — see ShellBase::handle_launch_at_login_toggle_.
     void set_launch_at_login_pref(bool enabled);
 
+    // Silently initialise the "start minimized to tray" checkbox.
+    void set_start_minimized_pref(bool enabled);
+
+    // Report whether a tray icon exists so the close-action dropdown can drop
+    // the "hide to tray" option, which would be unreachable without one. The
+    // shell also resolves a stored HideToTray to Quit in that case.
+    void set_tray_available(bool available);
+
     // Silently initialise the low-power-mode selector from the persisted pref.
     void set_low_power_pref(tesseract::Settings::LowPowerPreference pref);
 
@@ -339,6 +347,11 @@ public:
 
     // Fired when the user selects a different accent color.
     std::function<void(tesseract::Settings::ThemeAccent)> on_theme_accent_changed;
+    // The account's default emoji skin tone, read each time the status-emoji
+    // picker opens; on_emoji_skin_tone_changed fires when the user picks a
+    // new one from that picker's tone menu.
+    std::function<tesseract::emoji::SkinTone()> emoji_skin_tone_provider;
+    std::function<void(tesseract::emoji::SkinTone)> on_emoji_skin_tone_changed;
 
     // Fired when the user changes the Low power mode selector (Auto/On/Off).
     std::function<void(tesseract::Settings::LowPowerPreference)>
@@ -364,6 +377,12 @@ public:
 
     // Fired when the user toggles "Launch Tesseract when you log in".
     std::function<void(bool)> on_launch_at_login_changed;
+
+    // Fired when the user toggles "Start minimized to system tray".
+    std::function<void(bool)> on_start_minimized_changed;
+
+    // Fired when the user changes what closing the window does.
+    std::function<void(tesseract::Settings::CloseAction)> on_close_action_changed;
 
     // Fired when the user toggles notifications.
     std::function<void(bool)> on_notifications_changed;

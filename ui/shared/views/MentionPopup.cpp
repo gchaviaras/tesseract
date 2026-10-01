@@ -33,7 +33,7 @@ void MentionPopup::paint_row(tk::PaintCtx& ctx, const tk::Rect& row,
     {
         // Accent disc for @room.
         draw_avatar(ctx.canvas, nullptr, center, kAvatar, "#", pal.accent,
-                    pal.text_on_accent);
+                    pal.text_on_accent, tk::AvatarText::Literal);
     }
     else
     {

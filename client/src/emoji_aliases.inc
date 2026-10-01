@@ -902,3 +902,6 @@
 {"🥃", "whiskey"},
 {"🥃", "whisky"},
 {"🥃", "bourbon"},
+{"🇭🇲", "flag_heard_mcdonald_islands"},
+{"🇸🇭", "flag_st_helena"},
+{"🇹🇫", "flag_french_southern_territories"},

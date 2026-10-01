@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tesseract/launch_args.h>
+#include <tesseract/settings.h>
 
 #include <chrono>
 #include <functional>
@@ -45,14 +46,26 @@ struct LaunchPlan
     std::optional<int> exit_code;
 
     /// Whether the main window should start hidden in the tray.
+    ///
+    /// `--hidden`/`--minimized` is an explicit per-launch request and always
+    /// wins. Otherwise this follows the "Start minimized to tray" preference,
+    /// on every launch — opened by hand or by the OS login item.
+    ///
+    /// This deliberately no longer treats `autostart` as implying "hidden":
+    /// enabling a login item should not silently hide the app, and on MSIX
+    /// builds StartupTask launches us with no arguments at all (so --autostart
+    /// never even arrives), which already made the old behaviour
+    /// build-dependent.
     bool start_hidden() const
     {
-        return args.autostart || args.hidden;
+        if (args.hidden)
+            return true;
+        return Settings::instance().start_minimized;
     }
 
     /// Whether this launch carries something for an already-running
     /// instance to act on. A duplicate launch that has nothing to forward
-    /// and asked to stay hidden exits quietly without raising the other
+    /// and was started by the OS exits quietly without raising the other
     /// instance.
     bool has_forwardable_intent() const
     {
@@ -61,7 +74,18 @@ struct LaunchPlan
     }
     bool should_raise_existing_instance() const
     {
-        return has_forwardable_intent() || !start_hidden();
+        // Something to forward must reach the running instance regardless of
+        // how this launch was started.
+        if (has_forwardable_intent())
+            return true;
+        // An OS-started launch with nothing to forward stays out of the way.
+        if (args.autostart)
+            return false;
+        // A user-started launch raises even when it asked to start hidden.
+        // Without this, enabling "Start minimized to tray" would make the app
+        // reachable only by clicking the tray icon: launching it again while
+        // it already runs would quietly exit and show nothing.
+        return !args.hidden;
     }
 
     /// How long to wait for the single-instance lock before treating this

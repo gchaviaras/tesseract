@@ -8,6 +8,8 @@
 #include <QtGui/QFont>
 #include <QtGui/QFontDatabase>
 #include <QtGui/QFontMetricsF>
+#include <QtGui/QGlyphRun>
+#include <QtGui/QRawFont>
 #include <QtGui/QImage>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
@@ -80,9 +82,10 @@ void apply_monospace(QFont& f)
 
 // The word-split policy is shared (tk::initials_of); apply Qt's locale-aware
 // uppercasing to the result before drawing.
-QString initials_upper(std::string_view name)
+QString initials_upper(std::string_view name, AvatarText text)
 {
-    std::string base = initials_of(name);
+    std::string base =
+        text == AvatarText::Literal ? std::string(name) : initials_of(name);
     return QString::fromUtf8(base.data(), static_cast<int>(base.size()))
         .toUpper();
 }
@@ -688,8 +691,9 @@ public:
         p_.restore();
     }
 
-    void draw_initials_circle(std::string_view name, Point centre,
-                              float diameter, Color bg, Color fg) override
+    void draw_initials_circle_(std::string_view name, Point centre,
+                               float diameter, Color bg, Color fg,
+                               AvatarText text) override
     {
         p_.save();
         p_.setBrush(to_qcolor(bg));
@@ -702,7 +706,7 @@ public:
         f.setWeight(QFont::DemiBold);
         p_.setFont(f);
         p_.setPen(to_qcolor(fg));
-        QString s = initials_upper(name);
+        QString s = initials_upper(name, text);
         QRectF box(centre.x - diameter * 0.5, centre.y - diameter * 0.5,
                    diameter, diameter);
         p_.drawText(box, Qt::AlignCenter, s);
@@ -1634,6 +1638,40 @@ public:
         img.setDevicePixelRatio(scale_factor);
         img.fill(Qt::transparent);
         return std::make_unique<QtOffscreenSurface>(std::move(img));
+    }
+
+    bool can_render_emoji(std::string_view glyph) override
+    {
+        // Same font the picker cell asks for; Qt's fallback supplies the
+        // emoji face, or a .notdef (glyph 0) from the primary font when no
+        // installed font has the codepoint.
+        QTextLayout layout(
+            QString::fromUtf8(glyph.data(), static_cast<qsizetype>(glyph.size())),
+            font_cache_[static_cast<std::size_t>(FontRole::EmojiPickerCell)]);
+        layout.beginLayout();
+        QTextLine line = layout.createLine();
+        if (line.isValid())
+            line.setLineWidth(1.0e6);
+        layout.endLayout();
+
+        // Zero-advance glyphs (a shaped-away VS16/ZWJ) don't count; a
+        // sequence the font doesn't know falls apart into several visible
+        // glyphs.
+        int visible = 0;
+        for (const QGlyphRun& run : layout.glyphRuns())
+        {
+            const QList<quint32> ids = run.glyphIndexes();
+            const QList<QPointF> adv = run.rawFont().advancesForGlyphIndexes(ids);
+            for (qsizetype i = 0; i < ids.size() && i < adv.size(); ++i)
+            {
+                if (adv[i].x() <= 0.0)
+                    continue;
+                if (ids[i] == 0)
+                    return false;
+                ++visible;
+            }
+        }
+        return visible == 1;
     }
 };
 

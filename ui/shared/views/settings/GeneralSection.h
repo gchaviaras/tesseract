@@ -4,7 +4,8 @@
 //
 // Groups:
 //   "Startup"     — checkbox to launch Tesseract automatically when the user
-//                   logs into the OS
+//                   logs into the OS, checkbox to start every launch minimized
+//                   to the tray, and a dropdown for what closing the window does
 //   "Power"       — Low power mode: Auto / On / Off
 //
 // Reads initial state from Settings::instance(), but the shell re-pushes the
@@ -47,6 +48,24 @@ public:
     // Fired with the new state when the "launch at login" checkbox is toggled.
     std::function<void(bool)> on_launch_at_login_changed;
 
+    // Silently update the "start minimized to tray" checkbox without firing the
+    // callback. Mirrors set_launch_at_login.
+    void set_start_minimized(bool enabled);
+
+    // Fired when the "start minimized to tray" checkbox is toggled.
+    std::function<void(bool)> on_start_minimized_changed;
+
+    // Fired when the "when I close the window" dropdown changes.
+    std::function<void(tesseract::Settings::CloseAction)> on_close_action_changed;
+
+    // Report whether a system tray icon actually exists on this machine, and
+    // rebuild the close-action dropdown accordingly. Without a tray icon,
+    // CloseAction::HideToTray would be a trap — the window would hide with no
+    // way to bring it back — so that option is dropped from the list and the
+    // setting silently degrades to a real quit, matching what the shells do
+    // at runtime (ITrayIcon::is_available()).
+    void set_tray_available(bool available);
+
     // Silently update the low-power-mode selection without firing the callback.
     void set_low_power(tesseract::Settings::LowPowerPreference pref);
 
@@ -58,7 +77,14 @@ public:
     std::function<void(tesseract::Settings::LowPowerPreference)> on_low_power_changed;
 
 private:
+    // Rebuild close_action_combo_'s options for the current tray availability.
+    void rebuild_close_action_options_();
+
     tk::CheckButton* launch_at_login_cb_ = nullptr;
+    tk::CheckButton* start_minimized_cb_ = nullptr;
+    tk::ComboBox* close_action_combo_ = nullptr;
+    tk::Label* close_action_desc_ = nullptr;
+    bool tray_available_ = true;
     SettingsGroup* power_group_ = nullptr;
     tk::ComboBox* low_power_combo_ = nullptr;
     tk::Label* low_power_desc_ = nullptr;

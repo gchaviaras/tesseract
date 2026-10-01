@@ -55,7 +55,8 @@ std::string close_action_description(CA action, bool tray_available)
         break;
     }
     return tk::tr("Closing the window hides it to the system tray. Tesseract "
-                  "keeps running — use the tray icon's Quit menu item to exit.");
+                  "keeps running - use the tray icon's Quit menu item to "
+                  "exit.");
 }
 
 const char* low_power_value(LP pref)

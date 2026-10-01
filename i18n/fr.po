@@ -1517,7 +1517,7 @@ msgid "Closing the window minimizes Tesseract to the taskbar."
 msgstr "La fermeture de la fenêtre réduit Tesseract dans la barre des tâches."
 
 #: ui/shared/views/settings/GeneralSection.cpp
-msgid "Closing the window hides it to the system tray. Tesseract keeps running — use the tray icon's Quit menu item to exit."
+msgid "Closing the window hides it to the system tray. Tesseract keeps running - use the tray icon's Quit menu item to exit."
 msgstr "La fermeture de la fenêtre masque Tesseract dans la zone de notification, qui continue de fonctionner. Pour quitter, utilisez l'option « Quitter » du menu de l'icône de notification."
 
 #: ui/shared/views/settings/GeneralSection.cpp

@@ -14,28 +14,8 @@ namespace
 using LP = tesseract::Settings::LowPowerPreference;
 using CA = tesseract::Settings::CloseAction;
 
-const char* close_action_value(CA action)
-{
-    switch (action)
-    {
-    case CA::Quit:
-        return "quit";
-    case CA::Minimize:
-        return "minimize";
-    case CA::HideToTray:
-        break;
-    }
-    return "tray";
-}
-
-CA close_action_from_value(const std::string& v)
-{
-    if (v == "quit")
-        return CA::Quit;
-    if (v == "minimize")
-        return CA::Minimize;
-    return CA::HideToTray;
-}
+// The dropdown's selected values are the same spellings the setting persists,
+// via tesseract::close_action_to_string / _from_string.
 
 std::string close_action_description(CA action, bool tray_available)
 {
@@ -130,7 +110,8 @@ GeneralSection::GeneralSection()
     auto close_action_combo = tk::create_widget<tk::ComboBox>(this);
     close_action_combo_ = startup_group->add_widget(std::move(close_action_combo));
     rebuild_close_action_options_();
-    close_action_combo_->set_selected_value(close_action_value(s.close_action));
+    close_action_combo_->set_selected_value(
+        tesseract::close_action_to_string(s.close_action));
 
     auto close_action_desc = tk::create_widget<tk::Label>(
         this, close_action_description(s.close_action, tray_available_),
@@ -140,11 +121,12 @@ GeneralSection::GeneralSection()
 
     close_action_combo_->on_changed = [this](std::string v)
     {
+        const CA action = tesseract::close_action_from_string(v);
         if (close_action_desc_)
             close_action_desc_->set_text(
-                close_action_description(close_action_from_value(v), tray_available_));
+                close_action_description(action, tray_available_));
         if (on_close_action_changed)
-            on_close_action_changed(close_action_from_value(v));
+            on_close_action_changed(action);
     };
 
     // ── Power ─────────────────────────────────────────────────────────────────
@@ -222,11 +204,13 @@ void GeneralSection::set_tray_available(bool available)
     }
     if (close_action_desc_)
     {
-        close_action_desc_->set_text(close_action_description(
+        const CA action =
             close_action_combo_
-                ? close_action_from_value(close_action_combo_->selected_value())
-                : tesseract::Settings::CloseAction::HideToTray,
-            tray_available_));
+                ? tesseract::close_action_from_string(
+                      close_action_combo_->selected_value())
+                : CA::HideToTray;
+        close_action_desc_->set_text(
+            close_action_description(action, tray_available_));
     }
 }
 

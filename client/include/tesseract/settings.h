@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <filesystem>
+#include <string_view>
 
 // Runtime-mutable application settings. Today every field is hardcoded to
 // the historical visual default; a future settings dialog will mutate this
@@ -407,5 +408,16 @@ public:
 private:
     Settings() = default;
 };
+
+// Persisted spelling of Settings::CloseAction: "tray", "minimize" or "quit".
+// Shared by the settings serializer and the Settings → General dropdown, so
+// the on-disk key and the combo's selected value cannot drift apart.
+const char* close_action_to_string(Settings::CloseAction action);
+
+// Parse a persisted "close_action". Anything unrecognised — an unknown value,
+// or one written by a newer build — maps to HideToTray, the field default,
+// so a hand-edited or older settings.json can never make closing the window
+// start killing the app.
+Settings::CloseAction close_action_from_string(std::string_view value);
 
 } // namespace tesseract

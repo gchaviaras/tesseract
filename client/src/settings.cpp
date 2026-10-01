@@ -77,13 +77,8 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
     prefetch_unread_rooms        = j.value("prefetch_unread_rooms",          true);
     launch_at_login               = j.value("launch_at_login",              false);
 
-    auto close_action_str = j.value("close_action", std::string("tray"));
-    if (close_action_str == "quit")
-        close_action = CloseAction::Quit;
-    else if (close_action_str == "minimize")
-        close_action = CloseAction::Minimize;
-    else
-        close_action = CloseAction::HideToTray;
+    close_action                  = close_action_from_string(
+        j.value("close_action", std::string(close_action_to_string(CloseAction::HideToTray))));
     start_minimized               = j.value("start_minimized",             false);
 
     send_presence                = j.value("send_presence",                true);
@@ -217,12 +212,7 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         low_power_pref == LowPowerPreference::On  ? "on"  :
         low_power_pref == LowPowerPreference::Off ? "off" : "auto";
 
-    // Unknown/absent values fall back to HideToTray, matching the field
-    // default, so a hand-edited or older settings.json never quits the app
-    // unexpectedly on close.
-    const char* close_action_str =
-        close_action == CloseAction::Quit     ? "quit"     :
-        close_action == CloseAction::Minimize ? "minimize" : "tray";
+    const char* close_action_str = close_action_to_string(close_action);
 
     nlohmann::json j = {
         {"theme",                            theme_str},
@@ -324,6 +314,29 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
     if (!f.is_open())
         return;
     f << j.dump(4) << '\n';
+}
+
+const char* close_action_to_string(Settings::CloseAction action)
+{
+    switch (action)
+    {
+    case Settings::CloseAction::Quit:
+        return "quit";
+    case Settings::CloseAction::Minimize:
+        return "minimize";
+    case Settings::CloseAction::HideToTray:
+        break;
+    }
+    return "tray";
+}
+
+Settings::CloseAction close_action_from_string(std::string_view value)
+{
+    if (value == "quit")
+        return Settings::CloseAction::Quit;
+    if (value == "minimize")
+        return Settings::CloseAction::Minimize;
+    return Settings::CloseAction::HideToTray;
 }
 
 } // namespace tesseract

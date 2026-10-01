@@ -2513,6 +2513,29 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 - All platforms suppress the notification when the window is focused and the target room is already open.
 - **Quick-reply** — Windows toast `<input>`/`<action>` XML with foreground activation (unpackaged apps can't get true background activation); macOS `UNNotificationCategory` + `UNTextInputNotificationAction` without the `.foreground` option so replying doesn't raise the app; Linux implements both the KDE-only legacy D-Bus "inline-reply" extension (now reachable on Wayland too, since the legacy interface is used everywhere except Flatpak — see Wayland foreground activation above) and the portal's standardized "im.reply-with-text" button purpose (interface v2+, gracefully inert until Plasma implements it; only exercised via Flatpak now). `event_id` is threaded through the notification pipeline so a reply sends as a proper threaded reply (`m.in_reply_to`); `ShellBase::send_notification_reply_` dispatches the send and reports a failure via a follow-up notification.
 
+## matrix-sdk & ruma feature flags
+
+Cargo features enabled on the Rust SDK crates (`sdk/Cargo.toml`), stable and unstable. The MSCs these unstable flags unlock are described in context elsewhere in this file and in README.md's "Supported MSCs" section; this list tracks the crate-level flags themselves.
+
+- **matrix-sdk** `e2e-encryption` (stable) — end-to-end encryption, cross-signing, key backup.
+- **matrix-sdk** `bundled-sqlite` (stable) — vendors SQLite so the app has no system SQLite dependency; see Build & packaging below.
+- **matrix-sdk** `local-server` (stable) — the ephemeral loopback HTTP listener `sdk/src/oauth.rs` drives for the RFC 8252 OAuth redirect; Tesseract runs no HTTP server of its own otherwise.
+- **matrix-sdk** `markdown` (stable) — cascades to ruma's markdown support; backs `markdown_to_html`/`markdown_inline_to_html` (`sdk/src/markdown.rs`), the Rust-side Markdown→HTML conversion used by the compose bar.
+- **matrix-sdk** `qrcode` (stable) — QR-code login grant (MSC4108, `sdk/src/client/qr_grant.rs`).
+- **matrix-sdk** `experimental-send-custom-to-device` (unstable) — `encrypt_and_send_raw_to_device` for MatrixRTC call-key delivery (`sdk/src/client/rtc/e2ee.rs`).
+- **matrix-sdk-base** — pulled in only for `UtdCause` in the timeline converter; matrix-sdk doesn't re-export the crypto types module. No extra features enabled.
+- **matrix-sdk-ui** — sliding sync (`SyncService`/`RoomListService`) and the timeline/event-cache layer the FFI is built on. No extra features enabled.
+- **ruma** `api` (stable) — base client-server API types; always required.
+- **ruma** `html` (stable) — HTML parsing for formatted message bodies.
+- **ruma** `compat-encrypted-stickers` (unstable, MSC2545) — decrypts `m.sticker` events sent with an `EncryptedFile` media source.
+- **ruma** `unstable-msc3245-v1-compat` (unstable, MSC3245) — voice-message receive path (`m.voice`, MSC1767 waveform).
+- **ruma** `unstable-msc2448` (unstable, MSC2448) — BlurHash placeholders for gated/suppressed media previews.
+- **ruma** `unstable-msc4075` (unstable, MSC4075) — MatrixRTC ring notifications (`org.matrix.msc4075.rtc.notification` + `m.call.ring.ack`).
+- **ruma** `unstable-msc4095` (unstable, MSC4095) — sender-bundled URL previews, both receive and send.
+- **ruma** `unstable-msc3417` (unstable, MSC3417) — call rooms (room-list section, auto-join, lifecycle).
+
+`sdk/Cargo.toml` carries a comment on every feature explaining why it's enabled; treat this list as a snapshot that can drift as MSCs land in-spec (ruma drops the `unstable-` prefix) or are superseded — check the Cargo.toml comments for the current word on each one before relying on this list.
+
 ## Build & packaging
 
 - **Corrosion** fetched at configure time (no global Rust toolchain install requirement beyond `rustup`).

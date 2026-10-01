@@ -1,6 +1,36 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**. 2038 C++ + 764 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-09-30**. 2066 C++ + 765 Rust tests.
+
+> **Emoji picker: skin tones, Emoji 18.0, font-coverage filtering; "not
+> bridged" override persists (2026-09-30).**
+> Long-press, right-click or Shift+Enter on a tone-capable emoji opens a
+> `SkinTonePopover`; the picked tone becomes the default for both the
+> picker and `:shortcode:` autocomplete, synced across devices via
+> `im.gnomos.tesseract` account data (a 15 s stale-echo window
+> distinguishes our own save round-tripping from a genuinely newer value
+> from another device). Emoji 18.0 data is in (renamed flags keep their
+> old `:flag_…:` shortcodes), and both the picker and autocomplete now
+> hide any emoji newer than the system emoji font can actually draw.
+> Separately, a room's manual "not bridged" override is now saved to
+> account data instead of being lost on restart. Qt6 build + ctest
+> 2066/2066.
+
+<!-- -->
+
+> **i18n-extract: repo-relative references, regenerated template, emoji
+> category extraction (2026-09-29).**
+> `i18n-extract` wrote absolute checkout paths into every catalog's `#:`
+> source reference, churning the whole file on every regeneration; it now
+> runs from a repo-relative file list. `tesseract.pot` was stale (428 vs
+> ~1200 msgids in the catalogs) and is regenerated (1189); 45 dead entries
+> with no surviving source reference are dropped from `de.po`/`es.po`/
+> `fr.po`, and the emoji picker's category names (`client/src/emoji.cpp`,
+> previously untracked since the extractor only scanned `ui/`) are now
+> marked with a local `N_()` and extracted too. Qt6 build + ctest
+> 2038/2038.
+
+<!-- -->
 
 > **German translation (2026-09-28, v0.9.0).**
 > A German catalog (`i18n/de.po`) covers the whole UI, using Element
@@ -2301,14 +2331,14 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-09-29**
 > plain monospace.
 
 
-For build instructions, architectural overview, and the open-roadmap items, see [CLAUDE.md](CLAUDE.md). For tracked open issues / known gaps, see the "Known gaps" section at the bottom of CLAUDE.md.
+For build instructions, architectural overview, and the open-roadmap items, see [CLAUDE.md](CLAUDE.md). For tracked open issues / known gaps, see [ROADMAP.md](ROADMAP.md).
 
 ## Test coverage
 
 | Suite | Count |
 | ----- | ----- |
-| Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 756 |
-| C++ Catch2 tests via ctest | 2031 |
+| Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 765 |
+| C++ Catch2 tests via ctest | 2066 |
 
 ## Platforms
 
@@ -2373,9 +2403,9 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 - **`tk::Canvas`** — abstract 2D backend with four concrete impls (`canvas_d2d`, `canvas_qpainter`, `canvas_cairo`, `canvas_cg`). Color / Rect / Point / Image / TextLayout primitives; rounded-rect, stroke, push/pop clip; circle-cropped image draw; initials disc helper.
 - **`tk::Widget`** — measure / arrange / paint + pointer / wheel dispatch with `dispatch_pointer_down` + `world_to_local` capture semantics. Every subclass is constructed exclusively through `tk::create_widget()`/`create_root_widget()` (a Host-aware factory backed by a thread-local pending-`Host*` stack), never directly — constructors are `protected` and friend the factory via `TK_WIDGET_FACTORY_FRIEND`, so `host()` is valid from the first line of any constructor with no manual parameter plumbing.
-- **`tk::Host`** — per-platform integration surface (repaint scheduling, post-to-UI, native edit overlays). `request_repaint`, `post_to_ui`, `make_text_field`, `make_text_area`, `make_audio_player`, `make_audio_capture`, `encode_for_send`.
+- **`tk::Host`** — per-platform integration surface (repaint scheduling, post-to-UI, canvas-composited native text controls). `request_repaint`, `post_to_ui`, `make_text_field`, `make_text_area`, `make_audio_player`, `make_audio_capture`, `encode_for_send`.
 - **Keyboard focus** — real Tab/Shift-Tab traversal (`Host::advance_focus`/`request_focus`/`clear_focus`) with a `:focus-visible`-style ring shown only after keyboard navigation, not a mouse click. Traversal order follows each widget's own `bounds()` in reading order (top-to-bottom rows, left-to-right within a row via a row-overlap comparator), not `add_child()` insertion order, so `Stack`/rect-positioned widgets (grids, pickers) traverse sensibly too. `Host::set_focus_scope()`/`clear_focus_scope()` lets an open modal (Room Settings, an overlay, ...) scope Tab traversal to its own subtree. The compose box is focused by default whenever nothing else needs attention. Native text fields (`tk::TextField`/`tk::TextArea`) participate directly as self-positioning widgets in the tree rather than shell-polled overlays.
-- **Native text overlays** — `NativeTextField` (`QLineEdit` / `GtkEntry` / Win32 EDIT / `NSTextField`) and `NativeTextArea` (`QTextEdit` / `GtkTextView` / multi-line EDIT / `NSTextView`) for IME-friendly input. `set_placeholder` is implemented on all four platforms (GTK4 uses a `dim-label` `GtkLabel` overlay child since `GtkTextView` has no native placeholder API).
+- **Canvas-composited native text controls** — `NativeTextField` (`QLineEdit` / `GtkEntry` / `BetterTextField` / `NSTextField`) and `NativeTextArea` (`QTextEdit` / `GtkTextView` / `BetterTextArea` / `NSTextView`) back text input for IME/selection correctness, but render *into* the canvas rather than floating on top of it: each control's native surface is captured via `rendered_image()` and composited with `Canvas::draw_image()`, so it participates in clipping, opacity, and paint order like any other canvas content. Windows uses the bundled BetterText control (`third_party/bettertext`) rather than a plain Win32 EDIT. `set_placeholder` is implemented on all four platforms (GTK4 uses a `dim-label` `GtkLabel` overlay child since `GtkTextView` has no native placeholder API).
 - **Shared views** — `LoginView`, `RoomListView`, `MessageListView`, `EmojiPicker`, `StickerPicker`, `RecoveryBanner`, `ComposeBar` mounted identically on every platform.
 - **`AlertDialog`** — modal overlay widget (not backdrop-dismissible) with a title, body, and up to two configurable action buttons (`open(Options, primary_cb, secondary_cb)` / `close()` / `is_open()`). Used by `LoginView` to surface startup restore errors; available for other blocking error prompts.
 - **Drag-and-drop ingest (OS-inbound files)** — `tk::Widget` virtuals (`on_file_drop`/`dispatch_file_drop`, `on_native_drag_hover`/`dispatch_native_drag_hover`) mirror the existing pointer-event dispatch shape, so each drop target (`ComposeBar`, `RoomView`, `ImagePackEditorView`, `UserPackEditor`) claims its own drop and paints its own localized hover highlight instead of one whole-surface overlay; image-data MIME types route to the compose bar's image preview, generic files route to the file chip. Distinct from the in-app drag-and-drop framework below.
@@ -2430,7 +2460,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 ## Pickers
 
-- **Emoji picker** — Unicode-category tabs + per-pack custom tabs; search; virtualised grid via `tk::GridView`. Hovering a cell shows an inline `:shortcode:` tooltip (centred above the cell, flipped below near the top edge).
+- **Emoji picker** — Unicode-category tabs + per-pack custom tabs; search; virtualised grid via `tk::GridView`. Hovering a cell shows an inline `:shortcode:` tooltip (centred above the cell, flipped below near the top edge). Emoji 18.0 data (renamed flags keep their old `:flag_…:` shortcodes); emoji newer than the system emoji font can draw are hidden from both the picker and `:shortcode:` autocomplete. **Skin tones** — long-press, right-click, or Shift+Enter on a tone-capable emoji opens `SkinTonePopover`; the picked tone becomes the default for the picker and autocomplete, synced across devices via `im.gnomos.tesseract` account data (a 15 s window distinguishes our own save echoing back from a genuinely newer value from another device).
 - **Sticker picker** — Favorites tab + per-pack tabs; search; virtualised grid. Floating panel on every platform (Qt6 `QFrame`, GTK4 `GtkPopover`, macOS `NSPanel`, Win32 `WS_POPUP` HWND). Same `:shortcode:` hover tooltip as emoji picker.
 - **GridView hover tracking** — `GridView::on_pointer_move` / `on_pointer_leave` update `hovered_index_` and expose `hovered_index()` + `rect_at()` accessors; cell highlight on hover now works correctly (was silently broken).
 - **Recent emoji (MSC4356)** — `m.recent_emoji` + `io.github.johennes.msc4356.recent_emoji` account-data, dual-written on every bump; reads stable → unstable → legacy `io.element.recent_emoji` so existing Element users keep their picker rank. 100-entry cap, move-to-front-and-increment semantics, count-desc top-N for the Frequents tab.

@@ -359,6 +359,8 @@ set(_tk_sources
 
 if(TESSERACT_ENABLE_SCREENSHOT_MODE)
     list(APPEND _tk_sources
+        app/ScreenshotDirector.h
+        app/ScreenshotDirector.cpp
         app/ScreenshotFixture.h
         app/ScreenshotFixture.cpp)
 endif()

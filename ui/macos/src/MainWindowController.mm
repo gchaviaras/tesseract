@@ -224,6 +224,7 @@ protected:
     void on_server_info_ready_ui_() override;
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override;
+    void close_app_settings_ui_() override;
     // makeKeyAndOrderFront: also brings back a window orderOut:'d to the tray.
     void raise_main_window_ui_() override { raise_and_activate_(); }
     void open_quick_switch_ui_() override;
@@ -390,23 +391,14 @@ public:
     // NSSystemColorsDidChangeNotification observer (ObjC++ call site).
     void on_system_accent_changed();
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
-    void seed_screenshot_fixture(tesseract::screenshot::Fixture fixture)
+    bool seed_screenshot_fixture(tk::CanvasFactory& factory)
     {
-        my_user_id_ = std::move(fixture.user_id);
-        my_display_name_ = std::move(fixture.display_name);
-        my_avatar_url_ = std::move(fixture.avatar_url);
-        rooms_ = std::move(fixture.rooms);
-        current_room_id_ = std::move(fixture.selected_room_id);
-        main_app_->show_room();
-        main_app_->room_list_view()->set_rooms(rooms_);
-        main_app_->room_list_view()->set_selected_room(current_room_id_);
-        for (const auto& room : rooms_)
-            if (room.id == current_room_id_)
-            {
-                room_view_->set_room(room);
-                break;
-            }
-        room_view_->set_messages(std::move(fixture.messages));
+        return seed_screenshot_fixture_(factory);
+    }
+    void start_screenshot_director(tesseract::screenshot::ScreenshotHost& host,
+                                   std::string prefix)
+    {
+        start_screenshot_director_(host, std::move(prefix));
     }
 #endif
     void save_settings_debounced();
@@ -962,6 +954,12 @@ using TkImagePtr = std::unique_ptr<tk::Image>;
 - (tk::ThemeMode)_currentOSAppearance;
 - (std::optional<tk::Color>)_currentOSAccentColor;
 - (void)_applyTheme:(const tk::Theme&)t;
+- (void)_closeSettings;
+#ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
+- (BOOL)_saveScreenshotToPath:(NSString*)path;
+- (void)_screenshotApplyDark:(BOOL)dark;
+- (void)_screenshotRefresh;
+#endif
 - (void)_applyScaleChange:(float)scale;
 - (void)_windowDidChangeBackingProperties:(NSNotification*)note;
 - (void)_systemColorsDidChange:(NSNotification*)note;
@@ -1977,6 +1975,13 @@ void MacShell::open_app_settings_ui_()
         [c _openSettings];
 }
 
+void MacShell::close_app_settings_ui_()
+{
+    MainWindowController* c = ctrl_;
+    if (c)
+        [c _closeSettings];
+}
+
 void MacShell::open_quick_switch_ui_()
 {
     MainWindowController* c = ctrl_;
@@ -2718,6 +2723,55 @@ void MacShell::apply_window_title_ui_(const std::string& title)
 
 // ─────────────────────────────────────────────────────────────────────────
 
+#ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
+namespace
+{
+
+class MacScreenshotHost final : public tesseract::screenshot::ScreenshotHost
+{
+public:
+    MacScreenshotHost(MainWindowController* controller, NSString* directory)
+        : controller_(controller), directory_(directory)
+    {
+    }
+
+    void apply_theme(tesseract::screenshot::ScreenshotTheme theme) override
+    {
+        [controller_ _screenshotApplyDark:
+                         theme == tesseract::screenshot::ScreenshotTheme::Dark];
+    }
+    void refresh() override { [controller_ _screenshotRefresh]; }
+    bool save_png(const std::string& filename) override
+    {
+        NSString* path = [directory_
+            stringByAppendingPathComponent:@(filename.c_str())];
+        if ([controller_ _saveScreenshotToPath:path])
+            return true;
+        NSLog(@"Could not save screenshot: %@", path);
+        return false;
+    }
+    void run_after(int ms, std::function<void()> fn) override
+    {
+        __block std::function<void()> step = std::move(fn);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                     static_cast<int64_t>(ms) * NSEC_PER_MSEC),
+                       dispatch_get_main_queue(), ^{ step(); });
+    }
+    void finish(bool ok) override
+    {
+        if (!ok)
+            std::exit(EXIT_FAILURE);
+        [NSApp terminate:nil];
+    }
+
+private:
+    __weak MainWindowController* controller_;
+    NSString* directory_;
+};
+
+} // namespace
+#endif
+
 @implementation MainWindowController
 {
     // MacShell owns all multi-account state, image caches, worker threads,
@@ -2839,6 +2893,7 @@ void MacShell::apply_window_title_ui_(const std::string& title)
     BOOL _settingOwnAppearance;
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
     BOOL _screenshotMode;
+    std::unique_ptr<tesseract::screenshot::ScreenshotHost> _screenshotHost;
 #endif
 
     // Right-click context menu sticker state.
@@ -2996,6 +3051,17 @@ void MacShell::apply_window_title_ui_(const std::string& title)
     return png && [png writeToFile:path atomically:YES];
 }
 
+- (void)_screenshotApplyDark:(BOOL)dark
+{
+    [self _applyTheme:dark ? tk::Theme::dark() : tk::Theme::light()];
+}
+
+- (void)_screenshotRefresh
+{
+    _mainAppSurface->relayout();
+    [self _repaintSettingsSurfaceIfVisible];
+}
+
 - (void)captureScreenshotsToDirectory:(NSString*)directory
 {
     _screenshotMode = YES;
@@ -3010,14 +3076,11 @@ void MacShell::apply_window_title_ui_(const std::string& title)
         std::exit(EXIT_FAILURE);
     }
 
-    if (!tesseract::screenshot::install_avatar_assets(
-            _mainAppSurface->factory(),
-            _shell->account_manager_.thumbnail_cache()))
+    if (!_shell->seed_screenshot_fixture(_mainAppSurface->factory()))
     {
-        NSLog(@"Could not load screenshot avatar assets");
+        NSLog(@"Could not load screenshot assets");
         std::exit(EXIT_FAILURE);
     }
-    _shell->seed_screenshot_fixture(tesseract::screenshot::make_fixture());
     [self _populateUserStrip];
     _statusLabel.stringValue = TkTr("Connected");
     ((__bridge NSView*)_brandingSurface->view_handle()).hidden = YES;
@@ -3026,39 +3089,10 @@ void MacShell::apply_window_title_ui_(const std::string& title)
         ((__bridge NSView*)_settingsSurface->view_handle()).hidden = YES;
     ((__bridge NSView*)_mainAppSurface->view_handle()).hidden = NO;
     [self.window setContentSize:NSMakeSize(1100, 768)];
-
-    [self _applyTheme:tk::Theme::light()];
-    _mainAppSurface->relayout();
     [self.window makeKeyAndOrderFront:self];
 
-    __weak MainWindowController* weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC),
-                   dispatch_get_main_queue(), ^{
-        MainWindowController* strong = weakSelf;
-        if (!strong)
-            std::exit(EXIT_FAILURE);
-        NSString* light = [directory stringByAppendingPathComponent:@"mac-light.png"];
-        if (![strong _saveScreenshotToPath:light])
-        {
-            NSLog(@"Could not save screenshot: %@", light);
-            std::exit(EXIT_FAILURE);
-        }
-        [strong _applyTheme:tk::Theme::dark()];
-        strong->_mainAppSurface->relayout();
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300 * NSEC_PER_MSEC),
-                       dispatch_get_main_queue(), ^{
-            MainWindowController* current = weakSelf;
-            if (!current)
-                std::exit(EXIT_FAILURE);
-            NSString* dark = [directory stringByAppendingPathComponent:@"mac-dark.png"];
-            if (![current _saveScreenshotToPath:dark])
-            {
-                NSLog(@"Could not save screenshot: %@", dark);
-                std::exit(EXIT_FAILURE);
-            }
-            [NSApp terminate:nil];
-        });
-    });
+    _screenshotHost = std::make_unique<MacScreenshotHost>(self, directory);
+    _shell->start_screenshot_director(*_screenshotHost, "mac");
 }
 #endif
 
@@ -5542,13 +5576,7 @@ void MacShell::apply_window_title_ui_(const std::string& title)
         {
             return;
         }
-        s->_shell->stop_search_stats_poll();
-        NSView* mainAppView =
-            (__bridge NSView*)s->_mainAppSurface->view_handle();
-        mainAppView.hidden = NO;
-        ((__bridge NSView*)s->_settingsSurface->view_handle()).hidden = YES;
-        s->_shell->set_app_settings_open(false);
-        [s _teardownSettingsView];
+        [s _closeSettings];
     };
     _settingsView->on_reset_identity = [ws]
     {
@@ -5622,6 +5650,18 @@ void MacShell::apply_window_title_ui_(const std::string& title)
         [settingsView.bottomAnchor
             constraintEqualToAnchor:_statusBarView.topAnchor],
     ]];
+}
+
+- (void)_closeSettings
+{
+    if (!_settingsSurface)
+        return;
+    _shell->stop_search_stats_poll();
+    NSView* mainAppView = (__bridge NSView*)_mainAppSurface->view_handle();
+    mainAppView.hidden = NO;
+    ((__bridge NSView*)_settingsSurface->view_handle()).hidden = YES;
+    _shell->set_app_settings_open(false);
+    [self _teardownSettingsView];
 }
 
 - (void)_teardownSettingsView
@@ -5932,8 +5972,8 @@ void MacShell::apply_window_title_ui_(const std::string& title)
     // Edit-menu entry point — no click geometry of its own (unlike the
     // compose-bar button / message-hover reaction button, which anchor to
     // their own rect via RoomView's internal on_emoji/on_add_reaction_
-    // requested wiring). RoomView::show_emoji_picker() anchors near the
-    // compose bar instead and always opens in compose mode.
+    // requested wiring). RoomView::show_emoji_picker() anchors on the
+    // compose bar's emoji button instead and always opens in compose mode.
     if (_mainApp && _mainApp->room_view())
         _mainApp->room_view()->show_emoji_picker();
 }

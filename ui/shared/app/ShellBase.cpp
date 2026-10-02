@@ -15673,4 +15673,91 @@ void ShellBase::SpaceNavFrame::enter(views::RoomListView* rlv)
     rlv->scroll_to_offset(0.f);
 }
 
+#ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
+bool ShellBase::seed_screenshot_fixture_(tk::CanvasFactory& factory)
+{
+    if (!screenshot::install_assets(factory, account_manager_.thumbnail_cache()))
+        return false;
+
+    screenshot_fixture_ = screenshot::make_fixture();
+    const auto& f    = screenshot_fixture_;
+    my_user_id_      = f.user_id;
+    my_display_name_ = f.display_name;
+    my_avatar_url_   = f.avatar_url;
+    rooms_           = f.rooms;
+    current_room_id_ = f.selected_room_id;
+
+    main_app_->show_room();
+    main_app_->room_list_view()->set_rooms(rooms_);
+    main_app_->room_list_view()->set_selected_room(current_room_id_);
+    for (const auto& room : rooms_)
+    {
+        if (room.id == current_room_id_)
+        {
+            room_view_->set_room(room);
+            break;
+        }
+    }
+    room_view_->set_messages(f.messages);
+    room_view_->set_typing_text(format_typing_text(f.typing_names));
+    return true;
+}
+
+std::vector<screenshot::Scene> ShellBase::make_screenshot_scenes_()
+{
+    using State = views::RoomView::ThreadPanelState;
+    const auto& f = screenshot_fixture_;
+
+    std::vector<screenshot::Scene> scenes;
+    scenes.push_back({"main", {}, {}});
+    scenes.push_back(
+        {"thread",
+         [this, &f]
+         {
+             room_view_->set_thread_panel(State::Open, f.thread_root_id);
+             room_view_->thread_view()->set_messages(f.thread_messages,
+                                                     /*room_switch=*/true);
+         },
+         [this] { room_view_->set_thread_panel(State::Closed, {}); }});
+    scenes.push_back(
+        {"room-info",
+         [this, &f]
+         {
+             room_view_->show_room_info();
+             auto* panel = room_view_->room_info_panel();
+             panel->set_presence_provider(
+                 [&f](const std::string& user_id)
+                 {
+                     for (const auto& [id, state] : f.presence)
+                         if (id == user_id)
+                             return state;
+                     return tesseract::PresenceState::Offline;
+                 });
+             // After show_room_info(): RoomInfoPanel::open() clears members.
+             panel->set_members(f.members);
+         },
+         [this] { room_view_->room_info_panel()->close(); }});
+    scenes.push_back({"emoji",
+                      [this] { room_view_->show_emoji_picker(); },
+                      [this] { room_view_->close_pickers(); }});
+    scenes.push_back({"settings",
+                      [this]
+                      {
+                          open_app_settings_ui_();
+                          if (stats_settings_view_)
+                              stats_settings_view_->show_appearance_section();
+                      },
+                      [this] { close_app_settings_ui_(); }});
+    return scenes;
+}
+
+void ShellBase::start_screenshot_director_(screenshot::ScreenshotHost& host,
+                                           std::string prefix, int settle_ms)
+{
+    screenshot_director_ = std::make_unique<screenshot::ScreenshotDirector>(
+        host, make_screenshot_scenes_(), std::move(prefix), settle_ms);
+    screenshot_director_->start();
+}
+#endif
+
 } // namespace tesseract

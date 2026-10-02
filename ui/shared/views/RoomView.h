@@ -677,12 +677,19 @@ public:
     void refresh_emoticon_packs();
     void refresh_stickers();
 
-    // Open the emoji picker in compose mode, anchored near the compose bar,
-    // without a specific trigger-button rect — for entry points that have
+    // Open the emoji picker in compose mode, anchored on the compose bar's
+    // emoji button exactly as clicking it would — for entry points that have
     // no click geometry of their own (e.g. macOS's Edit-menu "Emoji &
-    // Stickers" item). The compose-bar button and message-hover reaction
-    // button call show_emoji_picker_ directly with their own rect instead.
+    // Stickers" item, screenshot mode). The compose-bar button and
+    // message-hover reaction button call show_emoji_picker_ directly with
+    // their own rect instead.
     void show_emoji_picker();
+    // Close the emoji/sticker picker if open. Public counterpart of the
+    // compose-bar toggle, used by screenshot mode to tear its scene down.
+    void close_pickers();
+    // Open the room-info side panel for the current room (what the header's
+    // info button does). Also used by screenshot mode's room-info scene.
+    void show_room_info();
 
     // Fired when the compose bar or typing indicator changes the internal
     // layout. Shell should call roomSurface_->relayout() in response.
@@ -794,7 +801,6 @@ private:
     // rooms nobody is looking at don't pay the O(n) rescan.
     void refresh_media_count_();
     int  media_count_() const;
-    void show_room_info();
     void show_room_settings();
     // Confirms leaving room_id (via confirm_provider_, falling back to
     // firing directly if unset) then forwards to on_leave_room. Shared by

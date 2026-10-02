@@ -73,6 +73,14 @@ public:
         return selected_idx_;
     }
 
+    // Label of the tab at `idx`, or empty for an out-of-range `idx`.
+    std::string tab_label(int idx) const
+    {
+        return idx >= 0 && static_cast<std::size_t>(idx) < tabs_.size()
+            ? tabs_[static_cast<std::size_t>(idx)].label
+            : std::string{};
+    }
+
     // Optional callback fired when the selection changes.
     std::function<void(int)> on_tab_selected;
 

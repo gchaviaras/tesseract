@@ -31,6 +31,15 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 | ![Linux](screenshots/qt6-light.png) | ![Linux](screenshots/gtk4-light.png) | ![Windows](screenshots/win-light.png) | ![macOS](screenshots/mac-light.png) |
 | ![Linux](screenshots/qt6-dark.png) | ![Linux](screenshots/gtk4-dark.png) | ![Windows](screenshots/win-dark.png) | ![macOS](screenshots/mac-dark.png) |
 
+### Feature tour
+
+| | |
+|---|---|
+| ![Threads](screenshots/qt6-thread-light.png) | ![Room info and members](screenshots/qt6-room-info-light.png) |
+| **Threads** — reply in a side panel without leaving the conversation | **Room info** — members, roles and presence at a glance |
+| ![Emoji picker](screenshots/qt6-emoji-light.png) | ![Settings](screenshots/qt6-settings-light.png) |
+| **Emoji picker** — search, categories and skin tones | **Settings** — themes, accent colours and message layouts |
+
 
 ## Features
 

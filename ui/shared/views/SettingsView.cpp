@@ -1538,4 +1538,15 @@ void SettingsView::show_account_section()
         tabs_->select(kAccountTabIdx); // no-op + no signal if already there
 }
 
+void SettingsView::show_appearance_section()
+{
+    if (tabs_)
+        tabs_->select(kAppearanceTabIdx);
+}
+
+std::string SettingsView::selected_tab_label() const
+{
+    return tabs_ ? tabs_->tab_label(tabs_->selected_idx()) : std::string{};
+}
+
 } // namespace tesseract::views

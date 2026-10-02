@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-02**. 2086 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-02**. 2098 C++ + 765 Rust tests.
 
 > **Emoji picker: skin tones, Emoji 18.0, font-coverage filtering; "not
 > bridged" override persists (2026-09-30).**

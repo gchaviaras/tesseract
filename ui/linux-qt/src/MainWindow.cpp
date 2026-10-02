@@ -1662,36 +1662,66 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
 }
 
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
+namespace
+{
+
+class QtScreenshotHost final : public tesseract::screenshot::ScreenshotHost
+{
+public:
+    QtScreenshotHost(MainWindow& window, QString dir)
+        : window_(window), dir_(std::move(dir))
+    {
+    }
+
+    void apply_theme(tesseract::screenshot::ScreenshotTheme theme) override
+    {
+        window_.apply_screenshot_theme_(
+            theme == tesseract::screenshot::ScreenshotTheme::Dark);
+    }
+    void refresh() override { window_.refresh_for_screenshot_(); }
+    bool save_png(const std::string& filename) override
+    {
+        const QString path =
+            QDir(dir_).filePath(QString::fromStdString(filename));
+        if (window_.grab().save(path, "PNG"))
+            return true;
+        qCritical("Could not save screenshot: %s", qPrintable(path));
+        return false;
+    }
+    void run_after(int ms, std::function<void()> fn) override
+    {
+        QTimer::singleShot(ms, &window_, std::move(fn));
+    }
+    void finish(bool ok) override { qApp->exit(ok ? 0 : 1); }
+
+private:
+    MainWindow& window_;
+    QString dir_;
+};
+
+} // namespace
+
+void MainWindow::apply_screenshot_theme_(bool dark)
+{
+    apply_theme_ui_(dark ? tk::Theme::dark() : tk::Theme::light());
+}
+
+void MainWindow::refresh_for_screenshot_()
+{
+    mainAppSurface_->relayout();
+    mainAppSurface_->update();
+    repaint();
+}
+
 void MainWindow::captureScreenshots(const std::string& output_dir)
 {
-    auto fixture = tesseract::screenshot::make_fixture();
-
-    my_user_id_      = std::move(fixture.user_id);
-    my_display_name_ = std::move(fixture.display_name);
-    my_avatar_url_   = std::move(fixture.avatar_url);
-    rooms_           = std::move(fixture.rooms);
-    current_room_id_ = std::move(fixture.selected_room_id);
-
-    if (!tesseract::screenshot::install_avatar_assets(
-            mainAppSurface_->factory(), account_manager_.thumbnail_cache()))
+    // Runs before app.exec(): qApp->exit() is a no-op without a running
+    // event loop, so setup failures exit directly.
+    if (!seed_screenshot_fixture_(mainAppSurface_->factory()))
     {
-        qCritical("Could not load screenshot avatar assets");
-        qApp->exit(1);
-        return;
+        qCritical("Could not load screenshot assets");
+        std::exit(EXIT_FAILURE);
     }
-
-    mainApp_->show_room();
-    mainApp_->room_list_view()->set_rooms(rooms_);
-    mainApp_->room_list_view()->set_selected_room(current_room_id_);
-    for (const auto& room : rooms_)
-    {
-        if (room.id == current_room_id_)
-        {
-            mainApp_->room_view()->set_room(room);
-            break;
-        }
-    }
-    mainApp_->room_view()->set_messages(std::move(fixture.messages));
     populateUserStrip();
 
     statusBar()->showMessage(QString::fromStdString(tk::tr("Connected")));
@@ -1703,45 +1733,11 @@ void MainWindow::captureScreenshots(const std::string& output_dir)
     {
         qCritical("Could not create screenshot directory: %s",
                   qPrintable(dir));
-        qApp->exit(1);
-        return;
+        std::exit(EXIT_FAILURE);
     }
 
-    apply_theme_ui_(tk::Theme::light());
-    mainAppSurface_->relayout();
-    mainAppSurface_->update();
-    repaint();
-    QTimer::singleShot(
-        300, this,
-        [this, dir]
-        {
-            const QString light = QDir(dir).filePath("qt6-light.png");
-            if (!grab().save(light, "PNG"))
-            {
-                qCritical("Could not save screenshot: %s", qPrintable(light));
-                qApp->exit(1);
-                return;
-            }
-
-            apply_theme_ui_(tk::Theme::dark());
-            mainAppSurface_->relayout();
-            mainAppSurface_->update();
-            repaint();
-            QTimer::singleShot(
-                300, this,
-                [this, dir]
-                {
-                    const QString dark = QDir(dir).filePath("qt6-dark.png");
-                    if (!grab().save(dark, "PNG"))
-                    {
-                        qCritical("Could not save screenshot: %s",
-                                  qPrintable(dark));
-                        qApp->exit(1);
-                        return;
-                    }
-                    qApp->quit();
-                });
-        });
+    screenshot_host_ = std::make_unique<QtScreenshotHost>(*this, dir);
+    start_screenshot_director_(*screenshot_host_, "qt6");
 }
 #endif
 
@@ -2225,6 +2221,17 @@ void MainWindow::teardownSettingsView_()
             delete to_destroy;
             settingsWidget_ = nullptr;
         });
+}
+
+void MainWindow::close_app_settings_ui_()
+{
+    if (!settingsWidget_ || contentStack_->currentWidget() != settingsWidget_)
+        return;
+    // Same steps as SettingsWidget::settingsClosed.
+    stop_search_index_stats_poll_();
+    showMainContent_();
+    set_app_settings_open_(false);
+    teardownSettingsView_();
 }
 
 void MainWindow::showMainContent_()

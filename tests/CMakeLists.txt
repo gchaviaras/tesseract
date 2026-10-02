@@ -205,7 +205,19 @@ add_executable(tesseract_tests
     cpp/test_video_capture_errors.cpp
     cpp/test_call_room_navigation.cpp
     cpp/test_emoji_skin_tone.cpp
+    cpp/test_screenshot_director.cpp
+    cpp/test_screenshot_fixture.cpp
+    cpp/test_screenshot_view_hooks.cpp
 )
+
+# Screenshot-mode sources are only in tesseract_tk when the mode is ON (they
+# stay out of release builds); compile them into the test binary otherwise so
+# the director/fixture stay covered by the normal ctest run.
+if(NOT TESSERACT_ENABLE_SCREENSHOT_MODE)
+    target_sources(tesseract_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/ui/shared/app/ScreenshotDirector.cpp
+        ${CMAKE_SOURCE_DIR}/ui/shared/app/ScreenshotFixture.cpp)
+endif()
 
 # tk::clean_device_display_name() lives in tk/gst_device_listing.cpp, which is
 # a Linux-only source in tesseract_tk (see the guard in ui/shared/CMakeLists.txt).

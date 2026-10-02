@@ -105,6 +105,9 @@ public:
     /// Seed the deterministic, network-free fixture, capture both themes, and
     /// exit the Qt event loop. Only present in screenshot-mode builds.
     void captureScreenshots(const std::string& output_dir);
+    // ScreenshotHost adapter hooks (see QtScreenshotHost in MainWindow.cpp).
+    void apply_screenshot_theme_(bool dark);
+    void refresh_for_screenshot_();
 #endif
 
     bool is_main_window_visible_() const override
@@ -167,6 +170,7 @@ private:
 
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
     bool screenshot_mode_ = false;
+    std::unique_ptr<tesseract::screenshot::ScreenshotHost> screenshot_host_;
 #endif
 
     // Ctrl+K quick switcher — open focuses the native search field; close
@@ -214,6 +218,7 @@ private:
     void on_server_info_ready_ui_() override;
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override { openSettings(); }
+    void close_app_settings_ui_() override;
     void raise_main_window_ui_() override;
     void open_quick_switch_ui_() override { openQuickSwitch_(); }
     void open_message_search_ui_() override { openMessageSearch_(); }

@@ -319,6 +319,12 @@ public:
     // selection actually changes.
     void show_account_section();
 
+    // Appearance is the fourth tab added (see the constructor's add_tab order).
+    static constexpr int kAppearanceTabIdx = 3;
+    // Select the Appearance tab. Used by screenshot mode's settings scene.
+    void show_appearance_section();
+    std::string selected_tab_label() const;
+
     // Fired when a profile field value changes (on_submit from its
     // self-owned field, wired by set_controller()). key = MSC key string,
     // value_json = JSON or "null".

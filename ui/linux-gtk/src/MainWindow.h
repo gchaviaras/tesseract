@@ -104,6 +104,11 @@ public:
 
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
     void start_screenshot_mode();
+    // ScreenshotHost adapter hooks (see GtkScreenshotHost in MainWindow.cpp).
+    void apply_screenshot_theme_(bool dark);
+    void refresh_for_screenshot_();
+    bool save_screenshot_(const char* filename);
+    void finish_screenshots_(bool ok);
 #endif
 
 private:
@@ -136,6 +141,7 @@ private:
     void on_server_info_ready_ui_() override;
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override { open_settings_(); }
+    void close_app_settings_ui_() override;
     void raise_main_window_ui_() override { present(); }
     void open_quick_switch_ui_() override { open_quick_switch_(); }
     void open_message_search_ui_() override { open_message_search_(); }
@@ -404,7 +410,7 @@ private:
     bool start_hidden_ = false;
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
     std::filesystem::path screenshot_dir_;
-    bool save_screenshot_(const char* filename);
+    std::unique_ptr<tesseract::screenshot::ScreenshotHost> screenshot_host_;
 #endif
     GtkWidget* window_ = nullptr;
     GtkWidget* content_stack_ = nullptr;

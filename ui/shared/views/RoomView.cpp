@@ -1318,6 +1318,11 @@ void RoomView::show_receipt_popup_(MessageListView* ml, tk::Rect anchor,
         repaint_requester_();
 }
 
+void RoomView::close_pickers()
+{
+    hide_pickers_();
+}
+
 void RoomView::hide_pickers_()
 {
     const bool was_visible = emoji_picker_visible_ || sticker_picker_visible_ ||
@@ -1377,7 +1382,16 @@ void RoomView::refresh_stickers()
 
 void RoomView::show_emoji_picker()
 {
-    show_emoji_picker_(compose_bar_rect(), /*for_reaction=*/false, {});
+    // Anchor where clicking the compose bar's emoji button would. The button
+    // has empty bounds while hidden (e.g. recording), so fall back to the bar.
+    tk::Rect anchor = compose_bar_rect();
+    if (compose_bar_ && compose_bar_->emoji_button())
+    {
+        const tk::Rect b = compose_bar_->emoji_button()->bounds();
+        if (b.w > 0.0f && b.h > 0.0f)
+            anchor = b;
+    }
+    show_emoji_picker_(anchor, /*for_reaction=*/false, {});
 }
 
 // ── Providers ─────────────────────────────────────────────────────────────

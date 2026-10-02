@@ -79,16 +79,20 @@ jobs:
           QT_SCALE_FACTOR: '1'
         run: |
           mkdir -p generated-screenshots
-          timeout 30s xvfb-run -a -s '-screen 0 1440x1000x24' \
+          timeout 60s xvfb-run -a -s '-screen 0 1440x1000x24' \
             build/linux-release/ui/linux-qt/tesseract \
             "--screenshot-dir=$PWD/generated-screenshots"
-          timeout 30s dbus-run-session -- xvfb-run -a -s '-screen 0 1440x1000x24' \
+          timeout 60s dbus-run-session -- xvfb-run -a -s '-screen 0 1440x1000x24' \
             build/linux-release/ui/linux-gtk/tesseract \
             "--screenshot-dir=$PWD/generated-screenshots"
-          test -s generated-screenshots/qt6-light.png
-          test -s generated-screenshots/qt6-dark.png
-          test -s generated-screenshots/gtk4-light.png
-          test -s generated-screenshots/gtk4-dark.png
+          for prefix in qt6 gtk4; do
+            for theme in light dark; do
+              test -s "generated-screenshots/$prefix-$theme.png"
+              for scene in thread room-info emoji settings; do
+                test -s "generated-screenshots/$prefix-$scene-$theme.png"
+              done
+            done
+          done
 
       - name: Upload refreshed screenshots
         uses: actions/upload-artifact@v4
@@ -144,11 +148,15 @@ jobs:
           LANG: en_US.UTF-8
         run: |
           mkdir -p generated-screenshots
-          gtimeout 30s \
+          gtimeout 60s \
             build/macos-appkit-arm64-release/ui/macos/Tesseract.app/Contents/MacOS/Tesseract \
             "--screenshot-dir=$PWD/generated-screenshots"
-          test -s generated-screenshots/mac-light.png
-          test -s generated-screenshots/mac-dark.png
+          for theme in light dark; do
+            test -s "generated-screenshots/mac-$theme.png"
+            for scene in thread room-info emoji settings; do
+              test -s "generated-screenshots/mac-$scene-$theme.png"
+            done
+          done
 
       - name: Upload refreshed screenshots
         uses: actions/upload-artifact@v4
@@ -219,7 +227,7 @@ jobs:
         run: cmake --build build/windows-release --target tesseract_win32
 
       # Tesseract.exe is a GUI-subsystem binary, so the shell doesn't wait for
-      # it; Start-Process -PassThru + Wait-Process gives the same 30 s bound
+      # it; Start-Process -PassThru + Wait-Process gives the same 60 s bound
       # the other jobs get from timeout/gtimeout.
       - name: Generate deterministic screenshots
         env:
@@ -230,9 +238,15 @@ jobs:
           $proc = Start-Process -PassThru `
             -FilePath build/windows-release/ui/windows/Tesseract.exe `
             -ArgumentList "--screenshot-dir=$out"
-          try { $proc | Wait-Process -Timeout 30 -ErrorAction Stop }
+          try { $proc | Wait-Process -Timeout 60 -ErrorAction Stop }
           catch { $proc | Stop-Process -Force; throw 'Screenshot capture timed out' }
-          foreach ($name in 'win-light.png', 'win-dark.png') {
+          $names = foreach ($theme in 'light', 'dark') {
+            "win-$theme.png"
+            foreach ($scene in 'thread', 'room-info', 'emoji', 'settings') {
+              "win-$scene-$theme.png"
+            }
+          }
+          foreach ($name in $names) {
             $file = Join-Path $out $name
             if (-not (Test-Path $file) -or (Get-Item $file).Length -eq 0) {
               throw "$name was not generated"

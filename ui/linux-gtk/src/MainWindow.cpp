@@ -41,6 +41,7 @@
 #include <fstream>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -2352,32 +2353,74 @@ bool MainWindow::save_screenshot_(const char* filename)
     return ok;
 }
 
+namespace
+{
+
+class GtkScreenshotHost final : public tesseract::screenshot::ScreenshotHost
+{
+public:
+    explicit GtkScreenshotHost(MainWindow& window) : window_(window) {}
+
+    void apply_theme(tesseract::screenshot::ScreenshotTheme theme) override
+    {
+        window_.apply_screenshot_theme_(
+            theme == tesseract::screenshot::ScreenshotTheme::Dark);
+    }
+    void refresh() override { window_.refresh_for_screenshot_(); }
+    bool save_png(const std::string& filename) override
+    {
+        return window_.save_screenshot_(filename.c_str());
+    }
+    void run_after(int ms, std::function<void()> fn) override
+    {
+        g_timeout_add(
+            static_cast<guint>(ms),
+            +[](gpointer data) -> gboolean
+            {
+                std::unique_ptr<std::function<void()>> step(
+                    static_cast<std::function<void()>*>(data));
+                (*step)();
+                return G_SOURCE_REMOVE;
+            },
+            new std::function<void()>(std::move(fn)));
+    }
+    void finish(bool ok) override { window_.finish_screenshots_(ok); }
+
+private:
+    MainWindow& window_;
+};
+
+} // namespace
+
+void MainWindow::apply_screenshot_theme_(bool dark)
+{
+    apply_theme_ui_(dark ? tk::Theme::dark() : tk::Theme::light());
+}
+
+void MainWindow::refresh_for_screenshot_()
+{
+    main_app_surface_->relayout();
+}
+
+void MainWindow::finish_screenshots_(bool ok)
+{
+    // g_application_run's status can't be set from here; a failed capture
+    // must still fail the CI step.
+    if (!ok)
+        std::exit(EXIT_FAILURE);
+    g_application_quit(G_APPLICATION(app_));
+}
+
 void MainWindow::start_screenshot_mode()
 {
-    auto fixture = tesseract::screenshot::make_fixture();
-    my_user_id_ = std::move(fixture.user_id);
-    my_display_name_ = std::move(fixture.display_name);
-    my_avatar_url_ = std::move(fixture.avatar_url);
-    rooms_ = std::move(fixture.rooms);
-    current_room_id_ = std::move(fixture.selected_room_id);
-
-    if (!tesseract::screenshot::install_avatar_assets(
-            main_app_surface_->factory(), account_manager_.thumbnail_cache()))
+    if (!seed_screenshot_fixture_(main_app_surface_->factory()))
     {
-        g_printerr("Could not load screenshot avatar assets\n");
-        g_application_quit(G_APPLICATION(app_));
+        g_printerr("Could not load screenshot assets\n");
+        finish_screenshots_(false);
         return;
     }
-
-    main_app_->show_room();
+    // show_rooms() keeps GTK's spaces-last ordering.
     show_rooms(rooms_);
-    for (const auto& room : rooms_)
-        if (room.id == current_room_id_)
-        {
-            room_view_->set_room(room);
-            break;
-        }
-    room_view_->set_messages(std::move(fixture.messages));
     populate_user_strip();
     gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Connected").c_str());
     show_main_content_();
@@ -2389,38 +2432,13 @@ void MainWindow::start_screenshot_mode()
     {
         g_printerr("Could not create screenshot directory: %s\n",
                    screenshot_dir_.string().c_str());
-        g_application_quit(G_APPLICATION(app_));
+        finish_screenshots_(false);
         return;
     }
 
-    apply_theme_ui_(tk::Theme::light());
-    main_app_surface_->relayout();
     gtk_window_present(GTK_WINDOW(window_));
-    g_timeout_add(
-        300,
-        +[](gpointer data) -> gboolean
-        {
-            auto* self = static_cast<MainWindow*>(data);
-            if (!self->save_screenshot_("gtk4-light.png"))
-            {
-                g_application_quit(G_APPLICATION(self->app_));
-                return G_SOURCE_REMOVE;
-            }
-            self->apply_theme_ui_(tk::Theme::dark());
-            self->main_app_surface_->relayout();
-            g_timeout_add(
-                300,
-                +[](gpointer inner) -> gboolean
-                {
-                    auto* window = static_cast<MainWindow*>(inner);
-                    window->save_screenshot_("gtk4-dark.png");
-                    g_application_quit(G_APPLICATION(window->app_));
-                    return G_SOURCE_REMOVE;
-                },
-                self);
-            return G_SOURCE_REMOVE;
-        },
-        this);
+    screenshot_host_ = std::make_unique<GtkScreenshotHost>(*this);
+    start_screenshot_director_(*screenshot_host_, "gtk4");
 }
 #endif
 
@@ -2943,6 +2961,17 @@ void MainWindow::teardown_settings_view_()
                              settings_widget_->widget());
             settings_widget_.reset();
         });
+}
+
+void MainWindow::close_app_settings_ui_()
+{
+    if (!settings_widget_)
+        return;
+    // Same steps as the settings view's on_close.
+    stop_search_index_stats_poll_();
+    show_main_content_();
+    set_app_settings_open_(false);
+    teardown_settings_view_();
 }
 
 void MainWindow::show_main_content_()

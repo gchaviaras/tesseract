@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-02
 
+- ci(screenshots): screenshot mode now also captures thread, room-info, emoji-picker and settings scenes, and the main view shows more (media, code, voice, file, mentions, calls, typing). One shared `ScreenshotDirector` drives all four shells; README gains a Feature tour. Qt6 build + ctest 2098/2098
 - fix(timeline): Ctrl+C/⌘C copies a timeline selection reliably. It is now handled once in shared code (`RoomView`) instead of per-shell window handlers, covers the thread panel, and ignores selections that are hidden or under a modal overlay. Ctrl/⌘ shortcuts (copy, Ctrl+K, Ctrl+F) now also work on non-Latin keyboard layouts. Qt6 build + ctest 2086/2086
 
 ### 2026-10-01

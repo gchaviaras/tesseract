@@ -49,6 +49,10 @@
 #include "views/MessageListView.h"
 #include "views/QuickSwitcher.h"
 #include "views/RoomListView.h"
+#ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
+#include "app/ScreenshotDirector.h"
+#include "app/ScreenshotFixture.h"
+#endif
 
 #include <array>
 #include <condition_variable>
@@ -4098,9 +4102,32 @@ protected:
     /// its own open-settings method; default no-op (mirrors
     /// `refresh_user_strip_()`).
     virtual void open_app_settings_ui_() {}
+    /// Return from the settings UI to the main content. Counterpart of
+    /// `open_app_settings_ui_()`; shells forward to their existing
+    /// "show main content" path. Default no-op.
+    virtual void close_app_settings_ui_() {}
     /// Open settings and land on the Account tab — wired to the sidebar
     /// status line's `on_status_clicked`.
     void open_settings_to_account_tab_();
+
+#ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
+    /// Screenshot mode: install the fixture's assets, then seed shell state
+    /// and the shared views from it. Returns false when an asset fails to
+    /// decode (the caller exits non-zero).
+    bool seed_screenshot_fixture_(tk::CanvasFactory& factory);
+    /// Screenshot mode: build the scene table and start capturing through
+    /// `host`, which must outlive the run.
+    void start_screenshot_director_(screenshot::ScreenshotHost& host,
+                                    std::string prefix, int settle_ms = 300);
+
+private:
+    std::vector<screenshot::Scene> make_screenshot_scenes_();
+
+    screenshot::Fixture screenshot_fixture_;
+    std::unique_ptr<screenshot::ScreenshotDirector> screenshot_director_;
+
+protected:
+#endif
 
     // ── Command-line launch actions ───────────────────────────────────────────
     // `--open-settings`, `--open-quick-switcher`, `--open-message-search` and

@@ -174,6 +174,7 @@ public:
     void on_server_info_ready_ui_() override;
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override { open_settings_(); }
+    void close_app_settings_ui_() override { close_settings_(); }
     void on_profile_field_result_ui_(const std::string& key, bool ok,
                                      const std::string& error) override;
     void update_typing_bar_(const std::string& text, bool visible) override;
@@ -212,6 +213,8 @@ private:
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
     void start_screenshot_mode_();
     bool save_screenshot_(const wchar_t* filename);
+    // ScreenshotHost adapter; nested so it can reach the private hooks.
+    class Win32ScreenshotHost;
 #endif
     // Bind the UI to the now-active account `uid` and finish startup (settings
     // controller + fields). Shared by the cold restore path and the
@@ -487,6 +490,9 @@ private:
     std::unordered_map<std::string, std::string> recent_taskbar_avatar_rooms_;
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
     std::filesystem::path screenshot_dir_;
+    std::unique_ptr<tesseract::screenshot::ScreenshotHost> screenshot_host_;
+    // The director never has two steps pending, so one timer id suffices.
+    std::function<void()> screenshot_step_;
 #endif
     // rooms_, current_room_id_, pending_restore_room_, space_stack_
     // are inherited from tesseract::ShellBase.
@@ -513,8 +519,7 @@ private:
     static constexpr UINT_PTR kStatusClearTimerId = 7;
     static constexpr UINT_PTR kPresenceTickTimerId = 8;
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
-    static constexpr UINT_PTR kScreenshotLightTimerId = 9;
-    static constexpr UINT_PTR kScreenshotDarkTimerId  = 10;
+    static constexpr UINT_PTR kScreenshotStepTimerId = 9;
 #endif
     static constexpr UINT kAnimTimerHz = 16; // ~60 fps
     bool anim_timer_running_ = false;

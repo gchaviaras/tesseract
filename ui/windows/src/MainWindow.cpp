@@ -55,6 +55,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <utility>
 #include <chrono>
 #include <ctime>
 #include <cwchar>
@@ -1612,28 +1613,11 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
-        if (wParam == kScreenshotLightTimerId)
+        if (wParam == kScreenshotStepTimerId)
         {
-            KillTimer(hwnd, kScreenshotLightTimerId);
-            if (!self->save_screenshot_(L"win-light.png"))
-            {
-                OutputDebugStringW(L"Tesseract screenshot: failed to save light image\n");
-                DestroyWindow(hwnd);
-                return 0;
-            }
-            self->apply_theme_ui_(tk::Theme::dark());
-            RedrawWindow(hwnd, nullptr, nullptr,
-                         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
-                             RDW_UPDATENOW);
-            SetTimer(hwnd, kScreenshotDarkTimerId, 500, nullptr);
-            return 0;
-        }
-        if (wParam == kScreenshotDarkTimerId)
-        {
-            KillTimer(hwnd, kScreenshotDarkTimerId);
-            if (!self->save_screenshot_(L"win-dark.png"))
-                OutputDebugStringW(L"Tesseract screenshot: failed to save dark image\n");
-            DestroyWindow(hwnd);
+            KillTimer(hwnd, kScreenshotStepTimerId);
+            if (auto step = std::exchange(self->screenshot_step_, nullptr))
+                step();
             return 0;
         }
 #endif
@@ -3753,36 +3737,64 @@ void MainWindow::start_login()
 }
 
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
+class MainWindow::Win32ScreenshotHost final
+    : public tesseract::screenshot::ScreenshotHost
+{
+public:
+    explicit Win32ScreenshotHost(MainWindow& window) : window_(window) {}
+
+    void apply_theme(tesseract::screenshot::ScreenshotTheme theme) override
+    {
+        window_.apply_theme_ui_(
+            theme == tesseract::screenshot::ScreenshotTheme::Dark
+                ? tk::Theme::dark()
+                : tk::Theme::light());
+    }
+    void refresh() override
+    {
+        // Relayout the surfaces directly: on_size() would also dismiss open
+        // popups (the emoji-picker scene's picker is one).
+        if (window_.main_app_surface_)
+            window_.main_app_surface_->relayout();
+        if (window_.settings_surface_)
+            window_.settings_surface_->relayout();
+        RedrawWindow(window_.hwnd_, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN |
+                         RDW_UPDATENOW);
+    }
+    bool save_png(const std::string& filename) override
+    {
+        if (window_.save_screenshot_(utf8_to_wstr(filename).c_str()))
+            return true;
+        OutputDebugStringW(L"Tesseract screenshot: failed to save image\n");
+        return false;
+    }
+    void run_after(int ms, std::function<void()> fn) override
+    {
+        window_.screenshot_step_ = std::move(fn);
+        SetTimer(window_.hwnd_, kScreenshotStepTimerId,
+                 static_cast<UINT>(ms), nullptr);
+    }
+    void finish(bool ok) override
+    {
+        // The message loop's exit code isn't reachable from here; a failed
+        // capture must still fail the CI step.
+        if (!ok)
+            std::exit(EXIT_FAILURE);
+        DestroyWindow(window_.hwnd_);
+    }
+
+private:
+    MainWindow& window_;
+};
+
 void MainWindow::start_screenshot_mode_()
 {
-    auto fixture = tesseract::screenshot::make_fixture();
-
-    my_user_id_      = std::move(fixture.user_id);
-    my_display_name_ = std::move(fixture.display_name);
-    my_avatar_url_   = std::move(fixture.avatar_url);
-    rooms_           = std::move(fixture.rooms);
-    current_room_id_ = std::move(fixture.selected_room_id);
-
-    if (!tesseract::screenshot::install_avatar_assets(
-            main_app_surface_->factory(), account_manager_.thumbnail_cache()))
+    if (!seed_screenshot_fixture_(main_app_surface_->factory()))
     {
-        OutputDebugStringW(L"Tesseract screenshot: could not load avatar assets\n");
-        DestroyWindow(hwnd_);
-        return;
+        OutputDebugStringW(L"Tesseract screenshot: could not load assets\n");
+        std::exit(EXIT_FAILURE);
     }
-
-    main_app_->show_room();
-    room_list_view_->set_rooms(rooms_);
-    room_list_view_->set_selected_room(current_room_id_);
-    for (const auto& room : rooms_)
-    {
-        if (room.id == current_room_id_)
-        {
-            room_view_->set_room(room);
-            break;
-        }
-    }
-    room_view_->set_messages(std::move(fixture.messages));
     populate_user_strip();
     show_main_content();
     SendMessageW(hStatus_, SB_SETTEXTW, 0,
@@ -3792,19 +3804,17 @@ void MainWindow::start_screenshot_mode_()
     // runner while remaining large enough to exercise the desktop layout.
     SetWindowPos(hwnd_, nullptr, 0, 0, 1100, 768,
                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-    apply_theme_ui_(tk::Theme::light());
-    RedrawWindow(hwnd_, nullptr, nullptr,
-                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
 
     std::error_code ec;
     std::filesystem::create_directories(screenshot_dir_, ec);
     if (ec)
     {
         OutputDebugStringW(L"Tesseract screenshot: could not create output directory\n");
-        DestroyWindow(hwnd_);
-        return;
+        std::exit(EXIT_FAILURE);
     }
-    SetTimer(hwnd_, kScreenshotLightTimerId, 500, nullptr);
+
+    screenshot_host_ = std::make_unique<Win32ScreenshotHost>(*this);
+    start_screenshot_director_(*screenshot_host_, "win", 500);
 }
 
 bool MainWindow::save_screenshot_(const wchar_t* filename)

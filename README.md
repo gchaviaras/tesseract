@@ -113,7 +113,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 
 ### Platform integration
 
-- System tray with unread/mention indicator and minimize-to-tray (clicking the icon jumps to the first unread room)
+- System tray with unread/mention indicator (clicking the icon jumps to the first unread room), and a choice of what closing the window does — quit, hide to the tray or minimize — with an opt-in "start minimized to tray"
 - Multi-account, with profile editing (display name, avatar, pronouns, timezone, and biography — MSC4133; plus a status emoji + text — MSC4426)
 - QR-code login (MSC4108; shown only when the server supports it)
 - Single-instance behavior (relaunching restores the running window)

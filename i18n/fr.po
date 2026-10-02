@@ -1492,6 +1492,38 @@ msgstr "Démarrage"
 msgid "Launch Tesseract when you log in"
 msgstr "Lancer Tesseract à l'ouverture de session"
 
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Start minimized to system tray"
+msgstr "Démarrer réduit dans la zone de notification"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "When I close the window"
+msgstr "Lorsque je ferme la fenêtre"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Minimize to taskbar"
+msgstr "Réduire dans la barre des tâches"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Hide to system tray"
+msgstr "Masquer dans la zone de notification"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window quits Tesseract."
+msgstr "La fermeture de la fenêtre quitte Tesseract."
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window minimizes Tesseract to the taskbar."
+msgstr "La fermeture de la fenêtre réduit Tesseract dans la barre des tâches."
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window hides it to the system tray. Tesseract keeps running - use the tray icon's Quit menu item to exit."
+msgstr "La fermeture de la fenêtre masque Tesseract dans la zone de notification, qui continue de fonctionner. Pour quitter, utilisez l'option « Quitter » du menu de l'icône de notification."
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "No system tray icon is available on this system, so closing the window always quits Tesseract."
+msgstr "Aucune icône de zone de notification n'est disponible sur ce système : la fermeture de la fenêtre quitte donc toujours Tesseract."
+
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Name"
 msgstr "Nom"

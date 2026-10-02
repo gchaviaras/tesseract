@@ -158,7 +158,13 @@ static NSString* const kActivateRoomKey = @"room_id";
     // main() — before any views are constructed.
     // A copy: the dispatch_async block below captures it by value.
     const tesseract::LaunchArgs launch = _launchPlan.args;
-    const BOOL startHidden = _launchedAsLoginItem || _launchPlan.start_hidden();
+    // Only the "Start minimized to tray" preference (or an explicit --hidden)
+    // starts a login-item launch hidden. _launchedAsLoginItem is deliberately
+    // not an additional trigger here, matching the other three shells:
+    // registering a login item should not silently hide the app. It is still
+    // used above to keep a duplicate login launch from raising the running
+    // instance.
+    const BOOL startHidden = _launchPlan.start_hidden();
 
     _windowController = [[MainWindowController alloc] init];
     _windowController.startedHidden = startHidden;

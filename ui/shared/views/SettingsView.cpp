@@ -70,6 +70,15 @@ SettingsView::SettingsView()
     {
         if (on_launch_at_login_changed) on_launch_at_login_changed(v);
     };
+    general->on_start_minimized_changed = [this](bool v)
+    {
+        if (on_start_minimized_changed) on_start_minimized_changed(v);
+    };
+    general->on_close_action_changed =
+        [this](tesseract::Settings::CloseAction action)
+    {
+        if (on_close_action_changed) on_close_action_changed(action);
+    };
     general->on_low_power_changed =
         [this](tesseract::Settings::LowPowerPreference pref)
     {
@@ -659,6 +668,22 @@ void SettingsView::set_launch_at_login_pref(bool enabled)
     }
 }
 
+void SettingsView::set_start_minimized_pref(bool enabled)
+{
+    if (general_)
+    {
+        general_->set_start_minimized(enabled);
+    }
+}
+
+void SettingsView::set_tray_available(bool available)
+{
+    if (general_)
+    {
+        general_->set_tray_available(available);
+    }
+}
+
 void SettingsView::set_low_power_pref(tesseract::Settings::LowPowerPreference pref)
 {
     if (general_)
@@ -738,6 +763,7 @@ void SettingsView::load_persisted_settings()
     // (actual OS state) right after showing the Settings view, since this cached
     // bool can drift from what's actually registered with the OS.
     set_launch_at_login_pref(s.launch_at_login);
+    set_start_minimized_pref(s.start_minimized);
     set_low_power_pref(s.low_power_pref);
     set_theme_pref(s.theme_pref);
     set_theme_accent(s.theme_accent);

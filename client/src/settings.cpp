@@ -76,6 +76,11 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
     autoscroll_unread_rooms      = j.value("autoscroll_unread_rooms",       true);
     prefetch_unread_rooms        = j.value("prefetch_unread_rooms",          true);
     launch_at_login               = j.value("launch_at_login",              false);
+
+    close_action                  = close_action_from_string(
+        j.value("close_action", std::string(close_action_to_string(CloseAction::HideToTray))));
+    start_minimized               = j.value("start_minimized",             false);
+
     send_presence                = j.value("send_presence",                true);
     index_messages_for_search    = j.value("index_messages_for_search",   false);
     check_for_updates            = j.value("check_for_updates",            true);
@@ -207,6 +212,8 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         low_power_pref == LowPowerPreference::On  ? "on"  :
         low_power_pref == LowPowerPreference::Off ? "off" : "auto";
 
+    const char* close_action_str = close_action_to_string(close_action);
+
     nlohmann::json j = {
         {"theme",                            theme_str},
         {"theme_accent",                     theme_accent_str},
@@ -225,6 +232,8 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         {"autoscroll_unread_rooms",          autoscroll_unread_rooms},
         {"prefetch_unread_rooms",            prefetch_unread_rooms},
         {"launch_at_login",                  launch_at_login},
+        {"close_action",                     close_action_str},
+        {"start_minimized",                  start_minimized},
         {"send_presence",                    send_presence},
         {"index_messages_for_search",        index_messages_for_search},
         {"check_for_updates",                check_for_updates},
@@ -305,6 +314,29 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
     if (!f.is_open())
         return;
     f << j.dump(4) << '\n';
+}
+
+const char* close_action_to_string(Settings::CloseAction action)
+{
+    switch (action)
+    {
+    case Settings::CloseAction::Quit:
+        return "quit";
+    case Settings::CloseAction::Minimize:
+        return "minimize";
+    case Settings::CloseAction::HideToTray:
+        break;
+    }
+    return "tray";
+}
+
+Settings::CloseAction close_action_from_string(std::string_view value)
+{
+    if (value == "quit")
+        return Settings::CloseAction::Quit;
+    if (value == "minimize")
+        return Settings::CloseAction::Minimize;
+    return Settings::CloseAction::HideToTray;
 }
 
 } // namespace tesseract

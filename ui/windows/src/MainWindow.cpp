@@ -879,6 +879,17 @@ void MainWindow::on_launch_at_login_pref_ui_(bool enabled)
         settings_view_->set_launch_at_login_pref(enabled);
 }
 
+bool MainWindow::tray_available_() const
+{
+    return tray_ && tray_->is_available();
+}
+
+void MainWindow::on_tray_available_ui_(bool available)
+{
+    if (settings_view_)
+        settings_view_->set_tray_available(available);
+}
+
 void MainWindow::on_inflight_ui_()
 {
     if (!hStatus_)
@@ -1139,10 +1150,25 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
     }
 
     case WM_CLOSE:
+        // Only the window that owns the app-wide tray icon consults
+        // CloseAction — spawned per-account windows have no tray_ and always
+        // close for real below. HideToTray/Minimize are intercepted here;
+        // Quit falls through to DefWindowProc so the window is destroyed.
+        // Hiding is only reachable when the tray icon actually exists, so
+        // CloseAction::HideToTray can never strand the app unreachable.
         if (self->tray_ && self->tray_->is_available() && !self->quitting_)
         {
-            ShowWindow(hwnd, SW_HIDE);
-            return 0;
+            switch (tesseract::Settings::instance().close_action)
+            {
+            case tesseract::Settings::CloseAction::HideToTray:
+                ShowWindow(hwnd, SW_HIDE);
+                return 0;
+            case tesseract::Settings::CloseAction::Minimize:
+                ShowWindow(hwnd, SW_MINIMIZE);
+                return 0;
+            case tesseract::Settings::CloseAction::Quit:
+                break;
+            }
         }
         return DefWindowProcW(hwnd, msg, wParam, lParam); // → WM_DESTROY
 
@@ -4121,6 +4147,10 @@ void MainWindow::open_settings_()
     // real OS state off the UI thread and pushes it in when it returns, so the
     // registry query never stalls the Settings-view open.
     refresh_launch_at_login_pref_();
+    // Tray availability is local state, so it can be pushed synchronously.
+    // Needed before the user can pick "hide to tray" — without a tray icon
+    // that option would hide the window with no way to bring it back.
+    push_tray_available_ui_();
     settings_surface_->relayout();
 
     // own_extended_profile_ may have been fetched (or changed) while

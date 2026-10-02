@@ -11,7 +11,8 @@ version) are noted where relevant.
 - OS-native secure credential storage on every platform
 - Single-instance behavior (launching again restores the running window)
 - Command-line options on every platform: `--help`, `--version`, `--profile` (separate, isolated app profiles), `--hidden`, `--log-level`/`--verbose`, `--logoutall`, and `--open-*` actions (settings, quick switcher, message search, a specific room) — see [docs/CLI.md](docs/CLI.md)
-- System tray with minimize-to-tray (default), unread dot, and mention-state color; clicking the tray icon jumps to the first unread room
+- System tray with unread dot and mention-state color; clicking the tray icon jumps to the first unread room
+- Configurable window-close behaviour — quit, hide to the tray (default) or minimize to the taskbar — plus an opt-in "start minimized to tray" that applies to every launch, including the OS login item
 - macOS dock badge showing the total notification count; clicking the dock icon raises the window and navigates to the first unread room
 - Session restore (all open room tabs and active account restored on launch)
 - Light / dark / system themes

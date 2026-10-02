@@ -12,6 +12,32 @@ namespace tesseract::views
 namespace
 {
 using LP = tesseract::Settings::LowPowerPreference;
+using CA = tesseract::Settings::CloseAction;
+
+// The dropdown's selected values are the same spellings the setting persists,
+// via tesseract::close_action_to_string / _from_string.
+
+std::string close_action_description(CA action, bool tray_available)
+{
+    if (!tray_available)
+    {
+        return tk::tr("No system tray icon is available on this system, so "
+                      "closing the window always quits Tesseract.");
+    }
+    switch (action)
+    {
+    case CA::Quit:
+        return tk::tr("Closing the window quits Tesseract.");
+    case CA::Minimize:
+        return tk::tr("Closing the window minimizes Tesseract to the "
+                      "taskbar.");
+    case CA::HideToTray:
+        break;
+    }
+    return tk::tr("Closing the window hides it to the system tray. Tesseract "
+                  "keeps running - use the tray icon's Quit menu item to "
+                  "exit.");
+}
 
 const char* low_power_value(LP pref)
 {
@@ -70,6 +96,39 @@ GeneralSection::GeneralSection()
         if (on_launch_at_login_changed) on_launch_at_login_changed(v);
     };
 
+    auto start_minimized_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Start minimized to system tray"), s.start_minimized);
+    start_minimized_cb_ = startup_group->add_widget(std::move(start_minimized_cb));
+    start_minimized_cb_->on_change = [this](bool v)
+    {
+        if (on_start_minimized_changed) on_start_minimized_changed(v);
+    };
+
+    startup_group->add_widget(
+        tk::create_widget<tk::Label>(this, tk::tr("When I close the window")));
+
+    auto close_action_combo = tk::create_widget<tk::ComboBox>(this);
+    close_action_combo_ = startup_group->add_widget(std::move(close_action_combo));
+    rebuild_close_action_options_();
+    close_action_combo_->set_selected_value(
+        tesseract::close_action_to_string(s.close_action));
+
+    auto close_action_desc = tk::create_widget<tk::Label>(
+        this, close_action_description(s.close_action, tray_available_),
+        tk::FontRole::Small);
+    close_action_desc->set_wrap(true);
+    close_action_desc_ = startup_group->add_widget(std::move(close_action_desc));
+
+    close_action_combo_->on_changed = [this](std::string v)
+    {
+        const CA action = tesseract::close_action_from_string(v);
+        if (close_action_desc_)
+            close_action_desc_->set_text(
+                close_action_description(action, tray_available_));
+        if (on_close_action_changed)
+            on_close_action_changed(action);
+    };
+
     // ── Power ─────────────────────────────────────────────────────────────────
     power_group_ = add_group(tk::tr("Power"));
     // Hidden until the shell confirms this machine has a battery.
@@ -106,6 +165,53 @@ GeneralSection::GeneralSection()
 void GeneralSection::set_launch_at_login(bool enabled)
 {
     launch_at_login_cb_->set_checked(enabled);
+}
+
+void GeneralSection::set_start_minimized(bool enabled)
+{
+    start_minimized_cb_->set_checked(enabled);
+}
+
+void GeneralSection::rebuild_close_action_options_()
+{
+    if (!close_action_combo_)
+        return;
+    // HideToTray is only offered when a tray icon actually exists. Without one
+    // the window would hide with no way back, so the option is dropped and the
+    // shells fall back to a real quit (ITrayIcon::is_available()).
+    std::vector<tk::ComboBox::Option> options{
+        {tk::tr("Quit Tesseract"), "quit"},
+        {tk::tr("Minimize to taskbar"), "minimize"},
+    };
+    if (tray_available_)
+        options.insert(options.begin(),
+                       {tk::tr("Hide to system tray"), "tray"});
+    close_action_combo_->set_options(std::move(options));
+}
+
+void GeneralSection::set_tray_available(bool available)
+{
+    tray_available_ = available;
+    rebuild_close_action_options_();
+    // The stored action may no longer be offered. Move the selection onto one
+    // that exists so the combo never renders a blank button. Persisting that
+    // resolution is the shell's job (it owns Settings and the save); this only
+    // fixes up the display.
+    if (close_action_combo_ && !tray_available_ &&
+        close_action_combo_->selected_value() == "tray")
+    {
+        close_action_combo_->set_selected_value("quit");
+    }
+    if (close_action_desc_)
+    {
+        const CA action =
+            close_action_combo_
+                ? tesseract::close_action_from_string(
+                      close_action_combo_->selected_value())
+                : CA::HideToTray;
+        close_action_desc_->set_text(
+            close_action_description(action, tray_available_));
+    }
 }
 
 void GeneralSection::set_low_power(tesseract::Settings::LowPowerPreference pref)

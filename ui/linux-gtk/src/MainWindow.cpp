@@ -184,6 +184,17 @@ void MainWindow::on_launch_at_login_pref_ui_(bool enabled)
         settings_widget_->settings_view()->set_launch_at_login_pref(enabled);
 }
 
+bool MainWindow::tray_available_() const
+{
+    return tray_ && tray_->is_available();
+}
+
+void MainWindow::on_tray_available_ui_(bool available)
+{
+    if (settings_widget_)
+        settings_widget_->settings_view()->set_tray_available(available);
+}
+
 void MainWindow::on_inflight_ui_()
 {
     if (!inflight_dot_)
@@ -2519,11 +2530,30 @@ gboolean MainWindow::on_window_close_request_(GtkWindow* /*window*/,
                                               gpointer user_data)
 {
     auto* self = static_cast<MainWindow*>(user_data);
+    // Only the window that owns the app-wide tray icon consults CloseAction —
+    // spawned per-account windows have no tray_ and always close for real
+    // below. HideToTray/Minimize are intercepted here (returning TRUE); Quit
+    // falls through so GTK destroys the window. Hiding is only reachable when
+    // the tray icon actually exists, so CloseAction::HideToTray can never
+    // strand the app unreachable.
     if (self->tray_ && self->tray_->is_available())
     {
-        gtk_widget_set_visible(self->window_, FALSE);
-        self->update_video_playback_suspension_();
-        return TRUE; // stop default destruction
+        switch (tesseract::Settings::instance().close_action)
+        {
+        case tesseract::Settings::CloseAction::HideToTray:
+            gtk_widget_set_visible(self->window_, FALSE);
+            self->update_video_playback_suspension_();
+            return TRUE; // stop default destruction
+        case tesseract::Settings::CloseAction::Minimize:
+            gtk_window_minimize(GTK_WINDOW(self->window_));
+            // gtk_window_minimize changes neither visibility nor focus, so
+            // nothing else drives this — call it explicitly as the hide path
+            // above does.
+            self->update_video_playback_suspension_();
+            return TRUE;
+        case tesseract::Settings::CloseAction::Quit:
+            break;
+        }
     }
     // Hand this window's account bridge back to the primary, release its
     // dedicated mapping and tray ownership (multi-window), then unregister.
@@ -5513,6 +5543,11 @@ void MainWindow::open_settings_()
     // re-queries the real OS state off the UI thread and pushes it in when it
     // returns, so the query never stalls the Settings-view open.
     refresh_launch_at_login_pref_();
+    // Tray availability is local state, so it can be pushed synchronously.
+    // Needed before the user can pick "hide to tray" — on a Linux box with no
+    // StatusNotifierItem/XEmbed host that option would hide the window with no
+    // way to bring it back.
+    push_tray_available_ui_();
 
     // Route through bind_settings_controller_() rather than calling
     // set_controller() directly: that's the only place that also wires

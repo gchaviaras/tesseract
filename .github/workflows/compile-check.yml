@@ -120,13 +120,22 @@ jobs:
         run: cmake --build build/macos-appkit-arm64-release
 
   linux:
-    name: Linux Qt6 (compile only)
+    name: Linux GTK4 + Qt6 (compile only)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
 
+      # TESSERACT_UI=linux builds both shells from one build dir, so the GTK4
+      # and Qt6 backends share this single job (and one Rust/SDK build) rather
+      # than each getting a runner of their own.
+      #
+      # libgtk-4-dev covers the GTK4 shell; its tray is a pure
+      # StatusNotifierItem D-Bus implementation, so no appindicator/GTK3
+      # package is needed. libsecret-1-dev is optional but recommended on
+      # Linux for the credential store. The Qt packages and libwayland-dev are
+      # for the Qt6 shell's xdg-activation-v1 window raising.
       - name: Install build dependencies
         run: |
           sudo apt-get update -q
@@ -134,11 +143,13 @@ jobs:
             qt6-base-dev qt6-base-private-dev qt6-multimedia-dev \
             qt6-wayland \
             qt6-image-formats-plugins \
+            libgtk-4-dev \
             ninja-build \
             libgl-dev \
             libopus-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
+            libsecret-1-dev \
             libwayland-dev \
             libxtst-dev \
             gstreamer1.0-plugins-base \
@@ -160,8 +171,13 @@ jobs:
         with:
           workspaces: . -> build/linux-release
 
+      # Tests stay on. Under TESSERACT_UI=linux the test target picks the Qt6
+      # TestSurface (tests/CMakeLists.txt maps "linux" to "qt6"), so the GTK
+      # test surface — which cannot compile, as it includes cairo.h without
+      # tests/CMakeLists.txt ever running pkg_check_modules for it — is not
+      # compiled at all. That pre-existing gap needs no workaround here.
       - name: Configure (Release)
-        run: cmake --preset linux-release -DTESSERACT_UI=qt6 "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
+        run: cmake --preset linux-release -DTESSERACT_UI=linux "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
 
       - name: Build
         run: cmake --build build/linux-release

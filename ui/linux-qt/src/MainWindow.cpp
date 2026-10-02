@@ -2618,11 +2618,27 @@ void MainWindow::do_quit_()
 
 void MainWindow::closeEvent(QCloseEvent* ev)
 {
+    // Only the window that owns the app-wide tray icon consults CloseAction —
+    // spawned per-account windows have no tray_ and always close for real
+    // below. HideToTray/Minimize are intercepted here (ignoring the event);
+    // Quit falls through so the window closes. Hiding is only reachable when
+    // the tray icon actually exists, so CloseAction::HideToTray can never
+    // strand the app unreachable.
     if (!explicitly_quitting_ && tray_ && tray_->is_available())
     {
-        ev->ignore();
-        hide();
-        return;
+        switch (tesseract::Settings::instance().close_action)
+        {
+        case tesseract::Settings::CloseAction::HideToTray:
+            ev->ignore();
+            hide();
+            return;
+        case tesseract::Settings::CloseAction::Minimize:
+            ev->ignore();
+            showMinimized();
+            return;
+        case tesseract::Settings::CloseAction::Quit:
+            break;
+        }
     }
     // Hand this window's account bridge back to the primary, release its dedicated
     // mapping and tray ownership (multi-window), then unregister.
@@ -4230,6 +4246,10 @@ void MainWindow::openSettings()
     // re-queries the real OS state off the UI thread and pushes it in when it
     // returns, so the query never stalls the Settings-view open.
     refresh_launch_at_login_pref_();
+    // Tray availability is local state, so it can be pushed synchronously.
+    // Needed before the user can pick "hide to tray" — without a QSystemTrayIcon
+    // that option would hide the window with no way to bring it back.
+    push_tray_available_ui_();
 
     // Route through bind_settings_controller_() rather than calling
     // set_controller() directly: that's the only place that also wires
@@ -4454,6 +4474,17 @@ void MainWindow::on_launch_at_login_pref_ui_(bool enabled)
 {
     if (settingsWidget_)
         settingsWidget_->set_launch_at_login_pref(enabled);
+}
+
+bool MainWindow::tray_available_() const
+{
+    return tray_ && tray_->is_available();
+}
+
+void MainWindow::on_tray_available_ui_(bool available)
+{
+    if (settingsWidget_)
+        settingsWidget_->set_tray_available(available);
 }
 
 void MainWindow::on_inflight_ui_()

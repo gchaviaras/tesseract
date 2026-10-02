@@ -1,7 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <tesseract/launch_args.h>
+#include <tesseract/settings.h>
 
 #include "app/Launch.h"
+
+#include <string>
+#include <vector>
 
 using tesseract::cli::Diagnostic;
 
@@ -212,6 +216,103 @@ TEST_CASE("launch_help_text: --relaunch is internal and not listed")
     const std::string help = tesseract::launch_help_text("tesseract");
     CHECK(help.find("--relaunch") == std::string::npos);
     CHECK(help.find("--profile") != std::string::npos);
+}
+
+// ── LaunchPlan::start_hidden / should_raise_existing_instance ──────────────
+// Both read the persisted "Start minimized to tray" preference, so each case
+// saves and restores it to keep the suite order-independent.
+
+namespace
+{
+
+class ScopedStartMinimized
+{
+public:
+    explicit ScopedStartMinimized(bool value)
+        : saved_(tesseract::Settings::instance().start_minimized)
+    {
+        tesseract::Settings::instance().start_minimized = value;
+    }
+    ~ScopedStartMinimized()
+    {
+        tesseract::Settings::instance().start_minimized = saved_;
+    }
+    ScopedStartMinimized(const ScopedStartMinimized&) = delete;
+    ScopedStartMinimized& operator=(const ScopedStartMinimized&) = delete;
+
+private:
+    bool saved_;
+};
+
+tesseract::LaunchPlan plan_with(const std::vector<std::string>& argv)
+{
+    tesseract::LaunchPlan plan;
+    plan.args = tesseract::parse_launch_args(argv);
+    return plan;
+}
+
+} // namespace
+
+TEST_CASE("LaunchPlan: default preference shows the window")
+{
+    ScopedStartMinimized pref(false);
+    CHECK_FALSE(plan_with({}).start_hidden());
+    // A login-item launch must not silently hide the app when the user never
+    // asked for it — this is the behaviour change from autostart-implied-hide.
+    CHECK_FALSE(plan_with({"--autostart"}).start_hidden());
+}
+
+TEST_CASE("LaunchPlan: start_minimized hides every kind of launch")
+{
+    ScopedStartMinimized pref(true);
+    CHECK(plan_with({}).start_hidden());
+    CHECK(plan_with({"--autostart"}).start_hidden());
+    CHECK(plan_with({"--open-room=!room:example.org"}).start_hidden());
+}
+
+TEST_CASE("LaunchPlan: --hidden always starts hidden, pref or not")
+{
+    ScopedStartMinimized off(false);
+    CHECK(plan_with({"--hidden"}).start_hidden());
+    CHECK(plan_with({"--minimized"}).start_hidden());
+    CHECK(plan_with({"--hidden", "--autostart"}).start_hidden());
+
+    ScopedStartMinimized on(true);
+    CHECK(plan_with({"--hidden"}).start_hidden());
+}
+
+TEST_CASE("LaunchPlan: a duplicate launch always raises, whatever the pref")
+{
+    // Otherwise an app living in the tray would be reachable only by clicking
+    // the tray icon: launching it again would quietly exit and show nothing.
+    ScopedStartMinimized on(true);
+    CHECK(plan_with({}).should_raise_existing_instance());
+
+    ScopedStartMinimized off(false);
+    CHECK(plan_with({}).should_raise_existing_instance());
+}
+
+TEST_CASE("LaunchPlan: an OS-started duplicate stays out of the way")
+{
+    ScopedStartMinimized on(true);
+    CHECK_FALSE(plan_with({"--autostart"}).should_raise_existing_instance());
+}
+
+TEST_CASE("LaunchPlan: --hidden with nothing to forward stays quiet")
+{
+    ScopedStartMinimized off(false);
+    CHECK_FALSE(plan_with({"--hidden"}).should_raise_existing_instance());
+}
+
+TEST_CASE("LaunchPlan: anything to forward reaches the running instance")
+{
+    ScopedStartMinimized off(false);
+    CHECK(plan_with({"--open-room=!room:example.org"})
+              .should_raise_existing_instance());
+    CHECK(plan_with({"--open-settings"}).should_raise_existing_instance());
+    CHECK(plan_with({"--open-settings", "--autostart"})
+              .should_raise_existing_instance());
+    CHECK(plan_with({"matrix:u/user:example.org"}).should_raise_existing_instance());
 }
 
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED

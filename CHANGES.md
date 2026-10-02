@@ -5,6 +5,10 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-01
+
+- feat(tray): Settings → General now controls what closing the window does (quit, hide to tray by default, or minimize) and adds an opt-in "start minimized to tray". A login item no longer silently hides the app, and a user-started launch always raises the running window. All platforms build; `ctest` unrun
+
 ### 2026-09-30
 
 - feat(emoji): skin tones in the emoji picker. Long-press, right-click or Shift+Enter opens a tone menu; the picked tone becomes the default for the picker and `:shortcode:` autocomplete, synced across devices. Qt6 build + ctest 2066/2066

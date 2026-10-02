@@ -1549,6 +1549,38 @@ msgstr "Inicio"
 msgid "Launch Tesseract when you log in"
 msgstr "Iniciar Tesseract al iniciar sesión"
 
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Start minimized to system tray"
+msgstr "Iniciar minimizado en la bandeja"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "When I close the window"
+msgstr "Al cerrar la ventana"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Minimize to taskbar"
+msgstr "Minimizar a la barra de tareas"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Hide to system tray"
+msgstr "Ocultar en la bandeja"
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window quits Tesseract."
+msgstr "Al cerrar la ventana se sale de Tesseract."
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window minimizes Tesseract to the taskbar."
+msgstr "Al cerrar la ventana se minimiza Tesseract a la barra de tareas."
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "Closing the window hides it to the system tray. Tesseract keeps running - use the tray icon's Quit menu item to exit."
+msgstr "Al cerrar la ventana se oculta en la bandeja. Tesseract sigue en funcionamiento; para salir, usa la opción «Salir» del menú del icono de la bandeja."
+
+#: ui/shared/views/settings/GeneralSection.cpp
+msgid "No system tray icon is available on this system, so closing the window always quits Tesseract."
+msgstr "En este sistema no hay ningún icono de bandeja, así que al cerrar la ventana siempre se sale de Tesseract."
+
 #: ui/shared/views/RoomSettingsView.cpp
 msgid "Name"
 msgstr "Nombre"

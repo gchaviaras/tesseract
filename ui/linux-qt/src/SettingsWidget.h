@@ -72,6 +72,10 @@ public:
     /// OS state) and after a failed toggle to reflect what really happened.
     void set_launch_at_login_pref(bool enabled);
 
+    /// Report whether a system tray icon exists, so the close-action dropdown
+    /// can drop "hide to tray" when hiding would be unreachable.
+    void set_tray_available(bool available);
+
     /// Silently initialise the "show room join/leave events" checkbox.
     void set_show_membership_events_pref(bool enabled);
 

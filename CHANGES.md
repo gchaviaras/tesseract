@@ -5,6 +5,10 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-02
+
+- fix(timeline): Ctrl+C/⌘C copies a timeline selection reliably. It is now handled once in shared code (`RoomView`) instead of per-shell window handlers, covers the thread panel, and ignores selections that are hidden or under a modal overlay. Ctrl/⌘ shortcuts (copy, Ctrl+K, Ctrl+F) now also work on non-Latin keyboard layouts. Qt6 build + ctest 2086/2086
+
 ### 2026-10-01
 
 - feat(tray): Settings → General now controls what closing the window does (quit, hide to tray by default, or minimize) and adds an opt-in "start minimized to tray". A login item no longer silently hides the app, and a user-started launch always raises the running window. All platforms build; `ctest` unrun

@@ -3691,18 +3691,20 @@ void MacShell::apply_window_title_ui_(const std::string& title)
                 s->_shell->ensure_tile(z, x, y);
             }
         };
-        _mainApp->room_view()->message_list()->on_show_copy_menu =
+        _mainApp->room_view()->on_show_copy_menu =
             [weakSelf]()
         {
             MainWindowController* s = weakSelf;
             if (!s || !s->_mainApp || !s->_mainAppSurface)
                 return;
-            auto* ml = s->_mainApp->room_view()->message_list();
             NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
             NSMenuItem* item = [[NSMenuItem alloc]
                 initWithTitle:TkTr("Copy")
                        action:@selector(copy:)
                 keyEquivalent:@""];
+            // Explicit target: with nil, copy: walks the responder chain and a
+            // still-first-responder composer NSTextView would copy its own text.
+            item.target = s;
             [menu addItem:item];
             NSEvent* event = [NSApp currentEvent];
             NSView* view =
@@ -8432,8 +8434,7 @@ void MacShell::apply_window_title_ui_(const std::string& title)
 {
     if (item.action == @selector(copy:))
     {
-        auto* ml = _mainApp ? _mainApp->room_view()->message_list() : nullptr;
-        return ml && ml->has_selection();
+        return _mainApp && _mainApp->room_view()->has_active_selection();
     }
     if ([self respondsToSelector:item.action] &&
         [NSStringFromSelector(item.action) hasSuffix:@"MenuAction:"])
@@ -8445,9 +8446,8 @@ void MacShell::apply_window_title_ui_(const std::string& title)
 
 - (void)copy:(id)sender
 {
-    auto* ml = _mainApp ? _mainApp->room_view()->message_list() : nullptr;
-    if (ml)
-        ml->copy_selection();
+    if (_mainApp)
+        _mainApp->room_view()->copy_active_selection();
 }
 
 - (void)_showQRGrant

@@ -1543,14 +1543,6 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
             }
             return 0;
         }
-        if (wParam == 'C' && (GetKeyState(VK_CONTROL) & 0x8000))
-        {
-            if (self->room_view_ && self->room_view_->message_list()->has_selection())
-            {
-                self->room_view_->message_list()->copy_selection();
-                return 0;
-            }
-        }
         return DefWindowProcW(hwnd, msg, wParam, lParam);
 
     case WM_TIMER:
@@ -2239,11 +2231,10 @@ void MainWindow::on_create(HWND hwnd)
             if (main_app_surface_)
                 main_app_surface_->host().release_focus_to_canvas();
         };
-        room_view_->message_list()->on_show_copy_menu = [this]()
+        room_view_->on_show_copy_menu = [this]()
         {
             if (!room_view_)
                 return;
-            auto* ml = room_view_->message_list();
             HMENU menu = CreatePopupMenu();
             AppendMenuW(menu, MF_STRING, 1, utf8_to_wstr(tk::tr("Copy")).c_str());
             POINT pt{};
@@ -2253,7 +2244,7 @@ void MainWindow::on_create(HWND hwnd)
                 pt.x, pt.y, hwnd_, nullptr));
             DestroyMenu(menu);
             if (cmd == 1)
-                ml->copy_selection();
+                room_view_->copy_active_selection();
         };
         // Switch the surface cursor to the link/pointer shape while the
         // mouse is over a URL / map tile / file card. Empty URL clears.

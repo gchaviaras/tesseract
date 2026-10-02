@@ -193,16 +193,16 @@ RoomWindow::RoomWindow(MainWindow* parent_shell, const std::string& room_id)
         if (surface_)
             surface_->host().release_focus_to_canvas();
     };
-    room_view_->message_list()->on_show_copy_menu = [this]()
+    room_view_->on_show_copy_menu = [this]()
     {
-        auto* ml = room_view_->message_list();
+        auto* rv = room_view_;
         auto* menu = new QMenu(this);
         menu->setAttribute(Qt::WA_DeleteOnClose);
         menu->setStyleSheet(tk::qt6::build_menu_qss(surface_->theme()));
         QAction* copyAct = menu->addAction(QString::fromStdString(tk::tr("Copy")));
-        QObject::connect(copyAct, &QAction::triggered, [ml]()
+        QObject::connect(copyAct, &QAction::triggered, [rv]()
         {
-            ml->copy_selection();
+            rv->copy_active_selection();
         });
         menu->popup(QCursor::pos());
     };
@@ -707,15 +707,6 @@ void RoomWindow::keyPressEvent(QKeyEvent* ev)
             img_viewer_->set_visible(false);
             if (surface_)
                 surface_->relayout();
-            return;
-        }
-    }
-    if (ev->key() == Qt::Key_C && (ev->modifiers() & Qt::ControlModifier))
-    {
-        if (room_view_ && room_view_->message_list()->has_selection())
-        {
-            room_view_->message_list()->copy_selection();
-            ev->accept();
             return;
         }
     }

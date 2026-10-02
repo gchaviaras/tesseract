@@ -49,7 +49,7 @@ version) are noted where relevant.
 - Fully-read markers (`m.fully_read`)
 - Typing indicators
 - Timeline day separators and new-message separator; a floating date badge pins to the top of the timeline while scrolling through history, naming the day you're viewing
-- Click-drag (or double/triple-click for word/line) text selection across message bodies; right-click or Ctrl+C/⌘C copies the selection
+- Click-drag (or double/triple-click for word/line) text selection across message bodies; right-click or Ctrl+C/⌘C copies the selection (main timeline and thread panel)
 - `m.notice` and `m.emote` (`/me`) handled distinctly from regular messages
 - Decryption retry as keys arrive (no permanent "unable to decrypt" placeholders)
 - Pinned messages — full support (pin/unpin) with power-level checks

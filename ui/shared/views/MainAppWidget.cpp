@@ -4,6 +4,7 @@
 #include "media_utils.h"
 #include "sidebar_metrics.h"
 #include "tk/i18n.h"
+#include "tk/key_shortcuts.h"
 #include "tk/layout.h"
 #include "tk/svg.h"
 #include "tk/theme.h"
@@ -11,7 +12,6 @@
 #include <tesseract/visual.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <memory>
 
@@ -24,19 +24,6 @@ namespace
 bool point_in_rect(tk::Point p, tk::Rect r)
 {
     return p.x >= r.x && p.y >= r.y && p.x < r.x + r.w && p.y < r.y + r.h;
-}
-
-bool shortcut_char(const tk::KeyEvent& event, char ch)
-{
-    if (event.key != tk::Key::Character || event.text.size() != 1)
-        return false;
-    return static_cast<char>(std::tolower(
-               static_cast<unsigned char>(event.text.front()))) == ch;
-}
-
-bool primary_shortcut(const tk::KeyEvent& event)
-{
-    return (event.ctrl || event.meta) && !event.alt;
 }
 
 } // namespace
@@ -1285,7 +1272,7 @@ void MainAppWidget::set_room_visible_(bool visible)
 
 bool MainAppWidget::handle_primary_shortcut_(const tk::KeyEvent& event)
 {
-    if (primary_shortcut(event) && shortcut_char(event, 'k') && !event.shift)
+    if (tk::primary_shortcut(event) && tk::shortcut_char(event, 'k') && !event.shift)
     {
         if (on_quick_switch_shortcut)
         {
@@ -1293,7 +1280,7 @@ bool MainAppWidget::handle_primary_shortcut_(const tk::KeyEvent& event)
             return true;
         }
     }
-    if (primary_shortcut(event) && shortcut_char(event, 'f'))
+    if (tk::primary_shortcut(event) && tk::shortcut_char(event, 'f'))
     {
         if (event.shift)
         {

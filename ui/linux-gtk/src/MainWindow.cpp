@@ -1504,7 +1504,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         };
         main_app_->space_root()->on_leave_space =
             [this](std::string rid) { confirm_leave_room_(rid); };
-        room_view_->message_list()->on_show_copy_menu = [this]()
+        room_view_->on_show_copy_menu = [this]()
         {
             if (!copy_ctx_menu_)
                 build_copy_context_menu_();
@@ -5780,7 +5780,7 @@ void MainWindow::on_copy_action_(GSimpleAction* /*action*/,
 {
     auto* self = static_cast<MainWindow*>(user_data);
     if (self->room_view_)
-        self->room_view_->message_list()->copy_selection();
+        self->room_view_->copy_active_selection();
 }
 
 void MainWindow::on_msg_right_click_(GtkGestureClick* gesture, int /*n_press*/,
@@ -6053,14 +6053,6 @@ gboolean MainWindow::on_window_key_pressed_(GtkEventControllerKey*,
     auto* self = static_cast<MainWindow*>(user_data);
     // Ctrl+K is handled by a global-scope GtkShortcutController (see ctor) so
     // it works while a native entry / text view has focus.
-    if (keyval == GDK_KEY_c && (state & GDK_CONTROL_MASK))
-    {
-        if (self->room_view_ && self->room_view_->message_list()->has_selection())
-        {
-            self->room_view_->message_list()->copy_selection();
-            return TRUE;
-        }
-    }
     if (keyval == GDK_KEY_Escape)
     {
         const bool had_quick_switch = self->main_app_ &&

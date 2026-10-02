@@ -545,10 +545,27 @@ public:
     std::function<void(std::string_view)> on_set_clipboard;
 
     // A message-list text selection just became active. Wire to
-    // Host::release_focus_to_canvas() in the shell so window-level
-    // Ctrl+C/Cmd+C can reach it instead of being swallowed by the
+    // Host::release_focus_to_canvas() in the shell so Ctrl+C/Cmd+C reaches
+    // on_key_down() through the surface instead of being swallowed by the
     // still-focused composer.
     std::function<void()> on_selection_started;
+
+    // Right-click on an active selection in either timeline. The shell
+    // should show a native context menu with a "Copy" item that calls
+    // copy_active_selection(). Falls back to copying directly if unset.
+    std::function<void()> on_show_copy_menu;
+
+    // True when either timeline (main or thread panel) has a non-empty,
+    // visible, uncovered text selection.
+    bool has_active_selection() const;
+
+    // Copy the active timeline selection to the clipboard. Only one of the
+    // two lists holds a selection at a time (starting one clears the
+    // other). Returns false (and does nothing) when there's none, or it's
+    // hidden or covered by a modal overlay. Ctrl+C/Cmd+C
+    // reaches this through on_key_down(); shells call it directly from
+    // native Copy paths (macOS Edit menu, context menus).
+    bool copy_active_selection();
 
     // Fired from set_room() so the shell can ensure the room's avatar thumbnail
     // is fetched and cached before the header paints.
@@ -707,6 +724,9 @@ public:
     // explicitly (needed for their native search field's text colour,
     // which doesn't otherwise pick up a palette change).
     void on_theme_changed(const tk::Theme&) override;
+    // Ctrl+C / Cmd+C copies the active timeline selection (see
+    // copy_active_selection()); falls through when there is none.
+    bool on_key_down(const tk::KeyEvent& event) override;
 
     // Pointer/hit-test routing. The overlay panels (RoomInfoPanel /
     // UserProfilePanel) paint last (on top) but are created before the
@@ -902,6 +922,8 @@ private:
     // Lazily created when the thread panel first opens. Owned by the tk
     // child list (add_child); we keep a borrowed pointer for access.
     ThreadView*     thread_view_      = nullptr;
+    // The visible list copy_active_selection() would copy from, or null.
+    MessageListView* selection_list_() const;
     ThreadListView* thread_list_view_ = nullptr;
     // Lazily created the first time set_pinned() is called with a non-empty
     // list. Owned by the tk child list (add_child); we keep a borrowed

@@ -3483,7 +3483,41 @@ KeyEvent translate_key_event(guint keyval, GdkModifierType state)
     return out;
 }
 
-gboolean key_pressed_cb(GtkEventControllerKey*, guint keyval, guint,
+// For a Ctrl/Meta shortcut on a non-Latin layout (Cyrillic, Greek, ...),
+// the keyval is the layout's own letter — Ctrl+C arrives as Cyrillic_es —
+// so shared shortcut matching on 'c' would never fire. Mirror GTK's own
+// accelerator matching: find a Latin letter on the same physical key in
+// any installed layout group. Returns `keyval` unchanged when there's none.
+guint latin_shortcut_keyval(guint keyval, guint keycode)
+{
+    // Only a non-Latin letter needs the keymap lookup — skip it for ASCII,
+    // named keys (Ctrl+arrows, Ctrl+Tab autorepeat) and anything else.
+    if (keyval < 0x80 || key_from_gdk(keyval) != Key::Unknown ||
+        !g_unichar_isalpha(gdk_keyval_to_unicode(keyval)))
+        return keyval;
+    GdkDisplay* display = gdk_display_get_default();
+    GdkKeymapKey* keys = nullptr;
+    guint* keyvals = nullptr;
+    int n = 0;
+    if (!display ||
+        !gdk_display_map_keycode(display, keycode, &keys, &keyvals, &n))
+        return keyval;
+    guint latin = keyval;
+    for (int i = 0; i < n; ++i)
+    {
+        if (keys[i].level == 0 && keyvals[i] < 0x80 &&
+            g_ascii_isalpha(static_cast<gchar>(keyvals[i])))
+        {
+            latin = keyvals[i];
+            break;
+        }
+    }
+    g_free(keys);
+    g_free(keyvals);
+    return latin;
+}
+
+gboolean key_pressed_cb(GtkEventControllerKey*, guint keyval, guint keycode,
                         GdkModifierType state, gpointer p)
 {
     Host* host = static_cast<Host*>(p);
@@ -3491,6 +3525,8 @@ gboolean key_pressed_cb(GtkEventControllerKey*, guint keyval, guint,
     {
         return FALSE;
     }
+    if (state & (GDK_CONTROL_MASK | GDK_META_MASK))
+        keyval = latin_shortcut_keyval(keyval, keycode);
     KeyEvent event = translate_key_event(keyval, state);
     if (event.key == Key::Unknown)
     {

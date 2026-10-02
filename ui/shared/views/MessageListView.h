@@ -769,16 +769,17 @@ public:
     // Clipboard write. Wire to Host::set_clipboard_text via RoomView.
     std::function<void(std::string_view)> on_set_clipboard;
 
-    // Called by on_right_click when there is an active selection. The shell
+    // Called by on_right_click when there is an active selection. The owner
     // should show a native context menu with a "Copy" item and call
-    // copy_selection() if chosen. Falls back to copy_selection() if unset.
-    std::function<void()> on_show_copy_menu;
+    // copy_selection() if chosen, returning true; returning false (or
+    // leaving this unset) copies the selection directly instead.
+    std::function<bool()> on_show_copy_menu;
 
     // Called the moment a text selection becomes non-empty (not on every
     // plain click). The shell should move real OS keyboard focus off the
-    // composer (Host::release_focus_to_canvas()) so window-level
-    // Ctrl+C/Cmd+C can reach copy_selection() instead of being swallowed by
-    // the composer's native text control.
+    // composer (Host::release_focus_to_canvas()) so Ctrl+C/Cmd+C reaches
+    // the tk key dispatch (RoomView::on_key_down) instead of being
+    // swallowed by the composer's native text control.
     std::function<void()> on_selection_started;
 
     // Called when a previously non-empty selection is cleared (e.g. a new
@@ -792,6 +793,11 @@ public:
     // Copy the current selection to the clipboard via on_set_clipboard.
     // No-op when has_selection() is false or on_set_clipboard is unset.
     void copy_selection();
+
+    // Drop the current selection, if any, without firing
+    // on_selection_cleared — for an owner that's moving the selection to a
+    // sibling list (which keeps keyboard focus off the composer).
+    void clear_selection();
 
     // Widget overrides
     void arrange(tk::LayoutCtx&, tk::Rect bounds) override;

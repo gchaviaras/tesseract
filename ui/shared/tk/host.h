@@ -998,6 +998,15 @@ public:
     // unset or the scoped widget is gone/hidden.
     void set_focus_scope(Widget* w) { focus_scope_ = track(w); }
     void clear_focus_scope() { focus_scope_.reset(); }
+    // The active focus scope, or null when unset or the scoped widget is
+    // gone/hidden (the same fallback advance_focus_() applies). Also tells
+    // shortcut handlers whether a modal overlay is covering the rest of the
+    // tree.
+    Widget* focus_scope() const
+    {
+        Widget* scope = focus_scope_.lock().get();
+        return scope && scope->visible_in_tree() ? scope : nullptr;
+    }
 
     // ── Canvas-level keyboard focus ──────────────────────────────────────────
     // Tracks which tk::Widget currently holds tk-level keyboard focus, scoped

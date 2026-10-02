@@ -8731,13 +8731,23 @@ void MessageListView::copy_selection()
         on_set_clipboard(result);
 }
 
+void MessageListView::clear_selection()
+{
+    if (!sel_)
+        return;
+    sel_.reset();
+    sel_is_dragging_ = false;
+    press_sel_ = false;
+    selection_started_notified_ = false;
+    if (request_repaint_)
+        request_repaint_();
+}
+
 bool MessageListView::on_right_click(tk::Point /*local*/)
 {
     if (!has_selection())
         return false;
-    if (on_show_copy_menu)
-        on_show_copy_menu();
-    else
+    if (!on_show_copy_menu || !on_show_copy_menu())
         copy_selection();
     return true;
 }

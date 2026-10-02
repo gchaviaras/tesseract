@@ -288,7 +288,7 @@ RoomWindow::RoomWindow(MainWindow* parent_shell, const std::string& room_id)
         if (surface_)
             surface_->host().release_focus_to_canvas();
     };
-    room_view_->message_list()->on_show_copy_menu = [this]()
+    room_view_->on_show_copy_menu = [this]()
     {
         if (!copy_ctx_menu_)
         {
@@ -671,7 +671,7 @@ void RoomWindow::on_copy_action_(GSimpleAction* /*action*/,
 {
     auto* w = static_cast<RoomWindow*>(self);
     if (w->room_view_)
-        w->room_view_->message_list()->copy_selection();
+        w->room_view_->copy_active_selection();
 }
 
 // static
@@ -688,14 +688,6 @@ gboolean RoomWindow::on_key_pressed_(GtkEventControllerKey*, guint keyval,
                                       gpointer self)
 {
     auto* w = static_cast<RoomWindow*>(self);
-    if (keyval == GDK_KEY_c && (state & GDK_CONTROL_MASK))
-    {
-        if (w->room_view_ && w->room_view_->message_list()->has_selection())
-        {
-            w->room_view_->message_list()->copy_selection();
-            return TRUE;
-        }
-    }
     if (keyval == GDK_KEY_Escape)
     {
         if (w->room_view_ && w->room_view_->room_search_open())

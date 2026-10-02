@@ -4,6 +4,7 @@
 #include "tesseract/client.h"
 #include "tesseract/settings.h"
 #include "tk/i18n.h"
+#include "tk/key_shortcuts.h"
 
 #include <algorithm>
 #include <memory>
@@ -367,11 +368,30 @@ void RoomView::wire_message_list_callbacks_(MessageListView* ml)
         if (on_set_clipboard) on_set_clipboard(text);
     };
 
-    // Selection just became active — forwarded to the shell via
+    // Selection just became active — drop any selection in the sibling
+    // timeline (main vs thread panel) so there's only ever one for
+    // copy_active_selection() to act on, then forward to the shell via
     // on_selection_started.
-    ml->on_selection_started = [this]
+    ml->on_selection_started = [this, ml]
     {
+        MessageListView* thread_ml =
+            thread_view_ ? thread_view_->message_list() : nullptr;
+        for (MessageListView* other : {message_list_, thread_ml})
+        {
+            if (other && other != ml)
+                other->clear_selection();
+        }
         if (on_selection_started) on_selection_started();
+    };
+
+    // Right-click on a selection — the shell's native Copy menu, if it set
+    // one; otherwise MessageListView copies directly.
+    ml->on_show_copy_menu = [this]
+    {
+        if (!on_show_copy_menu)
+            return false;
+        on_show_copy_menu();
+        return true;
     };
 
     // Selection just cleared (e.g. a new click elsewhere deselects it) —
@@ -2517,6 +2537,49 @@ void RoomView::on_popup_dismiss()
         call_popup_->close();
     if (header_overflow_menu_ && header_overflow_menu_->is_open())
         header_overflow_menu_->close();
+}
+
+MessageListView* RoomView::selection_list_() const
+{
+    // A hidden list (the thread panel is hidden, not destroyed, on close) or
+    // one under a modal overlay — any active focus scope it isn't part of:
+    // RoomView's own panels, MainAppWidget's transient overlays — holds a
+    // selection the user can't see, which a Ctrl+C must not copy.
+    tk::Widget* scope = host() ? host()->focus_scope() : nullptr;
+    const auto usable = [scope](MessageListView* ml)
+    {
+        return ml && ml->visible() && ml->has_selection() &&
+               (!scope || scope->is_ancestor_of(ml));
+    };
+    if (usable(message_list_))
+        return message_list_;
+    MessageListView* thread_ml =
+        thread_view_ ? thread_view_->message_list() : nullptr;
+    if (usable(thread_ml))
+        return thread_ml;
+    return nullptr;
+}
+
+bool RoomView::has_active_selection() const
+{
+    return selection_list_() != nullptr;
+}
+
+bool RoomView::copy_active_selection()
+{
+    MessageListView* target = selection_list_();
+    if (!target)
+        return false;
+    target->copy_selection();
+    return true;
+}
+
+bool RoomView::on_key_down(const tk::KeyEvent& event)
+{
+    if (tk::primary_shortcut(event) && !event.shift &&
+        tk::shortcut_char(event, 'c'))
+        return copy_active_selection();
+    return false;
 }
 
 void RoomView::on_theme_changed(const tk::Theme& t)

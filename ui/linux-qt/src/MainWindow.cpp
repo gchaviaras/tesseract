@@ -515,16 +515,16 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         };
         mainApp_->space_root()->on_leave_space =
             [this](std::string rid) { confirm_leave_room_(rid); };
-        mainApp_->room_view()->message_list()->on_show_copy_menu = [this]()
+        mainApp_->room_view()->on_show_copy_menu = [this]()
         {
-            auto* ml = mainApp_->room_view()->message_list();
+            auto* rv = mainApp_->room_view();
             auto* menu = new QMenu(mainAppSurface_);
             menu->setAttribute(Qt::WA_DeleteOnClose);
             menu->setStyleSheet(tk::qt6::build_menu_qss(current_theme_));
             QAction* copyAct = menu->addAction(QString::fromStdString(tk::tr("Copy")));
-            QObject::connect(copyAct, &QAction::triggered, [ml]()
+            QObject::connect(copyAct, &QAction::triggered, [rv]()
             {
-                ml->copy_selection();
+                rv->copy_active_selection();
             });
             menu->popup(QCursor::pos());
         };
@@ -2089,15 +2089,6 @@ void MainWindow::keyPressEvent(QKeyEvent* ev)
     }
     // Ctrl+K is handled by an application-scoped QShortcut (see ctor) so it
     // works while a native text widget has focus; no keyPressEvent branch.
-    if (ev->key() == Qt::Key_C && (ev->modifiers() & Qt::ControlModifier))
-    {
-        if (mainApp_ && mainApp_->room_view()->message_list()->has_selection())
-        {
-            mainApp_->room_view()->message_list()->copy_selection();
-            ev->accept();
-            return;
-        }
-    }
     QMainWindow::keyPressEvent(ev);
 }
 

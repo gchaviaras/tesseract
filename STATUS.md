@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-09-30**. 2066 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-02**. 2086 C++ + 765 Rust tests.
 
 > **Emoji picker: skin tones, Emoji 18.0, font-coverage filtering; "not
 > bridged" override persists (2026-09-30).**
@@ -2426,7 +2426,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 - **MSC2545 sticker decryption** — encrypted-sticker support via direct `ruma = { features = ["compat-encrypted-stickers"] }`; sticker timeline events emit JSON-encoded `MediaSource` for the encrypted variant.
 - **Block-level Markdown rendering** — headings (`#` through `######`), unordered and ordered lists (including nested), blockquotes, and tables render visually in `MessageListView` across all four canvas backends. Headings use `FontRole::UiSemibold`; list items indent with correct bullet / ordinal; blockquotes get an accent left-border stripe; tables use fixed-width columns. Complements the existing inline styles and code-block syntax highlighting.
 - **Floating date badge** — a rounded pill fixed to the top-center of the timeline viewport while scrolled away from the live tail, naming the day of whatever row is at the top (reuses the inline day-separator's `format_day_label()`). Modeled on `RoomListView`'s sticky-header pattern; pushes up and blends into the real inline `DaySeparator` row as it scrolls into place; shown regardless of how many distinct days are loaded.
-- **Drag-select + copy text** — click-drag (or double/triple-click for word/line) selects plain text across message bodies in `MessageListView`; right-click shows a native "Copy" context menu on all four platforms, and Ctrl+C/Cmd+C at the window level copies the selection too. Starting a real selection now moves OS keyboard focus off the composer (`Host::release_focus_to_canvas()`, fired via `MessageListView::on_selection_started`) so the composer's still-focused native text field doesn't swallow the Ctrl+C first; deselecting (a later click) returns focus to the composer via `on_selection_cleared`.
+- **Drag-select + copy text** — click-drag (or double/triple-click for word/line) selects plain text across message bodies in `MessageListView`; right-click shows a native "Copy" context menu on all four platforms, and Ctrl+C/Cmd+C copies the selection too — handled in shared code by `RoomView::on_key_down` → `copy_active_selection()`, which covers both the main timeline and the thread panel (starting a selection in one clears the other's; a selection that's hidden or outside the active focus scope — i.e. under a modal overlay — is ignored). Each backend maps Ctrl/Cmd shortcuts on non-Latin layouts to the Latin letter on the same physical key (Qt `key()`, GTK keymap lookup, macOS ASCII-capable layout, Win32 VK codes already are). Starting a real selection now moves OS keyboard focus off the composer (`Host::release_focus_to_canvas()`, fired via `MessageListView::on_selection_started`) so the composer's still-focused native text field doesn't swallow the Ctrl+C first; deselecting (a later click) returns focus to the composer via `on_selection_cleared`.
 
 ## Media
 

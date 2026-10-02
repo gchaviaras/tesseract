@@ -690,6 +690,14 @@ public:
     {
         return parent_;
     }
+    // True when `w` is this widget or sits anywhere in its subtree.
+    bool is_ancestor_of(const Widget* w) const
+    {
+        for (; w; w = w->parent())
+            if (w == this)
+                return true;
+        return false;
+    }
     Rect bounds() const
     {
         return bounds_;

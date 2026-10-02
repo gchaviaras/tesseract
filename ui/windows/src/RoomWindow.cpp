@@ -296,11 +296,10 @@ RoomWindow::RoomWindow(MainWindow* parent, const std::string& room_id)
         if (surface_)
             surface_->host().release_focus_to_canvas();
     };
-    room_view_->message_list()->on_show_copy_menu = [this]()
+    room_view_->on_show_copy_menu = [this]()
     {
         if (!room_view_)
             return;
-        auto* ml = room_view_->message_list();
         HMENU menu = CreatePopupMenu();
         AppendMenuW(menu, MF_STRING, 1, tk::win32::utf8_to_wide(tk::tr("Copy")).c_str());
         POINT pt{};
@@ -310,7 +309,7 @@ RoomWindow::RoomWindow(MainWindow* parent, const std::string& room_id)
             pt.x, pt.y, hwnd_, nullptr));
         DestroyMenu(menu);
         if (cmd == 1)
-            ml->copy_selection();
+            room_view_->copy_active_selection();
     };
 
     // ── Compose text area (self-owned) ────────────────────────────────────
@@ -1149,14 +1148,6 @@ LRESULT RoomWindow::handle_msg_(HWND hwnd, UINT msg, WPARAM wParam,
                 img_viewer_->set_visible(false);
                 if (surface_)
                     surface_->relayout();
-                return 0;
-            }
-        }
-        if (wParam == 'C' && (GetKeyState(VK_CONTROL) & 0x8000))
-        {
-            if (room_view_ && room_view_->message_list()->has_selection())
-            {
-                room_view_->message_list()->copy_selection();
                 return 0;
             }
         }

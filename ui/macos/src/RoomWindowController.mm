@@ -358,15 +358,17 @@ MacRoomWindow::MacRoomWindow(tesseract::ShellBase* shell,
         if (surface_)
             surface_->host().release_focus_to_canvas();
     };
-    room_view_->message_list()->on_show_copy_menu = [this]()
+    room_view_->on_show_copy_menu = [this]()
     {
         if (!surface_) return;
-        auto* ml = room_view_->message_list();
         NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
         NSMenuItem* item = [[NSMenuItem alloc]
             initWithTitle:TkTr("Copy")
                    action:@selector(copy:)
             keyEquivalent:@""];
+        // Explicit target: with nil, copy: walks the responder chain and a
+        // still-first-responder composer NSTextView would copy its own text.
+        item.target = controller_;
         [menu addItem:item];
         NSEvent* event = [NSApp currentEvent];
         NSView* view = (__bridge NSView*)surface_->view_handle();
@@ -915,8 +917,7 @@ void MacRoomWindow::surface_repaint_()
     if (item.action == @selector(copy:))
     {
         auto* rv = _cppWindow ? _cppWindow->room_view() : nullptr;
-        auto* ml = rv ? rv->message_list() : nullptr;
-        return ml && ml->has_selection();
+        return rv && rv->has_active_selection();
     }
     return YES;
 }
@@ -924,9 +925,8 @@ void MacRoomWindow::surface_repaint_()
 - (void)copy:(id)sender
 {
     auto* rv = _cppWindow ? _cppWindow->room_view() : nullptr;
-    auto* ml = rv ? rv->message_list() : nullptr;
-    if (ml)
-        ml->copy_selection();
+    if (rv)
+        rv->copy_active_selection();
 }
 
 @end

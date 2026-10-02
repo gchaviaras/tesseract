@@ -15,12 +15,14 @@
 #import <CoreAudio/CoreAudio.h>
 #import <ImageIO/ImageIO.h>
 #import <CoreServices/CoreServices.h>
+#import <Carbon/Carbon.h> // TIS input sources: Latin letter for Cmd shortcuts
 #import <SystemConfiguration/SystemConfiguration.h>
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 110000
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <utility>
 #include <vector>
@@ -269,6 +271,37 @@ tk::Key key_from_macos(NSEvent* event)
     }
 }
 
+// The letter `keyCode` types on the user's ASCII-capable keyboard layout
+// (their Latin layout, even while a Cyrillic/Greek one is active), or empty
+// when it isn't an ASCII letter there.
+std::string ascii_layout_letter(unsigned short keyCode, bool shift)
+{
+    TISInputSourceRef src = TISCopyCurrentASCIICapableKeyboardLayoutInputSource();
+    if (!src)
+        return {};
+    std::string out;
+    auto data = static_cast<CFDataRef>(
+        TISGetInputSourceProperty(src, kTISPropertyUnicodeKeyLayoutData));
+    if (data)
+    {
+        const auto* layout =
+            reinterpret_cast<const UCKeyboardLayout*>(CFDataGetBytePtr(data));
+        UInt32 dead = 0;
+        UniChar buf[4];
+        UniCharCount len = 0;
+        if (UCKeyTranslate(layout, keyCode, kUCKeyActionDown, 0,
+                           LMGetKbdType(), kUCKeyTranslateNoDeadKeysBit,
+                           &dead, 4, &len, buf) == noErr &&
+            len == 1 && buf[0] < 0x80 && std::isalpha(buf[0]))
+        {
+            const int c = shift ? std::toupper(buf[0]) : std::tolower(buf[0]);
+            out.assign(1, static_cast<char>(c));
+        }
+    }
+    CFRelease(src);
+    return out;
+}
+
 std::string character_text_from_macos(NSEvent* event)
 {
     NSString* chars = event.characters;
@@ -278,6 +311,17 @@ std::string character_text_from_macos(NSEvent* event)
     }
 
     const unichar ch = [chars characterAtIndex:0];
+    // A Cmd shortcut on a non-Latin layout carries the layout's own letter —
+    // Cmd+C arrives as "с" — so shared shortcut matching on 'c' would never
+    // fire. Match AppKit's own key-equivalent handling: use the letter the
+    // same physical key types on the user's Latin layout.
+    if ((event.modifierFlags & NSEventModifierFlagCommand) && ch >= 0x80)
+    {
+        std::string latin = ascii_layout_letter(
+            event.keyCode, event.modifierFlags & NSEventModifierFlagShift);
+        if (!latin.empty())
+            return latin;
+    }
     if ([[NSCharacterSet controlCharacterSet] characterIsMember:ch])
     {
         return {};

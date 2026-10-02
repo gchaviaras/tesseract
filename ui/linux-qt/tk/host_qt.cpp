@@ -2901,13 +2901,25 @@ Key key_from_qt(int key)
 
 std::string character_text_from_qt(QKeyEvent* e)
 {
+    const int key = e->key();
+    // A Ctrl/Meta shortcut on a non-Latin layout (Cyrillic, Greek, ...)
+    // carries the layout's own letter in text() — Ctrl+C arrives as "с" —
+    // so shared shortcut matching on 'c' would never fire. Qt's xkb
+    // backend already maps key() to the Latin key on the same physical key
+    // for modified presses (that's how QShortcut matches them), so prefer it.
+    if ((e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier)) &&
+        key >= Qt::Key_A && key <= Qt::Key_Z)
+    {
+        const char base = (e->modifiers() & Qt::ShiftModifier) ? 'A' : 'a';
+        return std::string(1, static_cast<char>(base + key - Qt::Key_A));
+    }
+
     const QString text = e->text();
     if (!text.isEmpty() && text.front().isPrint())
     {
         return text.toStdString();
     }
 
-    const int key = e->key();
     if (key >= Qt::Key_A && key <= Qt::Key_Z)
     {
         const char base = (e->modifiers() & Qt::ShiftModifier) ? 'A' : 'a';

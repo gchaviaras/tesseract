@@ -114,13 +114,3 @@ and in-progress work, as a single backlog ordered by priority/urgency.
 - **Room-list window** — `AllRooms` for desktop (recommended), or windowed?
 - **Pack-entry encrypted badging** — show a lock glyph on encrypted packs
   in the picker?
-
-## Tier 5 — The big structural gaps, acknowledge and schedule loosely, don't start soon
-
-- Localization beyond English/Spanish — content work, opportunistic/
-  contributor-driven.
-- **i18n not fully wired on macOS or Win32** — both shells use `tk::tr()`
-  for the shared views, but a handful of native-menu strings still go
-  through `NSLocalizedString`/raw literals instead of the shared catalog
-  (e.g. the AppKit context-menu "Copy" item); Win32 has no `LoadString`
-  usage at all yet for anything outside the shared views.

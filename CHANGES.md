@@ -5,6 +5,10 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-03
+
+- fix(windows): JPEGs with an EXIF orientation other than 1 (e.g. phone portrait photos) now display rotated instead of as an empty box; the image is decoded before it is rotated, and a failed rotation falls back to the unrotated image. Compressed sends of such photos use the same decode-then-rotate order. Windows build; user-verified live (receive + compressed send)
+
 ### 2026-10-02
 
 - ci(screenshots): screenshot mode now also captures thread, room-info, emoji-picker and settings scenes, and the main view shows more (media, code, voice, file, mentions, calls, typing). One shared `ScreenshotDirector` drives all four shells; README gains a Feature tour. Qt6 build + ctest 2098/2098

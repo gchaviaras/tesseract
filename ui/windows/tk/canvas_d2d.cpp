@@ -19,6 +19,8 @@ static constexpr int kEmojiFontResourceId = 201;
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cwchar>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -3087,6 +3089,15 @@ int read_frame_delay_ms(IWICBitmapFrameDecode* frame)
 
 } // namespace
 
+static void log_wic_failure(const wchar_t* step, HRESULT hr)
+{
+    wchar_t msg[96];
+    std::swprintf(msg, std::size(msg),
+                  L"Tesseract: image %ls failed (hr=0x%08lX)\n", step,
+                  static_cast<unsigned long>(hr));
+    OutputDebugStringW(msg);
+}
+
 // Forward declaration — defined further down this file; decode_image needs
 // it for its own optional max_w/max_h downscale.
 static std::unique_ptr<Image> scale_wic_bitmap(IWICImagingFactory* wic,
@@ -3195,32 +3206,13 @@ std::unique_ptr<Image> decode_image(Backend& /*b*/,
         }
     }
 
-    // When a non-identity orientation is present, interpose an
-    // IWICBitmapFlipRotator between the frame and the format converter.
-    // The rotator implements IWICBitmapSource, so it drops in transparently;
-    // GetSize() on the rotated source already returns post-rotation dimensions.
-    ComPtr<IWICBitmapFlipRotator> rotator;
-    IWICBitmapSource* decode_source = frame.Get();
-    if (exif_transform != WICBitmapTransformRotate0)
-    {
-        if (SUCCEEDED(wic->CreateBitmapFlipRotator(
-                rotator.GetAddressOf())) &&
-            SUCCEEDED(rotator->Initialize(frame.Get(), exif_transform)))
-        {
-            decode_source = rotator.Get();
-        }
-    }
-
     ComPtr<IWICFormatConverter> converter;
-    if (FAILED(wic->CreateFormatConverter(converter.GetAddressOf())))
+    HRESULT hr = wic->CreateFormatConverter(converter.GetAddressOf());
+    if (SUCCEEDED(hr))
     {
-        return nullptr;
-    }
-    if (FAILED(converter->Initialize(decode_source, GUID_WICPixelFormat32bppPBGRA,
-                                     WICBitmapDitherTypeNone, nullptr, 0.0f,
-                                     WICBitmapPaletteTypeMedianCut)))
-    {
-        return nullptr;
+        hr = converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
+                                   WICBitmapDitherTypeNone, nullptr, 0.0f,
+                                   WICBitmapPaletteTypeMedianCut);
     }
 
     // Force an eager decode into an in-memory IWICBitmap. The
@@ -3228,10 +3220,43 @@ std::unique_ptr<Image> decode_image(Backend& /*b*/,
     // IWICStream, which was initialised from caller-owned memory that
     // does not outlive this call.
     ComPtr<IWICBitmap> cached;
-    if (FAILED(wic->CreateBitmapFromSource(
-            converter.Get(), WICBitmapCacheOnLoad, cached.GetAddressOf())))
+    if (SUCCEEDED(hr))
     {
+        hr = wic->CreateBitmapFromSource(converter.Get(), WICBitmapCacheOnLoad,
+                                         cached.GetAddressOf());
+    }
+    if (FAILED(hr))
+    {
+        log_wic_failure(L"decode", hr);
         return nullptr;
+    }
+
+    // Apply the EXIF orientation to the decoded bitmap, not the lazy frame:
+    // IWICBitmapFlipRotator pulls pixels column-wise while codecs produce
+    // them scanline-wise, so rotating a JPEG frame directly fails on large
+    // photos. On failure keep the unrotated image rather than nothing.
+    if (exif_transform != WICBitmapTransformRotate0)
+    {
+        ComPtr<IWICBitmapFlipRotator> rotator;
+        ComPtr<IWICBitmap> rotated;
+        hr = wic->CreateBitmapFlipRotator(rotator.GetAddressOf());
+        if (SUCCEEDED(hr))
+        {
+            hr = rotator->Initialize(cached.Get(), exif_transform);
+        }
+        if (SUCCEEDED(hr))
+        {
+            hr = wic->CreateBitmapFromSource(rotator.Get(), WICBitmapCacheOnLoad,
+                                             rotated.GetAddressOf());
+        }
+        if (SUCCEEDED(hr))
+        {
+            cached = std::move(rotated);
+        }
+        else
+        {
+            log_wic_failure(L"EXIF rotate", hr);
+        }
     }
 
     UINT w = 0, h = 0;

@@ -3639,7 +3639,7 @@ public:
 
         // WIC decodes raw pixels; bake in the EXIF orientation because the
         // JPEG re-encode below drops the tag.
-        ComPtr<IWICBitmapSource> upright = frame;
+        WICBitmapTransformOptions xform = WICBitmapTransformRotate0;
         {
             UINT orientation = 1;
             ComPtr<IWICMetadataQueryReader> reader;
@@ -3660,7 +3660,6 @@ public:
                     PropVariantClear(&pv);
                 }
             }
-            WICBitmapTransformOptions xform = WICBitmapTransformRotate0;
             switch (orientation)
             {
             case 2: xform = WICBitmapTransformFlipHorizontal; break;
@@ -3680,20 +3679,14 @@ public:
             case 8: xform = WICBitmapTransformRotate270; break;
             default: break;
             }
-            if (xform != WICBitmapTransformRotate0)
-            {
-                ComPtr<IWICBitmapFlipRotator> rotator;
-                if (SUCCEEDED(wic->CreateBitmapFlipRotator(
-                        rotator.GetAddressOf())) &&
-                    SUCCEEDED(rotator->Initialize(frame.Get(), xform)))
-                {
-                    upright = rotator;
-                }
-            }
         }
 
         UINT src_w = 0, src_h = 0;
-        upright->GetSize(&src_w, &src_h);
+        frame->GetSize(&src_w, &src_h);
+        if (xform & (WICBitmapTransformRotate90 | WICBitmapTransformRotate270))
+        {
+            std::swap(src_w, src_h);
+        }
 
         if (!compress)
         {
@@ -3734,6 +3727,30 @@ public:
                                  static_cast<double>(kMaxH) / src_h});
             dst_w = std::max<UINT>(1, static_cast<UINT>(std::round(src_w * s)));
             dst_h = std::max<UINT>(1, static_cast<UINT>(std::round(src_h * s)));
+        }
+
+        // Rotate a decoded in-memory copy, not the lazy frame:
+        // IWICBitmapFlipRotator pulls pixels column-wise while codecs produce
+        // them scanline-wise, so rotating a JPEG frame directly fails on
+        // large photos.
+        ComPtr<IWICBitmapSource> upright = frame;
+        if (xform != WICBitmapTransformRotate0)
+        {
+            ComPtr<IWICBitmap> decoded;
+            ComPtr<IWICBitmapFlipRotator> rotator;
+            ComPtr<IWICBitmap> rotated;
+            if (FAILED(wic->CreateBitmapFromSource(frame.Get(),
+                                                   WICBitmapCacheOnLoad,
+                                                   decoded.GetAddressOf())) ||
+                FAILED(wic->CreateBitmapFlipRotator(rotator.GetAddressOf())) ||
+                FAILED(rotator->Initialize(decoded.Get(), xform)) ||
+                FAILED(wic->CreateBitmapFromSource(rotator.Get(),
+                                                   WICBitmapCacheOnLoad,
+                                                   rotated.GetAddressOf())))
+            {
+                return EncodedImage{};
+            }
+            upright = rotated;
         }
 
         ComPtr<IWICBitmapSource> source;

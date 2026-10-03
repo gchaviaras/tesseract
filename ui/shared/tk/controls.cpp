@@ -181,6 +181,8 @@ Color button_fill(Button::Variant v, const Theme& th, bool enabled,
             return th.palette.destructive_hover;
         }
         return th.palette.destructive;
+    case Button::Variant::Link:
+        return Color::rgba(0, 0, 0, 0);
     }
     return th.palette.accent;
 }
@@ -194,6 +196,10 @@ Color button_text(Button::Variant v, const Theme& th, bool enabled)
     if (v == Button::Variant::Primary || v == Button::Variant::Destructive)
     {
         return th.palette.text_on_accent;
+    }
+    if (v == Button::Variant::Link)
+    {
+        return th.palette.accent;
     }
     return th.palette.text_primary;
 }
@@ -311,7 +317,9 @@ void Button::paint(PaintCtx& ctx)
     {
         return;
     }
-    const Color text_color = button_text(variant_, ctx.theme, enabled_);
+    Color text_color = button_text(variant_, ctx.theme, enabled_);
+    if (variant_ == Variant::Link && enabled_ && (pressed_ || hovered_))
+        text_color = pressed_ ? ctx.theme.palette.accent_pressed : ctx.theme.palette.accent_hover;
     const bool leading_icon = icon_leading_ && !icon_svg_.empty();
     // Centre the whole icon + gap + label group, so a leading-icon button
     // lines up with plain-label buttons of the same width.
@@ -328,6 +336,11 @@ void Button::paint(PaintCtx& ctx)
         tx += icon_w;
     }
     ctx.canvas.draw_text(*cached_, {tx, ty}, text_color);
+    if (variant_ == Variant::Link && enabled_ && hovered_)
+    {
+        const float uy = ty + cached_size_.h - 1.0f;
+        ctx.canvas.draw_line({tx, uy}, {tx + cached_size_.w, uy}, text_color, 1.0f);
+    }
 }
 
 Color Button::content_color(const Theme& theme) const

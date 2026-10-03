@@ -40,6 +40,12 @@ public:
 
     bool has_knock() const { return knock_.has_value(); }
 
+    // A group named "{room} — Request pending"; topic and reason follow as
+    // its description. The Cancel button is a real child.
+    tk::Role access_role() const override { return tk::Role::Group; }
+    std::string access_name() const override;
+    std::string access_description() const override;
+
     // Fires when the user clicks "Cancel Request".
     std::function<void()> on_cancel;
 

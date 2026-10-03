@@ -185,6 +185,19 @@ void ShellBase::show_status_message_(std::string msg, int auto_clear_ms,
                 status_override_active_ = true;
             status_message_allows_links_ = allow_links;
             on_show_status_message_ui_(msg);
+            // The status line is the shell's channel for errors and
+            // notices (call-ended reasons, sync trouble, …) — speak it too,
+            // but not the same text again within a minute (the sync-error
+            // path re-posts its message on every 5 s retry).
+            const auto now = std::chrono::steady_clock::now();
+            if (main_app_ && main_app_->host() &&
+                (msg != last_announced_status_ ||
+                 now - last_announced_status_at_ > std::chrono::minutes(1)))
+            {
+                last_announced_status_    = msg;
+                last_announced_status_at_ = now;
+                main_app_->host()->announce(msg);
+            }
         });
     // auto_clear_ms <= 0 → persistent: the message stays until a newer
     // status message (which bumps the generation) replaces it.

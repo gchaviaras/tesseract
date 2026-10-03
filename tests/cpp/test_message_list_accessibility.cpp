@@ -2,6 +2,9 @@
 
 #include "tk/access_tree.h"
 #include "views/MessageListView.h"
+#include "tk/theme.h"
+#include "tk_test_surface.h"
+#include "access_test_util.h"
 
 using tesseract::views::MessageListView;
 using tesseract::views::MessageRowData;
@@ -96,7 +99,7 @@ TEST_CASE("a message row with reactions folds a reaction-count summary "
             break;
         }
     REQUIRE(item != nullptr);
-    CHECK(item->name == "Alice: nice! (3 reactions)");
+    CHECK(item->name == "Alice: nice!, 3 reactions");
 }
 
 TEST_CASE("a redacted message reads as \"Message deleted\", not empty body",
@@ -168,4 +171,68 @@ TEST_CASE("a day separator followed by real content is announced with the "
         }
     REQUIRE(separator != nullptr);
     CHECK_FALSE(separator->name.empty());
+}
+
+TEST_CASE("a message's name adds reply target, edited, and thread replies after the body",
+         "[message_list][accessibility]")
+{
+    MessageListView v;
+    auto row = text_row("$a", "Alice", "hi");
+    row.in_reply_to_id          = "$o";
+    row.in_reply_to_sender_name = "Bob";
+    row.is_edited               = true;
+    row.is_thread_root          = true;
+    row.thread_reply_count      = 2;
+    std::vector<MessageRowData> msgs{row};
+    v.set_messages(std::move(msgs), false);
+
+    AccessNode tree = build_access_tree(&v);
+    CHECK(access_test::find_named(
+              tree, "Alice: hi, replying to Bob, edited, 2 replies in thread") != nullptr);
+}
+
+TEST_CASE("a formatted table is summarised instead of read as Markdown source",
+         "[message_list][accessibility]")
+{
+    MessageListView v;
+    auto row = text_row("$a", "Alice", "| A | B |\n|---|---|\n| 1 | 2 |");
+    row.formatted_body = "<table><thead><tr><th>A</th><th>B</th></tr></thead>"
+                         "<tbody><tr><td>1</td><td>2</td></tr></tbody></table>";
+    std::vector<MessageRowData> msgs{row};
+    v.set_messages(std::move(msgs), false);
+
+    AccessNode tree = build_access_tree(&v);
+    CHECK(access_test::find_named(tree, "Alice: Table, 2 rows, 2 columns: A, B; 1, 2") !=
+          nullptr);
+}
+
+TEST_CASE("visible messages expose their links and the reply jump as actions",
+         "[message_list][accessibility]")
+{
+    auto surface = TestSurface::create(500, 600);
+    MessageListView v;
+    auto orig = text_row("$o", "Bob", "original");
+    auto row  = text_row("$a", "Alice", "see site");
+    row.formatted_body          = "see <a href=\"https://example.org\">site</a>";
+    row.in_reply_to_id          = "$o";
+    row.in_reply_to_sender_name = "Bob";
+    std::vector<MessageRowData> msgs{orig, row};
+    v.set_messages(std::move(msgs), false);
+    LayoutCtx lc{surface->factory(), Theme::light()};
+    v.measure(lc, {500, 600});
+    v.arrange(lc, {0, 0, 500, 600});
+
+    std::string opened;
+    v.on_link_clicked = [&](const std::string& url) { opened = url; };
+
+    AccessNode tree = build_access_tree(&v);
+    const AccessNode* link = access_test::find_named(tree, "site");
+    REQUIRE(link != nullptr);
+    CHECK(link->role == Role::Link);
+    CHECK(invoke_default_action(*link));
+    CHECK(opened == "https://example.org");
+
+    const AccessNode* jump = access_test::find_named(tree, "Jump to replied message");
+    REQUIRE(jump != nullptr);
+    CHECK(invoke_default_action(*jump)); // original is loaded: scrolls to it
 }

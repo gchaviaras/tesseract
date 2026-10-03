@@ -241,6 +241,26 @@ ComposeBar::ComposeBar()
     remove->set_accessible_name(tk::tr("Remove attachment"));
     remove_btn_ = add_child(std::move(remove));
 
+    auto make_cancel = [this](std::string name, float icon_px, std::function<void()> on_click)
+    {
+        auto b = tk::create_widget<tk::Button>(this, std::string{}, std::move(on_click),
+                                               tk::Button::Variant::Icon);
+        b->set_icon(kCloseSvg, icon_px);
+        b->set_accessible_name(std::move(name));
+        b->set_visible(false);
+        return add_child(std::move(b));
+    };
+    edit_cancel_btn_ = make_cancel(tk::tr("Cancel editing"), 14.0f,
+                                   [this]
+                                   {
+                                       clear_editing();
+                                       if (on_edit_cancelled)
+                                           on_edit_cancelled();
+                                   });
+    reply_cancel_btn_ = make_cancel(tk::tr("Cancel reply"), 14.0f, [this] { clear_reply(); });
+    voice_cancel_btn_ = make_cancel(tk::tr("Cancel recording"), 16.0f,
+                                    [this] { if (on_cancel_voice) on_cancel_voice(); });
+
     refresh_send_enabled();
 }
 
@@ -945,6 +965,12 @@ void ComposeBar::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
         edit_band_rect_ = {};
         edit_cancel_rect_ = {};
     }
+    edit_cancel_btn_->set_visible(!edit_cancel_rect_.empty());
+    reply_cancel_btn_->set_visible(!reply_cancel_rect_.empty());
+    if (!edit_cancel_rect_.empty())
+        edit_cancel_btn_->arrange(ctx, edit_cancel_rect_);
+    if (!reply_cancel_rect_.empty())
+        reply_cancel_btn_->arrange(ctx, reply_cancel_rect_);
 
     // ── Attachment band ───────────────────────────────────────────────
     if (pending_.has_value())
@@ -1073,6 +1099,8 @@ void ComposeBar::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     const float wave_right = (mic_available_ && !mic_btn_rect_.empty())
                                  ? mic_btn_rect_.x - kComposeBarGap
                                  : send_rect_.x - kComposeBarGap;
+    voice_cancel_btn_->set_visible(recording_);
+    voice_cancel_btn_->arrange(ctx, voice_cancel_rect_);
     waveform_strip_rect_ = {
         card_left + kVoiceCancelSide + kComposeBarGap, text_top + kComposeBarPadY,
         std::max(0.0f, wave_right - card_left - kVoiceCancelSide - kComposeBarGap),
@@ -1223,23 +1251,8 @@ void ComposeBar::paint(tk::PaintCtx& ctx)
                                  ctx.theme.palette.text_secondary);
         }
 
-        if (!edit_cancel_rect_.empty())
-        {
-            tk::TextStyle x_style{};
-            x_style.role = tk::FontRole::Body;
-            auto x_layout =
-                ctx.factory.build_text(std::string("\xC3\x97"), x_style);
-            if (x_layout)
-            {
-                tk::Size sz = x_layout->measure();
-                ctx.canvas.draw_text(
-                    *x_layout,
-                    {edit_cancel_rect_.x + (edit_cancel_rect_.w - sz.w) * 0.5f,
-                     edit_cancel_rect_.y + (edit_cancel_rect_.h - sz.h) * 0.5f},
-                    press_edit_cancel_ ? ctx.theme.palette.text_primary
-                                       : ctx.theme.palette.text_muted);
-            }
-        }
+        if (edit_cancel_btn_->visible())
+            edit_cancel_btn_->paint(ctx);
     }
 
     // ── Reply preview banner ──────────────────────────────────────────
@@ -1297,27 +1310,8 @@ void ComposeBar::paint(tk::PaintCtx& ctx)
                                  ctx.theme.palette.text_muted);
         }
 
-        // "×" cancel glyph centred in reply_cancel_rect_
-        if (!reply_cancel_rect_.empty())
-        {
-            tk::TextStyle x_style{};
-            x_style.role = tk::FontRole::Body;
-            // U+00D7 MULTIPLICATION SIGN: C3 97
-            auto x_layout =
-                ctx.factory.build_text(std::string("\xC3\x97"), x_style);
-            if (x_layout)
-            {
-                tk::Size sz = x_layout->measure();
-                ctx.canvas.draw_text(*x_layout,
-                                     {reply_cancel_rect_.x +
-                                          (reply_cancel_rect_.w - sz.w) * 0.5f,
-                                      reply_cancel_rect_.y +
-                                          (reply_cancel_rect_.h - sz.h) * 0.5f},
-                                     press_reply_cancel_
-                                         ? ctx.theme.palette.text_primary
-                                         : ctx.theme.palette.text_muted);
-            }
-        }
+        if (reply_cancel_btn_->visible())
+            reply_cancel_btn_->paint(ctx);
     }
 
     // Draw the compose card: a rounded rect that contains the text area
@@ -1391,26 +1385,8 @@ void ComposeBar::paint(tk::PaintCtx& ctx)
     // ── Voice recording waveform strip ──────────────────────────────────
     if (recording_ && !waveform_strip_rect_.empty())
     {
-        // Cancel × button
-        if (!voice_cancel_rect_.empty())
-        {
-            tk::TextStyle x_style{};
-            x_style.role = tk::FontRole::Body;
-            auto x_layout =
-                ctx.factory.build_text(std::string("\xC3\x97"), x_style);
-            if (x_layout)
-            {
-                tk::Size sz = x_layout->measure();
-                ctx.canvas.draw_text(
-                    *x_layout,
-                    {voice_cancel_rect_.x +
-                         (voice_cancel_rect_.w - sz.w) * 0.5f,
-                     voice_cancel_rect_.y +
-                         (voice_cancel_rect_.h - sz.h) * 0.5f},
-                    press_voice_cancel_ ? ctx.theme.palette.text_primary
-                                        : ctx.theme.palette.text_muted);
-            }
-        }
+        if (voice_cancel_btn_->visible())
+            voice_cancel_btn_->paint(ctx);
 
         // Amplitude bars
         const float center_y =
@@ -1550,45 +1526,40 @@ tk::Widget* ComposeBar::hit_test(tk::Point world)
     return nullptr;
 }
 
+void ComposeBar::set_room_name(const std::string& room_name)
+{
+    if (text_area_)
+        text_area_->set_accessible_name(tk::trf(tk::tr("Message {0}"), {room_name}));
+}
+
+std::vector<std::pair<std::string, tk::Rect>> ComposeBar::access_texts_() const
+{
+    std::vector<std::pair<std::string, tk::Rect>> out;
+    if (has_editing())
+        out.emplace_back(tk::tr("Editing message"), edit_band_rect_);
+    else if (has_reply())
+        out.emplace_back(reply_body_preview_.empty()
+                             ? tk::trf(tk::tr("Replying to {0}"), {reply_sender_name_})
+                             : tk::trf(tk::tr("{0}: {1}"),
+                                       {tk::trf(tk::tr("Replying to {0}"), {reply_sender_name_}),
+                                        reply_body_preview_}),
+                         reply_band_rect_);
+    if (pending_.has_value())
+    {
+        const std::string name =
+            pending_->filename.empty() ? tk::tr("Attachment") : pending_->filename;
+        out.emplace_back(tk::trf(tk::tr("Attachment: {0}, {1}"),
+                                 {name, tk::format_size(pending_->bytes.size())}),
+                         preview_band_rect_);
+    }
+    return out;
+}
+
 bool ComposeBar::on_pointer_down(tk::Point local)
 {
     const tk::Point world{bounds_.x + local.x, bounds_.y + local.y};
-    press_reply_cancel_ = false;
-    press_edit_cancel_ = false;
-    press_voice_cancel_ = false;
-    if (recording_ && !voice_cancel_rect_.empty())
-    {
-        if (world.x >= voice_cancel_rect_.x &&
-            world.x < voice_cancel_rect_.x + voice_cancel_rect_.w &&
-            world.y >= voice_cancel_rect_.y &&
-            world.y < voice_cancel_rect_.y + voice_cancel_rect_.h)
-        {
-            press_voice_cancel_ = true;
-            return true;
-        }
-    }
-    if (has_editing() && !edit_cancel_rect_.empty())
-    {
-        if (world.x >= edit_cancel_rect_.x &&
-            world.x < edit_cancel_rect_.x + edit_cancel_rect_.w &&
-            world.y >= edit_cancel_rect_.y &&
-            world.y < edit_cancel_rect_.y + edit_cancel_rect_.h)
-        {
-            press_edit_cancel_ = true;
-            return true;
-        }
-    }
-    if (has_reply() && !reply_cancel_rect_.empty())
-    {
-        if (world.x >= reply_cancel_rect_.x &&
-            world.x < reply_cancel_rect_.x + reply_cancel_rect_.w &&
-            world.y >= reply_cancel_rect_.y &&
-            world.y < reply_cancel_rect_.y + reply_cancel_rect_.h)
-        {
-            press_reply_cancel_ = true;
-            return true;
-        }
-    }
+    // The banner / recording "×" buttons are real children the host
+    // dispatches directly.
     // Absorb clicks on the floating preview (image or video thumbnail).
     if (pending_.has_value() && !preview_band_rect_.empty())
     {
@@ -1615,48 +1586,6 @@ bool ComposeBar::on_pointer_down(tk::Point local)
 
 void ComposeBar::on_pointer_up(tk::Point local, bool inside_self)
 {
-    const tk::Point world{bounds_.x + local.x, bounds_.y + local.y};
-    if (press_voice_cancel_)
-    {
-        press_voice_cancel_ = false;
-        if (inside_self && world.x >= voice_cancel_rect_.x &&
-            world.x < voice_cancel_rect_.x + voice_cancel_rect_.w &&
-            world.y >= voice_cancel_rect_.y &&
-            world.y < voice_cancel_rect_.y + voice_cancel_rect_.h)
-        {
-            if (on_cancel_voice)
-                on_cancel_voice();
-        }
-        return;
-    }
-    if (press_edit_cancel_)
-    {
-        press_edit_cancel_ = false;
-        if (inside_self && world.x >= edit_cancel_rect_.x &&
-            world.x < edit_cancel_rect_.x + edit_cancel_rect_.w &&
-            world.y >= edit_cancel_rect_.y &&
-            world.y < edit_cancel_rect_.y + edit_cancel_rect_.h)
-        {
-            clear_editing();
-            if (on_edit_cancelled)
-            {
-                on_edit_cancelled();
-            }
-            return;
-        }
-    }
-    if (press_reply_cancel_)
-    {
-        press_reply_cancel_ = false;
-        if (inside_self && world.x >= reply_cancel_rect_.x &&
-            world.x < reply_cancel_rect_.x + reply_cancel_rect_.w &&
-            world.y >= reply_cancel_rect_.y &&
-            world.y < reply_cancel_rect_.y + reply_cancel_rect_.h)
-        {
-            clear_reply();
-            return;
-        }
-    }
     tk::Widget::on_pointer_up(local, inside_self);
 }
 

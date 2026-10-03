@@ -28,6 +28,10 @@
 #endif
 #include <windows.h>
 
+#include <functional>
+#include <memory>
+#include <string>
+
 namespace tk
 {
 class Widget;
@@ -64,5 +68,41 @@ LRESULT handle_get_object(HWND hwnd, WPARAM wParam, LPARAM lParam);
 // apparently didn't need more — UIA is not forgiving about a missing focus
 // event, so this closes that gap for Windows specifically.
 void notify_focus_changed(HWND hwnd, tk::Widget* old_widget, tk::Widget* now_widget);
+
+// Speaks `text` via UiaRaiseNotificationEvent on the surface's root
+// provider. Called from tk::win32::Host's on_announce_() override.
+void announce(HWND hwnd, const std::string& text, bool assertive);
+
+// UIA identity for a native edit control we host (BetterText — a custom
+// window class with no UIA/MSAA support of its own, which Narrator would
+// otherwise read as a nameless "pane"). Exposes an Edit element with the
+// owning tk widget's accessible name and a Value pattern, merged onto the
+// HWND's default provider (focus, bounds). The owner forwards WM_GETOBJECT
+// to handle_get_object() from its window/subclass proc and destroys this
+// before the HWND (which disconnects the provider).
+class NativeEditAccessible
+{
+public:
+    struct Callbacks
+    {
+        std::function<std::string()> name;
+        std::function<std::string()> text;   // never called while password()
+        std::function<void(const std::string&)> set_text;
+        std::function<bool()> password;
+    };
+    NativeEditAccessible(HWND hwnd, Callbacks cb);
+    ~NativeEditAccessible();
+    NativeEditAccessible(const NativeEditAccessible&) = delete;
+    NativeEditAccessible& operator=(const NativeEditAccessible&) = delete;
+
+    // True (with *result set) for a UiaRootObjectId request.
+    bool handle_get_object(WPARAM wParam, LPARAM lParam, LRESULT* result);
+    // The accessible name changed (e.g. the composer's room) — tell clients.
+    void name_changed(const std::string& old_name, const std::string& new_name);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 } // namespace tk::win32

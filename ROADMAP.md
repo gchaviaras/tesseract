@@ -24,11 +24,12 @@ and in-progress work, as a single backlog ordered by priority/urgency.
 
 ## Tier 3 — Smaller deferred items, pick opportunistically
 
-- **Accessibility (screen reader support) — widget mapping, ongoing.**
-  Platform bridges are in place (Windows UIA, macOS NSAccessibility, Qt6/GTK4
-  AT-SPI) and wired into `tk::Widget` via `Role`/`AccessState`; Phase 4
-  widget-by-widget mapping is underway. See `docs/ACCESSIBILITY-PLAN.md` for
-  what's mapped and what's left.
+- **Accessibility — screen-reader verification, then Phase 5.** Every
+  view audited on 2026-10-03 is now mapped (see `docs/ACCESSIBILITY-PLAN.md`);
+  nothing has been driven with a real screen reader yet (Orca on Qt6 first,
+  then GTK4, Narrator/NVDA, VoiceOver). Phase 5 — high-contrast theme,
+  reduce-motion, a keyboard-only audit (incl. opening context menus from the
+  keyboard) — still needs its own plan.
 - Cmd/Ctrl+K refinements, room mentions as pills (vs. just user mentions),
   self-mention emphasis, device rename, new-device warnings, edit history
   viewer, GIF picker.

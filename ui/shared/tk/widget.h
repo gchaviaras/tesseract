@@ -246,6 +246,7 @@ enum class Role
     Dialog,
     MenuItem,
     Group,
+    ProgressBar,
 };
 
 // Dynamic accessible state, read fresh each time the tree is walked (see
@@ -259,6 +260,21 @@ struct AccessState
     bool expanded = false;
     bool selected = false;
     bool busy     = false;
+    // For synthesized nodes only (list rows, grid cells, widget rows,
+    // subtree nodes), which have no Widget::enabled() of their own to
+    // consult. A real widget node keeps reporting enabled() — bridges OR
+    // the two together.
+    bool disabled = false;
+};
+
+// Numeric value for range-shaped nodes (Role::ProgressBar). `present`
+// false means "no value" — the default for every other role.
+struct AccessValue
+{
+    bool   present = false;
+    double min     = 0.0;
+    double max     = 0.0;
+    double now     = 0.0;
 };
 
 class Widget : public EnableWeakSelf<Widget>
@@ -590,6 +606,27 @@ public:
     {
         return AccessState{};
     }
+    // Secondary text read after the name (AT-SPI/Qt Description, UIA
+    // FullDescription, NSAccessibility help) — e.g. an option card's hint
+    // line. Same i18n rule as access_name().
+    virtual std::string access_description() const
+    {
+        return {};
+    }
+    virtual AccessValue access_value() const
+    {
+        return {};
+    }
+    // True while this widget is a modal surface (an open dialog). When any
+    // visible widget reports this, build_access_tree exposes only that
+    // widget's subtree under the root, so an AT can't wander into the
+    // inert content behind it — the AT-level counterpart of the backdrop +
+    // Host::set_focus_scope pair that already makes it modal for pointer
+    // and keyboard.
+    virtual bool access_modal() const
+    {
+        return false;
+    }
 
     // Invoke this widget's "default action" — what an assistive-technology
     // client fires when the user activates the node (AT-SPI's "click"/
@@ -604,6 +641,15 @@ public:
     virtual bool access_default_action()
     {
         return false;
+    }
+
+    // Widgets this one owns and paints (typically via paint_overlay) but
+    // deliberately never add_child()'d — e.g. RoomView's emoji/sticker
+    // pickers, which are register_popup()'d instead. build_access_tree
+    // appends them after the real children so an AT can still reach them.
+    // Push only the ones currently shown; hidden ones are skipped anyway.
+    virtual void access_detached_children(std::vector<Widget*>&) const
+    {
     }
 
     // True for a widget that owns and manages a real native OS text-input

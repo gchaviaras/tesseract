@@ -61,6 +61,7 @@ MediaOverlayBase::MediaOverlayBase()
 
     auto fs = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
                                             tk::Button::Variant::Icon);
+    fs->set_accessible_name(tk::tr("Full screen"));
     fullscreen_btn_ = add_child(std::move(fs));
     fullscreen_btn_->set_on_click([this] { toggle_fullscreen_(); });
     fullscreen_btn_->set_fill_override(tk::Button::FillOverride{
@@ -92,6 +93,9 @@ void MediaOverlayBase::toggle_fullscreen_()
 {
     fullscreen_ = !fullscreen_;
     fullscreen_icon_.reset(); // glyph swaps between ⤢ (enter) and ⤡ (exit)
+    if (fullscreen_btn_)
+        fullscreen_btn_->set_accessible_name(fullscreen_ ? tk::tr("Exit full screen")
+                                                         : tk::tr("Full screen"));
     note_activity_();
     if (on_request_fullscreen)
     {
@@ -260,6 +264,8 @@ void MediaOverlayBase::dismiss_()
     const bool was_fullscreen = fullscreen_;
     fullscreen_ = false;
     fullscreen_icon_.reset();
+    if (fullscreen_btn_)
+        fullscreen_btn_->set_accessible_name(tk::tr("Full screen"));
     chrome_visible_ = true;
     is_open_ = false;
     if (on_close)

@@ -1,8 +1,11 @@
 #include "CallOverlayWidget.h"
 
+#include <unordered_map>
+
 #include "call_tile_layout.h"
 
 #include "icons.h"
+#include "tk/host.h"
 #include "tk/i18n.h"
 
 #include <algorithm>
@@ -250,9 +253,47 @@ void CallOverlayWidget::set_float_position(float x, float y)
 
 // ── Participant management ─────────────────────────────────────────────────
 
+// Speaks "{name} joined/left the call" for other people's changes once the
+// roster has settled. The roster arrives in pieces after joining (and again
+// after a docked/floating/popout remount builds a new overlay), so updates
+// within kRosterSettleMs of the first one only extend the silent baseline.
+// Status-only announcement — see tk::Host::announce.
+void CallOverlayWidget::announce_participant_changes_(
+    const std::vector<tesseract::RtcParticipantInfo>& ps)
+{
+    constexpr auto kRosterSettleMs = std::chrono::milliseconds(3000);
+    std::unordered_map<std::string, std::string> now;
+    for (const auto& p : ps)
+        if (p.user_id != local_user_id_)
+            now.emplace(p.participant_id, p.user_id);
+    const auto t = std::chrono::steady_clock::now();
+    if (!participants_known_)
+    {
+        participants_known_ = true;
+        roster_baseline_at_ = t;
+    }
+    else if (t - roster_baseline_at_ >= kRosterSettleMs && host())
+    {
+        auto name_of = [this](const std::string& uid)
+        {
+            const std::string n = display_name_provider_ ? display_name_provider_(uid) : std::string();
+            return n.empty() ? uid : n;
+        };
+        for (const auto& [pid, uid] : now)
+            if (!announced_participants_.count(pid))
+                host()->announce(tk::trf(tk::tr("{0} joined the call"), {name_of(uid)}));
+        for (const auto& [pid, uid] : announced_participants_)
+            if (!now.count(pid))
+                host()->announce(tk::trf(tk::tr("{0} left the call"), {name_of(uid)}));
+    }
+    announced_participants_ = std::move(now);
+}
+
 void CallOverlayWidget::update_participants(
     const std::vector<tesseract::RtcParticipantInfo>& ps)
 {
+    announce_participant_changes_(ps);
+
     // ── Remove departed participants ───────────────────────────────────────
 
     // Diff incoming list against tile_ids_: remove departed tiles, add new ones.

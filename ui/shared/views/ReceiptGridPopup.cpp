@@ -2,6 +2,7 @@
 
 #include "format.h"
 #include "media_utils.h"
+#include "tk/i18n.h"
 #include "tk/theme.h"
 
 #include <tesseract/visual.h>
@@ -15,11 +16,32 @@ namespace tesseract::views
 //  Grid adapter — paints one avatar cell per hidden receipt.
 // ─────────────────────────────────────────────────────────────────────────
 
-class ReceiptGridPopup::GridAdapter : public tk::GridAdapter
+class ReceiptGridPopup::GridAdapter : public tk::GridAdapter,
+                                      public tk::GridAdapterAccessibility
 {
 public:
     explicit GridAdapter(ReceiptGridPopup& owner) : owner_(owner)
     {
+    }
+
+    // One cell per reader, named by who read it; when, as its description.
+    tk::Role access_role_for_cell(std::size_t index) const override
+    {
+        return index < owner_.entries_.size() ? tk::Role::GridCell : tk::Role::None;
+    }
+    std::string access_name_for_cell(std::size_t index) const override
+    {
+        if (index >= owner_.entries_.size())
+            return {};
+        const auto& rr = owner_.entries_[index];
+        return rr.display_name.empty() ? rr.user_id : rr.display_name;
+    }
+    std::string access_description_for_cell(std::size_t index) const override
+    {
+        if (index >= owner_.entries_.size() || owner_.entries_[index].timestamp_ms == 0)
+            return {};
+        return tk::trf(tk::tr("Read at {0}"),
+                       {format_hhmm(owner_.entries_[index].timestamp_ms)});
     }
 
     std::size_t count() const override
@@ -48,6 +70,13 @@ private:
 // ─────────────────────────────────────────────────────────────────────────
 //  ReceiptGridPopup
 // ─────────────────────────────────────────────────────────────────────────
+
+std::string ReceiptGridPopup::access_name() const
+{
+    return tk::trf(tk::trn("Read by {0} person", "Read by {0} people",
+                           static_cast<long>(entries_.size())),
+                   {std::to_string(entries_.size())});
+}
 
 ReceiptGridPopup::ReceiptGridPopup()
     : grid_adapter_(std::make_unique<GridAdapter>(*this))

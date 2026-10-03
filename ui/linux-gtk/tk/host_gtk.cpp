@@ -3233,6 +3233,11 @@ protected:
         notify_focus_changed(overlay_, now);
     }
 
+    void on_announce_(const std::string& text, Politeness p) override
+    {
+        tk::gtk4::announce(overlay_, text, p == Politeness::Assertive);
+    }
+
 private:
     // Diff painted_this_pass_ (freshly rebuilt this on_draw()) against
     // live_overlays_ and create/reposition/destroy overlay widgets to match.

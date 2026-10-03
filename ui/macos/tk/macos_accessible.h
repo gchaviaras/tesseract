@@ -30,6 +30,8 @@
 
 #import <AppKit/AppKit.h>
 
+#include <string>
+
 namespace tk
 {
 class Widget;
@@ -76,5 +78,9 @@ id access_focused_element(id view);
 // about a missing focus notification, so this closes that gap for macOS
 // specifically (same rationale as Windows' notify_focus_changed).
 void notify_focus_changed(id view, tk::Widget* old_widget, tk::Widget* now_widget);
+
+// Speaks `text` via NSAccessibilityAnnouncementRequestedNotification.
+// Called from tk::macos::Host's on_announce_() override.
+void announce(id view, const std::string& text, bool assertive);
 
 } // namespace tk::macos

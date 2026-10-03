@@ -90,6 +90,10 @@ public:
     {
         return {};
     }
+    virtual std::string access_description_for_row(std::size_t /*index*/) const
+    {
+        return {};
+    }
     // Invoke row `index`'s default action (an AT client's "click" — see
     // Widget::access_default_action()'s identical rationale). Default: no
     // action available. Override for adapters whose rows are meaningfully
@@ -154,6 +158,10 @@ public:
     virtual Role access_role_for_cell(std::size_t index) const = 0;
     virtual std::string access_name_for_cell(std::size_t index) const = 0;
     virtual AccessState access_state_for_cell(std::size_t /*index*/) const
+    {
+        return {};
+    }
+    virtual std::string access_description_for_cell(std::size_t /*index*/) const
     {
         return {};
     }
@@ -264,6 +272,13 @@ public:
     // identical method; GridView::paint() computes this same range itself
     // and calls into this method rather than duplicating the row math.
     std::pair<int, int> visible_range() const;
+
+    // Columns at the current width (>= 1) — the accessibility tree's
+    // row/column model for cells laid out by index.
+    int column_count() const
+    {
+        return cols(bounds_.w);
+    }
 
 protected:
     // Background fill drawn behind the cells in paint(). Defaults to the

@@ -28,6 +28,28 @@ constexpr float kKnockCardReasonH = 18.0f; // 12 pt — Small role
 
 // ── constructor ───────────────────────────────────────────────────────────
 
+std::string KnockStatusCard::access_name() const
+{
+    if (!knock_)
+        return {};
+    const std::string& room =
+        knock_->room_name.empty() ? knock_->room_id : knock_->room_name;
+    return tk::trf(tk::tr("{0}: {1}"), {room, tk::tr("Request pending")});
+}
+
+std::string KnockStatusCard::access_description() const
+{
+    if (!knock_)
+        return {};
+    std::string desc = knock_->room_topic;
+    if (!knock_->reason.empty())
+    {
+        const std::string reason = tk::trf(tk::tr("Reason: {0}"), {knock_->reason});
+        desc = desc.empty() ? reason : tk::trf(tk::tr("{0}. {1}"), {desc, reason});
+    }
+    return desc;
+}
+
 KnockStatusCard::KnockStatusCard()
 {
     auto cancel = tk::create_widget<tk::Button>(this,

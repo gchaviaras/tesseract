@@ -731,6 +731,7 @@ void Host::paint_tooltip_overlay(PaintCtx& ctx, Rect surface_bounds)
 
 void Host::show_toast(std::string message)
 {
+    announce(message);
     toast_message_ = std::move(message);
     toast_visible_ = true;
     const auto gen = ++toast_gen_;

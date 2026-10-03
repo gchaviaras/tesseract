@@ -34,10 +34,36 @@ using tesseract::text::name_matches;
 
 // ─────────────────────────────────────────────────────────────────────────
 
-class ForwardRoomPicker::Adapter : public tk::ListAdapter
+class ForwardRoomPicker::Adapter : public tk::ListAdapter, public tk::ListAdapterAccessibility
 {
 public:
     explicit Adapter(ForwardRoomPicker& owner) : owner_(owner) {}
+
+    // Multi-select: each room is a checkbox (checked rows sort first).
+    tk::Role access_role_for_row(std::size_t index) const override
+    {
+        return owner_.room_at_(index) ? tk::Role::CheckBox : tk::Role::None;
+    }
+    std::string access_name_for_row(std::size_t index) const override
+    {
+        const auto* room = owner_.room_at_(index);
+        if (!room)
+            return {};
+        return room->name.empty() ? tk::tr("Unnamed room") : room->name;
+    }
+    tk::AccessState access_state_for_row(std::size_t index) const override
+    {
+        tk::AccessState st;
+        st.checked = owner_.is_row_selected_(index);
+        return st;
+    }
+    bool access_activate_row(std::size_t index) override
+    {
+        if (!owner_.room_at_(index))
+            return false;
+        owner_.toggle_row_(index);
+        return true;
+    }
 
     std::size_t count() const override { return owner_.row_count_(); }
 
@@ -134,28 +160,107 @@ ForwardRoomPicker::ForwardRoomPicker()
     list->set_adapter(adapter_.get());
     list->on_row_clicked = [this](int idx)
     {
-        if (idx < 0 || static_cast<std::size_t>(idx) >= row_count_())
-            return;
-        const auto* room = room_at_(static_cast<std::size_t>(idx));
-        if (!room)
-            return;
-        const std::string id = room->id;
-        if (selected_ids_.count(id))
-        {
-            selected_ids_.erase(id);
-            selected_order_.erase(
-                std::remove_if(selected_order_.begin(), selected_order_.end(),
-                               [&id](const auto& r) { return r.id == id; }),
-                selected_order_.end());
-        }
-        else
-        {
-            selected_ids_.insert(id);
-            selected_order_.push_back(*room);
-        }
-        refilter_();
+        if (idx >= 0)
+            toggle_row_(static_cast<std::size_t>(idx));
     };
     list_ = add_child(std::move(list));
+
+    cancel_btn_ = add_child(tk::create_widget<tk::Button>(
+        this, tk::tr("Cancel"), [this] { close(); }, tk::Button::Variant::Subtle));
+    confirm_btn_ = add_child(tk::create_widget<tk::Button>(
+        this, tk::tr("Forward"), [this] { if (!selected_ids_.empty()) confirm(); },
+        tk::Button::Variant::Primary));
+    dismiss_btn_ = add_child(tk::create_widget<tk::Button>(
+        this, tk::tr("Dismiss"), [this] { close(); }, tk::Button::Variant::Subtle));
+    dismiss_btn_->set_visible(false);
+}
+
+std::string ForwardRoomPicker::access_name() const
+{
+    return tk::tr("Forward message");
+}
+
+std::vector<std::string> ForwardRoomPicker::access_texts_() const
+{
+    if (!is_open_)
+        return {};
+    if (forwarding_)
+    {
+        if (!forwarding_status_.empty())
+            return {forwarding_status_};
+        return error_lines_;
+    }
+    if (row_count_() == 0)
+        return {tk::tr("No rooms")};
+    return {};
+}
+
+std::string ForwardRoomPicker::access_name_for_widget_row(std::size_t i) const
+{
+    const auto texts = access_texts_();
+    return i < texts.size() ? texts[i] : std::string();
+}
+
+tk::Rect ForwardRoomPicker::access_rect_for_widget_row(std::size_t) const
+{
+    return {card_rect_.x, card_rect_.y + kHeaderH, card_rect_.w,
+            std::max(0.0f, card_rect_.h - kHeaderH - kFooterH)};
+}
+
+bool ForwardRoomPicker::on_key_down(const tk::KeyEvent& e)
+{
+    if (!is_open_)
+        return false;
+    if (e.key == tk::Key::Escape)
+    {
+        // Like the backdrop: no dismissing mid-forward (the error body and
+        // its Dismiss step would be lost). Once errors show, Escape = Dismiss.
+        if (!forwarding_ || (forwarding_status_.empty() && !error_lines_.empty()))
+            close();
+        return true;
+    }
+    return false;
+}
+
+// Visibility, label, and enabled state of the footer buttons for the
+// current state — called from paint() (state can change without a relayout).
+void ForwardRoomPicker::sync_footer_buttons_()
+{
+    const bool show_dismiss = forwarding_ && forwarding_status_.empty() && !error_lines_.empty();
+    cancel_btn_->set_visible(!forwarding_);
+    confirm_btn_->set_visible(!forwarding_);
+    dismiss_btn_->set_visible(show_dismiss);
+    const bool can_forward = !selected_ids_.empty();
+    const std::string label =
+        can_forward ? tk::trf(tk::tr("Forward ({0})"), {std::to_string(selected_ids_.size())})
+                    : tk::tr("Forward");
+    if (confirm_btn_->label() != label)
+        confirm_btn_->set_label(label);
+    confirm_btn_->set_enabled(can_forward);
+}
+
+void ForwardRoomPicker::toggle_row_(std::size_t index)
+{
+    if (index >= row_count_())
+        return;
+    const auto* room = room_at_(index);
+    if (!room)
+        return;
+    const std::string id = room->id;
+    if (selected_ids_.count(id))
+    {
+        selected_ids_.erase(id);
+        selected_order_.erase(
+            std::remove_if(selected_order_.begin(), selected_order_.end(),
+                           [&id](const auto& r) { return r.id == id; }),
+            selected_order_.end());
+    }
+    else
+    {
+        selected_ids_.insert(id);
+        selected_order_.push_back(*room);
+    }
+    refilter_();
 }
 
 ForwardRoomPicker::~ForwardRoomPicker() = default;
@@ -185,7 +290,7 @@ void ForwardRoomPicker::open(const std::string& exclude_room_id)
     query_.clear();
     selected_order_.clear();
     selected_ids_.clear();
-    press_outside_ = press_cancel_ = press_confirm_ = false;
+    press_outside_ = false;
     is_open_ = true;
     set_visible(true);
     if (search_field_)
@@ -209,7 +314,7 @@ void ForwardRoomPicker::close()
     query_.clear();
     selected_order_.clear();
     selected_ids_.clear();
-    press_outside_ = press_cancel_ = press_confirm_ = press_dismiss_ = false;
+    press_outside_ = false;
     forwarding_     = false;
     forward_errors_ = 0;
     forwarding_status_.clear();
@@ -300,7 +405,9 @@ void ForwardRoomPicker::move_selection(int delta)
 
 void ForwardRoomPicker::confirm()
 {
-    if (selected_ids_.empty())
+    // In flight already: the Forward button (and a screen reader's cached
+    // tree) can outlive set_forwarding() until the next paint.
+    if (forwarding_ || selected_ids_.empty())
         return;
     std::vector<std::string> ids;
     ids.reserve(selected_order_.size());
@@ -315,10 +422,13 @@ void ForwardRoomPicker::set_forwarding(int room_count)
     forwarding_     = true;
     forward_errors_ = 0;
     error_lines_.clear();
+    forward_count_  = room_count;
     forwarding_status_ = tk::trf(
         tk::trn("Forwarding to {0} room…", "Forwarding to {0} rooms…",
                 static_cast<long>(room_count)),
         {std::to_string(room_count)});
+    if (host())
+        host()->announce(forwarding_status_);
 }
 
 void ForwardRoomPicker::add_forward_error(const std::string& room_name,
@@ -333,11 +443,22 @@ void ForwardRoomPicker::mark_complete()
 {
     if (forward_errors_ == 0)
     {
+        if (host())
+            host()->announce(tk::trf(tk::trn("Forwarded to {0} room", "Forwarded to {0} rooms",
+                                             static_cast<long>(forward_count_)),
+                                     {std::to_string(forward_count_)}));
         close();
         return;
     }
     // Errors present — switch to error-display mode; user must dismiss.
     forwarding_status_.clear();
+    if (host())
+    {
+        std::string all;
+        for (const auto& line : error_lines_)
+            all += (all.empty() ? "" : "\n") + line;
+        host()->announce(all, tk::Host::Politeness::Assertive);
+    }
 }
 
 // ── Layout + paint ────────────────────────────────────────────────────────
@@ -390,11 +511,14 @@ void ForwardRoomPicker::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     const float footer_y    = cy + ch - kFooterH;
     const float btn_cy      = footer_y + (kFooterH - kForwardRoomPickerBtnH) * 0.5f;
     const float confirm_w   = 112.0f; // room for "Forward (99)"
-    confirm_btn_rect_ = {cx + cw - kForwardRoomPickerPadX - confirm_w, btn_cy, confirm_w, kForwardRoomPickerBtnH};
-    cancel_btn_rect_  = {confirm_btn_rect_.x - kForwardRoomPickerBtnGap - kBtnMinW,
-                         btn_cy, kBtnMinW, kForwardRoomPickerBtnH};
-    // Dismiss button uses same geometry as confirm; shown in error state.
-    dismiss_btn_rect_ = confirm_btn_rect_;
+    const tk::Rect confirm_rect{cx + cw - kForwardRoomPickerPadX - confirm_w, btn_cy, confirm_w,
+                                kForwardRoomPickerBtnH};
+    const tk::Rect cancel_rect{confirm_rect.x - kForwardRoomPickerBtnGap - kBtnMinW, btn_cy,
+                               kBtnMinW, kForwardRoomPickerBtnH};
+    confirm_btn_->arrange(ctx, confirm_rect);
+    cancel_btn_->arrange(ctx, cancel_rect);
+    // Dismiss uses the confirm slot; shown in the error state.
+    dismiss_btn_->arrange(ctx, confirm_rect);
 
     const tk::Rect list_bounds{cx, cy + kHeaderH, cw,
                                 std::max(0.0f, ch - chrome_h)};
@@ -417,6 +541,8 @@ void ForwardRoomPicker::paint(tk::PaintCtx& ctx)
         if (search_field_)
             search_field_->set_focused(true);
     }
+
+    sync_footer_buttons_();
 
     if (forwarding_)
     {
@@ -466,26 +592,8 @@ void ForwardRoomPicker::paint(tk::PaintCtx& ctx)
                 ey += kLineH;
             }
 
-            ctx.canvas.fill_rounded_rect(
-                dismiss_btn_rect_, kForwardRoomPickerBtnRadius,
-                press_dismiss_ ? ctx.theme.palette.sidebar_hover
-                               : ctx.theme.palette.compose_card_bg);
-            ctx.canvas.stroke_rounded_rect(dismiss_btn_rect_, kForwardRoomPickerBtnRadius,
-                                           ctx.theme.palette.border, 1.0f);
-            {
-                tk::TextStyle bs{};
-                bs.role = tk::FontRole::Body;
-                auto lo = ctx.factory.build_text(tk::tr("Dismiss"), bs);
-                if (lo)
-                {
-                    const tk::Size sz = lo->measure();
-                    ctx.canvas.draw_text(
-                        *lo,
-                        {dismiss_btn_rect_.x + (dismiss_btn_rect_.w - sz.w) * 0.5f,
-                         dismiss_btn_rect_.y + (dismiss_btn_rect_.h - sz.h) * 0.5f},
-                        ctx.theme.palette.text_primary);
-                }
-            }
+            if (dismiss_btn_->visible())
+                dismiss_btn_->paint(ctx);
         }
         return;
     }
@@ -513,55 +621,8 @@ void ForwardRoomPicker::paint(tk::PaintCtx& ctx)
         {card_rect_.x, footer_y, card_rect_.w, 1.0f},
         ctx.theme.palette.separator);
 
-    ctx.canvas.fill_rounded_rect(
-        cancel_btn_rect_, kForwardRoomPickerBtnRadius,
-        press_cancel_ ? ctx.theme.palette.sidebar_hover
-                      : ctx.theme.palette.compose_card_bg);
-    ctx.canvas.stroke_rounded_rect(cancel_btn_rect_, kForwardRoomPickerBtnRadius,
-                                   ctx.theme.palette.border, 1.0f);
-    {
-        tk::TextStyle cs{};
-        cs.role  = tk::FontRole::Body;
-        auto lo  = ctx.factory.build_text(tk::tr("Cancel"), cs);
-        if (lo)
-        {
-            const tk::Size sz = lo->measure();
-            ctx.canvas.draw_text(
-                *lo,
-                {cancel_btn_rect_.x + (cancel_btn_rect_.w - sz.w) * 0.5f,
-                 cancel_btn_rect_.y + (cancel_btn_rect_.h - sz.h) * 0.5f},
-                ctx.theme.palette.text_primary);
-        }
-    }
-
-    const bool can_forward = !selected_ids_.empty();
-    const tk::Color confirm_bg =
-        can_forward
-            ? (press_confirm_ ? ctx.theme.palette.accent_pressed
-                              : ctx.theme.palette.accent)
-            : ctx.theme.palette.sidebar_hover;
-    ctx.canvas.fill_rounded_rect(confirm_btn_rect_, kForwardRoomPickerBtnRadius, confirm_bg);
-    {
-        const std::string label =
-            can_forward
-                ? tk::trf(tk::tr("Forward ({0})"),
-                          {std::to_string(selected_ids_.size())})
-                : tk::tr("Forward");
-        tk::TextStyle cs{};
-        cs.role = tk::FontRole::Body;
-        auto lo = ctx.factory.build_text(label, cs);
-        if (lo)
-        {
-            const tk::Size sz = lo->measure();
-            const tk::Color txt = can_forward ? ctx.theme.palette.text_on_accent
-                                              : ctx.theme.palette.text_muted;
-            ctx.canvas.draw_text(
-                *lo,
-                {confirm_btn_rect_.x + (confirm_btn_rect_.w - sz.w) * 0.5f,
-                 confirm_btn_rect_.y + (confirm_btn_rect_.h - sz.h) * 0.5f},
-                txt);
-        }
-    }
+    cancel_btn_->paint(ctx);
+    confirm_btn_->paint(ctx);
 
     if (row_count_() == 0)
     {
@@ -598,65 +659,26 @@ bool ForwardRoomPicker::on_pointer_down(tk::Point local)
 
     // Stored rects are in world coords; local is widget-local (world - bounds_).
     const tk::Point world{local.x + bounds_.x, local.y + bounds_.y};
-
-    auto hit = [](const tk::Rect& r, tk::Point p)
-    {
-        return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
-    };
-
-    if (forwarding_)
-    {
-        // Only the Dismiss button is active; dismiss only exists when errors shown.
-        press_dismiss_ = error_lines_.empty() ? false : hit(dismiss_btn_rect_, world);
-        return true;
-    }
-
-    press_cancel_  = hit(cancel_btn_rect_, world);
-    press_confirm_ = hit(confirm_btn_rect_, world) && !selected_ids_.empty();
-    press_outside_ = !press_cancel_ && !press_confirm_ && !hit(card_rect_, world);
-
+    const tk::Rect& r = card_rect_;
+    const bool in_card =
+        world.x >= r.x && world.x < r.x + r.w && world.y >= r.y && world.y < r.y + r.h;
+    // The footer buttons are real children the host dispatches directly;
+    // only the backdrop (and inert card chrome) lands here.
+    press_outside_ = !forwarding_ && !in_card;
     return true; // always consume — modal backdrop
 }
 
-void ForwardRoomPicker::on_pointer_up(tk::Point local, bool inside_self)
+void ForwardRoomPicker::on_pointer_up(tk::Point, bool inside_self)
 {
     if (!is_open_)
         return;
-
-    const tk::Point world{local.x + bounds_.x, local.y + bounds_.y};
-
-    auto hit = [](const tk::Rect& r, tk::Point p)
-    {
-        return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
-    };
-
-    if (forwarding_)
-    {
-        if (press_dismiss_ && hit(dismiss_btn_rect_, world))
-            close();
-        press_dismiss_ = false;
-        return;
-    }
-
-    if (press_cancel_ && hit(cancel_btn_rect_, world))
-    {
-        press_cancel_ = false;
-        close();
-        return;
-    }
-    if (press_confirm_ && hit(confirm_btn_rect_, world) && !selected_ids_.empty())
-    {
-        press_confirm_ = false;
-        confirm();
-        return;
-    }
     if (press_outside_ && inside_self)
     {
         press_outside_ = false;
         close();
         return;
     }
-    press_cancel_ = press_confirm_ = press_outside_ = false;
+    press_outside_ = false;
 }
 
 bool ForwardRoomPicker::on_wheel(tk::Point /*local*/, float /*dx*/, float /*dy*/, bool /*is_touchpad*/)

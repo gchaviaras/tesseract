@@ -1,4 +1,5 @@
 #include "AvatarEditControl.h"
+#include "tk/i18n.h"
 
 #include "tk/widget.h"
 #include "views/media_utils.h"
@@ -77,6 +78,28 @@ AvatarEditControl::HitZone AvatarEditControl::hit_test(tk::Point local) const
     if ((dx * dx + dy * dy) <= (radius * radius))
         return HitZone::Disc;
     return HitZone::None;
+}
+
+std::vector<AvatarEditControl::AccessItem>
+AvatarEditControl::access_items(tk::Point world_origin) const
+{
+    std::vector<AccessItem> out;
+    const float radius = diameter_ * 0.5f;
+    const tk::Rect disc{world_origin.x + centre_.x - radius, world_origin.y + centre_.y - radius,
+                        diameter_, diameter_};
+    if (editable_ && !busy_)
+    {
+        out.push_back({AccessItem::Kind::Change, tk::tr("Change avatar"), disc});
+        if (has_avatar())
+            out.push_back({AccessItem::Kind::Remove, tk::tr("Remove avatar"),
+                           {world_origin.x + centre_.x + radius - 2.0f * kRemoveChipR,
+                            world_origin.y + centre_.y - radius, 2.0f * kRemoveChipR,
+                            2.0f * kRemoveChipR}});
+    }
+    if (!error_.empty())
+        out.push_back({AccessItem::Kind::Error, error_,
+                       {disc.x, disc.y + disc.h, disc.w, 16.0f}});
+    return out;
 }
 
 bool AvatarEditControl::on_pointer_move(tk::Point local)

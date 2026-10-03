@@ -37,6 +37,24 @@ public:
 
     std::function<void(std::size_t index)> on_row_activated;
 
+    // Keyboard highlight (shared with the pointer hover): -1 for none.
+    int  highlighted() const { return hovered_index_; }
+    void set_highlighted(int i) { hovered_index_ = i; }
+    bool actionable(int i) const
+    {
+        return i >= 0 && i < int(items_.size()) && !items_[std::size_t(i)].is_separator &&
+               items_[std::size_t(i)].enabled;
+    }
+    // Next actionable row from `from` stepping by `dir` (+1/-1), or -1.
+    int next_actionable(int from, int dir) const
+    {
+        for (int i = from + dir; i >= 0 && i < int(items_.size()); i += dir)
+            if (actionable(i))
+                return i;
+        return -1;
+    }
+    int item_count() const { return int(items_.size()); }
+
     tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override
     {
         float h = 0.0f;
@@ -193,20 +211,28 @@ public:
     }
 
     // ── tk::WidgetRowAccessibility ─────────────────────────────────────
-    // Context menus are still mouse-only for keyboard nav (TODO: Up/Down/
-    // Enter/Escape), but an AT client can enumerate and invoke items here
-    // without ever holding keyboard focus.
+    // An AT client can enumerate and invoke items without holding keyboard
+    // focus; PopupMenu::on_key_down drives the same highlight from the
+    // keyboard (reported as `selected`).
     tk::Role access_role() const override { return tk::Role::List; }
     std::size_t access_row_count() const override { return items_.size(); }
     tk::Role access_role_for_widget_row(std::size_t index) const override
     {
         if (index >= items_.size())
             return tk::Role::None;
-        const Item& it = items_[index];
-        // Separators and disabled items aren't actionable — leave them out
-        // of the AT tree rather than announce dead entries.
-        return (it.is_separator || !it.enabled) ? tk::Role::None
-                                                : tk::Role::MenuItem;
+        // Separators are decoration; disabled items stay listed (reported
+        // disabled) so the menu's shape matches what a sighted user sees.
+        return items_[index].is_separator ? tk::Role::None : tk::Role::MenuItem;
+    }
+    tk::AccessState access_state_for_widget_row(std::size_t index) const override
+    {
+        tk::AccessState st;
+        if (index < items_.size())
+        {
+            st.disabled = !items_[index].enabled;
+            st.selected = int(index) == hovered_index_;
+        }
+        return st;
     }
     std::string access_name_for_widget_row(std::size_t index) const override
     {
@@ -298,7 +324,7 @@ void PopupMenu::open(std::vector<Item> items, tk::Rect anchor_world)
     }
 
     if (list_)
-        list_->set_items(items_);
+        list_->set_items(items_); // also clears the highlight
     reposition_();
     if (popup_surface_)
         popup_surface_->set_visible(true);
@@ -363,6 +389,52 @@ void PopupMenu::on_theme_changed(const tk::Theme& t)
 {
     if (popup_surface_)
         popup_surface_->set_theme(t);
+}
+
+bool PopupMenu::on_key_down(const tk::KeyEvent& e)
+{
+    if (!open_ || !list_)
+        return false;
+    const int cur = list_->highlighted();
+    int next = cur;
+    switch (e.key)
+    {
+    case tk::Key::Down:
+        next = list_->next_actionable(cur, 1);
+        if (next < 0) // wrap
+            next = list_->next_actionable(-1, 1);
+        break;
+    case tk::Key::Up:
+        next = list_->next_actionable(cur < 0 ? list_->item_count() : cur, -1);
+        if (next < 0)
+            next = list_->next_actionable(list_->item_count(), -1);
+        break;
+    case tk::Key::Home:
+        next = list_->next_actionable(-1, 1);
+        break;
+    case tk::Key::End:
+        next = list_->next_actionable(list_->item_count(), -1);
+        break;
+    case tk::Key::Enter:
+    case tk::Key::Space:
+        if (list_->actionable(cur) && list_->on_row_activated)
+            list_->on_row_activated(std::size_t(cur));
+        return true;
+    case tk::Key::Escape:
+    case tk::Key::Tab:
+    case tk::Key::Backtab:
+        on_popup_dismiss();
+        return true;
+    default:
+        return true; // an open menu swallows the rest (like tk::ComboBox)
+    }
+    if (next >= 0 && next != cur)
+    {
+        list_->set_highlighted(next);
+        if (popup_surface_)
+            popup_surface_->request_repaint();
+    }
+    return true;
 }
 
 void PopupMenu::on_popup_dismiss()

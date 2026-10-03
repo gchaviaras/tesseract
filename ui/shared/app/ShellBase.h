@@ -1237,6 +1237,9 @@ protected:
     /// Generation counter for show_status_message_ auto-clear: a late-firing
     /// callback only calls on_restore_status_ui_() if the gen still matches.
     std::uint32_t status_msg_gen_ = 0;
+    // Last status-line text spoken (see show_status_message_) and when.
+    std::string last_announced_status_;
+    std::chrono::steady_clock::time_point last_announced_status_at_{};
     /// True while a persistent (auto_clear_ms=0) status override is active.
     /// refresh_sync_status() checks this to avoid clobbering the override.
     bool status_override_active_ = false;

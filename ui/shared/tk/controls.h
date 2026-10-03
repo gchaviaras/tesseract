@@ -156,6 +156,9 @@ public:
         Subtle,
         Icon,
         Destructive,
+        // Background-less accent-coloured text (a "Skip for now" style
+        // secondary affordance). Underlined while hovered.
+        Link,
     };
 
 protected:
@@ -322,8 +325,11 @@ public:
     // reporting whether it actually had something to invoke.
     bool access_default_action() override
     {
+        // Decided before click(): the handler may disable (or destroy) this
+        // button, e.g. a "next" button on the last page.
+        const bool acts = enabled_ && static_cast<bool>(on_click_);
         click();
-        return enabled_ && static_cast<bool>(on_click_);
+        return acts;
     }
 
 protected:
@@ -613,6 +619,23 @@ public:
     void paint(PaintCtx&) override;
 
     bool focusable() const override { return false; }
+
+    // The caption doubles as the accessible name; an indeterminate bar
+    // reports no value (screen readers then just say "busy").
+    Role access_role() const override { return Role::ProgressBar; }
+    std::string access_name() const override { return label_; }
+    AccessState access_state() const override
+    {
+        AccessState s;
+        s.busy = indeterminate_;
+        return s;
+    }
+    AccessValue access_value() const override
+    {
+        if (indeterminate_)
+            return {};
+        return AccessValue{true, 0.0, 100.0, static_cast<double>(value_) * 100.0};
+    }
 
 private:
     bool  indeterminate_ = true;

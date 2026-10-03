@@ -822,6 +822,49 @@ void RoomHeader::paint(tk::PaintCtx& ctx)
         ctx.host->register_popup(date_picker_.get(), calendar_btn_);
 }
 
+std::size_t RoomHeader::access_row_count() const
+{
+    access_rows_.clear();
+    if (encrypted_ && !condensed_)
+        access_rows_.push_back({tk::Role::Image, tk::tr("Encrypted room"), {}, lock_icon_rect_});
+    if (!topic_spans_.empty())
+    {
+        std::string text;
+        for (const auto& span : topic_spans_)
+            text += span.text;
+        access_rows_.push_back({tk::Role::StaticText, text, {}, topic_rect_});
+        for (const auto& span : topic_spans_)
+            if (!span.url.empty())
+                access_rows_.push_back({tk::Role::Link, span.text.empty() ? span.url : span.text,
+                                        span.url, topic_rect_});
+    }
+    return access_rows_.size();
+}
+
+tk::Role RoomHeader::access_role_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].role : tk::Role::None;
+}
+
+std::string RoomHeader::access_name_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].name : std::string();
+}
+
+bool RoomHeader::access_activate_widget_row(std::size_t i)
+{
+    if (i >= access_rows_.size() || access_rows_[i].url.empty() || !on_link_clicked)
+        return false;
+    const std::string url = access_rows_[i].url;
+    on_link_clicked(url);
+    return true;
+}
+
+tk::Rect RoomHeader::access_rect_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].rect : tk::Rect{};
+}
+
 void RoomHeader::draw_lock_icon(tk::Canvas& canvas, tk::Rect rect,
                                 tk::Color tint)
 {

@@ -4942,3 +4942,189 @@ msgstr "Tono de piel oscuro"
 #: ui/shared/views/SkinTonePopover.cpp:176
 msgid "Skin tone"
 msgstr "Tono de piel"
+
+msgid ", "
+msgstr ", "
+
+msgid "; "
+msgstr "; "
+
+msgid "Add {0} to space"
+msgstr "Añadir {0} al espacio"
+
+msgid "Attachment"
+msgstr "Adjunto"
+
+msgid "Attachment: {0}, {1}"
+msgstr "Adjunto: {0}, {1}"
+
+msgid "Cancel editing"
+msgstr "Cancelar edición"
+
+msgid "Cancel recording"
+msgstr "Cancelar grabación"
+
+msgid "Cancel reply"
+msgstr "Cancelar respuesta"
+
+msgid "Change avatar"
+msgstr "Cambiar avatar"
+
+msgid "Edit shortcode {0}"
+msgstr "Editar código corto {0}"
+
+msgid "Encrypted room"
+msgstr "Sala cifrada"
+
+msgid "Exit full screen"
+msgstr "Salir de pantalla completa"
+
+msgid "Forwarded to {0} room"
+msgid_plural "Forwarded to {0} rooms"
+msgstr[0] "Reenviado a {0} sala"
+msgstr[1] "Reenviado a {0} salas"
+
+msgid "Full screen"
+msgstr "Pantalla completa"
+
+msgid "Invited {0} person"
+msgid_plural "Invited {0} people"
+msgstr[0] "{0} persona invitada"
+msgstr[1] "{0} personas invitadas"
+
+msgid "Jump to pinned message: {0}"
+msgstr "Ir al mensaje fijado: {0}"
+
+msgid "Jump to replied message"
+msgstr "Ir al mensaje respondido"
+
+msgid "Link preview: {0}"
+msgstr "Vista previa del enlace: {0}"
+
+msgid "Next month"
+msgstr "Mes siguiente"
+
+msgid "Next pinned message"
+msgstr "Siguiente mensaje fijado"
+
+msgid "Numbers: {0}, {1}, {2}"
+msgstr "Números: {0}, {1}, {2}"
+
+msgid "Open file"
+msgstr "Abrir archivo"
+
+msgid "Open image"
+msgstr "Abrir imagen"
+
+msgid "Open thread, {0} reply"
+msgid_plural "Open thread, {0} replies"
+msgstr[0] "Abrir hilo, {0} respuesta"
+msgstr[1] "Abrir hilo, {0} respuestas"
+
+msgid "Pack: {0}"
+msgstr "Paquete: {0}"
+
+msgid "Pinned messages"
+msgstr "Mensajes fijados"
+
+msgid "Play video"
+msgstr "Reproducir vídeo"
+
+msgid "Press Delete to remove it from the space"
+msgstr "Pulsa Suprimir para quitarla del espacio"
+
+msgid "Previous month"
+msgstr "Mes anterior"
+
+msgid "Previous pinned message"
+msgstr "Mensaje fijado anterior"
+
+msgid "Read at {0}"
+msgstr "Leído a las {0}"
+
+msgid "Read by {0} person"
+msgid_plural "Read by {0} people"
+msgstr[0] "Leído por {0} persona"
+msgstr[1] "Leído por {0} personas"
+
+msgid "Recovery key or passphrase"
+msgstr "Clave de recuperación o frase de contraseña"
+
+msgid "Recovery key: {0}"
+msgstr "Clave de recuperación: {0}"
+
+msgid "Remove avatar"
+msgstr "Quitar avatar"
+
+msgid "Remove pack {0}"
+msgstr "Quitar paquete {0}"
+
+msgid "Remove {0}"
+msgstr "Quitar {0}"
+
+msgid "Rename {0}"
+msgstr "Renombrar {0}"
+
+msgid "Shortcode"
+msgstr "Código corto"
+
+msgid "Show hidden media"
+msgstr "Mostrar contenido multimedia oculto"
+
+msgid "Space settings"
+msgstr "Configuración del espacio"
+
+msgid "Table, {0} rows, {1} columns: {2}"
+msgstr "Tabla, {0} filas, {1} columnas: {2}"
+
+msgid "edited"
+msgstr "editado"
+
+msgid "in reply"
+msgstr "en respuesta"
+
+msgid "replying to {0}"
+msgstr "en respuesta a {0}"
+
+msgid "{0} joined the call"
+msgstr "{0} se unió a la llamada"
+
+msgid "{0} left the call"
+msgstr "{0} salió de la llamada"
+
+msgid "{0} reaction"
+msgid_plural "{0} reactions"
+msgstr[0] "{0} reacción"
+msgstr[1] "{0} reacciones"
+
+msgid "{0} reply in thread"
+msgid_plural "{0} replies in thread"
+msgstr[0] "{0} respuesta en el hilo"
+msgstr[1] "{0} respuestas en el hilo"
+
+msgid "{0} {1}"
+msgstr "{0} {1}"
+
+msgid "{0} {1}%"
+msgstr "{0} {1} %"
+
+msgid "{0}, from {1}"
+msgstr "{0}, de {1}"
+
+msgid "{0}, {1}"
+msgstr "{0}, {1}"
+
+msgid "{0}, {1}, {2}"
+msgstr "{0}, {1}, {2}"
+
+msgid "{0}. {1}"
+msgstr "{0}. {1}"
+
+msgid "not sent"
+msgstr "no enviado"
+
+msgid "sending"
+msgstr "enviando"
+
+msgid "Message {0}"
+msgstr "Mensaje a {0}"

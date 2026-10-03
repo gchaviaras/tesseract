@@ -6,13 +6,16 @@
 #include <wrl/client.h>
 #include <uiautomation.h>
 #include <oleauto.h>
+#include <commctrl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace tk::win32
 {
@@ -50,6 +53,7 @@ CONTROLTYPEID to_uia_control_type(tk::Role r)
     case tk::Role::Dialog:      return UIA_PaneControlTypeId;
     case tk::Role::MenuItem:    return UIA_MenuItemControlTypeId;
     case tk::Role::Group:       return UIA_GroupControlTypeId;
+    case tk::Role::ProgressBar: return UIA_ProgressBarControlTypeId;
     case tk::Role::None:        return UIA_PaneControlTypeId;
     }
     return UIA_PaneControlTypeId;
@@ -123,6 +127,63 @@ AccessKey key_for(const tk::AccessNode& n)
     return {n.widget, n.row_index};
 }
 
+// Real widget nodes report enabled() directly; synthesized ones carry
+// state.disabled (see AccessState::disabled).
+bool node_disabled(const tk::AccessNode& n)
+{
+    if (n.state.disabled)
+        return true;
+    return n.row_index == -1 && n.widget && !n.activate && !n.widget->enabled();
+}
+
+// Last values raised to UIA for a provider — see AccessBridge::
+// raise_change_events (mirrors qt_accessible.cpp's Snapshot).
+struct Snapshot
+{
+    std::string name;
+    std::string description;
+    tk::AccessState state;
+    bool disabled = false;
+    double value = 0.0;
+    tk::Rect rect;
+};
+
+Snapshot snapshot_of(const tk::AccessNode& n)
+{
+    return {n.name, n.description, n.state, node_disabled(n), n.value.now, n.rect};
+}
+
+// Debounce for the AT-active refresh — see qt_accessible.cpp's
+// kRefreshDelayMs.
+constexpr int kRefreshDelayMs = 200;
+
+VARIANT bstr_variant(const std::string& s)
+{
+    VARIANT v;
+    VariantInit(&v);
+    v.vt = VT_BSTR;
+    v.bstrVal = SysAllocString(utf8_to_wide(s).c_str());
+    return v;
+}
+
+VARIANT i4_variant(int i)
+{
+    VARIANT v;
+    VariantInit(&v);
+    v.vt = VT_I4;
+    v.lVal = i;
+    return v;
+}
+
+VARIANT bool_variant(bool b)
+{
+    VARIANT v;
+    VariantInit(&v);
+    v.vt = VT_BOOL;
+    v.boolVal = b ? VARIANT_TRUE : VARIANT_FALSE;
+    return v;
+}
+
 class AccessNodeProvider;
 
 // Per-Surface accessibility state: the cached AccessNode tree, an index from
@@ -153,7 +214,17 @@ public:
     void mark_dirty()
     {
         dirty_ = true;
+        schedule_refresh();
     }
+
+    // While a UIA client holds providers (has queried us), rebuild shortly
+    // after any relayout/repaint so property/structure changes are raised as
+    // events. Looked up again by HWND when the timer fires — the bridge may
+    // have been detached and destroyed in between.
+    void schedule_refresh();
+
+    // UiaRaiseNotificationEvent on the root provider (Windows 10 1709+).
+    void announce(const std::string& text, bool assertive);
 
     const tk::AccessNode* root_node()
     {
@@ -259,8 +330,45 @@ private:
     // needs AccessNodeProvider's complete type).
     void notify_current_row(tk::Widget* owner, int idx);
 
+    // Defined out-of-class (needs AccessNodeProvider's complete type).
+    void raise_change_events();
+    // UIA_BoundingRectanglePropertyId change for `key`'s provider, if any.
+    void raise_rect_changed_(const AccessKey& key);
+    // Keys whose on-screen rect a UIA client is tracking: the focused widget
+    // and each list/grid's current row (Narrator's highlight follows those).
+    // Rect-change events go to these only — a scroll moves every row.
+    std::vector<AccessKey> tracked_keys_() const;
+
+public:
+    // The top-level window moved: tracked elements' screen rects changed
+    // even though nothing in the tk tree did.
+    void on_window_moved();
+    // Subclasses the surface's top-level window (once) to hear about moves —
+    // the surface is a child window and gets no WM_MOVE of its own.
+    void ensure_root_hooked();
+    void unhook_root();
+    void schedule_window_moved_();
+    void forget_root_() { hooked_root_ = nullptr; }
+
+private:
+    std::unordered_map<AccessKey, std::vector<AccessKey>, AccessKeyHash> children_of_;
+    std::unordered_map<tk::Widget*, int> current_row_;
+    HWND hooked_root_ = nullptr;
+    bool move_pending_ = false;
+
+public:
+    void remember(const AccessKey& key)
+    {
+        auto it = index_.find(key);
+        if (it != index_.end())
+            snapshots_[key] = snapshot_of(*it->second);
+    }
+
+private:
     Surface* surface_;
     bool dirty_ = true;
+    bool refresh_pending_ = false;
+    std::unordered_map<AccessKey, Snapshot, AccessKeyHash> snapshots_;
     tk::AccessNode tree_;
     int next_runtime_id_ = 1;
     std::unordered_map<AccessKey, const tk::AccessNode*, AccessKeyHash> index_;
@@ -293,7 +401,10 @@ class AccessNodeProvider final : public IRawElementProviderSimple,
                                  public IInvokeProvider,
                                  public IToggleProvider,
                                  public ISelectionItemProvider,
-                                 public IExpandCollapseProvider
+                                 public IExpandCollapseProvider,
+                                 public IRangeValueProvider,
+                                 public IGridProvider,
+                                 public IGridItemProvider
 {
 public:
     AccessNodeProvider(AccessBridge* bridge, AccessKey key, int runtime_id)
@@ -334,6 +445,12 @@ public:
             *ppv = static_cast<ISelectionItemProvider*>(this);
         else if (riid == __uuidof(IExpandCollapseProvider) && supports_expand_collapse(role))
             *ppv = static_cast<IExpandCollapseProvider*>(this);
+        else if (riid == __uuidof(IRangeValueProvider) && node() && node()->value.present)
+            *ppv = static_cast<IRangeValueProvider*>(this);
+        else if (riid == __uuidof(IGridProvider) && node() && node()->grid_col_count > 0)
+            *ppv = static_cast<IGridProvider*>(this);
+        else if (riid == __uuidof(IGridItemProvider) && node() && node()->grid_row >= 0)
+            *ppv = static_cast<IGridItemProvider*>(this);
 
         if (!*ppv)
             return E_NOINTERFACE;
@@ -398,6 +515,27 @@ public:
                 *pRetVal = static_cast<IExpandCollapseProvider*>(this);
             }
             break;
+        case UIA_RangeValuePatternId:
+            if (n->value.present)
+            {
+                AddRef();
+                *pRetVal = static_cast<IRangeValueProvider*>(this);
+            }
+            break;
+        case UIA_GridPatternId:
+            if (n->grid_col_count > 0)
+            {
+                AddRef();
+                *pRetVal = static_cast<IGridProvider*>(this);
+            }
+            break;
+        case UIA_GridItemPatternId:
+            if (n->grid_row >= 0)
+            {
+                AddRef();
+                *pRetVal = static_cast<IGridItemProvider*>(this);
+            }
+            break;
         default:
             break;
         }
@@ -411,13 +549,13 @@ public:
         const tk::AccessNode* n = node();
         if (!n)
             return S_OK;
-        // A real Widget node (row_index < 0) can read enabled/focus state
+        // A real Widget node (row_index == -1) can read enabled/focus state
         // straight off its Widget; a synthesized row/cell has neither (see
         // AccessState's own doc comment — enabled/focused deliberately
         // aren't part of it) — default both to "not a concern" rather than
         // guessing, matching qt_accessible.cpp's NodeAccessible::state()
         // never setting a "disabled" bit for any node either.
-        const bool is_real_widget = n->row_index < 0 && n->widget != nullptr;
+        const bool is_real_widget = n->row_index == -1 && n->widget != nullptr && !n->activate;
         switch (propertyId)
         {
         case UIA_ControlTypePropertyId:
@@ -430,9 +568,36 @@ public:
             break;
         case UIA_IsEnabledPropertyId:
             pRetVal->vt = VT_BOOL;
-            pRetVal->boolVal =
-                (is_real_widget && !n->widget->enabled()) ? VARIANT_FALSE : VARIANT_TRUE;
+            pRetVal->boolVal = node_disabled(*n) ? VARIANT_FALSE : VARIANT_TRUE;
             break;
+        case UIA_HelpTextPropertyId:
+            if (!n->description.empty())
+                *pRetVal = bstr_variant(n->description);
+            break;
+#ifdef UIA_FullDescriptionPropertyId
+        case UIA_FullDescriptionPropertyId:
+            if (!n->description.empty())
+                *pRetVal = bstr_variant(n->description);
+            break;
+#endif
+#ifdef UIA_PositionInSetPropertyId
+        case UIA_PositionInSetPropertyId:
+            if (n->pos_in_set > 0)
+                *pRetVal = i4_variant(n->pos_in_set);
+            break;
+        case UIA_SizeOfSetPropertyId:
+            if (n->row_set_size > 0)
+                *pRetVal = i4_variant(n->row_set_size);
+            break;
+#endif
+#ifdef UIA_IsDialogPropertyId
+        // UIA has no non-HWND dialog control type; Narrator/NVDA treat any
+        // element with IsDialog as a dialog (and build_access_tree already
+        // prunes the inert content behind a modal one).
+        case UIA_IsDialogPropertyId:
+            *pRetVal = bool_variant(n->role == tk::Role::Dialog);
+            break;
+#endif
         case UIA_IsKeyboardFocusablePropertyId:
             pRetVal->vt = VT_BOOL;
             pRetVal->boolVal =
@@ -743,6 +908,145 @@ public:
         return S_OK;
     }
 
+    // ---- IRangeValueProvider (Role::ProgressBar; read-only) ----
+    HRESULT STDMETHODCALLTYPE SetValue(double) override
+    {
+        return UIA_E_ELEMENTNOTENABLED;
+    }
+    HRESULT STDMETHODCALLTYPE get_Value(double* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        const tk::AccessNode* n = node();
+        *pRetVal = n ? n->value.now : 0.0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_IsReadOnly(BOOL* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = TRUE;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_Maximum(double* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        const tk::AccessNode* n = node();
+        *pRetVal = n ? n->value.max : 0.0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_Minimum(double* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        const tk::AccessNode* n = node();
+        *pRetVal = n ? n->value.min : 0.0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_LargeChange(double* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = 0.0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_SmallChange(double* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = 0.0;
+        return S_OK;
+    }
+
+    // ---- IGridProvider (grid container) ----
+    HRESULT STDMETHODCALLTYPE GetItem(int row, int column,
+                                      IRawElementProviderSimple** pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = nullptr;
+        const tk::AccessNode* n = node();
+        if (!n || !bridge_)
+            return E_INVALIDARG;
+        for (const auto& child : n->children)
+        {
+            if (child.grid_row == row && child.grid_col == column)
+            {
+                if (auto* p = bridge_->provider_for(key_for(child)))
+                {
+                    p->AddRef();
+                    *pRetVal = static_cast<IRawElementProviderSimple*>(p);
+                }
+                return S_OK;
+            }
+        }
+        return E_INVALIDARG;
+    }
+    HRESULT STDMETHODCALLTYPE get_RowCount(int* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        const tk::AccessNode* n = node();
+        *pRetVal = n ? n->grid_row_count : 0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_ColumnCount(int* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        const tk::AccessNode* n = node();
+        *pRetVal = n ? n->grid_col_count : 0;
+        return S_OK;
+    }
+
+    // ---- IGridItemProvider (grid cell) ----
+    HRESULT STDMETHODCALLTYPE get_Row(int* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        const tk::AccessNode* n = node();
+        *pRetVal = n ? n->grid_row : 0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_Column(int* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        const tk::AccessNode* n = node();
+        *pRetVal = n ? n->grid_col : 0;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_RowSpan(int* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = 1;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_ColumnSpan(int* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = 1;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_ContainingGrid(IRawElementProviderSimple** pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = nullptr;
+        if (bridge_)
+        {
+            if (auto* p = bridge_->parent_provider_for(key_))
+            {
+                p->AddRef();
+                *pRetVal = static_cast<IRawElementProviderSimple*>(p);
+            }
+        }
+        return S_OK;
+    }
+
 private:
     const tk::AccessNode* node() const
     {
@@ -808,19 +1112,161 @@ void AccessBridge::rebuild_if_dirty()
     index_ = std::move(new_index);
     parent_of_ = std::move(new_parent);
 
-    // Coarse-grained "something changed" notification, same acceptable
-    // staleness tradeoff qt_accessible.cpp documents for its own
-    // ObjectReorder event (fired once per rebuild, not per individual
-    // structural change).
-    if (tree_.widget)
+    // ChildrenInvalidated on each container (that a UIA client has seen)
+    // whose child list changed — never on the root: it is a nameless Pane,
+    // and Narrator speaks the event's element ("pane" on every room switch).
+    std::unordered_map<AccessKey, std::vector<AccessKey>, AccessKeyHash> new_children;
+    for (const auto& [key, node] : index_)
     {
-        if (auto* rp = provider_for(key_for(tree_)))
-            UiaRaiseStructureChangedEvent(rp, StructureChangeType_ChildrenReordered, nullptr, 0);
+        if (node->children.empty())
+            continue;
+        auto& kids = new_children[key];
+        kids.reserve(node->children.size());
+        for (const auto& ch : node->children)
+            kids.push_back(key_for(ch));
     }
+    const AccessKey root_key = tree_.widget ? key_for(tree_) : AccessKey{};
+    for (const auto& [key, kids] : new_children)
+    {
+        if (key == root_key)
+            continue;
+        auto old = children_of_.find(key);
+        if (old != children_of_.end() && old->second == kids)
+            continue;
+        auto prov = providers_.find(key);
+        if (prov != providers_.end())
+            UiaRaiseStructureChangedEvent(prov->second.Get(),
+                                          StructureChangeType_ChildrenInvalidated, nullptr, 0);
+    }
+    for (const auto& [key, kids] : children_of_)
+    {
+        if (key == root_key || new_children.count(key))
+            continue;
+        auto prov = providers_.find(key);
+        if (prov != providers_.end()) // all children removed
+            UiaRaiseStructureChangedEvent(prov->second.Get(),
+                                          StructureChangeType_ChildrenInvalidated, nullptr, 0);
+    }
+    children_of_ = std::move(new_children);
+
+    raise_change_events();
+}
+
+void AccessBridge::raise_change_events()
+{
+    std::vector<AccessKey> moved_keys;
+    for (auto it = snapshots_.begin(); it != snapshots_.end();)
+    {
+        auto node_it = index_.find(it->first);
+        auto prov_it = providers_.find(it->first);
+        if (node_it == index_.end() || prov_it == providers_.end())
+        {
+            it = snapshots_.erase(it);
+            continue;
+        }
+        const tk::AccessNode& node = *node_it->second;
+        AccessNodeProvider* p = prov_it->second.Get();
+        Snapshot now = snapshot_of(node);
+        Snapshot& was = it->second;
+
+        auto raise = [p](PROPERTYID id, VARIANT oldv, VARIANT newv)
+        {
+            UiaRaiseAutomationPropertyChangedEvent(p, id, oldv, newv);
+            VariantClear(&oldv);
+            VariantClear(&newv);
+        };
+        if (now.name != was.name)
+            raise(UIA_NamePropertyId, bstr_variant(was.name), bstr_variant(now.name));
+        if (now.description != was.description)
+            raise(UIA_HelpTextPropertyId, bstr_variant(was.description),
+                  bstr_variant(now.description));
+        if (now.disabled != was.disabled)
+            raise(UIA_IsEnabledPropertyId, bool_variant(!was.disabled),
+                  bool_variant(!now.disabled));
+        if (now.state.checked != was.state.checked && supports_toggle(node.role))
+            raise(UIA_ToggleToggleStatePropertyId,
+                  i4_variant(was.state.checked ? ToggleState_On : ToggleState_Off),
+                  i4_variant(now.state.checked ? ToggleState_On : ToggleState_Off));
+        if (now.state.expanded != was.state.expanded && supports_expand_collapse(node.role))
+            raise(UIA_ExpandCollapseExpandCollapseStatePropertyId,
+                  i4_variant(was.state.expanded ? ExpandCollapseState_Expanded
+                                                : ExpandCollapseState_Collapsed),
+                  i4_variant(now.state.expanded ? ExpandCollapseState_Expanded
+                                                : ExpandCollapseState_Collapsed));
+        if (now.state.selected != was.state.selected && supports_selection_item(node.role))
+            raise(UIA_SelectionItemIsSelectedPropertyId, bool_variant(was.state.selected),
+                  bool_variant(now.state.selected));
+        if (node.value.present && now.value != was.value)
+        {
+            VARIANT oldv;
+            VariantInit(&oldv);
+            oldv.vt = VT_R8;
+            oldv.dblVal = was.value;
+            VARIANT newv;
+            VariantInit(&newv);
+            newv.vt = VT_R8;
+            newv.dblVal = now.value;
+            raise(UIA_RangeValueValuePropertyId, oldv, newv);
+        }
+        const bool moved = now.rect.x != was.rect.x || now.rect.y != was.rect.y ||
+                           now.rect.w != was.rect.w || now.rect.h != was.rect.h;
+        was = std::move(now);
+        if (moved)
+            moved_keys.push_back(it->first);
+        ++it;
+    }
+    // Scrolling moves every row; only tell UIA about what it is tracking.
+    for (const AccessKey& k : tracked_keys_())
+        if (std::find(moved_keys.begin(), moved_keys.end(), k) != moved_keys.end())
+            raise_rect_changed_(k);
+}
+
+std::vector<AccessKey> AccessBridge::tracked_keys_() const
+{
+    std::vector<AccessKey> keys;
+    if (surface_)
+        if (tk::Widget* f = surface_->host().focused_widget())
+            keys.push_back(AccessKey{f, -1});
+    for (const auto& [owner, idx] : current_row_)
+        if (idx >= 0)
+            keys.push_back(AccessKey{owner, idx});
+    return keys;
+}
+
+void AccessBridge::raise_rect_changed_(const AccessKey& key)
+{
+    auto prov = providers_.find(key);
+    auto node = index_.find(key);
+    if (prov == providers_.end() || node == index_.end())
+        return;
+    const RECT rc = to_screen_rect(node->second->rect);
+    VARIANT newv;
+    VariantInit(&newv);
+    newv.vt     = VT_R8 | VT_ARRAY;
+    newv.parray = SafeArrayCreateVector(VT_R8, 0, 4);
+    if (newv.parray)
+    {
+        double vals[4] = {double(rc.left), double(rc.top), double(rc.right - rc.left),
+                          double(rc.bottom - rc.top)};
+        for (LONG i = 0; i < 4; ++i)
+            SafeArrayPutElement(newv.parray, &i, &vals[i]);
+    }
+    VARIANT oldv;
+    VariantInit(&oldv); // VT_EMPTY: unknown — clients re-query
+    UiaRaiseAutomationPropertyChangedEvent(prov->second.Get(), UIA_BoundingRectanglePropertyId,
+                                           oldv, newv);
+    VariantClear(&newv);
+}
+
+void AccessBridge::on_window_moved()
+{
+    for (const AccessKey& k : tracked_keys_())
+        raise_rect_changed_(k);
 }
 
 void AccessBridge::notify_current_row(tk::Widget* owner, int idx)
 {
+    current_row_[owner] = idx;
     if (idx < 0)
         return; // deselected — nothing to report as "current"
     if (auto* p = provider_for(AccessKey{owner, idx}))
@@ -841,6 +1287,8 @@ AccessNodeProvider* AccessBridge::provider_for(const AccessKey& key)
     p.Attach(new AccessNodeProvider(this, key, next_runtime_id_++));
     AccessNodeProvider* raw = p.Get();
     providers_.emplace(key, std::move(p));
+    remember(key);
+    ensure_root_hooked();
     return raw;
 }
 
@@ -875,6 +1323,7 @@ void AccessBridge::detach()
         entry.second->detach();
     }
     providers_.clear();
+    unhook_root();
     surface_ = nullptr;
 }
 
@@ -896,7 +1345,280 @@ AccessBridge* bridge_for_hwnd(HWND hwnd)
     return it == registry.end() ? nullptr : it->second.get();
 }
 
+// Debounce for window-move rect events: one burst after the drag settles
+// rather than one per WM_WINDOWPOSCHANGED.
+constexpr int kMoveSettleMs = 150;
+
+LRESULT CALLBACK root_move_subclass_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
+                                         UINT_PTR id, DWORD_PTR ref)
+{
+    const HWND surface_hwnd = reinterpret_cast<HWND>(ref);
+    switch (msg)
+    {
+    case WM_WINDOWPOSCHANGED:
+    {
+        const auto* pos = reinterpret_cast<const WINDOWPOS*>(lp);
+        if (pos && (pos->flags & SWP_NOMOVE))
+            break;
+        if (AccessBridge* b = bridge_for_hwnd(surface_hwnd))
+            b->schedule_window_moved_();
+        break;
+    }
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(hwnd, root_move_subclass_proc, id);
+        if (AccessBridge* b = bridge_for_hwnd(surface_hwnd))
+            b->forget_root_();
+        break;
+    default:
+        break;
+    }
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+void AccessBridge::ensure_root_hooked()
+{
+    if (hooked_root_ || !surface_)
+        return;
+    const HWND self = surface_->hwnd();
+    const HWND root = self ? GetAncestor(self, GA_ROOT) : nullptr;
+    if (!root || root == self)
+        return; // a top-level surface gets WM_WINDOWPOSCHANGED itself
+    if (SetWindowSubclass(root, root_move_subclass_proc,
+                          reinterpret_cast<UINT_PTR>(self), reinterpret_cast<DWORD_PTR>(self)))
+        hooked_root_ = root;
+}
+
+void AccessBridge::unhook_root()
+{
+    if (hooked_root_ && surface_ && IsWindow(hooked_root_))
+        RemoveWindowSubclass(hooked_root_, root_move_subclass_proc,
+                             reinterpret_cast<UINT_PTR>(surface_->hwnd()));
+    hooked_root_ = nullptr;
+}
+
+void AccessBridge::schedule_window_moved_()
+{
+    if (move_pending_ || !surface_ || providers_.empty())
+        return;
+    move_pending_ = true;
+    HWND hwnd = surface_->hwnd();
+    surface_->host().post_delayed(kMoveSettleMs, [hwnd]
+    {
+        if (AccessBridge* b = bridge_for_hwnd(hwnd))
+        {
+            b->move_pending_ = false;
+            b->on_window_moved();
+        }
+    });
+}
+
+void AccessBridge::schedule_refresh()
+{
+    if (providers_.empty() || refresh_pending_ || !surface_)
+        return;
+    refresh_pending_ = true;
+    HWND hwnd = surface_->hwnd();
+    surface_->host().post_delayed(kRefreshDelayMs, [hwnd]
+    {
+        if (AccessBridge* b = bridge_for_hwnd(hwnd))
+        {
+            b->refresh_pending_ = false;
+            b->dirty_ = true;
+            b->rebuild_if_dirty();
+        }
+    });
+}
+
+void AccessBridge::announce(const std::string& text, bool assertive)
+{
+    AccessNodeProvider* root = root_provider();
+    if (!root)
+        return;
+    BSTR display  = SysAllocString(utf8_to_wide(text).c_str());
+    BSTR activity = SysAllocString(L"tesseract.announce");
+    UiaRaiseNotificationEvent(root, NotificationKind_Other,
+                              assertive ? NotificationProcessing_ImportantMostRecent
+                                        : NotificationProcessing_MostRecent,
+                              display, activity);
+    SysFreeString(display);
+    SysFreeString(activity);
+}
+
 } // namespace
+
+namespace
+{
+
+// The COM object behind NativeEditAccessible. Callbacks are nulled by
+// detach() when the owner goes away; a UIA client still holding a
+// reference then gets safe defaults.
+class NativeEditProvider final : public IRawElementProviderSimple, public IValueProvider
+{
+public:
+    NativeEditProvider(HWND hwnd, NativeEditAccessible::Callbacks cb)
+        : hwnd_(hwnd), cb_(std::move(cb)), live_(true)
+    {
+    }
+    void detach()
+    {
+        live_ = false;
+        cb_   = {};
+    }
+
+    // ---- IUnknown ----
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override
+    {
+        if (!ppv)
+            return E_POINTER;
+        *ppv = nullptr;
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IRawElementProviderSimple))
+            *ppv = static_cast<IRawElementProviderSimple*>(this);
+        else if (riid == __uuidof(IValueProvider))
+            *ppv = static_cast<IValueProvider*>(this);
+        if (!*ppv)
+            return E_NOINTERFACE;
+        AddRef();
+        return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs_; }
+    ULONG STDMETHODCALLTYPE Release() override
+    {
+        ULONG n = --refs_;
+        if (n == 0)
+            delete this;
+        return n;
+    }
+
+    // ---- IRawElementProviderSimple ----
+    HRESULT STDMETHODCALLTYPE get_ProviderOptions(ProviderOptions* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = ProviderOptions_ServerSideProvider;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetPatternProvider(PATTERNID id, IUnknown** pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = nullptr;
+        if (id == UIA_ValuePatternId && live_)
+        {
+            AddRef();
+            *pRetVal = static_cast<IValueProvider*>(this);
+        }
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetPropertyValue(PROPERTYID id, VARIANT* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        VariantInit(pRetVal);
+        if (!live_)
+            return S_OK;
+        switch (id)
+        {
+        case UIA_ControlTypePropertyId:
+            *pRetVal = i4_variant(UIA_EditControlTypeId);
+            break;
+        case UIA_NamePropertyId:
+            *pRetVal = bstr_variant(cb_.name ? cb_.name() : std::string());
+            break;
+        case UIA_IsPasswordPropertyId:
+            *pRetVal = bool_variant(is_password_());
+            break;
+        case UIA_IsKeyboardFocusablePropertyId:
+        case UIA_IsContentElementPropertyId:
+        case UIA_IsControlElementPropertyId:
+            *pRetVal = bool_variant(true);
+            break;
+        default:
+            break; // the HWND's own provider supplies focus, bounds, enabled
+        }
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_HostRawElementProvider(IRawElementProviderSimple** pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        return UiaHostProviderFromHwnd(hwnd_, pRetVal);
+    }
+
+    // ---- IValueProvider ----
+    HRESULT STDMETHODCALLTYPE SetValue(LPCWSTR val) override
+    {
+        if (!live_ || !cb_.set_text)
+            return UIA_E_ELEMENTNOTAVAILABLE;
+        cb_.set_text(wide_to_utf8(val ? std::wstring(val) : std::wstring()));
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_Value(BSTR* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        // A password field's content is never exposed.
+        const std::string t = (live_ && !is_password_() && cb_.text) ? cb_.text() : std::string();
+        *pRetVal = SysAllocString(utf8_to_wide(t).c_str());
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE get_IsReadOnly(BOOL* pRetVal) override
+    {
+        if (!pRetVal)
+            return E_POINTER;
+        *pRetVal = FALSE;
+        return S_OK;
+    }
+
+private:
+    bool is_password_() const { return cb_.password && cb_.password(); }
+
+    HWND hwnd_;
+    NativeEditAccessible::Callbacks cb_;
+    bool live_;
+    std::atomic<ULONG> refs_{1};
+};
+
+} // namespace
+
+struct NativeEditAccessible::Impl
+{
+    HWND hwnd = nullptr;
+    ComPtr<NativeEditProvider> provider;
+};
+
+NativeEditAccessible::NativeEditAccessible(HWND hwnd, Callbacks cb) : impl_(std::make_unique<Impl>())
+{
+    impl_->hwnd = hwnd;
+    impl_->provider.Attach(new NativeEditProvider(hwnd, std::move(cb)));
+}
+
+NativeEditAccessible::~NativeEditAccessible()
+{
+    if (impl_->provider)
+    {
+        UiaDisconnectProvider(impl_->provider.Get());
+        impl_->provider->detach();
+    }
+}
+
+bool NativeEditAccessible::handle_get_object(WPARAM wParam, LPARAM lParam, LRESULT* result)
+{
+    if (static_cast<long>(lParam) != UiaRootObjectId || !impl_->provider)
+        return false;
+    *result = UiaReturnRawElementProvider(impl_->hwnd, wParam, lParam, impl_->provider.Get());
+    return true;
+}
+
+void NativeEditAccessible::name_changed(const std::string& old_name, const std::string& new_name)
+{
+    if (!impl_->provider || old_name == new_name || !UiaClientsAreListening())
+        return;
+    VARIANT oldv = bstr_variant(old_name);
+    VARIANT newv = bstr_variant(new_name);
+    UiaRaiseAutomationPropertyChangedEvent(impl_->provider.Get(), UIA_NamePropertyId, oldv, newv);
+    VariantClear(&oldv);
+    VariantClear(&newv);
+}
 
 void attach_accessible_bridge(Surface& surface)
 {
@@ -907,6 +1629,17 @@ void attach_accessible_bridge(Surface& surface)
     AccessBridge* raw = bridge.get();
     bridge_registry().emplace(hwnd, std::move(bridge));
     surface.add_layout_listener([raw] { raw->mark_dirty(); });
+    surface.host().add_paint_listener([hwnd]
+    {
+        if (AccessBridge* b = bridge_for_hwnd(hwnd))
+            b->schedule_refresh();
+    });
+}
+
+void announce(HWND hwnd, const std::string& text, bool assertive)
+{
+    if (AccessBridge* b = bridge_for_hwnd(hwnd))
+        b->announce(text, assertive);
 }
 
 void detach_accessible_bridge(HWND hwnd)

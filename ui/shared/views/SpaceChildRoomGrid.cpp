@@ -144,10 +144,46 @@ private:
 // below, ellipsized) — reads as "the same visual language" as a
 // RoomListView row (same avatar rendering, same font role) without forcing
 // a horizontal row shape into a grid cell. ────────────────────────────────
-class SpaceChildRoomGrid::Adapter : public tk::GridAdapter
+class SpaceChildRoomGrid::Adapter : public tk::GridAdapter, public tk::GridAdapterAccessibility
 {
 public:
     explicit Adapter(SpaceChildRoomGrid& owner) : owner_(owner) {}
+
+    // Cells are named by the room; the topic and the keyboard remove
+    // affordance (Delete on the selected cell) follow as the description.
+    tk::Role access_role_for_cell(std::size_t index) const override
+    {
+        return owner_.entry_at_(index) ? tk::Role::GridCell : tk::Role::None;
+    }
+    std::string access_name_for_cell(std::size_t index) const override
+    {
+        const auto* entry = owner_.entry_at_(index);
+        if (!entry)
+            return {};
+        const tesseract::RoomInfo& info = entry->info;
+        if (!entry->joined && info.name.empty())
+            return tk::tr("Loading\xe2\x80\xa6");
+        return info.name.empty() ? info.id : info.name;
+    }
+    std::string access_description_for_cell(std::size_t index) const override
+    {
+        const auto* entry = owner_.entry_at_(index);
+        if (!entry)
+            return {};
+        std::string desc = entry->info.topic;
+        if (owner_.can_manage_ && owner_.on_remove_requested)
+        {
+            const std::string hint = tk::tr("Press Delete to remove it from the space");
+            desc = desc.empty() ? hint : tk::trf(tk::tr("{0}. {1}"), {desc, hint});
+        }
+        return desc;
+    }
+    tk::AccessState access_state_for_cell(std::size_t index) const override
+    {
+        tk::AccessState st;
+        st.selected = owner_.grid_ && owner_.grid_->selected_index() == static_cast<int>(index);
+        return st;
+    }
 
     std::size_t count() const override { return owner_.children_.size(); }
 

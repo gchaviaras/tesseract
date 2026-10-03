@@ -10,7 +10,9 @@
 // Mounted as the topmost child of MainAppWidget — set_visible(false) by
 // default, arranged at full bounds, painted last (highest z-order).
 
+#include "tk/access_tree.h"
 #include "tk/canvas.h"
+#include "tk/controls.h"
 #include "tk/host.h"
 #include "tk/list_view.h"
 #include "tk/text_field.h"
@@ -27,7 +29,7 @@
 namespace tesseract::views
 {
 
-class ForwardRoomPicker : public tk::Widget
+class ForwardRoomPicker : public tk::Widget, public tk::WidgetRowAccessibility
 {
 protected:
     // host() is nullable: when null (e.g. unit tests constructing the
@@ -102,6 +104,21 @@ public:
     bool on_pointer_down(tk::Point local) override;
     void on_pointer_up(tk::Point local, bool inside_self) override;
     bool on_wheel(tk::Point local, float dx, float dy, bool is_touchpad = false) override;
+    bool on_key_down(const tk::KeyEvent& e) override;
+
+    // ── Accessibility ─────────────────────────────────────────────────────
+    // A modal dialog; rooms are checkboxes (see Adapter), and the painted
+    // status / error / empty text is exposed as rows.
+    tk::Role    access_role() const override { return tk::Role::Dialog; }
+    std::string access_name() const override;
+    bool        access_modal() const override { return is_open_ && visible(); }
+    std::size_t access_row_count() const override { return access_texts_().size(); }
+    tk::Role    access_role_for_widget_row(std::size_t) const override
+    {
+        return tk::Role::StaticText;
+    }
+    std::string access_name_for_widget_row(std::size_t i) const override;
+    tk::Rect    access_rect_for_widget_row(std::size_t i) const override;
 
     static constexpr float kCardW    = 560.0f;
     static constexpr float kCardMaxH = 520.0f;
@@ -125,6 +142,8 @@ private:
     // Rebuild filtered_unselected_ from all_rooms_ minus selected_ids_,
     // applying query_. Resets the list to the top.
     void refilter_();
+    // Check / uncheck the room at display row `index` (click and AT path).
+    void toggle_row_(std::size_t index);
 
     // Set by open(); consumed by the next paint(). Deferred rather than
     // focused synchronously inside open() because arrange() — which
@@ -155,19 +174,22 @@ private:
     tk::Rect card_rect_{};
     tk::Rect search_field_rect_{};
     tk::TextField* search_field_ = nullptr; // owned via add_child when host provided
-    tk::Rect cancel_btn_rect_{};
-    tk::Rect confirm_btn_rect_{};
+    // Footer buttons, positioned in arrange() and painted in paint();
+    // Dismiss replaces Cancel / Forward (N) on the error body.
+    tk::Button* cancel_btn_  = nullptr;
+    tk::Button* confirm_btn_ = nullptr;
+    tk::Button* dismiss_btn_ = nullptr;
 
     bool press_outside_ = false;
-    bool press_cancel_  = false;
-    bool press_confirm_ = false;
-    bool press_dismiss_ = false;
+
+    std::vector<std::string> access_texts_() const;
+    void sync_footer_buttons_();
 
     bool                     forwarding_      = false;
     int                      forward_errors_  = 0;
     std::string              forwarding_status_;
     std::vector<std::string> error_lines_;
-    tk::Rect                 dismiss_btn_rect_{};
+    int                      forward_count_   = 0;
 };
 
 } // namespace tesseract::views

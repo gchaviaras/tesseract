@@ -38,11 +38,51 @@ constexpr float kRowPillPadX = 8.0f;
 
 // ── Adapter ─────────────────────────────────────────────────────────────
 
-class RoomDirectoryView::Adapter : public tk::ListAdapter
+class RoomDirectoryView::Adapter : public tk::ListAdapter, public tk::ListAdapterAccessibility
 {
 public:
     explicit Adapter(RoomDirectoryView& owner) : owner_(owner)
     {
+    }
+
+    // Name is the room; the join rule, member count, and topic follow as
+    // its description. Activation selects it (the Join button below the
+    // list acts on the selection), exactly like a click.
+    tk::Role access_role_for_row(std::size_t index) const override
+    {
+        return index < owner_.items_.size() ? tk::Role::ListItem : tk::Role::None;
+    }
+    std::string access_name_for_row(std::size_t index) const override
+    {
+        if (index >= owner_.items_.size())
+            return {};
+        const auto& e = owner_.items_[index];
+        return e.name.empty() ? e.room_id : e.name;
+    }
+    std::string access_description_for_row(std::size_t index) const override
+    {
+        if (index >= owner_.items_.size())
+            return {};
+        const auto& e = owner_.items_[index];
+        const std::string members =
+            tk::trf(tk::trn("{0} member", "{0} members", static_cast<long>(e.joined_members)),
+                    {std::to_string(e.joined_members)});
+        if (e.topic.empty())
+            return tk::trf(tk::tr("{0}, {1}"), {join_rule_label(e.join_rule), members});
+        return tk::trf(tk::tr("{0}, {1}, {2}"), {join_rule_label(e.join_rule), members, e.topic});
+    }
+    tk::AccessState access_state_for_row(std::size_t index) const override
+    {
+        tk::AccessState st;
+        st.selected = static_cast<int>(index) == owner_.selected_index_;
+        return st;
+    }
+    bool access_activate_row(std::size_t index) override
+    {
+        if (index >= owner_.items_.size())
+            return false;
+        owner_.select_row_(static_cast<int>(index));
+        return true;
     }
 
     std::size_t count() const override

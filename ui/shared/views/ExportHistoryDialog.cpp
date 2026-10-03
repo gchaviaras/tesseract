@@ -478,6 +478,13 @@ void ExportHistoryDialog::apply_finished_(bool ok, bool cancelled, std::string o
     title_layout_.reset();
     body_layout_.reset();
     update_child_visibility_();
+    if (open_ && host())
+    {
+        const auto [title, body] = title_and_body_();
+        host()->announce(body.empty() ? title : tk::trf(tk::tr("{0}. {1}"), {title, body}),
+                         ok || cancelled ? tk::Host::Politeness::Polite
+                                         : tk::Host::Politeness::Assertive);
+    }
     if (open_ && on_layout_changed) on_layout_changed();
 }
 
@@ -612,21 +619,8 @@ void ExportHistoryDialog::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
 
 // ── paint ─────────────────────────────────────────────────────────────────
 
-void ExportHistoryDialog::paint_before_children(tk::PaintCtx& ctx)
+std::pair<std::string, std::string> ExportHistoryDialog::title_and_body_() const
 {
-    if (!open_) return;
-
-    auto& cv = ctx.canvas;
-    const auto& pal = ctx.theme.palette;
-
-    cv.fill_rect(backdrop_rect_, tk::Color{0, 0, 0, 120});
-    cv.fill_rounded_rect(card_rect_, 8.0f, pal.chrome_bg);
-    cv.stroke_rounded_rect(card_rect_, 8.0f, pal.border, 1.0f);
-
-    const float text_x = card_rect_.x + kCardPad;
-    const float text_w = card_rect_.w - kCardPad * 2.0f;
-    float y = card_rect_.y + kCardPad;
-
     std::string title;
     std::string body;
     switch (state_)
@@ -661,6 +655,36 @@ void ExportHistoryDialog::paint_before_children(tk::PaintCtx& ctx)
                             : (finished_error_.empty() ? std::string() : finished_error_);
         break;
     }
+
+    return {title, body};
+}
+
+std::string ExportHistoryDialog::access_name() const
+{
+    return title_and_body_().first;
+}
+
+std::string ExportHistoryDialog::access_description() const
+{
+    return title_and_body_().second;
+}
+
+void ExportHistoryDialog::paint_before_children(tk::PaintCtx& ctx)
+{
+    if (!open_) return;
+
+    auto& cv = ctx.canvas;
+    const auto& pal = ctx.theme.palette;
+
+    cv.fill_rect(backdrop_rect_, tk::Color{0, 0, 0, 120});
+    cv.fill_rounded_rect(card_rect_, 8.0f, pal.chrome_bg);
+    cv.stroke_rounded_rect(card_rect_, 8.0f, pal.border, 1.0f);
+
+    const float text_x = card_rect_.x + kCardPad;
+    const float text_w = card_rect_.w - kCardPad * 2.0f;
+    float y = card_rect_.y + kCardPad;
+
+    const auto [title, body] = title_and_body_();
 
     if (!title_layout_)
     {

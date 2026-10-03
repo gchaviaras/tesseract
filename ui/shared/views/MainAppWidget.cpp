@@ -42,6 +42,7 @@ public:
                     on_back();
             },
             tk::Button::Variant::Icon);
+        back->set_accessible_name(tk::tr("Back"));
         back_btn_ = add_child(std::move(back));
 
         auto name = tk::create_widget<tk::Label>(this, "", tk::FontRole::Body);

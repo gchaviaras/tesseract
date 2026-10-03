@@ -19,7 +19,9 @@
 
 #include "InviteFieldModel.h"
 
+#include "tk/access_tree.h"
 #include "tk/canvas.h"
+#include "tk/controls.h"
 #include "tk/list_view.h"
 #include "tk/text_area.h"
 #include "tk/widget.h"
@@ -35,7 +37,7 @@
 namespace tesseract::views
 {
 
-class InviteDialog : public tk::Widget
+class InviteDialog : public tk::Widget, public tk::WidgetRowAccessibility
 {
 protected:
     // host() is nullable: when null (unit tests constructing the dialog
@@ -131,6 +133,21 @@ public:
     bool on_pointer_down(tk::Point local) override;
     void on_pointer_up(tk::Point local, bool inside_self) override;
     bool on_wheel(tk::Point local, float dx, float dy, bool is_touchpad = false) override;
+    bool on_key_down(const tk::KeyEvent& e) override;
+
+    // ── Accessibility ─────────────────────────────────────────────────────
+    // A modal dialog named by its title. The painted status / error / empty
+    // text are exposed as rows; the list rows are checkboxes (see Adapter).
+    tk::Role    access_role() const override { return tk::Role::Dialog; }
+    std::string access_name() const override { return title_(); }
+    bool        access_modal() const override { return is_open_ && visible(); }
+    std::size_t access_row_count() const override { return access_texts_().size(); }
+    tk::Role    access_role_for_widget_row(std::size_t) const override
+    {
+        return tk::Role::StaticText;
+    }
+    std::string access_name_for_widget_row(std::size_t i) const override;
+    tk::Rect    access_rect_for_widget_row(std::size_t i) const override;
 
     static constexpr float kCardW     = 560.0f;
     static constexpr float kCardMaxH  = 560.0f;
@@ -173,6 +190,11 @@ private:
     const tk::Image* avatar_for_(const UserEntry& e);
     float field_height_() const;
     void relayout_();
+    std::string title_() const;
+    // The painted-only text currently shown in the body (status line, error
+    // lines, or the empty-list message).
+    std::vector<std::string> access_texts_() const;
+    void announce_(const std::string& text, bool assertive = false);
 
     bool is_open_       = false;
     bool pending_focus_ = false;
@@ -200,17 +222,18 @@ private:
 
     tk::Rect card_rect_{};
     tk::Rect field_rect_{};
-    tk::Rect cancel_btn_rect_{};
-    tk::Rect confirm_btn_rect_{};
-    tk::Rect dismiss_btn_rect_{};
+
+    // Footer buttons (positioned in arrange(), painted in paint()). Cancel /
+    // Invite (N) while choosing; Dismiss replaces them on the error body.
+    tk::Button* cancel_btn_  = nullptr;
+    tk::Button* confirm_btn_ = nullptr;
+    tk::Button* dismiss_btn_ = nullptr;
 
     bool press_outside_ = false;
-    bool press_cancel_  = false;
-    bool press_confirm_ = false;
-    bool press_dismiss_ = false;
 
     bool                     inviting_       = false;
     int                      invite_errors_  = 0;
+    int                      invite_count_   = 0;
     std::string              inviting_status_;
     std::vector<std::string> error_lines_;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tk/widget.h"
+#include "tk/access_tree.h"
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/host.h"
@@ -19,12 +20,14 @@
 namespace tesseract::views
 {
 
+class OptionCardButton;
+
 // The single place every encryption interaction happens: setting up a
 // recovery key (Fresh), unlocking this device with a recovery key or another
 // device (Recover), and answering verification requests from the user's
 // other devices or other users (Verify). ShellBase drives it; there is no
 // other verification UI (EncryptionReminderBanner only reopens this).
-class EncryptionSetupOverlay : public tk::Widget
+class EncryptionSetupOverlay : public tk::Widget, public tk::WidgetRowAccessibility
 {
 public:
     enum class Mode { Fresh, Recover, Verify };
@@ -127,6 +130,7 @@ public:
     void report_reset_error(const std::string& msg)
     {
         error_msg_ = msg;
+        announce_(msg, true);
     }
 
     // ── Interactive verification (driven by ShellBase) ────────────────────
@@ -209,6 +213,22 @@ public:
     void     paint(tk::PaintCtx& ctx) override;
     bool     on_pointer_down(tk::Point world) override;
     void     on_pointer_up(tk::Point local, bool inside_self) override;
+    // Escape closes the steps a backdrop click would (see backdrop_closes_).
+    bool     on_key_down(const tk::KeyEvent& e) override;
+
+    // ── Accessibility ─────────────────────────────────────────────────────
+    // A modal dialog named by the current step's title, described by its
+    // main paragraph. The painted-only content (recovery key, SAS codes,
+    // progress, errors) is exposed as text rows recorded during paint(); the
+    // links, option cards, and action buttons are real child buttons.
+    tk::Role    access_role() const override { return tk::Role::Dialog; }
+    std::string access_name() const override { return access_title_; }
+    std::string access_description() const override { return access_body_; }
+    bool        access_modal() const override { return visible(); }
+    std::size_t access_row_count() const override { return access_rows_.size(); }
+    tk::Role    access_role_for_widget_row(std::size_t i) const override;
+    std::string access_name_for_widget_row(std::size_t i) const override;
+    tk::Rect    access_rect_for_widget_row(std::size_t i) const override;
 
     // Reset mode and step so the overlay can be reused for a different mode.
     void reset(Mode mode)
@@ -294,6 +314,11 @@ private:
     bool     backdrop_closes_() const;
     void     choose_other_device_();
     void     reject_();
+    void     go_back_();
+    void     use_passphrase_();
+    // The Done step's sentence for done_kind_.
+    std::string done_text_() const;
+    void     announce_(const std::string& text, bool assertive = false);
     bool     key_field_rect_visible()        const;
     tk::Rect key_field_rect_value()          const;
 
@@ -332,26 +357,31 @@ private:
     // key_saved_checked_, which stays the source of truth.
     tk::CheckButton* key_saved_cb_ = nullptr;
 
-    // ── Layout rects computed during paint(), hit-tested in pointer handlers ──
-    // These cover the non-button affordances only (the text links).
-    tk::Rect secondary_link_{};   // "Skip for now"
-    tk::Rect passphrase_link_{};  // "Use a passphrase instead"
-    tk::Rect back_link_{};
-    tk::Rect device_row_{};       // Choose › Use another device
-    tk::Rect key_row_{};          // Choose › Enter recovery key
-    tk::Rect lost_link_{};        // Choose › I've lost…
-    tk::Rect reject_link_{};      // Not me / They don't match / Decline
+    // Background-less text links (tk::Button Variant::Link), positioned per
+    // step in paint() like primary_button_. reject_link_'s label varies (Not
+    // me / Decline / They don't match).
+    tk::Button* skip_link_       = nullptr; // "Skip for now"
+    tk::Button* passphrase_link_ = nullptr; // "Use a passphrase instead"
+    tk::Button* back_link_       = nullptr;
+    tk::Button* lost_link_       = nullptr; // Choose › I've lost…
+    tk::Button* reject_link_     = nullptr;
+    // Choose-step option cards (title + hint + chevron).
+    OptionCardButton* device_card_ = nullptr; // Use another device
+    OptionCardButton* key_card_    = nullptr; // Enter recovery key
     bool     primary_enabled_ = true;  // recomputed per-step in paint()
 
-    // ── Press tracking (mirror ImageViewerOverlay) ──────────────────────────
-    bool press_secondary_   = false;
-    bool press_back_        = false;
-    bool press_passphrase_  = false;
-    bool press_device_row_  = false;
-    bool press_key_row_     = false;
-    bool press_lost_        = false;
-    bool press_reject_      = false;
-    bool backdrop_press_    = false;
+    bool backdrop_press_ = false;
+
+    // Accessible text recorded by paint() for the current step.
+    struct AccessRow
+    {
+        tk::Role    role = tk::Role::StaticText;
+        std::string name;
+        tk::Rect    rect;
+    };
+    std::string            access_title_;
+    std::string            access_body_;
+    std::vector<AccessRow> access_rows_;
 
     // Borrowed — owned via add_child(). Null when constructed without a
     // Host (e.g. in tests that don't exercise the native field).

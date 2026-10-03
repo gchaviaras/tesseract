@@ -55,6 +55,19 @@ public:
 
     const tesseract::KnockRequestInfo& info() const { return info_; }
 
+    // A group named by the requester (mxid or reason as its description),
+    // so the Accept / Deny buttons inside are announced with their context.
+    tk::Role access_role() const override { return tk::Role::Group; }
+    std::string access_name() const override
+    {
+        return info_.display_name.empty() ? info_.user_id : info_.display_name;
+    }
+    std::string access_description() const override
+    {
+        return info_.reason.empty() ? info_.user_id
+                                    : tk::trf(tk::tr("Reason: {0}"), {info_.reason});
+    }
+
     std::function<void()> on_accept;
     std::function<void()> on_decline;
     std::function<void()> on_ban;
@@ -147,11 +160,22 @@ private:
 
 // ── KnockRequestsPanel ───────────────────────────────────────────────────
 
+std::string KnockRequestsPanel::access_name() const
+{
+    return tk::trf(tk::tr("Requests to Join ({0})"), {std::to_string(requests_.size())});
+}
+
+std::string KnockRequestsPanel::access_description() const
+{
+    return requests_.empty() ? tk::tr("No pending requests") : std::string();
+}
+
 KnockRequestsPanel::KnockRequestsPanel()
 {
     auto close = tk::create_widget<tk::Button>(
         this, "\xC3\x97", std::function<void()>{}, tk::Button::Variant::Subtle);
     close->set_on_click([this]() { if (on_close) on_close(); });
+    close->set_accessible_name(tk::tr("Close"));
     close_btn_ = add_child(std::move(close));
 
     set_visible(false);

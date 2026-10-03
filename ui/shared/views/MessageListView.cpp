@@ -1277,6 +1277,89 @@ public:
 std::unique_ptr<MessageRowRenderer>
 make_row_renderer(tesseract::Settings::MessageLayout);
 
+// Screen-reader description of a message's content (not its sender):
+// deleted / undecryptable text, the media kind or caption, the file name,
+// or the plain body. Shared with RoomMediaView's thumbnails.
+std::string message_access_body(const MessageRowData& m)
+{
+    using Kind = MessageRowData::Kind;
+    switch (m.kind)
+    {
+    case Kind::Redacted:
+        return tk::tr("Message deleted");
+    case Kind::Utd:
+        return tk::tr("Unable to decrypt message");
+    case Kind::Image:
+        return m.has_filename_caption && !m.body.empty() ? m.body : tk::tr("Image");
+    case Kind::Sticker:
+        return tk::tr("Sticker");
+    case Kind::File:
+        return m.file_name.empty() ? tk::tr("File") : m.file_name;
+    case Kind::Audio:
+        return tk::tr("Audio message");
+    case Kind::Voice:
+        return tk::tr("Voice message");
+    case Kind::Video:
+        return m.has_filename_caption && !m.body.empty() ? m.body : tk::tr("Video");
+    case Kind::Location:
+        return m.location_description.empty() ? tk::tr("Location") : m.location_description;
+    default:
+        break;
+    }
+    // A formatted body with a table reads as its text with each table
+    // summarised ("Table, 3 rows, 2 columns: a, b; c, d") instead of the
+    // raw Markdown source in `body`.
+    if (m.formatted_body.find("<table") != std::string::npos)
+    {
+        // Parsed once per distinct body: the access tree is rebuilt often
+        // while a screen reader is attached, and every row is named on each
+        // rebuild. UI-thread only; bounded by a crude clear-when-full.
+        static std::unordered_map<std::string, std::string> table_text_cache;
+        if (auto it = table_text_cache.find(m.formatted_body); it != table_text_cache.end())
+            return it->second.empty() ? m.body : it->second;
+        if (table_text_cache.size() > 256)
+            table_text_cache.clear();
+        std::string& cached = table_text_cache[m.formatted_body];
+        auto spans_text = [](const std::vector<tk::TextSpan>& spans)
+        {
+            std::string t;
+            for (const auto& sp : spans)
+                t += sp.text;
+            return t;
+        };
+        std::string out;
+        for (const auto& block : html_to_blocks(m.formatted_body))
+        {
+            std::string piece;
+            if (block.kind == BodyBlock::Kind::Table)
+            {
+                const auto& rows = block.table.rows;
+                const std::size_t cols = block.table.col_align.size();
+                std::string cells;
+                for (std::size_t r = 0; r < rows.size(); ++r)
+                {
+                    std::string line;
+                    for (std::size_t c = 0; c < rows[r].size(); ++c)
+                        line += (c ? tk::tr(", ") : std::string()) + spans_text(rows[r][c].spans);
+                    cells += (r ? tk::tr("; ") : std::string()) + line;
+                }
+                piece = tk::trf(tk::tr("Table, {0} rows, {1} columns: {2}"),
+                                {std::to_string(rows.size()), std::to_string(cols), cells});
+            }
+            else
+            {
+                piece = spans_text(block.spans);
+            }
+            if (!piece.empty())
+                out += (out.empty() ? std::string() : std::string(" ")) + piece;
+        }
+        cached = out;
+        if (!out.empty())
+            return out;
+    }
+    return m.body;
+}
+
 class MessageListView::Adapter : public tk::ListAdapter,
                                  public tk::ListAdapterAccessibility
 {
@@ -3083,7 +3166,8 @@ public:
         case Kind::TimelineStart:
             return tk::tr("Start of conversation");
         case Kind::PinnedEvent:
-            return m.sender_name.empty() ? m.body : m.sender_name + " " + m.body;
+            return m.sender_name.empty() ? m.body
+                                         : tk::trf(tk::tr("{0} {1}"), {m.sender_name, m.body});
         case Kind::CallNotification:
         {
             const bool is_video = (m.body == "video");
@@ -3091,7 +3175,8 @@ public:
                 is_video ? tk::tr("started a video call")
                         : (m.body == "audio" ? tk::tr("started a voice call")
                                              : tk::tr("started a call"));
-            return m.sender_name.empty() ? intent : m.sender_name + " " + intent;
+            return m.sender_name.empty() ? intent
+                                         : tk::trf(tk::tr("{0} {1}"), {m.sender_name, intent});
         }
         case Kind::RoomName:
             return room_name_change_phrase(m);
@@ -3129,21 +3214,45 @@ public:
             break;
         }
 
-        // Real content rows: "{sender}: {description}", with reactions
-        // folded in as a trailing count (flattened-bubble approach — see
-        // this block's own top comment).
-        std::string body = message_row_access_body_(m);
-        std::string name = m.sender_name.empty() ? body : m.sender_name + ": " + body;
+        // Real content rows: "{sender}: {body}", then the context extras —
+        // reply target, edited, time, thread replies, reactions — so the
+        // message itself is heard first when arrowing through (flattened-
+        // bubble approach; interactive parts are the subtree below). Each
+        // piece is its own translatable phrase, joined by a translatable
+        // separator.
+        const std::string body = message_row_access_body_(m);
+        std::string name = m.sender_name.empty()
+                               ? body
+                               : tk::trf(tk::tr("{0}: {1}"), {m.sender_name, body});
+        std::vector<std::string> extras;
+        if (m.pending_state == MessageRowData::PendingState::Failed)
+            extras.push_back(tk::tr("not sent"));
+        else if (m.pending_state == MessageRowData::PendingState::Sending)
+            extras.push_back(tk::tr("sending"));
+        if (m.has_reply())
+            extras.push_back(m.in_reply_to_sender_name.empty()
+                                 ? tk::tr("in reply")
+                                 : tk::trf(tk::tr("replying to {0}"),
+                                           {m.in_reply_to_sender_name}));
+        if (m.is_edited)
+            extras.push_back(tk::tr("edited"));
+        if (m.timestamp_ms != 0)
+            extras.push_back(format_hhmm(m.timestamp_ms));
+        if (m.thread_reply_count > 0)
+            extras.push_back(tk::trf(tk::trn("{0} reply in thread", "{0} replies in thread",
+                                             static_cast<long>(m.thread_reply_count)),
+                                     {std::to_string(m.thread_reply_count)}));
         if (!m.reactions.empty())
         {
             std::uint64_t total = 0;
             for (const auto& r : m.reactions)
                 total += r.count;
-            name += " " +
-                   tk::trf(tk::trn("({0} reaction)", "({0} reactions)",
-                                  static_cast<int>(total)),
-                           {std::to_string(total)});
+            extras.push_back(tk::trf(tk::trn("{0} reaction", "{0} reactions",
+                                             static_cast<long>(total)),
+                                     {std::to_string(total)}));
         }
+        for (const auto& e : extras)
+            name = tk::trf(tk::tr("{0}, {1}"), {name, e});
         return name;
     }
 
@@ -3186,23 +3295,157 @@ public:
         MessageListView* v = &owner_;
         const std::string ev = m.event_id;
 
+        // ── Content: reply quote, links, preview cards, thread, media ──
+        // Each opens exactly what the corresponding click does.
+        if (m.has_reply())
+            out.push_back(action_node_(tk::tr("Jump to replied message"),
+                                       [v, ev] { return v->jump_to_reply_original_(ev); }));
+
+        if (m.kind == Kind::Text || m.kind == Kind::Notice || m.kind == Kind::Emote)
+        {
+            const std::vector<tk::TextSpan> spans =
+                m.formatted_body.empty() ? autolink_plain_to_spans(m.body)
+                                         : html_to_spans(m.formatted_body);
+            for (const auto& sp : spans)
+            {
+                if (sp.url.empty())
+                    continue;
+                tk::AccessNode link = action_node_(
+                    sp.text.empty() ? sp.url : sp.text,
+                    [v, url = sp.url] { return v->open_link_(url); });
+                link.role = tk::Role::Link;
+                out.push_back(std::move(link));
+            }
+        }
+
+        for (const UrlPreviewData* card : owner_.previews_.cards_for(m))
+        {
+            if (!card)
+                continue;
+            const std::string url = !card->matched_url.empty() ? card->matched_url : m.first_url;
+            if (url.empty())
+                continue;
+            tk::AccessNode node = action_node_(
+                card->title.empty() ? tk::trf(tk::tr("Link preview: {0}"), {url})
+                                    : tk::trf(tk::tr("Link preview: {0}"), {card->title}),
+                [v, url]
+                {
+                    if (!v->on_link_clicked)
+                        return false;
+                    v->on_link_clicked(url);
+                    return true;
+                });
+            node.role = tk::Role::Link;
+            out.push_back(std::move(node));
+        }
+
+        if (m.is_thread_root && m.thread_reply_count > 0)
+        {
+            tk::AccessNode chip = action_node_(
+                tk::trf(tk::trn("Open thread, {0} reply", "Open thread, {0} replies",
+                                static_cast<long>(m.thread_reply_count)),
+                        {std::to_string(m.thread_reply_count)}),
+                [v, ev]
+                {
+                    if (!v->on_thread_preview_clicked)
+                        return false;
+                    v->on_thread_preview_clicked(ev);
+                    return true;
+                });
+            chip.subtree_id = "thread";
+            out.push_back(std::move(chip));
+        }
+
+        const bool hidden_media = owner_.media_is_hidden_by_eid_(ev);
+        if (hidden_media && (m.kind == Kind::Image || m.kind == Kind::Video))
+        {
+            out.push_back(action_node_(tk::tr("Show hidden media"),
+                                       [v, ev]
+                                       {
+                                           if (!v->on_reveal_media)
+                                               return false;
+                                           v->on_reveal_media(ev);
+                                           return true;
+                                       }));
+        }
+        else if (m.kind == Kind::Image)
+        {
+            out.push_back(action_node_(tk::tr("Open image"),
+                                       [v, ev]
+                                       {
+                                           auto it = v->image_geom_.find(ev);
+                                           if (it == v->image_geom_.end() || !v->on_image_clicked)
+                                               return false;
+                                           v->on_image_clicked(it->second);
+                                           return true;
+                                       }));
+        }
+        else if (m.kind == Kind::Video)
+        {
+            out.push_back(action_node_(tk::tr("Play video"),
+                                       [v, ev]
+                                       {
+                                           auto it = v->video_geom_.find(ev);
+                                           if (it == v->video_geom_.end() || !v->on_video_clicked)
+                                               return false;
+                                           v->on_video_clicked(it->second);
+                                           return true;
+                                       }));
+        }
+        else if (m.kind == Kind::File)
+        {
+            out.push_back(action_node_(tk::tr("Open file"),
+                                       [v, ev]
+                                       {
+                                           auto it = v->file_geom_.find(ev);
+                                           if (it == v->file_geom_.end() || !v->on_file_clicked)
+                                               return false;
+                                           v->on_file_clicked(it->second);
+                                           return true;
+                                       }));
+        }
+        else if (m.kind == Kind::Audio || m.kind == Kind::Voice)
+        {
+            const bool playing = owner_.media_.playing_event_id() == ev;
+            tk::AccessNode play = action_node_(
+                playing ? tk::tr("Pause") : tk::tr("Play"),
+                [v, ev, voice = m.kind == Kind::Voice]
+                {
+                    for (const auto& row : v->messages_)
+                    {
+                        if (row.event_id != ev)
+                            continue;
+                        if (voice)
+                            v->media_.handle_voice_play_click(row);
+                        else
+                            v->media_.handle_audio_play_click(row);
+                        return true;
+                    }
+                    return false;
+                });
+            play.subtree_id = "media:play";
+            out.push_back(std::move(play));
+        }
+
         // ── Reactions ──────────────────────────────────────────────────
         if (!m.reactions.empty())
         {
             tk::AccessNode group;
             group.role = tk::Role::Group;
             group.name = tk::tr("Reactions");
+            group.subtree_id = "reactions";
             for (const auto& r : m.reactions)
             {
                 tk::AccessNode chip;
                 chip.role          = tk::Role::Switch;
+                chip.subtree_id    = "reaction:" + r.key;
                 chip.state.checked = r.reacted_by_me;
                 chip.name = tk::trf(
                     tk::trn("{0}, {1} reaction", "{0}, {1} reactions",
                             static_cast<int>(r.count)),
                     {r.key, std::to_string(r.count)});
                 if (r.reacted_by_me)
-                    chip.name += ", " + tk::tr("reacted by you");
+                    chip.name = tk::trf(tk::tr("{0}, {1}"), {chip.name, tk::tr("reacted by you")});
                 const std::string key = r.key;
                 const std::string src =
                     r.source ? r.source->mxc_url() : std::string{};
@@ -3301,6 +3544,7 @@ public:
             }
             tk::AccessNode rr_node;
             rr_node.role = tk::Role::StaticText;
+            rr_node.subtree_id = "receipts";
             rr_node.name = tk::trf(tk::tr("Read by {0}"), {names});
             out.push_back(std::move(rr_node));
         }
@@ -3499,31 +3743,7 @@ private:
     // type description for media kinds with no caption.
     std::string message_row_access_body_(const MessageRowData& m) const
     {
-        using Kind = MessageRowData::Kind;
-        switch (m.kind)
-        {
-        case Kind::Redacted:
-            return tk::tr("Message deleted");
-        case Kind::Utd:
-            return tk::tr("Unable to decrypt message");
-        case Kind::Image:
-            return m.has_filename_caption && !m.body.empty() ? m.body : tk::tr("Image");
-        case Kind::Sticker:
-            return tk::tr("Sticker");
-        case Kind::File:
-            return m.file_name.empty() ? tk::tr("File") : m.file_name;
-        case Kind::Audio:
-            return tk::tr("Audio message");
-        case Kind::Voice:
-            return tk::tr("Voice message");
-        case Kind::Video:
-            return m.has_filename_caption && !m.body.empty() ? m.body : tk::tr("Video");
-        case Kind::Location:
-            return m.location_description.empty() ? tk::tr("Location")
-                                                   : m.location_description;
-        default:
-            return m.body;
-        }
+        return message_access_body(m);
     }
 
     // ── Row hover-highlight cross-fade (see paint_row) ──────────────────────
@@ -7037,6 +7257,16 @@ void MessageListView::update_message(std::size_t index, MessageRowData msg)
     {
         return;
     }
+    // A local echo that just failed to send: say so (the row's red marker
+    // is visual only).
+    if (msg.pending_state == MessageRowData::PendingState::Failed &&
+        messages_[index].pending_state != MessageRowData::PendingState::Failed && host())
+    {
+        host()->announce(msg.pending_error.empty()
+                             ? tk::tr("Message not sent")
+                             : tk::trf(tk::tr("Message not sent: {0}"), {msg.pending_error}),
+                         tk::Host::Politeness::Assertive);
+    }
     if (msg.kind == MessageRowData::Kind::ReadMarker)
     {
         suppress_read_marker_ = false;
@@ -7175,6 +7405,52 @@ void MessageListView::set_highlighted_event(const std::string& event_id)
     {
         request_repaint_();
     }
+}
+
+bool MessageListView::jump_to_reply_original_(const std::string& reply_event_id)
+{
+    for (std::size_t i = 0; i < messages_.size(); ++i)
+    {
+        if (messages_[i].event_id != reply_event_id)
+            continue;
+        const std::string orig_id = messages_[i].in_reply_to_id;
+        if (orig_id.empty())
+            return false;
+        for (std::size_t j = 0; j < messages_.size(); ++j)
+        {
+            if (messages_[j].event_id == orig_id)
+            {
+                scroll_to_index(static_cast<int>(j));
+                start_jump_highlight(orig_id);
+                return true;
+            }
+        }
+        if (on_scroll_to_original)
+        {
+            on_scroll_to_original(orig_id);
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+bool MessageListView::open_link_(const std::string& url)
+{
+    // A matrix.to user link is a mention pill — open the profile panel
+    // instead of a browser.
+    const std::string uid = mention_user_id_from_url(url);
+    if (!uid.empty() && on_mention_clicked)
+    {
+        on_mention_clicked(uid);
+        return true;
+    }
+    if (on_link_clicked)
+    {
+        on_link_clicked(url);
+        return true;
+    }
+    return false;
 }
 
 void MessageListView::start_jump_highlight(const std::string& event_id)
@@ -9696,33 +9972,7 @@ void MessageListView::on_pointer_up(tk::Point local, bool inside_self)
         press_quote_ = false;
         press_quote_event_id_.clear();
         if (fire)
-        {
-            for (std::size_t i = 0; i < messages_.size(); ++i)
-            {
-                if (messages_[i].event_id == ev)
-                {
-                    const std::string& orig_id = messages_[i].in_reply_to_id;
-                    if (orig_id.empty())
-                    {
-                        break;
-                    }
-                    for (std::size_t j = 0; j < messages_.size(); ++j)
-                    {
-                        if (messages_[j].event_id == orig_id)
-                        {
-                            scroll_to_index(static_cast<int>(j));
-                            start_jump_highlight(orig_id);
-                            return;
-                        }
-                    }
-                    if (on_scroll_to_original)
-                    {
-                        on_scroll_to_original(orig_id);
-                    }
-                    break;
-                }
-            }
-        }
+            jump_to_reply_original_(ev);
         return;
     }
 
@@ -9731,19 +9981,7 @@ void MessageListView::on_pointer_up(tk::Point local, bool inside_self)
         std::string url = std::move(press_link_url_);
         press_link_url_.clear();
         if (inside_self)
-        {
-            // A matrix.to user link is a mention pill — open the profile panel
-            // instead of a browser.
-            std::string uid = mention_user_id_from_url(url);
-            if (!uid.empty() && on_mention_clicked)
-            {
-                on_mention_clicked(uid);
-            }
-            else if (on_link_clicked)
-            {
-                on_link_clicked(url);
-            }
-        }
+            open_link_(url);
         return;
     }
 

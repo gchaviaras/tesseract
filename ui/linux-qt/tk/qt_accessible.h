@@ -12,6 +12,8 @@
 
 #include <QtWidgets/QWidget>
 
+#include <string>
+
 namespace tk
 {
 class Widget;
@@ -33,5 +35,9 @@ void install_accessible_factory();
 // tk::macos::notify_focus_changed. `old` is unused today; kept for symmetry
 // with Host::on_focus_changed_'s signature and those two.
 void notify_focus_changed(Surface* surface, tk::Widget* old, tk::Widget* now);
+
+// Speaks `text` via a QAccessibleAnnouncementEvent (Qt >= 6.8; no-op on
+// older Qt). Called from tk::qt6::Host's on_announce_() override.
+void announce(Surface* surface, const std::string& text, bool assertive);
 
 } // namespace tk::qt6

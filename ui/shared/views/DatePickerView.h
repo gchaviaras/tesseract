@@ -12,6 +12,7 @@
 //      pointer events through the Widget::dispatch_pointer_* methods.
 //   5. Wire on_date_picked / on_dismiss to react to user actions.
 
+#include "tk/access_tree.h"
 #include "tk/animator.h"
 #include "tk/widget.h"
 
@@ -26,7 +27,7 @@
 namespace tesseract::views
 {
 
-class DatePickerView : public tk::Widget
+class DatePickerView : public tk::Widget, public tk::WidgetRowAccessibility
 {
 public:
     // Popup card dimensions (logical px).
@@ -77,6 +78,22 @@ public:
     // hover-highlight logic draws it for free); PageUp/PageDown change
     // month; Enter/Space picks the highlighted day; Escape dismisses.
     bool     on_key_down(const tk::KeyEvent& event) override;
+
+    // ── Accessibility ─────────────────────────────────────────────────────
+    // A grid named by the shown month ("October 2026"): rows are the
+    // previous/next-month buttons, the current month's day cells (6×7 grid
+    // positions, the keyboard highlight as `selected`), and "Today".
+    tk::Role    access_role() const override { return tk::Role::Grid; }
+    std::string access_name() const override;
+    std::size_t access_row_count() const override;
+    tk::Role    access_role_for_widget_row(std::size_t i) const override;
+    std::string access_name_for_widget_row(std::size_t i) const override;
+    std::string access_description_for_widget_row(std::size_t i) const override;
+    tk::AccessState access_state_for_widget_row(std::size_t i) const override;
+    bool        access_activate_widget_row(std::size_t i) override;
+    tk::Rect    access_rect_for_widget_row(std::size_t i) const override;
+    std::pair<int, int> access_grid_cell_for_widget_row(std::size_t i) const override;
+    std::pair<int, int> access_grid_size() const override { return {kRows, kCols}; }
 
 private:
     // ── layout constants ──────────────────────────────────────────────────────
@@ -174,6 +191,10 @@ private:
 
     // Whether today's date is selectable (within max_date).
     bool today_enabled() const;
+    // Shift the shown month by -1 / +1 within [1970-01, max]; true if it moved.
+    bool step_month_(int dir);
+    void pick_cell_(int cell);
+    void pick_today_();
 
     // Helper: ensure all static layouts (DOW labels, "Today", nav glyphs)
     // have been built with the given factory, and rebuild on factory change.

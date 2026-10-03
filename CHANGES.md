@@ -7,6 +7,12 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-03
 
+- feat(a11y): accessibility framework: canvas popups and grids are reachable, an open dialog hides what's behind it, and `Host::announce()` speaks status (toasts, status line, send failures, call join/leave). The four bridges push name/state changes while a screen reader is attached. Qt6 build + ctest 2135/2135
+- feat(a11y): the encryption, invite and forward dialogs work with a screen reader and the keyboard; their links, option cards and footer buttons are real buttons. Qt6 build + ctest 2135/2135
+- feat(a11y): previously silent lists and painted views are exposed, from the room directory and space views to the date picker, pinned banner and room header. Qt6 build + ctest 2135/2135
+- feat(a11y): messages read sender and body, then reply, edited, time, thread and reactions, and their links and media controls are actionable. Context menus take arrow keys, Enter and Escape. Qt6 build + ctest 2135/2135
+- fix(a11y): password fields no longer expose the typed text, and per-message actions no longer share one identity in the bridges. Qt6 build + ctest 2135/2135
+
 - fix(windows): JPEGs with an EXIF orientation other than 1 (e.g. phone portrait photos) now display rotated instead of as an empty box; the image is decoded before it is rotated, and a failed rotation falls back to the unrotated image. Compressed sends of such photos use the same decode-then-rotate order. Windows build; user-verified live (receive + compressed send)
 
 ### 2026-10-02

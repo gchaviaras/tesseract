@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "tk/canvas.h"
+#include "tk/controls.h"
 #include "tk/theme.h"
 #include "views/PinnedBanner.h"
 #include "tk_test_surface.h"
@@ -74,9 +75,39 @@ TEST_CASE("PinnedBanner::on_jump_to fires for the currently-displayed pin",
     std::string clicked;
     b.on_jump_to = [&](const std::string& id) { clicked = id; };
 
-    // Body rect starts at x=0 and is wide; click near the middle.
+    // The body is a real button filling the banner's left part; press and
+    // release near its middle (button-local coordinates).
+    tk::Button* body = b.body_button();
+    REQUIRE(body != nullptr);
+    REQUIRE(body->visible());
     const tk::Point p{50.0f, PinnedBanner::kBannerH * 0.5f};
-    REQUIRE(b.on_pointer_down(p));
-    b.on_pointer_up(p, /*inside_self=*/true);
+    REQUIRE(body->on_pointer_down(p));
+    body->on_pointer_up(p, /*inside_self=*/true);
     CHECK(clicked == "$pinned");
+}
+
+TEST_CASE("PinnedBanner chevrons step through pins and are named for AT",
+          "[pinned_banner][accessibility]")
+{
+    TkPinnedBannerStage st;
+    PinnedBanner b;
+    b.set_pins({make_pin("$a", 100), make_pin("$b", 200)});
+    st.arrange(b, {0, 0, 400, PinnedBanner::kBannerH});
+
+    CHECK(b.access_role() == tk::Role::Group);
+    CHECK(b.access_name() == "Pinned messages");
+    CHECK(b.access_description() == "1 of 2");
+    REQUIRE(b.previous_button()->visible());
+    CHECK_FALSE(b.previous_button()->enabled());
+    CHECK(b.next_button()->access_name() == "Next pinned message");
+    CHECK(b.body_button()->access_name() == "Jump to pinned message: Alice: Important");
+
+    CHECK(b.next_button()->access_default_action());
+    CHECK(b.current_index() == 1);
+    CHECK(b.access_description() == "2 of 2");
+    CHECK(b.previous_button()->enabled());
+    CHECK_FALSE(b.next_button()->enabled());
+
+    b.set_pins({make_pin("$only", 1)});
+    CHECK_FALSE(b.previous_button()->visible());
 }

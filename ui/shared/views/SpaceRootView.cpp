@@ -134,6 +134,7 @@ SpaceRootView::SpaceRootView()
     settings_btn_ = add_child(
         tk::create_widget<tk::Button>(this, "\xF0\x9F\x94\xA7", std::function<void()>{},
                                      tk::Button::Variant::Icon));
+    settings_btn_->set_accessible_name(tk::tr("Space settings"));
     settings_btn_->set_on_click([this]() {
         if (!space_ || !settings_view_) return;
         settings_view_->open(*space_);

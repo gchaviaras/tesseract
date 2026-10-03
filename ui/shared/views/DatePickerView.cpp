@@ -360,50 +360,178 @@ void DatePickerView::on_pointer_up(tk::Point local, bool inside_self)
         return; // released on different target — cancel
 
     if (z == Zone::PrevBtn)
-    {
-        if (!(view_year_ == 1970 && view_month_ == 1))
-        {
-            // We don't have a factory here; schedule a re-navigate flag and
-            // let paint_overlay() pick it up.  To keep it simple, force a
-            // cell rebuild by zeroing the first cell's month marker.
-            if (--view_month_ < 1)
-            {
-                view_month_ = 12;
-                --view_year_;
-            }
-            layouts_[0].reset();
-            cells_[0].month = 0; // force rebuild on next paint
-        }
-    }
+        step_month_(-1);
     else if (z == Zone::NextBtn)
-    {
-        if (!(view_year_ == max_year_ && view_month_ == max_month_))
-        {
-            if (++view_month_ > 12)
-            {
-                view_month_ = 1;
-                ++view_year_;
-            }
-            layouts_[0].reset();
-            cells_[0].month = 0;
-        }
-    }
+        step_month_(1);
     else if (z == Zone::DayCell)
+        pick_cell_(cell);
+    else if (z == Zone::TodayBtn)
+        pick_today_();
+}
+
+bool DatePickerView::step_month_(int dir)
+{
+    if (dir < 0)
     {
-        if (cell >= 0 && cell < kRows * kCols && cells_[cell].enabled)
+        if (view_year_ == 1970 && view_month_ == 1)
+            return false;
+        if (--view_month_ < 1)
         {
-            const auto& ci = cells_[cell];
-            if (on_date_picked)
-                on_date_picked(ci.year, ci.month, ci.day);
+            view_month_ = 12;
+            --view_year_;
         }
     }
-    else if (z == Zone::TodayBtn && today_enabled())
+    else
     {
-        int ty, tm, td;
-        today(ty, tm, td);
-        if (on_date_picked)
-            on_date_picked(ty, tm, td);
+        if (view_year_ == max_year_ && view_month_ == max_month_)
+            return false;
+        if (++view_month_ > 12)
+        {
+            view_month_ = 1;
+            ++view_year_;
+        }
     }
+    // No factory here: force a cell rebuild on the next paint_overlay() by
+    // zeroing the first cell's month marker.
+    layouts_[0].reset();
+    cells_[0].month = 0;
+    if (host())
+        host()->request_repaint();
+    return true;
+}
+
+void DatePickerView::pick_cell_(int cell)
+{
+    if (cell < 0 || cell >= kRows * kCols || !cells_[cell].enabled)
+        return;
+    const auto& ci = cells_[cell];
+    if (on_date_picked)
+        on_date_picked(ci.year, ci.month, ci.day);
+}
+
+void DatePickerView::pick_today_()
+{
+    if (!today_enabled())
+        return;
+    int ty, tm, td;
+    today(ty, tm, td);
+    if (on_date_picked)
+        on_date_picked(ty, tm, td);
+}
+
+// ── Accessibility ─────────────────────────────────────────────────────────────
+// Rows: 0 = previous month, 1 = next month, 2 .. 2+42 = day cells (spill
+// days from adjacent months report Role::None), last = Today.
+
+namespace
+{
+constexpr std::size_t kDateRowPrev  = 0;
+constexpr std::size_t kDateRowNext  = 1;
+constexpr std::size_t kDateRowCell0 = 2;
+} // namespace
+
+std::string DatePickerView::access_name() const
+{
+    std::tm month_tm{};
+    month_tm.tm_year = view_year_ - 1900;
+    month_tm.tm_mon  = view_month_ - 1;
+    month_tm.tm_mday = 1;
+    return tk::format_date(month_tm, tk::tr("%B %Y"));
+}
+
+std::size_t DatePickerView::access_row_count() const
+{
+    return kDateRowCell0 + static_cast<std::size_t>(kRows * kCols) + 1;
+}
+
+tk::Role DatePickerView::access_role_for_widget_row(std::size_t i) const
+{
+    if (i == kDateRowPrev || i == kDateRowNext)
+        return tk::Role::Button;
+    if (i >= kDateRowCell0 + static_cast<std::size_t>(kRows * kCols))
+        return tk::Role::Button; // Today
+    const auto& ci = cells_[i - kDateRowCell0];
+    return (ci.year != 0 && ci.in_month) ? tk::Role::GridCell : tk::Role::None;
+}
+
+std::string DatePickerView::access_name_for_widget_row(std::size_t i) const
+{
+    if (i == kDateRowPrev)
+        return tk::tr("Previous month");
+    if (i == kDateRowNext)
+        return tk::tr("Next month");
+    if (i >= kDateRowCell0 + static_cast<std::size_t>(kRows * kCols))
+        return tk::tr("Today");
+    const auto& ci = cells_[i - kDateRowCell0];
+    std::tm day_tm{};
+    day_tm.tm_year = ci.year - 1900;
+    day_tm.tm_mon  = ci.month - 1;
+    day_tm.tm_mday = ci.day;
+    return tk::format_date(day_tm, tk::tr("%B %-d, %Y"));
+}
+
+std::string DatePickerView::access_description_for_widget_row(std::size_t i) const
+{
+    if (i < kDateRowCell0 || i >= kDateRowCell0 + static_cast<std::size_t>(kRows * kCols))
+        return {};
+    return cells_[i - kDateRowCell0].is_today ? tk::tr("Today") : std::string();
+}
+
+tk::AccessState DatePickerView::access_state_for_widget_row(std::size_t i) const
+{
+    tk::AccessState st;
+    if (i == kDateRowPrev)
+        st.disabled = view_year_ == 1970 && view_month_ == 1;
+    else if (i == kDateRowNext)
+        st.disabled = view_year_ == max_year_ && view_month_ == max_month_;
+    else if (i >= kDateRowCell0 + static_cast<std::size_t>(kRows * kCols))
+        st.disabled = !today_enabled();
+    else
+    {
+        const int cell = static_cast<int>(i - kDateRowCell0);
+        st.disabled = !cells_[cell].enabled;
+        st.selected = hovered_zone_ == Zone::DayCell && hovered_cell_ == cell;
+    }
+    return st;
+}
+
+bool DatePickerView::access_activate_widget_row(std::size_t i)
+{
+    if (i == kDateRowPrev)
+        return step_month_(-1);
+    if (i == kDateRowNext)
+        return step_month_(1);
+    if (i >= kDateRowCell0 + static_cast<std::size_t>(kRows * kCols))
+    {
+        if (!today_enabled())
+            return false;
+        pick_today_();
+        return true;
+    }
+    const int cell = static_cast<int>(i - kDateRowCell0);
+    if (!cells_[cell].enabled)
+        return false;
+    pick_cell_(cell);
+    return true;
+}
+
+tk::Rect DatePickerView::access_rect_for_widget_row(std::size_t i) const
+{
+    if (i == kDateRowPrev)
+        return prev_btn_rect_;
+    if (i == kDateRowNext)
+        return next_btn_rect_;
+    if (i >= kDateRowCell0 + static_cast<std::size_t>(kRows * kCols))
+        return today_btn_rect_;
+    return cell_world_rect(static_cast<int>(i - kDateRowCell0));
+}
+
+std::pair<int, int> DatePickerView::access_grid_cell_for_widget_row(std::size_t i) const
+{
+    if (i < kDateRowCell0 || i >= kDateRowCell0 + static_cast<std::size_t>(kRows * kCols))
+        return {-1, -1};
+    const int cell = static_cast<int>(i - kDateRowCell0);
+    return {cell / kCols, cell % kCols};
 }
 
 bool DatePickerView::on_pointer_move(tk::Point local)
@@ -510,27 +638,7 @@ bool DatePickerView::on_key_down(const tk::KeyEvent& e)
 
     if (e.key == tk::Key::PageUp || e.key == tk::Key::PageDown)
     {
-        const bool next = (e.key == tk::Key::PageDown);
-        if (next && !(view_year_ == max_year_ && view_month_ == max_month_))
-        {
-            if (++view_month_ > 12)
-            {
-                view_month_ = 1;
-                ++view_year_;
-            }
-            layouts_[0].reset();
-            cells_[0].month = 0; // force rebuild on next paint
-        }
-        else if (!next && !(view_year_ == 1970 && view_month_ == 1))
-        {
-            if (--view_month_ < 1)
-            {
-                view_month_ = 12;
-                --view_year_;
-            }
-            layouts_[0].reset();
-            cells_[0].month = 0;
-        }
+        step_month_(e.key == tk::Key::PageDown ? 1 : -1);
         // Cells for the new month haven't been rebuilt yet (no factory
         // here — paint_overlay() picks it up next frame), so there's
         // nothing sensible to highlight until then.
@@ -541,13 +649,8 @@ bool DatePickerView::on_key_down(const tk::KeyEvent& e)
 
     if (e.key == tk::Key::Enter || e.key == tk::Key::Space)
     {
-        if (hovered_zone_ == Zone::DayCell && hovered_cell_ >= 0 &&
-            hovered_cell_ < kRows * kCols && cells_[hovered_cell_].enabled)
-        {
-            const auto& ci = cells_[hovered_cell_];
-            if (on_date_picked)
-                on_date_picked(ci.year, ci.month, ci.day);
-        }
+        if (hovered_zone_ == Zone::DayCell)
+            pick_cell_(hovered_cell_);
         return true;
     }
 

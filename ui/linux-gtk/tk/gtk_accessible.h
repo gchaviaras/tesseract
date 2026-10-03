@@ -24,6 +24,8 @@ namespace tk
 class Widget;
 }
 
+#include <string>
+
 namespace tk::gtk4
 {
 
@@ -44,5 +46,9 @@ void attach_accessible_bridge(Surface& surface);
 // announced too, not just row navigation. No-op if `overlay` has no attached
 // bridge yet, or `now` isn't (yet) part of a built access tree.
 void notify_focus_changed(GtkWidget* overlay, tk::Widget* now);
+
+// Speaks `text` via gtk_accessible_announce() (GTK >= 4.14; no-op on older
+// GTK). Called from tk::gtk4::Host's on_announce_() override.
+void announce(GtkWidget* overlay, const std::string& text, bool assertive);
 
 } // namespace tk::gtk4

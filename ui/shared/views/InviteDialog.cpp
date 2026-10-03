@@ -38,10 +38,57 @@ bool hit(const tk::Rect& r, tk::Point p)
 
 // ─────────────────────────────────────────────────────────────────────────
 
-class InviteDialog::Adapter : public tk::ListAdapter
+class InviteDialog::Adapter : public tk::ListAdapter, public tk::ListAdapterAccessibility
 {
 public:
     explicit Adapter(InviteDialog& owner) : owner_(owner) {}
+
+    // Each row is a checkbox: checked = in the invite list; rows that can't
+    // be picked (already a member / looking up / not found) are disabled
+    // and say why in their description.
+    tk::Role access_role_for_row(std::size_t index) const override
+    {
+        return index < owner_.rows_.size() ? tk::Role::CheckBox : tk::Role::None;
+    }
+    std::string access_name_for_row(std::size_t index) const override
+    {
+        if (index >= owner_.rows_.size())
+            return {};
+        const UserEntry& u = owner_.rows_[index].user;
+        if (u.display_name.empty())
+            return u.user_id;
+        return tk::trf(tk::tr("{0} ({1})"), {u.display_name, u.user_id});
+    }
+    std::string access_description_for_row(std::size_t index) const override
+    {
+        if (index >= owner_.rows_.size())
+            return {};
+        switch (owner_.rows_[index].state)
+        {
+        case RowState::AlreadyMember: return tk::tr("Already in room");
+        case RowState::Resolving:     return tk::tr("Looking up\xE2\x80\xA6");
+        case RowState::NotFound:      return tk::tr("User not found");
+        default:                      return {};
+        }
+    }
+    tk::AccessState access_state_for_row(std::size_t index) const override
+    {
+        tk::AccessState st;
+        if (index >= owner_.rows_.size())
+            return st;
+        const RowState rs = owner_.rows_[index].state;
+        st.checked  = rs == RowState::Selected;
+        st.disabled = rs != RowState::Selected && rs != RowState::Available;
+        st.busy     = rs == RowState::Resolving;
+        return st;
+    }
+    bool access_activate_row(std::size_t index) override
+    {
+        if (index >= owner_.rows_.size())
+            return false;
+        owner_.toggle_row_(index);
+        return true;
+    }
 
     std::size_t count() const override { return owner_.rows_.size(); }
 
@@ -221,9 +268,73 @@ InviteDialog::InviteDialog()
             search_field_->set_focused(true);
     };
     list_ = add_child(std::move(list));
+
+    cancel_btn_ = add_child(tk::create_widget<tk::Button>(
+        this, tk::tr("Cancel"), [this] { close(); }, tk::Button::Variant::Subtle));
+    confirm_btn_ = add_child(tk::create_widget<tk::Button>(
+        this, tk::tr("Invite"), [this] { confirm(); }, tk::Button::Variant::Primary));
+    dismiss_btn_ = add_child(tk::create_widget<tk::Button>(
+        this, tk::tr("Dismiss"), [this] { close(); }, tk::Button::Variant::Subtle));
+    dismiss_btn_->set_visible(false);
 }
 
 InviteDialog::~InviteDialog() = default;
+
+std::string InviteDialog::title_() const
+{
+    return room_name_.empty() ? tk::tr("Invite to room")
+                              : tk::trf(tk::tr("Invite to {0}"), {room_name_});
+}
+
+std::vector<std::string> InviteDialog::access_texts_() const
+{
+    if (!is_open_)
+        return {};
+    if (inviting_)
+    {
+        if (!inviting_status_.empty())
+            return {inviting_status_};
+        return error_lines_;
+    }
+    if (rows_.empty())
+        return {tk::tr("No matching people")};
+    return {};
+}
+
+std::string InviteDialog::access_name_for_widget_row(std::size_t i) const
+{
+    const auto texts = access_texts_();
+    return i < texts.size() ? texts[i] : std::string();
+}
+
+tk::Rect InviteDialog::access_rect_for_widget_row(std::size_t) const
+{
+    const float header_h = kTitleH + field_height_() + kInviteFieldGapB;
+    return {card_rect_.x, card_rect_.y + header_h, card_rect_.w,
+            std::max(0.0f, card_rect_.h - header_h - kFooterH)};
+}
+
+void InviteDialog::announce_(const std::string& text, bool assertive)
+{
+    if (host())
+        host()->announce(text, assertive ? tk::Host::Politeness::Assertive
+                                         : tk::Host::Politeness::Polite);
+}
+
+bool InviteDialog::on_key_down(const tk::KeyEvent& e)
+{
+    if (!is_open_)
+        return false;
+    if (e.key == tk::Key::Escape)
+    {
+        // Like the backdrop: no dismissing mid-invite (the error body and
+        // its Dismiss step would be lost). Once errors show, Escape = Dismiss.
+        if (!inviting_ || (inviting_status_.empty() && !error_lines_.empty()))
+            close();
+        return true;
+    }
+    return false;
+}
 
 void InviteDialog::set_users_filter(UsersFilter f)
 {
@@ -287,7 +398,7 @@ void InviteDialog::open(const std::string& room_id, const std::string& room_name
     pill_entries_.clear();
     existing_members_.clear();
     parse_ = {};
-    press_outside_ = press_cancel_ = press_confirm_ = press_dismiss_ = false;
+    press_outside_ = false;
     inviting_      = false;
     invite_errors_ = 0;
     inviting_status_.clear();
@@ -322,7 +433,7 @@ void InviteDialog::close()
     rows_.clear();
     resolved_.clear();
     pill_entries_.clear();
-    press_outside_ = press_cancel_ = press_confirm_ = press_dismiss_ = false;
+    press_outside_ = false;
     inviting_      = false;
     invite_errors_ = 0;
     inviting_status_.clear();
@@ -659,11 +770,13 @@ void InviteDialog::set_inviting(int user_count)
 {
     inviting_      = true;
     invite_errors_ = 0;
+    invite_count_  = user_count;
     error_lines_.clear();
     inviting_status_ = tk::trf(
         tk::trn("Inviting {0} person\xE2\x80\xA6", "Inviting {0} people\xE2\x80\xA6",
                 static_cast<long>(user_count)),
         {std::to_string(user_count)});
+    announce_(inviting_status_);
     relayout_();
 }
 
@@ -678,10 +791,17 @@ void InviteDialog::mark_complete()
 {
     if (invite_errors_ == 0)
     {
+        announce_(tk::trf(tk::trn("Invited {0} person", "Invited {0} people",
+                                  static_cast<long>(invite_count_)),
+                          {std::to_string(invite_count_)}));
         close();
         return;
     }
     inviting_status_.clear();
+    std::string all;
+    for (const auto& line : error_lines_)
+        all += (all.empty() ? "" : "\n") + line;
+    announce_(all, true);
     relayout_();
 }
 
@@ -735,10 +855,17 @@ void InviteDialog::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     const float footer_y = cy + ch - kFooterH;
     const float btn_y    = footer_y + (kFooterH - kInviteBtnH) * 0.5f;
     constexpr float confirm_w = 112.0f; // room for "Invite (99)"
-    confirm_btn_rect_ = {cx + cw - kInvitePadX - confirm_w, btn_y, confirm_w, kInviteBtnH};
-    cancel_btn_rect_  = {confirm_btn_rect_.x - kInviteBtnGap - kInviteBtnMinW, btn_y,
-                         kInviteBtnMinW, kInviteBtnH};
-    dismiss_btn_rect_ = confirm_btn_rect_;
+    const tk::Rect confirm_rect{cx + cw - kInvitePadX - confirm_w, btn_y, confirm_w,
+                                kInviteBtnH};
+    const tk::Rect cancel_rect{confirm_rect.x - kInviteBtnGap - kInviteBtnMinW, btn_y,
+                               kInviteBtnMinW, kInviteBtnH};
+    const bool show_dismiss = inviting_ && inviting_status_.empty() && !error_lines_.empty();
+    cancel_btn_->set_visible(!inviting_);
+    confirm_btn_->set_visible(!inviting_);
+    dismiss_btn_->set_visible(show_dismiss);
+    cancel_btn_->arrange(ctx, cancel_rect);
+    confirm_btn_->arrange(ctx, confirm_rect);
+    dismiss_btn_->arrange(ctx, confirm_rect);
 
     list_->set_visible(!inviting_);
     list_->arrange(ctx, {cx, cy + header_h, cw, std::max(0.0f, ch - chrome_h)});
@@ -770,9 +897,7 @@ void InviteDialog::paint(tk::PaintCtx& ctx)
         ts.role      = tk::FontRole::Title;
         ts.trim      = tk::TextTrim::Ellipsis;
         ts.max_width = std::max(0.0f, card_rect_.w - 2.0f * kInvitePadX);
-        const std::string title =
-            room_name_.empty() ? tk::tr("Invite to room")
-                               : tk::trf(tk::tr("Invite to {0}"), {room_name_});
+        const std::string title = title_();
         if (auto lo = ctx.factory.build_text(title, ts))
         {
             const tk::Size sz = lo->measure();
@@ -788,29 +913,6 @@ void InviteDialog::paint(tk::PaintCtx& ctx)
         pal.separator);
     const float footer_y = card_rect_.y + card_rect_.h - kFooterH;
     ctx.canvas.fill_rect({card_rect_.x, footer_y, card_rect_.w, 1.0f}, pal.separator);
-
-    auto draw_button = [&](const tk::Rect& r, const std::string& label,
-                           bool primary, bool enabled, bool pressed)
-    {
-        tk::Color bg;
-        if (primary)
-            bg = enabled ? (pressed ? pal.accent_pressed : pal.accent) : pal.sidebar_hover;
-        else
-            bg = pressed ? pal.sidebar_hover : pal.compose_card_bg;
-        ctx.canvas.fill_rounded_rect(r, kInviteBtnRadius, bg);
-        if (!primary)
-            ctx.canvas.stroke_rounded_rect(r, kInviteBtnRadius, pal.border, 1.0f);
-        tk::TextStyle bs{};
-        bs.role = tk::FontRole::Body;
-        if (auto lo = ctx.factory.build_text(label, bs))
-        {
-            const tk::Size sz = lo->measure();
-            const tk::Color fg = primary ? (enabled ? pal.text_on_accent : pal.text_muted)
-                                         : pal.text_primary;
-            ctx.canvas.draw_text(*lo, {r.x + (r.w - sz.w) * 0.5f, r.y + (r.h - sz.h) * 0.5f},
-                                 fg);
-        }
-    };
 
     const float body_y = card_rect_.y + header_h;
     const float body_h = card_rect_.h - header_h - kFooterH;
@@ -849,7 +951,8 @@ void InviteDialog::paint(tk::PaintCtx& ctx)
                 ctx.canvas.draw_text(*lo, {card_rect_.x + kPad, ey}, pal.destructive);
                 ey += h + kLineGap;
             }
-            draw_button(dismiss_btn_rect_, tk::tr("Dismiss"), false, true, press_dismiss_);
+            if (dismiss_btn_->visible())
+                dismiss_btn_->paint(ctx);
         }
         return;
     }
@@ -864,11 +967,14 @@ void InviteDialog::paint(tk::PaintCtx& ctx)
     for (const auto& r : rows_)
         resolving = resolving || r.state == RowState::Resolving;
     const bool can_invite = !ids.empty() && !resolving;
-    draw_button(cancel_btn_rect_, tk::tr("Cancel"), false, true, press_cancel_);
-    draw_button(confirm_btn_rect_,
-                ids.empty() ? tk::tr("Invite")
-                            : tk::trf(tk::tr("Invite ({0})"), {std::to_string(ids.size())}),
-                true, can_invite, press_confirm_);
+    const std::string confirm_label =
+        ids.empty() ? tk::tr("Invite")
+                    : tk::trf(tk::tr("Invite ({0})"), {std::to_string(ids.size())});
+    if (confirm_btn_->label() != confirm_label)
+        confirm_btn_->set_label(confirm_label);
+    confirm_btn_->set_enabled(can_invite);
+    cancel_btn_->paint(ctx);
+    confirm_btn_->paint(ctx);
 
     if (rows_.empty())
     {
@@ -900,50 +1006,23 @@ bool InviteDialog::on_pointer_down(tk::Point local)
     if (!is_open_)
         return false;
     const tk::Point world{local.x + bounds_.x, local.y + bounds_.y};
-
-    if (inviting_)
-    {
-        press_dismiss_ = !error_lines_.empty() && hit(dismiss_btn_rect_, world);
-        return true;
-    }
-    press_cancel_  = hit(cancel_btn_rect_, world);
-    press_confirm_ = hit(confirm_btn_rect_, world);
-    press_outside_ = !press_cancel_ && !press_confirm_ && !hit(card_rect_, world);
+    // The footer buttons are real children the host dispatches directly;
+    // only the backdrop (and inert card chrome) lands here.
+    press_outside_ = !inviting_ && !hit(card_rect_, world);
     return true; // modal backdrop — always consume
 }
 
-void InviteDialog::on_pointer_up(tk::Point local, bool inside_self)
+void InviteDialog::on_pointer_up(tk::Point, bool inside_self)
 {
     if (!is_open_)
         return;
-    const tk::Point world{local.x + bounds_.x, local.y + bounds_.y};
-
-    if (inviting_)
-    {
-        if (press_dismiss_ && hit(dismiss_btn_rect_, world))
-            close();
-        press_dismiss_ = false;
-        return;
-    }
-    if (press_cancel_ && hit(cancel_btn_rect_, world))
-    {
-        press_cancel_ = false;
-        close();
-        return;
-    }
-    if (press_confirm_ && hit(confirm_btn_rect_, world))
-    {
-        press_confirm_ = false;
-        confirm();
-        return;
-    }
     if (press_outside_ && inside_self)
     {
         press_outside_ = false;
         close();
         return;
     }
-    press_cancel_ = press_confirm_ = press_outside_ = false;
+    press_outside_ = false;
 }
 
 bool InviteDialog::on_wheel(tk::Point, float, float, bool)

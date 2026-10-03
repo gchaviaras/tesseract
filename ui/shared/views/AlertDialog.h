@@ -55,17 +55,19 @@ public:
     // action. on_pointer_down still consumes events so nothing behind leaks.
     bool     on_pointer_down(tk::Point local) override;
 
-    // Accessibility: a Dialog node named for its (canvas-painted) title +
-    // body; the primary/secondary buttons attach under it.
+    // Accessibility: a modal Dialog named by its (canvas-painted) title and
+    // described by its body; the buttons attach under it. While open,
+    // build_access_tree hides everything behind it.
     tk::Role access_role() const override { return tk::Role::Dialog; }
     std::string access_name() const override
     {
-        if (opts_.title.empty())
-            return opts_.body;
-        if (opts_.body.empty())
-            return opts_.title;
-        return opts_.title + ". " + opts_.body;
+        return opts_.title.empty() ? opts_.body : opts_.title;
     }
+    std::string access_description() const override
+    {
+        return opts_.title.empty() ? std::string() : opts_.body;
+    }
+    bool access_modal() const override { return open_ && visible(); }
 
 private:
     bool open_ = false;

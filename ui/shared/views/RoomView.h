@@ -723,6 +723,17 @@ public:
     // default paint_overlay() recursion never reaches it — this explicitly
     // forwards, mirroring RoomHeader::paint_overlay for DatePickerView.
     void paint_overlay(tk::PaintCtx&) override;
+    // The pickers/receipt popup are register_popup()'d, never add_child()'d
+    // (see paint_overlay above) — surface them to the access tree directly.
+    void access_detached_children(std::vector<tk::Widget*>& out) const override
+    {
+        if (emoji_picker_visible_ && emoji_picker_)
+            out.push_back(emoji_picker_.get());
+        if (sticker_picker_visible_ && sticker_picker_)
+            out.push_back(sticker_picker_.get());
+        if (receipt_popup_visible_ && receipt_popup_)
+            out.push_back(receipt_popup_.get());
+    }
     // Reached via Host's popup-first-refusal click-outside path while a
     // picker is the registered popup.
     void on_popup_dismiss() override;

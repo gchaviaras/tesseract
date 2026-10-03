@@ -78,6 +78,7 @@ void TextField::ensure_native_()
     // pending_ is fully consumed and left empty.
     if (pending_.text)        field_->set_text(std::move(*pending_.text));
     if (pending_.placeholder) field_->set_placeholder(std::move(*pending_.placeholder));
+    field_->set_accessible_name(accessible_name_.empty() ? placeholder_ : accessible_name_);
     if (pending_.password)    field_->set_password(*pending_.password);
     if (pending_.compact)     field_->set_compact(*pending_.compact);
     if (pending_.text_color)  field_->set_text_color(*pending_.text_color);
@@ -104,10 +105,18 @@ void TextField::set_placeholder(std::string text)
     placeholder_ = text; // kept for access_name()'s empty-field fallback
     if (field_) field_->set_placeholder(std::move(text));
     else pending_.placeholder = std::move(text);
+    if (field_) field_->set_accessible_name(accessible_name_.empty() ? placeholder_ : accessible_name_);
+}
+
+void TextField::set_accessible_name(std::string name)
+{
+    accessible_name_ = std::move(name);
+    if (field_) field_->set_accessible_name(accessible_name_.empty() ? placeholder_ : accessible_name_);
 }
 
 void TextField::set_password(bool password)
 {
+    password_ = password;
     if (field_) field_->set_password(password);
     else pending_.password = password;
 }

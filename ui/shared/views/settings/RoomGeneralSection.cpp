@@ -44,7 +44,7 @@ constexpr float kRoomGeneralTopicMaxH = 200.0f; // cap so topic can't swallow th
 // doc comment describes an owner doing.
 // ---------------------------------------------------------------------------
 
-class RoomGeneralSection::AvatarCell : public tk::Widget
+class RoomGeneralSection::AvatarCell : public tk::Widget, public AvatarAccessRows
 {
 protected:
     AvatarCell() = default;
@@ -102,6 +102,15 @@ public:
     }
     bool on_pointer_move(tk::Point local) override { return avatar_.on_pointer_move(local); }
     void on_pointer_leave() override { avatar_.on_pointer_leave(); }
+
+protected:
+    const AvatarEditControl& avatar_control_() const override { return avatar_; }
+    tk::Point avatar_world_origin_() const override { return {bounds_.x, bounds_.y}; }
+    void avatar_activate_(bool remove) override
+    {
+        if (remove ? on_remove_clicked : on_upload_clicked)
+            (remove ? on_remove_clicked : on_upload_clicked)();
+    }
 
 private:
     AvatarEditControl avatar_;

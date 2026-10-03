@@ -23,6 +23,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace tesseract::views
 {
@@ -71,6 +72,13 @@ public:
     // export keeps running; control moves to the status bar.
     void close();
     bool is_open() const { return open_; }
+
+    // A modal dialog named by the step title, described by its body (the
+    // resume prompt, export target, or output path / error).
+    tk::Role    access_role() const override { return tk::Role::Dialog; }
+    std::string access_name() const override;
+    std::string access_description() const override;
+    bool        access_modal() const override { return open_ && visible(); }
 
     // Populates the Options state's resume-vs-new choice. No-op if the
     // dialog isn't currently showing Options for the room the checkpoint
@@ -152,6 +160,7 @@ private:
                         std::uint64_t events_written, std::string error);
 
     bool open_ = false;
+    std::pair<std::string, std::string> title_and_body_() const;
     State state_ = State::Options;
 
     std::string room_id_;

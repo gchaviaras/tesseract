@@ -4804,3 +4804,189 @@ msgstr "Dunkle Hautfarbe"
 #: ui/shared/views/SkinTonePopover.cpp:176
 msgid "Skin tone"
 msgstr "Hautfarbe"
+
+msgid ", "
+msgstr ", "
+
+msgid "; "
+msgstr "; "
+
+msgid "Add {0} to space"
+msgstr "{0} zum Space hinzufügen"
+
+msgid "Attachment"
+msgstr "Anhang"
+
+msgid "Attachment: {0}, {1}"
+msgstr "Anhang: {0}, {1}"
+
+msgid "Cancel editing"
+msgstr "Bearbeiten abbrechen"
+
+msgid "Cancel recording"
+msgstr "Aufnahme abbrechen"
+
+msgid "Cancel reply"
+msgstr "Antwort abbrechen"
+
+msgid "Change avatar"
+msgstr "Avatar ändern"
+
+msgid "Edit shortcode {0}"
+msgstr "Kürzel {0} bearbeiten"
+
+msgid "Encrypted room"
+msgstr "Verschlüsselter Chat"
+
+msgid "Exit full screen"
+msgstr "Vollbild beenden"
+
+msgid "Forwarded to {0} room"
+msgid_plural "Forwarded to {0} rooms"
+msgstr[0] "An {0} Chat weitergeleitet"
+msgstr[1] "An {0} Chats weitergeleitet"
+
+msgid "Full screen"
+msgstr "Vollbild"
+
+msgid "Invited {0} person"
+msgid_plural "Invited {0} people"
+msgstr[0] "{0} Person eingeladen"
+msgstr[1] "{0} Personen eingeladen"
+
+msgid "Jump to pinned message: {0}"
+msgstr "Zur angehefteten Nachricht springen: {0}"
+
+msgid "Jump to replied message"
+msgstr "Zur beantworteten Nachricht springen"
+
+msgid "Link preview: {0}"
+msgstr "Linkvorschau: {0}"
+
+msgid "Next month"
+msgstr "Nächster Monat"
+
+msgid "Next pinned message"
+msgstr "Nächste angeheftete Nachricht"
+
+msgid "Numbers: {0}, {1}, {2}"
+msgstr "Zahlen: {0}, {1}, {2}"
+
+msgid "Open file"
+msgstr "Datei öffnen"
+
+msgid "Open image"
+msgstr "Bild öffnen"
+
+msgid "Open thread, {0} reply"
+msgid_plural "Open thread, {0} replies"
+msgstr[0] "Thread öffnen, {0} Antwort"
+msgstr[1] "Thread öffnen, {0} Antworten"
+
+msgid "Pack: {0}"
+msgstr "Paket: {0}"
+
+msgid "Pinned messages"
+msgstr "Angeheftete Nachrichten"
+
+msgid "Play video"
+msgstr "Video abspielen"
+
+msgid "Press Delete to remove it from the space"
+msgstr "Entf drücken, um ihn aus dem Space zu entfernen"
+
+msgid "Previous month"
+msgstr "Vorheriger Monat"
+
+msgid "Previous pinned message"
+msgstr "Vorherige angeheftete Nachricht"
+
+msgid "Read at {0}"
+msgstr "Gelesen um {0}"
+
+msgid "Read by {0} person"
+msgid_plural "Read by {0} people"
+msgstr[0] "Gelesen von {0} Person"
+msgstr[1] "Gelesen von {0} Personen"
+
+msgid "Recovery key or passphrase"
+msgstr "Wiederherstellungsschlüssel oder Passphrase"
+
+msgid "Recovery key: {0}"
+msgstr "Wiederherstellungsschlüssel: {0}"
+
+msgid "Remove avatar"
+msgstr "Avatar entfernen"
+
+msgid "Remove pack {0}"
+msgstr "Paket {0} entfernen"
+
+msgid "Remove {0}"
+msgstr "{0} entfernen"
+
+msgid "Rename {0}"
+msgstr "{0} umbenennen"
+
+msgid "Shortcode"
+msgstr "Kürzel"
+
+msgid "Show hidden media"
+msgstr "Ausgeblendete Medien anzeigen"
+
+msgid "Space settings"
+msgstr "Space-Einstellungen"
+
+msgid "Table, {0} rows, {1} columns: {2}"
+msgstr "Tabelle, {0} Zeilen, {1} Spalten: {2}"
+
+msgid "edited"
+msgstr "bearbeitet"
+
+msgid "in reply"
+msgstr "als Antwort"
+
+msgid "replying to {0}"
+msgstr "Antwort an {0}"
+
+msgid "{0} joined the call"
+msgstr "{0} ist dem Anruf beigetreten"
+
+msgid "{0} left the call"
+msgstr "{0} hat den Anruf verlassen"
+
+msgid "{0} reaction"
+msgid_plural "{0} reactions"
+msgstr[0] "{0} Reaktion"
+msgstr[1] "{0} Reaktionen"
+
+msgid "{0} reply in thread"
+msgid_plural "{0} replies in thread"
+msgstr[0] "{0} Antwort im Thread"
+msgstr[1] "{0} Antworten im Thread"
+
+msgid "{0} {1}"
+msgstr "{0} {1}"
+
+msgid "{0} {1}%"
+msgstr "{0} {1} %"
+
+msgid "{0}, from {1}"
+msgstr "{0}, von {1}"
+
+msgid "{0}, {1}"
+msgstr "{0}, {1}"
+
+msgid "{0}, {1}, {2}"
+msgstr "{0}, {1}, {2}"
+
+msgid "{0}. {1}"
+msgstr "{0}. {1}"
+
+msgid "not sent"
+msgstr "nicht gesendet"
+
+msgid "sending"
+msgstr "wird gesendet"
+
+msgid "Message {0}"
+msgstr "Nachricht an {0}"

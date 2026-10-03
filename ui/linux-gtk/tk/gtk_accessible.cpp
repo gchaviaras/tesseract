@@ -67,6 +67,7 @@ GtkAccessibleRole to_gtk_role(tk::Role r)
     case tk::Role::Dialog:      return GTK_ACCESSIBLE_ROLE_DIALOG;
     case tk::Role::MenuItem:    return GTK_ACCESSIBLE_ROLE_MENU_ITEM;
     case tk::Role::Group:       return GTK_ACCESSIBLE_ROLE_GROUP;
+    case tk::Role::ProgressBar: return GTK_ACCESSIBLE_ROLE_PROGRESS_BAR;
     case tk::Role::None:        return GTK_ACCESSIBLE_ROLE_GENERIC;
     }
     return GTK_ACCESSIBLE_ROLE_GENERIC;
@@ -122,12 +123,37 @@ struct NodeData
     // discipline, and access_tree.cpp's own "not virtualized, but still
     // avoid spam" precedent).
     bool pushed_once = false;
+    // GtkWidget's accessible-role is construct-only: a key whose node now
+    // has a different role gets a fresh widget (see ensure_node_widget).
+    tk::Role role = tk::Role::None;
     std::string last_name;
     bool last_checked = false;
     bool last_expanded = false;
     bool last_selected = false;
     bool last_busy = false;
+    bool last_disabled = false;
+    bool last_modal = false;
+    std::string last_description;
+    double last_value_now = 0.0;
+    int last_pos = -1;
+    int last_grid_row = -1;
+    int last_grid_col = -1;
+    int last_grid_rows = -1;
+    int last_grid_cols = -1;
 };
+
+// Real widget nodes report enabled() directly; synthesized ones carry
+// state.disabled (see AccessState::disabled).
+bool node_disabled(const AccessNode& n)
+{
+    if (n.state.disabled)
+        return true;
+    return n.row_index == -1 && n.widget && !n.activate && !n.widget->enabled();
+}
+
+// Debounce for the AT-active refresh — see qt_accessible.cpp's
+// kRefreshDelayMs.
+constexpr guint kRefreshDelayMs = 200;
 
 // ─────────────────────────────────────────────────────────────────────────
 //  TkAccessNode — one real (zero-size, GTK-visible-but-invisually-inert)
@@ -259,9 +285,48 @@ public:
     {
     }
 
+    ~AccessBridge()
+    {
+        if (refresh_source_)
+            g_source_remove(refresh_source_);
+    }
+
     void mark_dirty()
     {
         dirty_ = true;
+        schedule_refresh();
+    }
+
+    // Once an AT has made us build the tree (nodes_ non-empty), rebuild
+    // shortly after any relayout/repaint so changed names/states are pushed
+    // without waiting for the AT's next query. Free when no AT is attached.
+    void schedule_refresh()
+    {
+        if (nodes_.empty() || refresh_source_)
+            return;
+        refresh_source_ = g_timeout_add(
+            kRefreshDelayMs,
+            [](gpointer p) -> gboolean
+            {
+                auto* self = static_cast<AccessBridge*>(p);
+                self->refresh_source_ = 0;
+                self->dirty_ = true;
+                self->rebuild_if_dirty();
+                return G_SOURCE_REMOVE;
+            },
+            this);
+    }
+
+    void announce(const std::string& text, bool assertive)
+    {
+#if GTK_CHECK_VERSION(4, 14, 0)
+        gtk_accessible_announce(GTK_ACCESSIBLE(root_marker_), text.c_str(),
+                                assertive ? GTK_ACCESSIBLE_ANNOUNCEMENT_PRIORITY_HIGH
+                                          : GTK_ACCESSIBLE_ANNOUNCEMENT_PRIORITY_MEDIUM);
+#else
+        (void)text;
+        (void)assertive;
+#endif
     }
 
     GtkAccessible* root_child()
@@ -415,6 +480,12 @@ private:
     void ensure_node_widget(const AccessKey& key, const AccessNode& node)
     {
         auto it = nodes_.find(key);
+        if (it != nodes_.end() && node_data(GTK_ACCESSIBLE(it->second))->role != node.role)
+        {
+            gtk_widget_unparent(it->second);
+            nodes_.erase(it);
+            it = nodes_.end();
+        }
         GtkWidget* widget;
         NodeData* data;
         if (it != nodes_.end())
@@ -434,6 +505,7 @@ private:
             data->bridge = this;
             data->key_widget = key.widget;
             data->key_row_index = key.row_index;
+            data->role = node.role;
             gtk_widget_set_parent(widget, root_marker_);
             gtk_widget_action_set_enabled(widget, "activate", has_action_role(node.role));
             nodes_[key] = widget;
@@ -443,35 +515,92 @@ private:
 
     void push_if_changed(NodeData* data, GtkWidget* widget, const AccessNode& node)
     {
-        bool name_changed = !data->pushed_once || data->last_name != node.name;
-        bool state_changed = !data->pushed_once ||
-            data->last_checked != node.state.checked ||
-            data->last_expanded != node.state.expanded ||
-            data->last_selected != node.state.selected ||
-            data->last_busy != node.state.busy;
+        const bool first    = !data->pushed_once;
+        const bool disabled = node_disabled(node);
+        auto* acc = GTK_ACCESSIBLE(widget);
 
-        if (name_changed)
+        if (first || data->last_name != node.name)
         {
-            gtk_accessible_update_property(GTK_ACCESSIBLE(widget),
-                                           GTK_ACCESSIBLE_PROPERTY_LABEL,
+            gtk_accessible_update_property(acc, GTK_ACCESSIBLE_PROPERTY_LABEL,
                                            node.name.c_str(), -1);
             data->last_name = node.name;
         }
-        if (state_changed)
+        if (first || data->last_description != node.description)
+        {
+            if (node.description.empty())
+                gtk_accessible_reset_property(acc, GTK_ACCESSIBLE_PROPERTY_DESCRIPTION);
+            else
+                gtk_accessible_update_property(acc, GTK_ACCESSIBLE_PROPERTY_DESCRIPTION,
+                                               node.description.c_str(), -1);
+            data->last_description = node.description;
+        }
+        if (first || data->last_checked != node.state.checked ||
+            data->last_expanded != node.state.expanded ||
+            data->last_selected != node.state.selected ||
+            data->last_busy != node.state.busy || data->last_disabled != disabled)
         {
             gtk_accessible_update_state(
-                GTK_ACCESSIBLE(widget),
+                acc,
                 GTK_ACCESSIBLE_STATE_CHECKED,
                 node.state.checked ? GTK_ACCESSIBLE_TRISTATE_TRUE
                                    : GTK_ACCESSIBLE_TRISTATE_FALSE,
                 GTK_ACCESSIBLE_STATE_EXPANDED, static_cast<int>(node.state.expanded),
                 GTK_ACCESSIBLE_STATE_SELECTED, static_cast<int>(node.state.selected),
                 GTK_ACCESSIBLE_STATE_BUSY, static_cast<int>(node.state.busy),
+                GTK_ACCESSIBLE_STATE_DISABLED, static_cast<int>(disabled),
                 -1);
             data->last_checked  = node.state.checked;
             data->last_expanded = node.state.expanded;
             data->last_selected = node.state.selected;
             data->last_busy     = node.state.busy;
+            data->last_disabled = disabled;
+        }
+        if (first || data->last_modal != node.modal)
+        {
+            gtk_accessible_update_property(acc, GTK_ACCESSIBLE_PROPERTY_MODAL,
+                                           static_cast<gboolean>(node.modal), -1);
+            data->last_modal = node.modal;
+        }
+        if (node.value.present && (first || data->last_value_now != node.value.now))
+        {
+            gtk_accessible_update_property(acc, GTK_ACCESSIBLE_PROPERTY_VALUE_MIN,
+                                           node.value.min,
+                                           GTK_ACCESSIBLE_PROPERTY_VALUE_MAX,
+                                           node.value.max,
+                                           GTK_ACCESSIBLE_PROPERTY_VALUE_NOW,
+                                           node.value.now, -1);
+            data->last_value_now = node.value.now;
+        }
+        // "Item N of M" for list rows; ARIA-style 1-based positions.
+        const int pos = node.pos_in_set;
+        if (pos > 0 && (first || data->last_pos != pos))
+        {
+            gtk_accessible_update_relation(acc, GTK_ACCESSIBLE_RELATION_POS_IN_SET, pos,
+                                           GTK_ACCESSIBLE_RELATION_SET_SIZE,
+                                           node.row_set_size, -1);
+            data->last_pos = pos;
+        }
+        if (node.grid_row >= 0 &&
+            (first || data->last_grid_row != node.grid_row ||
+             data->last_grid_col != node.grid_col))
+        {
+            gtk_accessible_update_relation(acc, GTK_ACCESSIBLE_RELATION_ROW_INDEX,
+                                           node.grid_row + 1,
+                                           GTK_ACCESSIBLE_RELATION_COL_INDEX,
+                                           node.grid_col + 1, -1);
+            data->last_grid_row = node.grid_row;
+            data->last_grid_col = node.grid_col;
+        }
+        if (node.grid_col_count > 0 &&
+            (first || data->last_grid_rows != node.grid_row_count ||
+             data->last_grid_cols != node.grid_col_count))
+        {
+            gtk_accessible_update_relation(acc, GTK_ACCESSIBLE_RELATION_ROW_COUNT,
+                                           node.grid_row_count,
+                                           GTK_ACCESSIBLE_RELATION_COL_COUNT,
+                                           node.grid_col_count, -1);
+            data->last_grid_rows = node.grid_row_count;
+            data->last_grid_cols = node.grid_col_count;
         }
         data->pushed_once = true;
     }
@@ -525,6 +654,7 @@ private:
     Surface& surface_;
     GtkWidget* root_marker_; // borrowed — owned by the real GtkOverlay it's added to
     bool dirty_ = true;
+    guint refresh_source_ = 0;
     AccessNode tree_;
     std::unordered_map<AccessKey, const AccessNode*, AccessKeyHash> index_;
     std::unordered_map<AccessKey, AccessKey, AccessKeyHash> parent_of_;
@@ -604,6 +734,17 @@ void attach_accessible_bridge(Surface& surface)
     gtk_overlay_set_measure_overlay(GTK_OVERLAY(overlay), root_marker, FALSE);
 
     surface.add_layout_listener([bridge] { bridge->mark_dirty(); });
+    surface.host().add_paint_listener([bridge] { bridge->schedule_refresh(); });
+}
+
+void announce(GtkWidget* overlay, const std::string& text, bool assertive)
+{
+    if (!overlay)
+        return;
+    auto* bridge = static_cast<AccessBridge*>(
+        g_object_get_data(G_OBJECT(overlay), "tk-access-bridge"));
+    if (bridge)
+        bridge->announce(text, assertive);
 }
 
 void notify_focus_changed(GtkWidget* overlay, tk::Widget* now)

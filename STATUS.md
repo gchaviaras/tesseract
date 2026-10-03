@@ -1,6 +1,19 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-02**. 2098 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-03**. 2135 C++ + 765 Rust tests.
+
+> **Accessibility gap pass (2026-10-03).**
+> The access tree now reaches canvas-drawn popups
+> (`Widget::access_detached_children`), prunes to an open modal
+> (`access_modal`), and carries descriptions, values, a disabled state and
+> 2-D grid positions; `Host::announce()` speaks status through each
+> platform's screen reader, and the bridges push name/state changes while
+> one is attached. The encryption dialog, invite/forward dialogs, room
+> directory, space views, date picker, pinned banner, knock panels,
+> image-pack editor, room header and composer banners are exposed; the
+> timeline reads reply/edited/time/thread/reactions and summarises tables,
+> with links, previews and media controls actionable; context menus take
+> the keyboard. Qt6 build + ctest 2135/2135.
 
 > **Emoji picker: skin tones, Emoji 18.0, font-coverage filtering; "not
 > bridged" override persists (2026-09-30).**

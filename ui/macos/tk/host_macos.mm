@@ -219,6 +219,11 @@ protected:
         notify_focus_changed(view_, old, now);
     }
 
+    void on_announce_(const std::string& text, Politeness p) override
+    {
+        tk::macos::announce(view_, text, p == Politeness::Assertive);
+    }
+
 private:
     TKSurfaceView* view_;
     const Theme* theme_;

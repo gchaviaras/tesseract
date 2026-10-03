@@ -50,6 +50,10 @@ public:
     void set_text(std::string text);
     std::string text() const;
     void set_placeholder(std::string text);
+    // Accessible label (what a screen reader calls the field), e.g. the
+    // composer's "Message {room}". Falls back to the placeholder. Must be
+    // tk::tr()'d by the caller.
+    void set_accessible_name(std::string name);
     void set_text_color(Color c);
     void set_font_role(FontRole role);
 
@@ -191,6 +195,8 @@ public:
     // access_name() rationale.
     std::string access_name() const override
     {
+        if (!accessible_name_.empty())
+            return accessible_name_;
         std::string t = text();
         return t.empty() ? placeholder_ : t;
     }
@@ -234,6 +240,7 @@ private:
     // Set by set_placeholder(); read by access_name() as the empty-field
     // fallback — see TextField::placeholder_'s identical comment.
     std::string placeholder_;
+    std::string accessible_name_;
     std::function<void(bool)> on_focus_changed_cb_;
     std::vector<std::function<bool(NavKey)>> nav_handlers_;
     // See tk::TextField::last_bg_pushed_ — same rationale, mirrored here.

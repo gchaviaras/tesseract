@@ -11,6 +11,7 @@
 // measured height from 0 → kBannerH or vice-versa via the next layout pass).
 
 #include "tk/canvas.h"
+#include "tk/controls.h"
 #include "tk/widget.h"
 
 #include <tesseract/types.h>
@@ -46,8 +47,23 @@ public:
     tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override;
     void     arrange(tk::LayoutCtx&, tk::Rect bounds) override;
     void     paint(tk::PaintCtx&) override;
-    bool     on_pointer_down(tk::Point local) override;
-    void     on_pointer_up(tk::Point local, bool inside_self) override;
+
+    // A "Pinned messages" group ("2 of 5" as its description when there are
+    // several); the body and the previous/next chevrons are real buttons.
+    tk::Role    access_role() const override
+    {
+        return pins_.empty() ? tk::Role::None : tk::Role::Group;
+    }
+    std::string access_name() const override;
+    std::string access_description() const override;
+
+    // The "<sender>: <body>" line shown for the current pin.
+    std::string current_preview() const;
+
+    // Test hooks: the three buttons (null-safe accessors).
+    tk::Button* body_button() const { return body_btn_; }
+    tk::Button* previous_button() const { return up_btn_; }
+    tk::Button* next_button() const { return down_btn_; }
 
     // Layout constants exposed for tests.
     static constexpr float kBannerH    = 44.0f;
@@ -59,13 +75,15 @@ public:
 private:
     std::vector<tesseract::PinnedEvent> pins_;
     std::size_t current_index_ = 0;
-    // Layout rects (world-space, refreshed on arrange).
+    // Body rect (world-space, refreshed on arrange) — the preview text is
+    // painted over body_btn_'s hover/press fill.
     tk::Rect body_rect_{};
-    tk::Rect up_rect_{};
-    tk::Rect down_rect_{};
-    bool press_body_ = false;
-    bool press_up_   = false;
-    bool press_down_ = false;
+    tk::Button* body_btn_ = nullptr; // jump to the current pin
+    tk::Button* up_btn_   = nullptr; // previous pin
+    tk::Button* down_btn_ = nullptr; // next pin
+
+    void step_(int delta);
+    void sync_buttons_();
 };
 
 } // namespace tesseract::views

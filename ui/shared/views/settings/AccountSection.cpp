@@ -53,7 +53,7 @@ constexpr float kErrorH           = 14.0f;
 // shape changed.
 // ---------------------------------------------------------------------------
 
-class AccountSection::Content : public tk::Widget
+class AccountSection::Content : public tk::Widget, public AvatarAccessRows
 {
 protected:
     // host() is nullable — see AccountSection::AccountSection().
@@ -95,6 +95,15 @@ public:
     bool on_pointer_down(tk::Point local) override;
     bool on_pointer_move(tk::Point local) override;
     void on_pointer_leave() override;
+
+protected:
+    const AvatarEditControl& avatar_control_() const override { return avatar_; }
+    tk::Point avatar_world_origin_() const override { return {bounds_.x, bounds_.y}; }
+    void avatar_activate_(bool remove) override
+    {
+        if (remove ? on_avatar_remove_clicked : on_avatar_upload_clicked)
+            (remove ? on_avatar_remove_clicked : on_avatar_upload_clicked)();
+    }
 
 private:
     void invalidate_text();

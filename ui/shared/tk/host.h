@@ -94,6 +94,12 @@ public:
     // rely on the system theme for text colour don't need to implement it.
     virtual void set_text_color(Color) {}
 
+    // What a screen reader should call this control (the owning tk widget's
+    // accessible label, else its placeholder) — for a backend whose native
+    // control is exposed to the platform AT directly (Win32's BetterText).
+    // Default no-op: backends whose native control isn't AT-visible.
+    virtual void set_accessible_name(std::string) {}
+
     // Tell a backend that captures itself into an offscreen buffer (see
     // rendered_image() below) the exact solid color already painted behind
     // this field, so it can pre-fill an *opaque* capture buffer with it
@@ -276,6 +282,12 @@ public:
     virtual void set_text_color(Color)
     {
     }
+
+    // What a screen reader should call this control (the owning tk widget's
+    // accessible label, else its placeholder) — for a backend whose native
+    // control is exposed to the platform AT directly (Win32's BetterText).
+    // Default no-op: backends whose native control isn't AT-visible.
+    virtual void set_accessible_name(std::string) {}
 
     // See NativeTextField::set_background_color()'s doc comment — same
     // rationale and same tk::TextArea/Widget::background_color() sourcing,
@@ -825,6 +837,33 @@ public:
         pre_paint_hook_ = std::move(cb);
     }
 
+    // ── Accessibility ────────────────────────────────────────────────────────
+    // Politeness of an announce(): Polite waits for the screen reader to
+    // finish what it is saying; Assertive interrupts (errors only).
+    enum class Politeness
+    {
+        Polite,
+        Assertive,
+    };
+    // Speak `text` through the platform screen reader without moving focus —
+    // status only (progress, errors, toasts, call join/leave); never for
+    // incoming messages. Forwards to on_announce_(), which each backend
+    // routes to its accessibility bridge. No-op when no AT is listening.
+    void announce(const std::string& text, Politeness p = Politeness::Polite)
+    {
+        if (!text.empty())
+            on_announce_(text, p);
+    }
+
+    // Called once per paint pass (alongside the pre-paint hook). An
+    // accessibility bridge uses this to notice name/state changes that
+    // didn't relayout anything (a toggled button relabelling itself) —
+    // anything visible changing repaints first.
+    void add_paint_listener(std::function<void()> cb)
+    {
+        paint_listeners_.push_back(std::move(cb));
+    }
+
 protected:
     // Each Host impl invokes this from its native input handlers — see
     // host_qt.cpp / host_gtk.cpp / host_win32.cpp / host_macos.mm.
@@ -845,6 +884,13 @@ protected:
     void run_pre_paint_hook_() const
     {
         if (pre_paint_hook_) pre_paint_hook_();
+        for (const auto& cb : paint_listeners_)
+            cb();
+    }
+
+    // Backend hook behind announce(); default does nothing.
+    virtual void on_announce_(const std::string& /*text*/, Politeness /*p*/)
+    {
     }
 
 public:
@@ -1375,6 +1421,7 @@ private:
     std::function<void()> on_user_activity_;
     std::function<void()> on_ctrl_key_up_;
     std::function<void()> pre_paint_hook_;
+    std::vector<std::function<void()>> paint_listeners_;
 
     // Backing flag for mark_needs_relayout()'s coalescing guard.
     bool relayout_scheduled_ = false;

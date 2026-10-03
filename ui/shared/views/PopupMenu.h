@@ -100,6 +100,10 @@ public:
     // detect it locally. Fires on_dismissed(), matching the existing
     // contract owners already wire to call close().
     void     on_popup_dismiss() override;
+    // While open (the host routes keys to the active popup first): Up/Down
+    // (wrapping) and Home/End move the highlight over enabled items, Enter/
+    // Space activate it, Escape/Tab dismiss.
+    bool     on_key_down(const tk::KeyEvent& e) override;
 
 private:
     class MenuList; // popup surface's root widget — defined in the .cpp

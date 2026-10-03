@@ -1794,6 +1794,7 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
     if (compose_bar_)
     {
         compose_bar_->set_enabled(true);
+        compose_bar_->set_room_name(info.name.empty() ? info.id : info.name);
         // Default-focus policy: composing is the primary activity in a chat
         // client, so a genuine room switch (not a same-room metadata
         // refresh — see the else-if above) should land the user in the

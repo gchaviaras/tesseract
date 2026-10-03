@@ -135,6 +135,105 @@ tk::Rect ImagePackSectionList::name_rect_at(std::size_t pack_idx) const
     return world;
 }
 
+tk::Rect ImagePackSectionList::to_world_(const tk::Rect& r) const
+{
+    return {bounds_.x + r.x, bounds_.y - scroll_y_ + r.y, r.w, r.h};
+}
+
+std::size_t ImagePackSectionList::access_row_count() const
+{
+    access_rows_.clear();
+    if (!packs_)
+        return 0;
+    static const char* const kUsageNames[3] = {tk::N_("Any"), tk::N_("Emoji"),
+                                               tk::N_("Sticker")};
+    auto* self = const_cast<ImagePackSectionList*>(this);
+    const auto layout = compute_layout_(bounds_.w);
+    for (std::size_t i = 0; i < packs_->size() && i < layout.size(); ++i)
+    {
+        const StagedPack& pack = (*packs_)[i];
+        const SectionLayout& sec = layout[i];
+        const std::string name =
+            pack.display_name.empty() ? tk::tr("Unnamed pack") : pack.display_name;
+
+        AccessRow header;
+        header.name = tk::trf(tk::tr("Pack: {0}"), {name});
+        header.rect = to_world_(sec.header_rect);
+        header.state.selected = active_pack_index_ && *active_pack_index_ == i;
+        header.activate = [self, i] { if (self->on_pack_header_clicked) self->on_pack_header_clicked(i); };
+        access_rows_.push_back(std::move(header));
+
+        if (can_edit_)
+        {
+            access_rows_.push_back({tk::Role::Button, tk::trf(tk::tr("Rename {0}"), {name}),
+                                    to_world_(sec.name_rect), {},
+                                    [self, i] { if (self->on_pack_name_clicked) self->on_pack_name_clicked(i); }});
+            for (int seg = 0; seg < 3; ++seg)
+            {
+                AccessRow usage{tk::Role::RadioButton, tk::tr(kUsageNames[seg]),
+                                to_world_(sec.usage_rect[seg]), {}, {}};
+                usage.state.checked = pack.usage == kUsageSlots[seg];
+                const tesseract::PackUsage u = kUsageSlots[seg];
+                usage.activate = [self, i, u]
+                { if (self->on_pack_usage_changed) self->on_pack_usage_changed(i, u); };
+                access_rows_.push_back(std::move(usage));
+            }
+            access_rows_.push_back({tk::Role::Button, tk::trf(tk::tr("Remove pack {0}"), {name}),
+                                    to_world_(sec.remove_chip_rect), {},
+                                    [self, i] { if (self->on_pack_remove_requested) self->on_pack_remove_requested(i); }});
+        }
+
+        for (std::size_t t = 0; t < pack.images.size() && t < sec.tiles.size(); ++t)
+        {
+            const std::string sc = pack.images[t].shortcode.empty()
+                                       ? tk::tr("(no shortcode)")
+                                       : pack.images[t].shortcode;
+            const tk::Rect tile = to_world_(sec.tiles[t]);
+            if (!can_edit_)
+            {
+                access_rows_.push_back({tk::Role::Image, sc, tile, {}, {}});
+                continue;
+            }
+            access_rows_.push_back({tk::Role::Button, tk::trf(tk::tr("Edit shortcode {0}"), {sc}),
+                                    tile, {},
+                                    [self, i, t] { if (self->on_tile_shortcode_clicked) self->on_tile_shortcode_clicked(i, t); }});
+            access_rows_.push_back({tk::Role::Button, tk::trf(tk::tr("Remove {0}"), {sc}), tile, {},
+                                    [self, i, t] { if (self->on_tile_remove_requested) self->on_tile_remove_requested(i, t); }});
+        }
+    }
+    return access_rows_.size();
+}
+
+tk::Role ImagePackSectionList::access_role_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].role : tk::Role::None;
+}
+
+std::string ImagePackSectionList::access_name_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].name : std::string();
+}
+
+tk::AccessState ImagePackSectionList::access_state_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].state : tk::AccessState{};
+}
+
+bool ImagePackSectionList::access_activate_widget_row(std::size_t i)
+{
+    if (i >= access_rows_.size() || !access_rows_[i].activate)
+        return false;
+    // Copy: the callback may mutate the packs and rebuild the rows.
+    auto act = access_rows_[i].activate;
+    act();
+    return true;
+}
+
+tk::Rect ImagePackSectionList::access_rect_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].rect : tk::Rect{};
+}
+
 std::optional<std::size_t> ImagePackSectionList::pack_at(tk::Point world) const
 {
     if (!packs_)
@@ -470,6 +569,7 @@ ImagePackEditorView::ImagePackEditorView()
     {
         auto new_pack = tk::create_widget<tk::TextField>(this, kRowH);
         new_pack->set_placeholder(tk::tr("Pack name"));
+        new_pack->set_accessible_name(tk::tr("New pack name"));
         new_pack->set_visible(false);
         new_pack->set_on_changed(
             [this](const std::string& t) { set_new_pack_name_text(t); });
@@ -477,6 +577,7 @@ ImagePackEditorView::ImagePackEditorView()
 
         auto shortcode = tk::create_widget<tk::TextField>(this, kRowH);
         shortcode->set_compact(true);
+        shortcode->set_accessible_name(tk::tr("Shortcode"));
         shortcode->set_visible(false);
         shortcode->set_on_changed(
             [this](const std::string& t) { set_editing_shortcode_text(t); });
@@ -490,6 +591,7 @@ ImagePackEditorView::ImagePackEditorView()
 
         auto pack_name = tk::create_widget<tk::TextField>(this, kRowH);
         pack_name->set_compact(true);
+        pack_name->set_accessible_name(tk::tr("Pack name"));
         pack_name->set_visible(false);
         pack_name->set_on_changed(
             [this](const std::string& t) { set_editing_pack_name_text(t); });

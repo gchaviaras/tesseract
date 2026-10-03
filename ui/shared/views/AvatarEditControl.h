@@ -18,11 +18,13 @@
 // from its own `paint()`.
 
 #include "tk/canvas.h"
+#include "tk/access_tree.h"
 #include "tk/widget.h"
 
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 #include <string_view>
 
 namespace tesseract::views
@@ -74,6 +76,24 @@ public:
     // `local` uses the owner's local coordinate space.
     HitZone hit_test(tk::Point local) const;
 
+    // What an owning widget exposes to assistive technology on this
+    // control's behalf (it isn't a tk::Widget itself): "Change avatar" and,
+    // when there is one, "Remove avatar" while editable, then the error
+    // text. Rects are world-space given the owner's world origin.
+    struct AccessItem
+    {
+        enum class Kind
+        {
+            Change,
+            Remove,
+            Error,
+        };
+        Kind        kind;
+        std::string name;
+        tk::Rect    rect;
+    };
+    std::vector<AccessItem> access_items(tk::Point world_origin) const;
+
     // Returns true when the hover state changed (caller should repaint).
     // No-op (always returns false) when not editable.
     bool on_pointer_move(tk::Point local);
@@ -99,6 +119,51 @@ private:
     bool hovered_  = false;
     std::string error_;
     mutable std::unique_ptr<tk::TextLayout> error_layout_;
+};
+
+// Mixin for a widget hosting an AvatarEditControl: exposes the control's
+// access_items() as rows and routes activation back through the owner's
+// existing upload / remove callbacks.
+class AvatarAccessRows : public tk::WidgetRowAccessibility
+{
+public:
+    std::size_t access_row_count() const override
+    {
+        items_ = avatar_control_().access_items(avatar_world_origin_());
+        return items_.size();
+    }
+    tk::Role access_role_for_widget_row(std::size_t i) const override
+    {
+        if (i >= items_.size())
+            return tk::Role::None;
+        return items_[i].kind == AvatarEditControl::AccessItem::Kind::Error
+                   ? tk::Role::StaticText
+                   : tk::Role::Button;
+    }
+    std::string access_name_for_widget_row(std::size_t i) const override
+    {
+        return i < items_.size() ? items_[i].name : std::string();
+    }
+    tk::Rect access_rect_for_widget_row(std::size_t i) const override
+    {
+        return i < items_.size() ? items_[i].rect : tk::Rect{};
+    }
+    bool access_activate_widget_row(std::size_t i) override
+    {
+        if (i >= items_.size() || items_[i].kind == AvatarEditControl::AccessItem::Kind::Error)
+            return false;
+        avatar_activate_(items_[i].kind == AvatarEditControl::AccessItem::Kind::Remove);
+        return true;
+    }
+
+protected:
+    virtual const AvatarEditControl& avatar_control_() const = 0;
+    virtual tk::Point avatar_world_origin_() const = 0;
+    // remove == false: upload / change.
+    virtual void avatar_activate_(bool remove) = 0;
+
+private:
+    mutable std::vector<AvatarEditControl::AccessItem> items_;
 };
 
 } // namespace tesseract::views

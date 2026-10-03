@@ -198,7 +198,7 @@ public:
             const auto& u = owner_.user_results_[index];
             if (u.display_name.empty())
                 return u.user_id;
-            return u.display_name + " (" + u.user_id + ")";
+            return tk::trf(tk::tr("{0} ({1})"), {u.display_name, u.user_id});
         }
         const auto& r = owner_.filtered_[index];
         return r.name.empty() ? tk::tr("Unnamed room") : r.name;

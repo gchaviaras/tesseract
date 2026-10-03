@@ -30,6 +30,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace tesseract::views
@@ -168,6 +169,12 @@ private:
     std::function<void()>                                relayout_requester_;
     std::function<const tk::Image*(const std::string&)> avatar_provider_;
     std::function<std::string(const std::string&)>      display_name_provider_;
+    // participant_id → user_id from the last update_participants(), for the
+    // join / leave announcements.
+    std::unordered_map<std::string, std::string> announced_participants_;
+    bool participants_known_ = false;
+    std::chrono::steady_clock::time_point roster_baseline_at_{};
+    void announce_participant_changes_(const std::vector<tesseract::RtcParticipantInfo>& ps);
 
     // ── Timer ─────────────────────────────────────────────────────────────────
     std::uint64_t         timer_gen_      = 0;

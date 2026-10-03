@@ -41,23 +41,6 @@ float button_width(tk::PaintCtx& ctx, const std::string& label)
     return (lo ? lo->measure().w : 0.0f) + 2.0f * kEncryptionSetupBtnHPad;
 }
 
-// A bare, background-less text link (accent-coloured, centred in `r`). Used for
-// the "Skip for now" / "Back" / "Use a passphrase instead" / "Use another
-// device instead" affordances — the filled action buttons are tk::Button
-// children, not these.
-void paint_link(tk::PaintCtx& ctx, tk::Rect r, const std::string& label)
-{
-    const auto& pal = ctx.theme.palette;
-    tk::TextStyle st;
-    st.role = tk::FontRole::UiSemibold;
-    auto lo = ctx.factory.build_text(label, st);
-    if (!lo) return;
-    tk::Size sz = lo->measure();
-    ctx.canvas.draw_text(*lo,
-                         {r.x + (r.w - sz.w) * 0.5f, r.y + (r.h - sz.h) * 0.5f},
-                         pal.accent);
-}
-
 // Draw a left-aligned body / label paragraph; returns the rendered height so
 // callers can stack content below it.
 float paint_paragraph(tk::PaintCtx& ctx, tk::Rect area, const std::string& text,
@@ -74,6 +57,61 @@ float paint_paragraph(tk::PaintCtx& ctx, tk::Rect area, const std::string& text,
 }
 
 } // namespace
+
+// Recover › Choose's option row: a bordered card with a title, a one-line
+// hint, and a chevron. A real button (focusable, Enter/Space, AT Button
+// named by the title with the hint as its description); the recommended
+// card gets the accent border.
+class OptionCardButton : public tk::Button
+{
+protected:
+    OptionCardButton() : tk::Button("", {}, tk::Button::Variant::Subtle) {}
+    TK_WIDGET_FACTORY_FRIEND(OptionCardButton)
+
+public:
+    void set_content(std::string title, std::string hint, bool recommended)
+    {
+        if (title != label())
+            set_label(title);
+        hint_        = std::move(hint);
+        recommended_ = recommended;
+    }
+
+    std::string access_description() const override
+    {
+        return hint_;
+    }
+
+    void paint(tk::PaintCtx& ctx) override
+    {
+        const auto& pal = ctx.theme.palette;
+        auto& c         = ctx.canvas;
+        const tk::Rect r = bounds();
+        c.fill_rounded_rect(r, kBtnRad, pressed() ? pal.subtle_pressed
+                                        : hovered() ? pal.subtle_hover
+                                                    : pal.bg);
+        c.stroke_rounded_rect(r, kBtnRad, recommended_ ? pal.accent : pal.border,
+                              recommended_ ? 1.5f : 1.0f);
+        tk::TextStyle ts;
+        ts.role = tk::FontRole::SidebarName;
+        if (auto lo = ctx.factory.build_text(label(), ts))
+            c.draw_text(*lo, {r.x + 14.0f, r.y + 11.0f}, pal.text_primary);
+        tk::TextStyle hs;
+        hs.role      = tk::FontRole::Caption;
+        hs.trim      = tk::TextTrim::Ellipsis;
+        hs.max_width = r.w - 48.0f;
+        if (auto lo = ctx.factory.build_text(hint_, hs))
+            c.draw_text(*lo, {r.x + 14.0f, r.y + 35.0f}, pal.text_secondary);
+        chevron_.draw(c, ctx.factory, kChevronRightSvg,
+                      {r.x + r.w - 14.0f - kChevronPx, r.y, kChevronPx, r.h}, kChevronPx,
+                      pal.text_muted);
+    }
+
+private:
+    std::string   hint_;
+    bool          recommended_ = false;
+    tk::IconCache chevron_;
+};
 
 EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
     : mode_(mode), step_(initial_step_(mode)), done_kind_(initial_done_kind_(mode))
@@ -114,6 +152,29 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
     save_button_->set_on_click(
         [this] { if (on_save_to_file) on_save_to_file(recovery_key_); });
 
+    auto make_link = [this](std::string label, std::function<void()> on_click)
+    {
+        auto link = tk::create_widget<tk::Button>(this, std::move(label), std::move(on_click),
+                                                  tk::Button::Variant::Link);
+        tk::Button* raw = add_child(std::move(link));
+        raw->set_visible(false);
+        return raw;
+    };
+    skip_link_ = make_link(tk::tr("Skip for now"), [this] { if (on_close) on_close(); });
+    passphrase_link_ = make_link(tk::tr("Use a passphrase instead"),
+                                 [this] { use_passphrase_(); });
+    back_link_ = make_link(tk::tr("Back"), [this] { go_back_(); });
+    lost_link_ = make_link(tk::tr("I've lost my recovery key and other devices"),
+                           [this] { advance_step_(Step::LostAccess); });
+    reject_link_ = make_link(tk::tr("Not me"), [this] { reject_(); });
+
+    device_card_ = add_child(tk::create_widget<OptionCardButton>(this));
+    device_card_->set_visible(false);
+    device_card_->set_on_click([this] { choose_other_device_(); });
+    key_card_ = add_child(tk::create_widget<OptionCardButton>(this));
+    key_card_->set_visible(false);
+    key_card_->set_on_click([this] { advance_step_(Step::EnterKey); });
+
     auto key_saved = tk::create_widget<tk::CheckButton>(
         this, tk::tr("I've saved my recovery key"));
     key_saved_cb_ = add_child(std::move(key_saved));
@@ -136,12 +197,14 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
 
         auto passphrase = tk::create_widget<tk::TextField>(this, 36.0f);
         passphrase->set_password(true);
+        passphrase->set_accessible_name(tk::tr("Passphrase"));
         passphrase->set_visible(false);
         passphrase->set_on_changed(repaint);
         passphrase_field_ = add_child(std::move(passphrase));
 
         auto confirm = tk::create_widget<tk::TextField>(this, 36.0f);
         confirm->set_password(true);
+        confirm->set_accessible_name(tk::tr("Confirm passphrase"));
         confirm->set_visible(false);
         confirm->set_on_changed(repaint);
         confirm->set_on_submit(submit);
@@ -149,6 +212,7 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
 
         auto key = tk::create_widget<tk::TextField>(this, 36.0f);
         key->set_password(false);
+        key->set_accessible_name(tk::tr("Recovery key or passphrase"));
         key->set_visible(false);
         key->set_on_changed(repaint);
         key->set_on_submit(submit);
@@ -188,6 +252,7 @@ void EncryptionSetupOverlay::key_save_result(bool ok, const std::string& error)
                                      : tk::trf(tk::tr("Couldn't save the file: {0}"),
                                                {error});
     }
+    announce_(save_status_, !ok);
     if (host()) host()->request_repaint();
 }
 
@@ -223,6 +288,7 @@ void EncryptionSetupOverlay::advance_progress(uint8_t step,
         else
             advance_step_(passphrase_mode_ ? Step::PassphraseEntry : Step::Intro);
         error_msg_ = std::move(msg);
+        announce_(error_msg_, true);
     }
 }
 
@@ -358,6 +424,7 @@ void EncryptionSetupOverlay::fire_primary_()
 
         case Step::CompareCodes:
             advance_step_(Step::Confirming);
+            announce_(tk::tr("Confirming\xe2\x80\xa6"));
             if (on_sas_match) on_sas_match();
             break;
 
@@ -423,6 +490,7 @@ void EncryptionSetupOverlay::verification_done(DoneKind kind)
     resume_step_.reset();
     done_kind_ = kind;
     advance_step_(Step::Done);
+    announce_(done_text_());
 }
 
 void EncryptionSetupOverlay::verification_failed(std::string reason, bool can_retry)
@@ -433,6 +501,7 @@ void EncryptionSetupOverlay::verification_failed(std::string reason, bool can_re
     error_msg_ = reason.empty()
                      ? tk::tr("The request was cancelled or timed out.")
                      : std::move(reason);
+    announce_(error_msg_, true);
 }
 
 bool EncryptionSetupOverlay::in_verification_step() const
@@ -486,16 +555,8 @@ void EncryptionSetupOverlay::return_to_start()
 
 void EncryptionSetupOverlay::simulate_primary_action()         { fire_primary_(); }
 void EncryptionSetupOverlay::simulate_skip()                    { if (on_close) on_close(); }
-void EncryptionSetupOverlay::simulate_select_passphrase_mode()
-{
-    passphrase_mode_ = true;
-    advance_step_(Step::PassphraseEntry);
-}
-void EncryptionSetupOverlay::simulate_back()
-{
-    passphrase_mode_ = false;
-    advance_step_(mode_ == Mode::Fresh ? Step::Intro : Step::Choose);
-}
+void EncryptionSetupOverlay::simulate_select_passphrase_mode() { use_passphrase_(); }
+void EncryptionSetupOverlay::simulate_back()                    { go_back_(); }
 void EncryptionSetupOverlay::simulate_backdrop_click()
 {
     // Any point outside the (centred) card: just inside the top-left corner.
@@ -523,6 +584,47 @@ void EncryptionSetupOverlay::reject_()
                    "your account."),
             can_retry_);
     }
+}
+
+void EncryptionSetupOverlay::go_back_()
+{
+    passphrase_mode_ = false;
+    if (step_ == Step::VerifyFailed)
+        return_to_start(); // honours where an incoming request interrupted
+    else
+        advance_step_(mode_ == Mode::Fresh ? Step::Intro : Step::Choose);
+}
+
+void EncryptionSetupOverlay::use_passphrase_()
+{
+    passphrase_mode_ = true;
+    advance_step_(Step::PassphraseEntry);
+}
+
+std::string EncryptionSetupOverlay::done_text_() const
+{
+    switch (done_kind_)
+    {
+        case DoneKind::Protected:
+            return tk::tr("You're all set. Your messages are protected.");
+        case DoneKind::Unlocked:
+            return tk::tr("You're all set. Your encrypted messages are "
+                          "available on this device.");
+        case DoneKind::OtherDeviceConfirmed:
+            return tk::tr("Your other device is confirmed and can now read "
+                          "your encrypted messages.");
+        case DoneKind::UserVerified:
+            return tk::tr("Verified. You can trust you're talking to the "
+                          "right person.");
+    }
+    return {};
+}
+
+void EncryptionSetupOverlay::announce_(const std::string& text, bool assertive)
+{
+    if (host())
+        host()->announce(text, assertive ? tk::Host::Politeness::Assertive
+                                         : tk::Host::Politeness::Polite);
 }
 
 void EncryptionSetupOverlay::on_theme_changed(const tk::Theme& t)
@@ -653,9 +755,14 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
     // not drawn this step can't be hit-tested with a stale rect. The child
     // action buttons are hidden up front and re-shown by the steps that use
     // them, so a vanished button is skipped by hit-testing too.
-    secondary_link_ = passphrase_link_ = back_link_ =
-        device_row_ = key_row_ = lost_link_ = reject_link_ = {};
     primary_enabled_ = true;
+    access_title_.clear();
+    access_body_.clear();
+    access_rows_.clear();
+    // The links and option cards are hidden *after* the step below has
+    // placed the ones it uses (not hidden-then-reshown like the buttons
+    // just below), so a focused link doesn't flicker invisible every frame.
+    std::vector<tk::Button*> placed;
     if (primary_button_) primary_button_->set_visible(false);
     if (copy_button_) copy_button_->set_visible(false);
     if (save_button_) save_button_->set_visible(false);
@@ -697,6 +804,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
     auto place_button = [&](tk::Button* btn, tk::Rect r)
     {
         if (!btn) return;
+        placed.push_back(btn);
         btn->set_visible(true);
         btn->arrange(lc, r);
         btn->paint(ctx);
@@ -725,6 +833,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
     float content_y = card.y + kCardPad;
     auto draw_title = [&](const std::string& title)
     {
+        access_title_ = title;
         tk::TextStyle st;
         st.role = tk::FontRole::Title;
         auto lo = ctx.factory.build_text(title, st);
@@ -754,12 +863,18 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                       label, enabled);
     };
     // A bare link whose text starts at the content's left edge.
-    auto left_link = [&](float y, const std::string& label) -> tk::Rect
+    auto left_link = [&](tk::Button* link, float y, const std::string& label)
     {
-        tk::Rect r{cx - kEncryptionSetupBtnHPad, y, button_width(ctx, label),
-                   kEncryptionSetupBtnH};
-        paint_link(ctx, r, label);
-        return r;
+        if (!link) return;
+        if (link->label() != label) link->set_label(label);
+        place_button(link, {cx - kEncryptionSetupBtnHPad, y, button_width(ctx, label),
+                            kEncryptionSetupBtnH});
+    };
+    // Painted-only text an AT should still be able to read.
+    auto note = [&](const std::string& text, tk::Rect r,
+                    tk::Role role = tk::Role::StaticText)
+    {
+        if (!text.empty()) access_rows_.push_back({role, text, r});
     };
 
     switch (step_)
@@ -773,45 +888,32 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                                    "on this device."),
                             tk::FontRole::Body, pal.text_secondary);
 
+            access_body_ = tk::tr("Choose how to unlock your encrypted messages "
+                                  "on this device.");
+
             // Option rows: a bordered card each, title + one-line hint.
             constexpr float kRowH = 64.0f;
             float row_y = card.y + 128.0f;
-            auto draw_row = [&](const std::string& title, const std::string& hint,
-                                bool recommended) -> tk::Rect
+            auto place_card = [&](OptionCardButton* card_btn, const std::string& title,
+                                  const std::string& hint, bool recommended)
             {
-                tk::Rect r{cx, row_y, cw, kRowH};
-                c.fill_rounded_rect(r, kBtnRad, pal.bg);
-                c.stroke_rounded_rect(r, kBtnRad, recommended ? pal.accent : pal.border,
-                                      recommended ? 1.5f : 1.0f);
-                tk::TextStyle ts;
-                ts.role = tk::FontRole::SidebarName;
-                if (auto lo = ctx.factory.build_text(title, ts))
-                    c.draw_text(*lo, {r.x + 14.0f, r.y + 11.0f}, pal.text_primary);
-                tk::TextStyle hs;
-                hs.role      = tk::FontRole::Caption;
-                hs.trim      = tk::TextTrim::Ellipsis;
-                hs.max_width = r.w - 48.0f;
-                if (auto lo = ctx.factory.build_text(hint, hs))
-                    c.draw_text(*lo, {r.x + 14.0f, r.y + 35.0f}, pal.text_secondary);
-                chevron_icon_.draw(c, ctx.factory, kChevronRightSvg,
-                                   {r.x + r.w - 14.0f - kChevronPx, r.y, kChevronPx, r.h},
-                                   kChevronPx, pal.text_muted);
+                if (!card_btn) return;
+                card_btn->set_content(title, hint, recommended);
+                place_button(card_btn, {cx, row_y, cw, kRowH});
                 row_y += kRowH + 10.0f;
-                return r;
             };
             if (has_other_device_)
-                device_row_ = draw_row(tk::tr("Use another device"),
-                                       tk::tr("Approve from a device where you're "
-                                              "already signed in"),
-                                       true);
-            key_row_ = draw_row(tk::tr("Enter recovery key"),
-                                tk::tr("Or the passphrase you chose instead"),
-                                !has_other_device_);
+                place_card(device_card_, tk::tr("Use another device"),
+                           tk::tr("Approve from a device where you're "
+                                  "already signed in"),
+                           true);
+            place_card(key_card_, tk::tr("Enter recovery key"),
+                       tk::tr("Or the passphrase you chose instead"), !has_other_device_);
 
-            lost_link_ = left_link(row_y - 2.0f,
-                                   tk::tr("I've lost my recovery key and other devices"));
+            left_link(lost_link_, row_y - 2.0f,
+                      tk::tr("I've lost my recovery key and other devices"));
 
-            secondary_link_ = left_link(by, tk::tr("Skip for now"));
+            left_link(skip_link_, by, tk::tr("Skip for now"));
             break;
         }
 
@@ -819,16 +921,16 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         case Step::LostAccess:
         {
             draw_title(tk::tr("Reset encryption?"));
-            paint_paragraph(
-                ctx, {cx, content_y, cw, 0},
+            access_body_ =
                 tk::tr("If you've lost both your recovery key and every other "
                        "signed-in device, you can start over with a new recovery "
                        "key. Messages you can't read now will stay unreadable, "
                        "and people you chat with will see that your security "
-                       "details changed."),
-                tk::FontRole::Body, pal.text_secondary);
+                       "details changed.");
+            paint_paragraph(ctx, {cx, content_y, cw, 0}, access_body_, tk::FontRole::Body,
+                            pal.text_secondary);
             place_right_primary(tk::tr("Reset encryption"), true);
-            back_link_ = left_link(by, tk::tr("Back"));
+            left_link(back_link_, by, tk::tr("Back"));
             break;
         }
 
@@ -839,10 +941,10 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             if (we_asked && !incoming_own_device_)
             {
                 draw_title(tk::trf(tk::tr("Waiting for {0}"), {peer_}));
-                paint_paragraph(ctx, {cx, content_y, cw, 0},
-                                tk::trf(tk::tr("{0} needs to accept the verification "
-                                               "request in their Matrix app."),
-                                        {peer_}),
+                access_body_ = tk::trf(tk::tr("{0} needs to accept the verification "
+                                              "request in their Matrix app."),
+                                       {peer_});
+                paint_paragraph(ctx, {cx, content_y, cw, 0}, access_body_,
                                 tk::FontRole::Body, pal.text_secondary);
             }
             else
@@ -850,11 +952,13 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                 draw_title(we_asked ? tk::tr("Check your other device")
                                     : tk::tr("Starting verification\xe2\x80\xa6"));
                 if (we_asked)
-                    paint_paragraph(ctx, {cx, content_y, cw, 0},
-                                    tk::tr("Open Tesseract (or another Matrix app) on a "
-                                           "device where you're signed in and accept "
-                                           "the request."),
+                {
+                    access_body_ = tk::tr("Open Tesseract (or another Matrix app) on a "
+                                          "device where you're signed in and accept "
+                                          "the request.");
+                    paint_paragraph(ctx, {cx, content_y, cw, 0}, access_body_,
                                     tk::FontRole::Body, pal.text_secondary);
+                }
             }
             draw_spinner(by - 40.0f);
             place_right_primary(tk::tr("Cancel"), true);
@@ -876,11 +980,12 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                                      "few numbers to make sure you're talking to "
                                      "the right person."),
                               {peer_});
+            access_body_ = body;
             paint_paragraph(ctx, {cx, content_y, cw, 0}, body, tk::FontRole::Body,
                             pal.text_secondary);
             place_right_primary(tk::tr("Continue"), true);
-            reject_link_ = left_link(by, incoming_own_device_ ? tk::tr("Not me")
-                                                              : tk::tr("Decline"));
+            left_link(reject_link_, by,
+                      incoming_own_device_ ? tk::tr("Not me") : tk::tr("Decline"));
             break;
         }
 
@@ -890,32 +995,43 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         case Step::CompareCodes:
         {
             draw_title(tk::tr("Compare numbers"));
-            content_y += paint_paragraph(
-                ctx, {cx, content_y, cw, 0},
+            access_body_ =
                 incoming_own_device_
                     ? tk::tr("Check that the other device shows the same numbers in "
                              "the same order.")
                     : tk::trf(tk::tr("Check that {0} sees the same numbers in the same "
                                      "order."),
-                              {peer_}),
-                tk::FontRole::Body, pal.text_secondary);
+                              {peer_});
+            content_y += paint_paragraph(ctx, {cx, content_y, cw, 0}, access_body_,
+                                         tk::FontRole::Body, pal.text_secondary);
             content_y += 14.0f;
-            paint_sas_decimal_row(ctx, {cx, content_y, cw, sas_decimal_row_height()},
-                                  sas_.decimals);
+            const tk::Rect dec_rect{cx, content_y, cw, sas_decimal_row_height()};
+            paint_sas_decimal_row(ctx, dec_rect, sas_.decimals);
+            note(tk::trf(tk::tr("Numbers: {0}, {1}, {2}"),
+                         {std::to_string(sas_.decimals[0]), std::to_string(sas_.decimals[1]),
+                          std::to_string(sas_.decimals[2])}),
+                 dec_rect);
             content_y += sas_decimal_row_height();
             if (!sas_.emojis.empty())
             {
                 content_y += 18.0f;
-                content_y += paint_paragraph(
-                    ctx, {cx, content_y, cw, 0},
-                    tk::tr("Or compare these emoji:"),
-                    tk::FontRole::Caption, pal.text_secondary);
-                paint_sas_emoji_grid(ctx,
-                                     {cx, content_y + 10.0f, cw, sas_emoji_grid_height()},
-                                     sas_.emojis);
+                const std::string emoji_caption = tk::tr("Or compare these emoji:");
+                const float cap_h = paint_paragraph(ctx, {cx, content_y, cw, 0},
+                                                    emoji_caption, tk::FontRole::Caption,
+                                                    pal.text_secondary);
+                note(emoji_caption, {cx, content_y, cw, cap_h});
+                content_y += cap_h;
+                const tk::Rect grid_rect{cx, content_y + 10.0f, cw, sas_emoji_grid_height()};
+                paint_sas_emoji_grid(ctx, grid_rect, sas_.emojis);
+                // One row per emoji, in reading order, named by its label so
+                // the comparison works by ear.
+                for (std::size_t i = 0; i < sas_.emojis.size(); ++i)
+                    note(tk::trf(tk::tr("{0}. {1}"),
+                                 {std::to_string(i + 1), sas_.emojis[i].description}),
+                         grid_rect);
             }
             place_right_primary(tk::tr("They match"), true);
-            reject_link_ = left_link(by, tk::tr("They don't match"));
+            left_link(reject_link_, by, tk::tr("They don't match"));
             break;
         }
 
@@ -926,7 +1042,8 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             draw_spinner(scy);
             tk::TextStyle st;
             st.role = tk::FontRole::Body;
-            if (auto lo = ctx.factory.build_text(tk::tr("Confirming\xe2\x80\xa6"), st))
+            access_title_ = tk::tr("Confirming\xe2\x80\xa6");
+            if (auto lo = ctx.factory.build_text(access_title_, st))
             {
                 tk::Size sz = lo->measure();
                 c.draw_text(*lo, {card.x + (card.w - sz.w) * 0.5f, scy + 34.0f},
@@ -939,11 +1056,12 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         case Step::VerifyFailed:
         {
             draw_title(tk::tr("Couldn't confirm"));
+            access_body_ = error_msg_;
             paint_paragraph(ctx, {cx, content_y, cw, 0}, error_msg_, tk::FontRole::Body,
                             pal.text_secondary);
             place_right_primary(can_retry_ ? tk::tr("Try again") : tk::tr("Close"), true);
             if (mode_ != Mode::Verify)
-                back_link_ = left_link(by, tk::tr("Back"));
+                left_link(back_link_, by, tk::tr("Back"));
             break;
         }
 
@@ -961,25 +1079,25 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                     : tk::tr("To read your encrypted messages on this device, "
                              "confirm it's you with your recovery key or with "
                              "another device where you're signed in.");
+            access_body_ = body;
             content_y += paint_paragraph(ctx, {cx, content_y, cw, 0}, body,
                                          tk::FontRole::Body, pal.text_secondary);
 
             // Inline error (e.g. enable_recovery failed) — shown so the user
             // sees why setup bounced back here.
             if (!error_msg_.empty())
-                paint_paragraph(ctx, {cx, content_y + 10.0f, cw, 0}, error_msg_,
-                                tk::FontRole::Small, pal.destructive);
+            {
+                const float eh = paint_paragraph(ctx, {cx, content_y + 10.0f, cw, 0},
+                                                 error_msg_, tk::FontRole::Small,
+                                                 pal.destructive);
+                note(error_msg_, {cx, content_y + 10.0f, cw, eh});
+            }
 
             // Advanced option: a passphrase the user picks, instead of a
             // generated key. Deliberately a quiet link, not an upfront choice.
             if (fresh)
-            {
-                const std::string pl = tk::tr("Use a passphrase instead");
-                passphrase_link_ = {cx - kEncryptionSetupBtnHPad,
-                                    by - kEncryptionSetupBtnH - 6.0f,
-                                    button_width(ctx, pl), kEncryptionSetupBtnH};
-                paint_link(ctx, passphrase_link_, pl);
-            }
+                left_link(passphrase_link_, by - kEncryptionSetupBtnH - 6.0f,
+                          tk::tr("Use a passphrase instead"));
 
             const std::string prim =
                 fresh ? tk::tr("Create recovery key") : tk::tr("Continue");
@@ -987,11 +1105,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             place_primary({card.x + card.w - kCardPad - pw, by, pw, kEncryptionSetupBtnH},
                           prim, true);
 
-            const std::string skip = tk::tr("Skip for now");
-            float             sw   = button_width(ctx, skip);
-            secondary_link_        = {cx - kEncryptionSetupBtnHPad, by, sw,
-                                      kEncryptionSetupBtnH};
-            paint_link(ctx, secondary_link_, skip);
+            left_link(skip_link_, by, tk::tr("Skip for now"));
             break;
         }
 
@@ -999,10 +1113,10 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         case Step::PassphraseEntry:
         {
             draw_title(tk::tr("Choose a passphrase"));
-            paint_paragraph(ctx, {cx, content_y, cw, 0},
-                            tk::tr("Pick something memorable that you don't use "
-                                   "anywhere else."),
-                            tk::FontRole::Body, pal.text_secondary);
+            access_body_ = tk::tr("Pick something memorable that you don't use "
+                                  "anywhere else.");
+            paint_paragraph(ctx, {cx, content_y, cw, 0}, access_body_, tk::FontRole::Body,
+                            pal.text_secondary);
 
             tk::Rect f1 = passphrase_field_rect_value();
             tk::Rect f2 = passphrase_confirm_field_rect_value();
@@ -1023,8 +1137,11 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             if (hint.empty() && !confirm.empty() && !passphrases_match_())
                 hint = tk::tr("The passphrases don't match.");
             if (!hint.empty())
-                paint_paragraph(ctx, {cx, f2.y + f2.h + 10.0f, cw, 0}, hint,
-                                tk::FontRole::Small, pal.destructive);
+            {
+                const float hh = paint_paragraph(ctx, {cx, f2.y + f2.h + 10.0f, cw, 0}, hint,
+                                                 tk::FontRole::Small, pal.destructive);
+                note(hint, {cx, f2.y + f2.h + 10.0f, cw, hh});
+            }
 
             primary_enabled_ = passphrases_match_();
             const std::string cont = tk::tr("Continue");
@@ -1032,10 +1149,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             place_primary({card.x + card.w - kCardPad - cwid, by, cwid, kEncryptionSetupBtnH},
                           cont, primary_enabled_);
 
-            const std::string back = tk::tr("Back");
-            back_link_ = {cx - kEncryptionSetupBtnHPad, by, button_width(ctx, back),
-                          kEncryptionSetupBtnH};
-            paint_link(ctx, back_link_, back);
+            left_link(back_link_, by, tk::tr("Back"));
             break;
         }
 
@@ -1043,17 +1157,21 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         case Step::EnterKey:
         {
             draw_title(tk::tr("Enter your recovery key"));
-            paint_paragraph(ctx, {cx, card.y + 92.0f, cw, 0},
-                            tk::tr("If you set a passphrase instead, enter that."),
+            access_body_ = tk::tr("If you set a passphrase instead, enter that.");
+            paint_paragraph(ctx, {cx, card.y + 92.0f, cw, 0}, access_body_,
                             tk::FontRole::Small, pal.text_muted);
 
             place_field(key_field_, key_field_rect_value()); // card.y + 120
 
             if (!error_msg_.empty())
-                paint_paragraph(ctx, {cx, card.y + 168.0f, cw, 0}, error_msg_,
-                                tk::FontRole::Small, pal.destructive);
+            {
+                const float eh = paint_paragraph(ctx, {cx, card.y + 168.0f, cw, 0},
+                                                 error_msg_, tk::FontRole::Small,
+                                                 pal.destructive);
+                note(error_msg_, {cx, card.y + 168.0f, cw, eh});
+            }
 
-            back_link_ = left_link(by, tk::tr("Back"));
+            left_link(back_link_, by, tk::tr("Back"));
 
             const std::string key = key_field_ ? key_field_->text() : std::string();
             primary_enabled_ = !key.empty();
@@ -1091,6 +1209,19 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                     below += sz.h + 14.0f;
                 }
             }
+            access_title_ = progress_label_;
+            {
+                // A busy/progress node an AT can poll; percent in the name
+                // since these rows carry no numeric value.
+                std::string pname = progress_label_;
+                if (progress_fraction_ >= 0.0f)
+                    pname = tk::trf(tk::tr("{0} {1}%"),
+                                    {progress_label_,
+                                     std::to_string(static_cast<int>(
+                                         progress_fraction_ * 100.0f + 0.5f))});
+                note(pname, {card.x + kCardPad, scy - 16.0f, cw, below - scy + 16.0f},
+                     tk::Role::ProgressBar);
+            }
             // Thin determinate bar while room keys upload.
             if (progress_fraction_ >= 0.0f)
             {
@@ -1109,12 +1240,11 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         case Step::ShowKey:
         {
             draw_title(tk::tr("Save your recovery key"));
-            content_y += paint_paragraph(
-                ctx, {cx, content_y, cw, 0},
-                tk::tr("Keep it somewhere safe, like a password manager. You'll "
-                       "need it to read your messages if you sign in on a new "
-                       "device."),
-                tk::FontRole::Body, pal.text_secondary);
+            access_body_ = tk::tr("Keep it somewhere safe, like a password manager. You'll "
+                                  "need it to read your messages if you sign in on a new "
+                                  "device.");
+            content_y += paint_paragraph(ctx, {cx, content_y, cw, 0}, access_body_,
+                                         tk::FontRole::Body, pal.text_secondary);
             content_y += 14.0f;
 
             // Key box, grouped in fours so it can be read out / compared.
@@ -1130,6 +1260,10 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                 if (lo)
                     c.draw_text(*lo, {box.x + 12.0f, box.y + 10.0f},
                                 pal.text_primary);
+                // Read group by group ("ABCD EFGH …") so it can be copied
+                // down by ear.
+                note(tk::trf(tk::tr("Recovery key: {0}"), {format_recovery_key(recovery_key_)}),
+                     box);
             }
 
             // Copy (+ Save to file… when the shell offers it) below the box,
@@ -1160,9 +1294,11 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                 st.max_width = std::max(0.0f, right - cx);
                 auto lo = ctx.factory.build_text(save_status_, st);
                 if (lo)
-                    c.draw_text(*lo,
-                                {cx, row_y + (kEncryptionSetupBtnH - lo->measure().h) * 0.5f},
-                                save_failed_ ? pal.destructive : pal.text_muted);
+                {
+                    const float sy = row_y + (kEncryptionSetupBtnH - lo->measure().h) * 0.5f;
+                    c.draw_text(*lo, {cx, sy}, save_failed_ ? pal.destructive : pal.text_muted);
+                    note(save_status_, {cx, sy, lo->measure().w, lo->measure().h});
+                }
             }
 
             // "I've saved my recovery key" checkbox (a real tk::CheckButton,
@@ -1193,25 +1329,8 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             c.fill_rounded_rect(dr, disc * 0.5f, pal.accent);
             done_check_icon_.draw(c, ctx.factory, kCheckSvg, dr, 30.0f,
                                   pal.text_on_accent);
-            std::string body;
-            switch (done_kind_)
-            {
-                case DoneKind::Protected:
-                    body = tk::tr("You're all set. Your messages are protected.");
-                    break;
-                case DoneKind::Unlocked:
-                    body = tk::tr("You're all set. Your encrypted messages are "
-                                  "available on this device.");
-                    break;
-                case DoneKind::OtherDeviceConfirmed:
-                    body = tk::tr("Your other device is confirmed and can now read "
-                                  "your encrypted messages.");
-                    break;
-                case DoneKind::UserVerified:
-                    body = tk::tr("Verified. You can trust you're talking to the "
-                                  "right person.");
-                    break;
-            }
+            const std::string body = done_text_();
+            access_title_ = body;
             {
                 tk::TextStyle st;
                 st.role      = tk::FontRole::Body;
@@ -1257,6 +1376,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                                       "as a different account, sign out there first, "
                                       "or copy the link into a private window."),
                                {reset_account_});
+            access_body_ = body;
             content_y += paint_paragraph(ctx, {cx, content_y, cw, 0}, body,
                                          tk::FontRole::Body,
                                          failed ? pal.destructive : pal.text_secondary);
@@ -1276,12 +1396,15 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                 if (host()) host()->request_repaint(); // self-drive the spinner
 
                 if (elapsed_ms >= kResetHintAfterMs && !reset_account_.empty())
-                    paint_paragraph(
-                        ctx, {cx, scy + 30.0f, cw, 0},
+                {
+                    const std::string hint =
                         tk::trf(tk::tr("Still waiting? Check that you approved it as "
                                        "{0}, not another account."),
-                                {reset_account_}),
-                        tk::FontRole::Small, pal.text_muted);
+                                {reset_account_});
+                    const float hh = paint_paragraph(ctx, {cx, scy + 30.0f, cw, 0}, hint,
+                                                     tk::FontRole::Small, pal.text_muted);
+                    note(hint, {cx, scy + 30.0f, cw, hh});
+                }
 
                 // Copy the approval link (for a private window / other
                 // profile signed in as the right account).
@@ -1304,6 +1427,12 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             break;
         }
     }
+
+    for (tk::Button* b : {skip_link_, passphrase_link_, back_link_, lost_link_, reject_link_,
+                          static_cast<tk::Button*>(device_card_),
+                          static_cast<tk::Button*>(key_card_)})
+        if (b && std::find(placed.begin(), placed.end(), b) == placed.end())
+            b->set_visible(false);
 }
 
 // ── Pointer handling ──────────────────────────────────────────────────────────
@@ -1313,37 +1442,18 @@ bool EncryptionSetupOverlay::on_pointer_down(tk::Point local)
     if (!visible()) return false;
 
     const tk::Point w{local.x + bounds().x, local.y + bounds().y};
+    backdrop_press_ = false;
 
-    press_secondary_ = press_back_ =
-        press_passphrase_ = press_device_row_ = press_key_row_ = press_lost_ =
-            press_reject_ = backdrop_press_ = false;
+    // During Progress / Confirming the operation is in flight, and during
+    // ResetApproving only the Cancel/Close child button acts: swallow
+    // backdrop / stray clicks so nothing can be dismissed mid-flight.
+    if (step_ == Step::Progress || step_ == Step::Confirming ||
+        step_ == Step::ResetApproving)
+        return true;
 
-    // During Progress / Confirming the operation is in flight: swallow every
-    // click.
-    if (step_ == Step::Progress || step_ == Step::Confirming) return true;
-
-    // During ResetApproving only the Cancel/Close child button acts; swallow
-    // backdrop / stray clicks so the wait can't be dismissed without aborting.
-    if (step_ == Step::ResetApproving) return true;
-
-    // The filled Primary / Copy / Save buttons are tk::Button children; the
-    // host dispatches their presses directly, so they never reach this
-    // handler. We only track the bare links, the checkbox, and the backdrop.
-    if (rect_contains(secondary_link_, w))
-        press_secondary_ = true;
-    else if (rect_contains(passphrase_link_, w))
-        press_passphrase_ = true;
-    else if (rect_contains(back_link_, w))
-        press_back_ = true;
-    else if (rect_contains(device_row_, w))
-        press_device_row_ = true;
-    else if (rect_contains(key_row_, w))
-        press_key_row_ = true;
-    else if (rect_contains(lost_link_, w))
-        press_lost_ = true;
-    else if (rect_contains(reject_link_, w))
-        press_reject_ = true;
-    else if (!rect_contains(card_bounds(), w))
+    // Every control on the card is a child tk::Button / CheckButton /
+    // TextField the host dispatches directly; only the backdrop lands here.
+    if (!rect_contains(card_bounds(), w))
         backdrop_press_ = true;
 
     return true; // modal: always consume
@@ -1352,47 +1462,41 @@ bool EncryptionSetupOverlay::on_pointer_down(tk::Point local)
 void EncryptionSetupOverlay::on_pointer_up(tk::Point local, bool inside_self)
 {
     const tk::Point w{local.x + bounds().x, local.y + bounds().y};
-    auto hit = [&](const tk::Rect& r) { return inside_self && rect_contains(r, w); };
-
-    // Primary / Copy / Save are tk::Button children and fire their own
-    // on_click; this handler only runs for the bare links, checkbox, and
-    // backdrop dismiss.
-    if (press_secondary_ && hit(secondary_link_))
+    if (backdrop_press_ && inside_self && backdrop_closes_() &&
+        !rect_contains(card_bounds(), w))
     {
         if (on_close) on_close();
     }
-    else if (press_passphrase_ && hit(passphrase_link_))
-    {
-        passphrase_mode_ = true;
-        advance_step_(Step::PassphraseEntry);
-    }
-    else if (press_back_ && hit(back_link_))
-    {
-        passphrase_mode_ = false;
-        if (step_ == Step::VerifyFailed)
-            return_to_start(); // honours where an incoming request interrupted
-        else
-            advance_step_(mode_ == Mode::Fresh ? Step::Intro : Step::Choose);
-    }
-    else if (press_device_row_ && hit(device_row_))
-        choose_other_device_();
-    else if (press_key_row_ && hit(key_row_))
-        advance_step_(Step::EnterKey);
-    else if (press_lost_ && hit(lost_link_))
-        advance_step_(Step::LostAccess);
-    else if (press_reject_ && hit(reject_link_))
-        reject_();
-    else if (backdrop_press_ && backdrop_closes_() &&
-             !rect_contains(card_bounds(), w))
-    {
-        if (on_close) on_close();
-    }
-
-    press_secondary_ = press_back_ =
-        press_passphrase_ = press_device_row_ = press_key_row_ = press_lost_ =
-            press_reject_ = backdrop_press_ = false;
-
+    backdrop_press_ = false;
     if (host()) host()->request_repaint();
+}
+
+bool EncryptionSetupOverlay::on_key_down(const tk::KeyEvent& e)
+{
+    if (!visible()) return false;
+    if (e.key == tk::Key::Escape)
+    {
+        if (backdrop_closes_() && on_close) on_close();
+        return true;
+    }
+    return false;
+}
+
+// ── Accessibility rows ────────────────────────────────────────────────────────
+
+tk::Role EncryptionSetupOverlay::access_role_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].role : tk::Role::None;
+}
+
+std::string EncryptionSetupOverlay::access_name_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].name : std::string();
+}
+
+tk::Rect EncryptionSetupOverlay::access_rect_for_widget_row(std::size_t i) const
+{
+    return i < access_rows_.size() ? access_rows_[i].rect : tk::Rect{};
 }
 
 } // namespace tesseract::views

@@ -102,15 +102,54 @@ public:
     static constexpr float kMonthHeaderH = 28.0f;
 
     // ── tk::ListAdapterAccessibility ───────────────────────────────────
-    // Row-level for now: one node per month header and one per thumbnail
-    // strip. Per-thumbnail nodes need the 2-D grid-table model (deferred).
+    // One StaticText node per month header; each thumbnail strip is a group
+    // whose children are the individual thumbnails (see
+    // access_subtree_for_row), each opening that item like a click.
     tk::Role access_role_for_row(std::size_t index) const override
     {
         if (index >= owner_.rows_.size())
             return tk::Role::None;
         return owner_.rows_[index].kind == MediaGridRow::Kind::MonthHeader
                    ? tk::Role::StaticText
-                   : tk::Role::ListItem;
+                   : tk::Role::Group;
+    }
+    std::vector<tk::AccessNode> access_subtree_for_row(std::size_t index) const override
+    {
+        std::vector<tk::AccessNode> out;
+        if (index >= owner_.rows_.size())
+            return out;
+        const auto& r = owner_.rows_[index];
+        if (r.kind != MediaGridRow::Kind::MediaStrip)
+            return out;
+        const tk::Rect row_rect = owner_.list_ ? owner_.list_->row_world_rect(static_cast<int>(index))
+                                               : tk::Rect{};
+        for (std::size_t i = 0; i < r.items.size(); ++i)
+        {
+            const MessageRowData& item = r.items[i];
+            tk::AccessNode n;
+            n.role = tk::Role::Button;
+            n.name = item.sender_name.empty()
+                         ? message_access_body(item)
+                         : tk::trf(tk::tr("{0}, from {1}"),
+                                   {message_access_body(item), item.sender_name});
+            n.rect = {row_rect.x + kPadX + static_cast<float>(i) * (kCellSize + kCellSpacing),
+                      row_rect.y, kCellSize, kCellSize};
+            RoomMediaView* owner = &owner_;
+            const std::string event_id = item.event_id;
+            n.activate = [owner, event_id]
+            {
+                for (const auto& row : owner->rows_)
+                    for (const auto& it : row.items)
+                        if (it.event_id == event_id)
+                        {
+                            owner->activate_item_(it);
+                            return true;
+                        }
+                return false;
+            };
+            out.push_back(std::move(n));
+        }
+        return out;
     }
     std::string access_name_for_row(std::size_t index) const override
     {
@@ -119,11 +158,11 @@ public:
         const auto& r = owner_.rows_[index];
         if (r.kind == MediaGridRow::Kind::MonthHeader)
             return r.month_label;
-        return tk::trf(tk::trn("{0} item", "{0} items",
-                               static_cast<long>(r.items.size())),
-                       {std::to_string(r.items.size())}) +
-               (r.month_label.empty() ? std::string{}
-                                      : ", " + r.month_label);
+        const std::string count = tk::trf(tk::trn("{0} item", "{0} items",
+                                                  static_cast<long>(r.items.size())),
+                                          {std::to_string(r.items.size())});
+        return r.month_label.empty() ? count
+                                     : tk::trf(tk::tr("{0}, {1}"), {count, r.month_label});
     }
     bool access_activate_row(std::size_t index) override
     {
@@ -214,6 +253,7 @@ RoomMediaView::RoomMediaView() : adapter_(std::make_unique<Adapter>(*this))
     auto close_button = tk::create_widget<tk::Button>(
         this, std::string{}, std::function<void()>{}, tk::Button::Variant::Icon);
     close_button->set_icon(kCloseSvg, 20.0f);
+    close_button->set_accessible_name(tk::tr("Close"));
     close_btn_ = add_child(std::move(close_button));
     close_btn_->set_on_click([this] { close(); });
 }

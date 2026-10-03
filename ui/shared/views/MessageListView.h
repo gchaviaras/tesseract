@@ -277,6 +277,10 @@ std::size_t membership_group_start_of(const std::vector<MessageRowData>& msgs,
 // actions, and rows without a reason, pass through unchanged.
 std::string with_membership_reason(std::string phrase, const MessageRowData& m);
 
+// Screen-reader description of a message's content (media kind / caption,
+// file name, deleted / undecryptable, or the body) — see MessageListView.cpp.
+std::string message_access_body(const MessageRowData& m);
+
 class MessageListView : public tk::ListView
 {
 public:
@@ -1260,6 +1264,12 @@ private:
     // Same check from a click handler that only has the event id: resolves the
     // row's `is_own` from the message list before consulting the predicate.
     bool media_is_hidden_by_eid_(const std::string& event_id) const;
+    // Scroll to (or ask the shell to load) the message `reply_event_id`
+    // replies to — the reply-quote click. False when there's nothing to do.
+    bool jump_to_reply_original_(const std::string& reply_event_id);
+    // A clicked link: a matrix.to user link opens the profile, anything else
+    // goes to on_link_clicked. False when neither callback is set.
+    bool open_link_(const std::string& url);
     MentionAvatarProvider mention_avatar_provider_;
     RoomAvatarProvider room_avatar_provider_;
     // Small, dedicated mark-and-sweep cache for rasterized mention-pill

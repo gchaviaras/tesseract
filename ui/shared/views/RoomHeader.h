@@ -10,6 +10,7 @@
 
 #include "DatePickerView.h"
 #include "PopupMenu.h"
+#include "tk/access_tree.h"
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/host.h"
@@ -26,7 +27,7 @@
 namespace tesseract::views
 {
 
-class RoomHeader : public tk::Widget
+class RoomHeader : public tk::Widget, public tk::WidgetRowAccessibility
 {
 public:
     static constexpr float kHeight = 60.0f;
@@ -102,6 +103,11 @@ public:
     void arrange(tk::LayoutCtx&, tk::Rect bounds) override;
     void paint(tk::PaintCtx&) override;
     void paint_overlay(tk::PaintCtx&) override;
+    void access_detached_children(std::vector<tk::Widget*>& out) const override
+    {
+        if (date_picker_visible_ && date_picker_)
+            out.push_back(date_picker_.get());
+    }
     void on_popup_dismiss() override;
 
     bool on_pointer_down(tk::Point local) override;
@@ -113,6 +119,17 @@ public:
 
     // Fired when a hyperlink in the room topic is clicked.
     std::function<void(const std::string& url)> on_link_clicked;
+
+    // ── Accessibility ─────────────────────────────────────────────────────
+    // Painted-only content: the encryption lock, and — when the topic is
+    // rich text (HTML, or a plain topic with URLs), so the topic Label is
+    // hidden — the topic text plus one Link row per link in it.
+    std::size_t access_row_count() const override;
+    tk::Role    access_role_for_widget_row(std::size_t i) const override;
+    std::string access_name_for_widget_row(std::size_t i) const override;
+    bool        access_activate_widget_row(std::size_t i) override;
+    tk::Rect    access_rect_for_widget_row(std::size_t i) const override;
+    bool        access_rows_after_children() const override { return true; }
     // Fired when the pointer enters or leaves a hyperlink in the topic.
     // Passes the URL while hovering, empty string when leaving.
     std::function<void(const std::string& url)> on_link_hovered;
@@ -220,6 +237,15 @@ private:
 
     bool encrypted_ = false;
     tk::Rect lock_icon_rect_{};
+
+    struct AccessRow
+    {
+        tk::Role    role;
+        std::string name;
+        std::string url; // Link rows only
+        tk::Rect    rect;
+    };
+    mutable std::vector<AccessRow> access_rows_;
 
     bool press_info_ = false; // true when header area (not calendar) is pressed
     bool hover_topic_ = false;

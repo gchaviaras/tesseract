@@ -46,6 +46,7 @@ Color cb_zone_fill(Button::Variant v, const Theme& th, bool enabled, bool hovere
         return th.palette.destructive;
     case Button::Variant::Subtle:
     case Button::Variant::Icon:
+    case Button::Variant::Link:
         if (pressed) return th.palette.subtle_pressed;
         if (hovered) return th.palette.subtle_hover;
         return Color::rgba(0, 0, 0, 0);

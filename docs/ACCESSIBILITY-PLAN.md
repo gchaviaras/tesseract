@@ -1,5 +1,27 @@
 # Accessibility implementation plan
 
+> **Gap pass (2026-10-03):** a re-audit after a month of feature work found
+> new views unmapped and several framework holes; all closed in one pass.
+> Framework: `Widget::access_detached_children` (register_popup'd canvas
+> popups — emoji/sticker pickers, receipts, date picker — were unreachable),
+> `access_modal` pruning, `access_description`, `access_value` +
+> `Role::ProgressBar`, `AccessState::disabled`, 2-D grid positions
+> (`grid_row/col`, `WidgetRowAccessibility::access_grid_*`),
+> `Host::announce()` (status only: toasts, status line, send failures, call
+> join/leave), bridges pushing name/state/value changes while an AT is
+> attached (debounced via `Host::add_paint_listener`), stable identities for
+> `access_subtree_for_row` nodes, and a `tk::Button::Variant::Link`.
+> Views: EncryptionSetupOverlay, InviteDialog, ForwardRoomPicker,
+> RoomDirectoryView, SpaceAddRoomList, SpaceChildRoomGrid,
+> ReceiptGridPopup, RoomMediaView thumbnails, DatePickerView,
+> PinnedBanner, KnockRequestsPanel/KnockStatusCard, ExportHistoryDialog,
+> ImagePackEditorView, AvatarEditControl owners, RoomHeader rich topic +
+> lock, ComposeBar banners, MessageListView (reply/edited/time/thread/
+> reactions, tables, links, previews, media), PopupMenu keyboard nav.
+> Closed as won't-fix: `tk::GroupBox` (its one user is untitled and doesn't
+> parent the grouped widgets, so there is nothing to name). Still open:
+> real screen-reader verification on every platform, and Phase 5 below.
+
 > **Phase 4 status (2026-09-02):** the widget-by-widget mapping sweep ran
 > across a fresh audit of the (grown) view tree. Mapped this pass: the tab
 > strips (`TabBar`/`TabView`/`SideTabView`), `SettingsGroup`,

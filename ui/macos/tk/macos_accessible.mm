@@ -53,6 +53,7 @@ NSAccessibilityRole to_ns_role(tk::Role r)
     case tk::Role::Dialog:      return NSAccessibilityGroupRole; // + subrole, see to_ns_subrole
     case tk::Role::MenuItem:    return NSAccessibilityMenuItemRole;
     case tk::Role::Group:       return NSAccessibilityGroupRole;
+    case tk::Role::ProgressBar: return NSAccessibilityProgressIndicatorRole;
     case tk::Role::None:        return NSAccessibilityGroupRole;
     }
     return NSAccessibilityGroupRole;
@@ -123,6 +124,34 @@ AccessKey key_for(const tk::AccessNode& n)
     return {n.widget, n.row_index};
 }
 
+// Real widget nodes report enabled() directly; synthesized ones carry
+// state.disabled (see AccessState::disabled).
+bool node_disabled(const tk::AccessNode& n)
+{
+    if (n.state.disabled)
+        return true;
+    return n.row_index == -1 && n.widget && !n.activate && !n.widget->enabled();
+}
+
+// Last values posted to VoiceOver for an element — see AccessBridge::
+// post_change_notifications (mirrors qt_accessible.cpp's Snapshot).
+struct Snapshot
+{
+    std::string name;
+    tk::AccessState state;
+    bool disabled = false;
+    double value = 0.0;
+};
+
+Snapshot snapshot_of(const tk::AccessNode& n)
+{
+    return {n.name, n.state, node_disabled(n), n.value.now};
+}
+
+// Debounce for the AT-active refresh — see qt_accessible.cpp's
+// kRefreshDelayMs.
+constexpr int64_t kRefreshDelayMs = 200;
+
 // Depth-first hit test against world-space AccessNode rects (already in the
 // same coordinate space as `local` — see AccessNode::rect's own doc
 // comment), returning the deepest matching descendant or `node` itself if
@@ -168,7 +197,16 @@ public:
     void mark_dirty()
     {
         dirty_ = true;
+        schedule_refresh();
     }
+
+    // While VoiceOver holds elements (has queried us), rebuild shortly after
+    // any relayout/repaint so title/value changes are posted. Defined
+    // out-of-class (looks the bridge up again by view when it fires — it
+    // may have been detached in between).
+    void schedule_refresh();
+
+    void announce(const std::string& text, bool assertive);
 
     const tk::AccessNode* root_node()
     {
@@ -271,8 +309,21 @@ private:
     // needs TKAccessElement's complete type).
     void notify_current_row(tk::Widget* owner, int idx);
 
+    void post_change_notifications();
+
+public:
+    void remember(const AccessKey& key)
+    {
+        auto it = index_.find(key);
+        if (it != index_.end())
+            snapshots_[key] = snapshot_of(*it->second);
+    }
+
+private:
     Surface* surface_;
     bool dirty_ = true;
+    bool refresh_pending_ = false;
+    std::unordered_map<AccessKey, Snapshot, AccessKeyHash> snapshots_;
     tk::AccessNode tree_;
     std::unordered_map<AccessKey, const tk::AccessNode*, AccessKeyHash> index_;
     std::unordered_map<AccessKey, AccessKey, AccessKeyHash> parent_of_;
@@ -360,6 +411,8 @@ private:
     const tk::AccessNode* n = self.tkNode;
     if (!n)
         return nil;
+    if (n->value.present)
+        return @(n->value.now);
     switch (n->role)
     {
     case tk::Role::CheckBox:
@@ -375,13 +428,70 @@ private:
 - (BOOL)isAccessibilityEnabled
 {
     const tk::AccessNode* n = self.tkNode;
-    return (n && n->row_index < 0 && n->widget) ? (n->widget->enabled() ? YES : NO) : YES;
+    return (n && tk::macos::node_disabled(*n)) ? NO : YES;
+}
+
+- (id)accessibilityMinValue
+{
+    const tk::AccessNode* n = self.tkNode;
+    return (n && n->value.present) ? @(n->value.min) : nil;
+}
+
+- (id)accessibilityMaxValue
+{
+    const tk::AccessNode* n = self.tkNode;
+    return (n && n->value.present) ? @(n->value.max) : nil;
+}
+
+- (NSString*)accessibilityHelp
+{
+    const tk::AccessNode* n = self.tkNode;
+    if (!n || n->description.empty())
+        return nil;
+    return [NSString stringWithUTF8String:n->description.c_str()];
+}
+
+- (BOOL)isAccessibilityModal
+{
+    const tk::AccessNode* n = self.tkNode;
+    return (n && n->modal) ? YES : NO;
+}
+
+// "Item N" for list rows / grid cells.
+- (NSInteger)accessibilityIndex
+{
+    const tk::AccessNode* n = self.tkNode;
+    return (n && n->pos_in_set > 0) ? n->pos_in_set - 1 : 0;
+}
+
+- (NSInteger)accessibilityRowCount
+{
+    const tk::AccessNode* n = self.tkNode;
+    return (n && n->grid_row_count > 0) ? n->grid_row_count : 0;
+}
+
+- (NSInteger)accessibilityColumnCount
+{
+    const tk::AccessNode* n = self.tkNode;
+    return (n && n->grid_col_count > 0) ? n->grid_col_count : 0;
+}
+
+- (NSRange)accessibilityRowIndexRange
+{
+    const tk::AccessNode* n = self.tkNode;
+    return (n && n->grid_row >= 0) ? NSMakeRange(n->grid_row, 1) : NSMakeRange(NSNotFound, 0);
+}
+
+- (NSRange)accessibilityColumnIndexRange
+{
+    const tk::AccessNode* n = self.tkNode;
+    return (n && n->grid_col >= 0) ? NSMakeRange(n->grid_col, 1) : NSMakeRange(NSNotFound, 0);
 }
 
 - (BOOL)isAccessibilityFocused
 {
     const tk::AccessNode* n = self.tkNode;
-    return (n && n->row_index < 0 && n->widget) ? (n->widget->has_focus() ? YES : NO) : NO;
+    return (n && n->row_index == -1 && n->widget && !n->activate) ? (n->widget->has_focus() ? YES : NO) : NO;
 }
 
 - (BOOL)isAccessibilityExpanded
@@ -500,15 +610,53 @@ void AccessBridge::rebuild_if_dirty()
         }
     }
 
+    bool structure_changed = new_index.size() != index_.size();
+    if (!structure_changed)
+    {
+        for (const auto& entry : new_index)
+        {
+            if (index_.find(entry.first) == index_.end())
+            {
+                structure_changed = true;
+                break;
+            }
+        }
+    }
+
     index_ = std::move(new_index);
     parent_of_ = std::move(new_parent);
 
-    // Coarse-grained "something changed" notification, same acceptable
-    // staleness tradeoff qt_accessible.cpp documents for its own
-    // ObjectReorder event (fired once per rebuild, not per individual
-    // structural change).
-    if (NSView* v = view())
-        NSAccessibilityPostNotification(v, NSAccessibilityLayoutChangedNotification);
+    // Coarse-grained "something changed" notification (once per rebuild
+    // that actually added/removed nodes).
+    if (structure_changed)
+        if (NSView* v = view())
+            NSAccessibilityPostNotification(v, NSAccessibilityLayoutChangedNotification);
+    post_change_notifications();
+}
+
+void AccessBridge::post_change_notifications()
+{
+    for (auto it = snapshots_.begin(); it != snapshots_.end();)
+    {
+        auto node_it = index_.find(it->first);
+        auto el_it   = elements_.find(it->first);
+        if (node_it == index_.end() || el_it == elements_.end())
+        {
+            it = snapshots_.erase(it);
+            continue;
+        }
+        Snapshot now = snapshot_of(*node_it->second);
+        Snapshot& was = it->second;
+        TKAccessElement* el = el_it->second;
+        if (now.name != was.name)
+            NSAccessibilityPostNotification(el, NSAccessibilityTitleChangedNotification);
+        if (now.state.checked != was.state.checked || now.state.selected != was.state.selected ||
+            now.state.expanded != was.state.expanded || now.disabled != was.disabled ||
+            now.value != was.value)
+            NSAccessibilityPostNotification(el, NSAccessibilityValueChangedNotification);
+        was = std::move(now);
+        ++it;
+    }
 }
 
 void AccessBridge::notify_current_row(tk::Widget* owner, int idx)
@@ -532,6 +680,7 @@ TKAccessElement* AccessBridge::element_for(const AccessKey& key)
 
     TKAccessElement* el = [[TKAccessElement alloc] initWithBridge:this key:key];
     elements_.emplace(key, el);
+    remember(key);
     return el;
 }
 
@@ -586,6 +735,50 @@ AccessBridge* bridge_for_view(id view)
     return it == registry.end() ? nullptr : it->second.get();
 }
 
+AccessBridge* bridge_for_key(const void* key)
+{
+    auto& registry = bridge_registry();
+    auto it = registry.find(key);
+    return it == registry.end() ? nullptr : it->second.get();
+}
+
+void AccessBridge::schedule_refresh()
+{
+    if (elements_.empty() || refresh_pending_ || !surface_)
+        return;
+    NSView* v = view();
+    if (!v)
+        return;
+    refresh_pending_ = true;
+    const void* key = (__bridge const void*)v;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, kRefreshDelayMs * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+                       if (AccessBridge* b = bridge_for_key(key))
+                       {
+                           b->refresh_pending_ = false;
+                           b->dirty_ = true;
+                           b->rebuild_if_dirty();
+                       }
+                   });
+}
+
+void AccessBridge::announce(const std::string& text, bool assertive)
+{
+    NSView* v = view();
+    if (!v)
+        return;
+    NSString* msg = [NSString stringWithUTF8String:text.c_str()];
+    if (!msg)
+        return;
+    id target = v.window ? (id)v.window : (id)v;
+    NSAccessibilityPostNotificationWithUserInfo(
+        target, NSAccessibilityAnnouncementRequestedNotification, @{
+            NSAccessibilityAnnouncementKey : msg,
+            NSAccessibilityPriorityKey :
+                @(assertive ? NSAccessibilityPriorityHigh : NSAccessibilityPriorityMedium),
+        });
+}
+
 } // namespace
 
 void attach_accessible_bridge(Surface& surface)
@@ -597,6 +790,18 @@ void attach_accessible_bridge(Surface& surface)
     AccessBridge* raw = bridge.get();
     bridge_registry().emplace((__bridge const void*)view, std::move(bridge));
     surface.add_layout_listener([raw] { raw->mark_dirty(); });
+    const void* key = (__bridge const void*)view;
+    surface.host().add_paint_listener([key]
+    {
+        if (AccessBridge* b = bridge_for_key(key))
+            b->schedule_refresh();
+    });
+}
+
+void announce(id view, const std::string& text, bool assertive)
+{
+    if (AccessBridge* b = bridge_for_view(view))
+        b->announce(text, assertive);
 }
 
 void detach_accessible_bridge(Surface& surface)

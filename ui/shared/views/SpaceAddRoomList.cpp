@@ -128,10 +128,39 @@ private:
 // private nested class (opaque in its header), so this reimplements the
 // look from the same shared pieces (draw_avatar() + <visual.h> metrics)
 // rather than reusing it. ────────────────────────────────────────────────
-class SpaceAddRoomList::Adapter : public tk::ListAdapter
+class SpaceAddRoomList::Adapter : public tk::ListAdapter, public tk::ListAdapterAccessibility
 {
 public:
     explicit Adapter(SpaceAddRoomList& owner) : owner_(owner) {}
+
+    // Each row is a button that adds that room to the space; disabled when
+    // the user can't manage the space's children.
+    tk::Role access_role_for_row(std::size_t index) const override
+    {
+        return owner_.room_at_(index) ? tk::Role::Button : tk::Role::None;
+    }
+    std::string access_name_for_row(std::size_t index) const override
+    {
+        const auto* room = owner_.room_at_(index);
+        if (!room)
+            return {};
+        return tk::trf(tk::tr("Add {0} to space"),
+                       {room->name.empty() ? room->id : room->name});
+    }
+    tk::AccessState access_state_for_row(std::size_t) const override
+    {
+        tk::AccessState st;
+        st.disabled = !owner_.can_manage_;
+        return st;
+    }
+    bool access_activate_row(std::size_t index) override
+    {
+        const auto* room = owner_.room_at_(index);
+        if (!owner_.can_manage_ || !room || !owner_.on_add_requested)
+            return false;
+        owner_.on_add_requested(room->id);
+        return true;
+    }
 
     std::size_t count() const override { return owner_.filtered_.size(); }
 

@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace tk
@@ -32,7 +33,12 @@ struct AccessNode
     Widget* widget = nullptr;
     Role role = Role::None;
     std::string name;
+    std::string description;
     AccessState state;
+    AccessValue value;
+    // Mirrors Widget::access_modal() for a real widget node; bridges set the
+    // native modal flag from it where one exists.
+    bool modal = false;
     std::vector<AccessNode> children;
 
     // World-surface (root-widget-coordinate) bounds — a platform bridge maps
@@ -52,8 +58,26 @@ struct AccessNode
     // For a grid this is a flat linear position, not yet a full row/column
     // table model (see GridAdapterAccessibility's own comment).
     int row_index = -1;
+    // "Item pos_in_set of row_set_size" among the rows actually exposed
+    // (Role::None rows — day separators, skipped spill days — don't
+    // count). 1-based; -1 when not part of a set. Identity stays row_index.
+    int pos_in_set = -1;
     int row_set_size = -1;
 
+    // Grid semantics. On a cell (GridAdapterAccessibility, or a
+    // WidgetRowAccessibility row that reports a grid position): its 0-based
+    // row/column. On the grid container itself: its row/column counts.
+    // -1 = not part of a grid.
+    int grid_row = -1;
+    int grid_col = -1;
+    int grid_row_count = -1;
+    int grid_col_count = -1;
+
+    // (Subtree nodes from access_subtree_for_row are re-keyed by
+    // build_access_tree: widget = the owning list, row_index = a synthetic
+    // value <= -2 derived from row + role + name — identity only, not a
+    // position; see key_subtree.)
+    //
     // Optional: a synthesized node that maps to neither a real Widget nor a
     // plain (row_index) list row — e.g. a reaction toggle or an action button
     // inside a virtualized message row (see ListAdapterAccessibility::
@@ -62,6 +86,11 @@ struct AccessNode
     // view; it stays valid only as long as the access tree it belongs to
     // (rebuilt on every layout change).
     std::function<bool()> activate;
+
+    // Optional stable identity for a subtree node whose name changes in
+    // place (a reaction's count, Play ↔ Pause): key_subtree keys by this
+    // instead of role + name when set.
+    std::string subtree_id;
 };
 
 // Optional interface a Widget may implement directly — unlike
@@ -102,6 +131,30 @@ public:
     virtual Rect access_rect_for_widget_row(std::size_t /*index*/) const
     {
         return {};
+    }
+    virtual std::string access_description_for_widget_row(std::size_t /*index*/) const
+    {
+        return {};
+    }
+    // Optional grid placement for a widget that paints a 2-D grid itself
+    // (DatePickerView's day cells): {row, col}, or {-1, -1} for a row that
+    // isn't a grid cell (e.g. the month-navigation buttons around it).
+    // access_grid_size() gives the container's {rows, cols}; {-1, -1}
+    // (default) means this widget isn't a grid.
+    virtual std::pair<int, int> access_grid_cell_for_widget_row(std::size_t /*index*/) const
+    {
+        return {-1, -1};
+    }
+    virtual std::pair<int, int> access_grid_size() const
+    {
+        return {-1, -1};
+    }
+    // Reading order: the rows normally precede the widget's real children
+    // (a tab strip before its panel). Return true for supplementary rows
+    // that belong after them (RoomHeader's topic after the room name).
+    virtual bool access_rows_after_children() const
+    {
+        return false;
     }
 };
 

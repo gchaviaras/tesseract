@@ -484,6 +484,11 @@ public:
     void paint_before_children(tk::PaintCtx&) override;
     void paint_after_children(tk::PaintCtx&) override;
     void paint_overlay(tk::PaintCtx&) override;
+    void access_detached_children(std::vector<tk::Widget*>& out) const override
+    {
+        if (status_emoji_picker_visible_ && status_emoji_picker_)
+            out.push_back(status_emoji_picker_.get());
+    }
     void on_theme_changed(const tk::Theme&) override;
 
 private:

@@ -41,6 +41,11 @@ protected:
 public:
     ~ReceiptGridPopup() override;
 
+    // A group of the readers (its grid cells), so an AT announces what the
+    // popup is before reading names.
+    tk::Role access_role() const override { return tk::Role::Group; }
+    std::string access_name() const override;
+
     using ImageProvider = MessageListView::ImageProvider;
 
     void set_image_provider(ImageProvider p);

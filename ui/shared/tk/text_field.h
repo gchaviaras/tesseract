@@ -40,6 +40,10 @@ public:
     std::string text() const;
     void set_placeholder(std::string text);
     void set_password(bool password);
+    // Accessible label (what a screen reader calls the field, e.g.
+    // "Passphrase"), for fields whose visible caption is painted separately
+    // rather than being the placeholder. Must be tk::tr()'d by the caller.
+    void set_accessible_name(std::string name);
     // Reduce internal padding so the field fits inside a compact inline row
     // (e.g. an image-pack shortcode/rename field).
     void set_compact(bool compact);
@@ -159,10 +163,16 @@ public:
     {
         return Role::TextInput;
     }
-    // Falls back to the placeholder when empty — matches how a real native
-    // field's accessible name commonly reads when it has no value yet.
+    // An explicit label wins; otherwise the text, falling back to the
+    // placeholder when empty — matches how a real native field's accessible
+    // name commonly reads when it has no value yet. A password field never
+    // exposes what was typed.
     std::string access_name() const override
     {
+        if (!accessible_name_.empty())
+            return accessible_name_;
+        if (password_)
+            return placeholder_;
         std::string t = text();
         return t.empty() ? placeholder_ : t;
     }
@@ -241,6 +251,8 @@ private:
     // fallback (set_placeholder() itself is a pure pass-through to the
     // native control, with nothing else to read back from).
     std::string placeholder_;
+    std::string accessible_name_;
+    bool password_ = false;
     // Last Widget::background_color() pushed to field_->set_background_color()
     // — avoids re-forwarding the same value (and the recapture it can
     // trigger) on every paint(). See TextField::paint()'s doc comment.

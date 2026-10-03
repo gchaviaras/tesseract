@@ -864,6 +864,7 @@ public:
         SetWindowSubclass(hwnd_, &BetterTextField::subclass_proc, 1,
                           reinterpret_cast<DWORD_PTR>(this));
         BetterTextSetNotifyCallback(hwnd_, &BetterTextField::on_notify, this);
+        access_ = std::make_unique<NativeEditAccessible>(hwnd_, make_access_callbacks_());
         // Caret rendering is owned by the canvas from here on (see
         // caret_rect()/caret_blink_visible() below) — permanently off so
         // Paint() never bakes a caret into the capture, and the blink timer
@@ -882,8 +883,34 @@ public:
         line_h_dip_ = BetterTextGetContentHeight(hwnd_);
     }
 
+
+    // ── Accessibility (see NativeEditAccessible) ─────────────────────────
+    void set_accessible_name(std::string name) override
+    {
+        if (name == access_name_)
+            return;
+        std::string old = std::exchange(access_name_, std::move(name));
+        if (access_)
+            access_->name_changed(old, access_name_);
+    }
+
+    NativeEditAccessible::Callbacks make_access_callbacks_()
+    {
+        NativeEditAccessible::Callbacks cb;
+        cb.name     = [this] { return access_name_; };
+        cb.text     = [this] { return text(); };
+        cb.set_text = [this](const std::string& t)
+        {
+            set_text(t);
+            notify_changed(); // an AT edit is a user edit
+        };
+        cb.password = [this] { return password_; };
+        return cb;
+    }
+
     ~BetterTextField() override
     {
+        access_.reset(); // disconnect the UIA provider before the HWND goes
         if (hwnd_)
         {
             BetterTextSetNotifyCallback(hwnd_, nullptr, nullptr);
@@ -1033,6 +1060,7 @@ public:
     }
     void set_password(bool password) override
     {
+        password_ = password;
         if (!hwnd_)
         {
             return;
@@ -1315,6 +1343,12 @@ private:
                                           DWORD_PTR ref)
     {
         auto* self = reinterpret_cast<BetterTextField*>(ref);
+        if (msg == WM_GETOBJECT && self->access_)
+        {
+            LRESULT r = 0;
+            if (self->access_->handle_get_object(wParam, lParam, &r))
+                return r;
+        }
         // Up / Down / Escape navigation forwarded to a popup the field drives
         // (the Ctrl+K quick switcher), mirroring the multi-line variant.
         if (msg == WM_KEYDOWN && self->popup_nav_)
@@ -1495,6 +1529,10 @@ private:
 
     HWND parent_ = nullptr;
     HWND hwnd_ = nullptr;
+    // UIA identity for hwnd_ (BetterText has none of its own).
+    std::unique_ptr<NativeEditAccessible> access_;
+    std::string access_name_;
+    bool password_ = false;
     int id_ = 0;
     const Theme* theme_ = nullptr;
     float line_h_dip_ = 0.f;
@@ -1554,13 +1592,40 @@ public:
         SetWindowSubclass(hwnd_, &BetterTextArea::subclass_proc, 1,
                           reinterpret_cast<DWORD_PTR>(this));
         BetterTextSetNotifyCallback(hwnd_, &BetterTextArea::on_notify, this);
+        access_ = std::make_unique<NativeEditAccessible>(hwnd_, make_access_callbacks_());
         BetterTextSetImageProvider(hwnd_, &image_provider_);
         // See BetterTextField's ctor — same canvas-owned-caret rationale.
         BetterTextSetCaretVisible(hwnd_, FALSE);
     }
 
+
+    // ── Accessibility (see NativeEditAccessible) ─────────────────────────
+    void set_accessible_name(std::string name) override
+    {
+        if (name == access_name_)
+            return;
+        std::string old = std::exchange(access_name_, std::move(name));
+        if (access_)
+            access_->name_changed(old, access_name_);
+    }
+
+    NativeEditAccessible::Callbacks make_access_callbacks_()
+    {
+        NativeEditAccessible::Callbacks cb;
+        cb.name     = [this] { return access_name_; };
+        cb.text     = [this] { return text(); };
+        cb.set_text = [this](const std::string& t)
+        {
+            set_text(t);
+            notify_changed(); // an AT edit is a user edit
+        };
+        cb.password = [this] { return false; };
+        return cb;
+    }
+
     ~BetterTextArea() override
     {
+        access_.reset(); // disconnect the UIA provider before the HWND goes
         if (hwnd_)
         {
             BetterTextSetNotifyCallback(hwnd_, nullptr, nullptr);
@@ -2386,6 +2451,12 @@ private:
                                           DWORD_PTR ref)
     {
         auto* self = reinterpret_cast<BetterTextArea*>(ref);
+        if (msg == WM_GETOBJECT && self->access_)
+        {
+            LRESULT r = 0;
+            if (self->access_->handle_get_object(wParam, lParam, &r))
+                return r;
+        }
         if (msg == WM_KEYDOWN && self->popup_nav_)
         {
             NativeTextArea::NavKey nk{};
@@ -2808,6 +2879,9 @@ private:
 
     HWND parent_ = nullptr;
     HWND hwnd_ = nullptr;
+    // UIA identity for hwnd_ (BetterText has none of its own).
+    std::unique_ptr<NativeEditAccessible> access_;
+    std::string access_name_;
     int id_ = 0;
     IWICImagingFactory* wic_ = nullptr;
     const Theme* theme_ = nullptr;
@@ -4309,6 +4383,11 @@ protected:
     void on_focus_changed_(Widget* old, Widget* now) override
     {
         notify_focus_changed(hwnd_, old, now);
+    }
+
+    void on_announce_(const std::string& text, Politeness p) override
+    {
+        tk::win32::announce(hwnd_, text, p == Politeness::Assertive);
     }
 
 private:

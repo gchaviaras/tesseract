@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "tk/access_tree.h"
 #include "tk_test_host.h"
 #include "views/InviteDialog.h"
 #include "views/InviteFieldModel.h"
@@ -392,4 +393,95 @@ TEST_CASE("InviteDialog: confirm waits for pending lookups", "[invite_dialog]")
     f.dlg->set_resolved_user("@dave:other.org", std::nullopt);
     f.dlg->confirm();
     CHECK(fired == 1);
+}
+
+// ── Accessibility ─────────────────────────────────────────────────────────
+
+namespace
+{
+
+const tk::AccessNode* find_access_named(const tk::AccessNode& node, const std::string& name)
+{
+    if (node.name == name)
+        return &node;
+    for (const auto& ch : node.children)
+        if (const tk::AccessNode* f = find_access_named(ch, name))
+            return f;
+    return nullptr;
+}
+
+} // namespace
+
+TEST_CASE("InviteDialog is a modal dialog whose rows are checkboxes",
+         "[invite_dialog][accessibility]")
+{
+    Fixture f;
+    f.dlg->set_existing_members({"@carol:example.org"});
+    tk::AccessNode tree = tk::build_access_tree(f.dlg.get());
+    CHECK(tree.role == tk::Role::Dialog);
+    CHECK(tree.modal);
+    CHECK(tree.name == "Invite to Room");
+
+    const tk::AccessNode* alice = find_access_named(tree, "Alice (@alice:example.org)");
+    REQUIRE(alice != nullptr);
+    CHECK(alice->role == tk::Role::CheckBox);
+    CHECK_FALSE(alice->state.checked);
+    CHECK(tk::invoke_default_action(*alice));
+    CHECK(f.dlg->selected_user_ids() == std::vector<std::string>{"@alice:example.org"});
+
+    tree = tk::build_access_tree(f.dlg.get());
+    alice = find_access_named(tree, "Alice (@alice:example.org)");
+    REQUIRE(alice != nullptr);
+    CHECK(alice->state.checked);
+
+    const tk::AccessNode* carol = find_access_named(tree, "Carol (@carol:example.org)");
+    REQUIRE(carol != nullptr);
+    CHECK(carol->state.disabled);
+    CHECK(carol->description == "Already in room");
+
+    CHECK(find_access_named(tree, "Cancel") != nullptr);
+}
+
+TEST_CASE("InviteDialog's Cancel button closes and the error body is readable",
+         "[invite_dialog][accessibility]")
+{
+    Fixture f;
+    bool closed = false;
+    f.dlg->on_close = [&] { closed = true; };
+
+    f.dlg->set_inviting(2);
+    tk::AccessNode tree = tk::build_access_tree(f.dlg.get());
+    CHECK(find_access_named(tree, "Inviting 2 people\xE2\x80\xA6") != nullptr);
+
+    f.dlg->add_invite_error("@bob:example.org", "Forbidden");
+    f.dlg->mark_complete();
+    tree = tk::build_access_tree(f.dlg.get());
+    CHECK(find_access_named(tree, "Failed to invite @bob:example.org: Forbidden") != nullptr);
+
+    f.dlg->close();
+    CHECK(closed);
+
+    Fixture g;
+    tree = tk::build_access_tree(g.dlg.get());
+    const tk::AccessNode* cancel = find_access_named(tree, "Cancel");
+    REQUIRE(cancel != nullptr);
+    bool closed_g = false;
+    g.dlg->on_close = [&] { closed_g = true; };
+    CHECK(tk::invoke_default_action(*cancel));
+    CHECK(closed_g);
+}
+
+TEST_CASE("InviteDialog ignores Escape while invites are in flight",
+         "[invite_dialog][accessibility]")
+{
+    Fixture f;
+    f.dlg->set_inviting(1);
+    tk::KeyEvent esc;
+    esc.key = tk::Key::Escape;
+    CHECK(f.dlg->on_key_down(esc));
+    CHECK(f.dlg->is_open());
+    f.dlg->add_invite_error("@bob:example.org", "Forbidden");
+    f.dlg->mark_complete();
+    CHECK(f.dlg->on_key_down(esc)); // errors shown: Escape dismisses
+    CHECK_FALSE(f.dlg->is_open());
 }

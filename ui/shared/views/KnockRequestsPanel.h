@@ -42,6 +42,12 @@ public:
     void open(const std::string& room_id);
     void close();
     bool is_open() const { return open_; }
+
+    // A dialog titled like the painted header; when empty its description
+    // says so.
+    tk::Role access_role() const override { return tk::Role::Dialog; }
+    std::string access_name() const override;
+    std::string access_description() const override;
     const std::string& room_id() const { return room_id_; }
 
     // Replace the pending-request list. No-op on row identity (rebuilds

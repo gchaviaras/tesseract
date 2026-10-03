@@ -13,6 +13,7 @@
 // content height reported by the host's NativeTextArea, and grows further
 // to accommodate the preview band when an image is attached.
 
+#include "tk/access_tree.h"
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/host.h"
@@ -45,7 +46,7 @@ struct MediaInfo
     std::uint32_t pending_gen = 0;
 };
 
-class ComposeBar : public tk::Widget
+class ComposeBar : public tk::Widget, public tk::WidgetRowAccessibility
 {
 protected:
     // host() is nullable: when null, text_area_ is simply not constructed —
@@ -55,6 +56,25 @@ protected:
     TK_WIDGET_FACTORY_FRIEND(ComposeBar)
 
 public:
+    // ── Accessibility ─────────────────────────────────────────────────────
+    // The painted banner text ("Editing message" / "Replying to …") and the
+    // pending attachment's name and size, read before the controls.
+    std::size_t access_row_count() const override { return access_texts_().size(); }
+    tk::Role    access_role_for_widget_row(std::size_t) const override
+    {
+        return tk::Role::StaticText;
+    }
+    std::string access_name_for_widget_row(std::size_t i) const override
+    {
+        const auto t = access_texts_();
+        return i < t.size() ? t[i].first : std::string();
+    }
+    tk::Rect    access_rect_for_widget_row(std::size_t i) const override
+    {
+        const auto t = access_texts_();
+        return i < t.size() ? t[i].second : tk::Rect{};
+    }
+
     ~ComposeBar() override { invalidate_weak_self(); }
 
     static constexpr float kMinHeight = 56.0f;
@@ -352,6 +372,9 @@ public:
     /// Exit reply mode. Clears the reply banner, shrinks `natural_height()`,
     /// and fires `on_size_changed`. No-op when not in reply mode.
     void clear_reply();
+    // The composer's accessible label becomes "Message {room}", so landing in
+    // it after a room switch tells a screen-reader user where they are.
+    void set_room_name(const std::string& room_name);
     bool has_reply() const
     {
         return !reply_event_id_.empty();
@@ -460,6 +483,14 @@ private:
     tk::Button* mic_btn_ = nullptr;     // borrowed; hidden when no mic device
     tk::BusyButton* send_btn_ = nullptr; // borrowed
     tk::Button* remove_btn_ = nullptr;  // borrowed; hidden when no image
+    // The "×" on the edit / reply banners and the recording strip — real
+    // buttons positioned in arrange() and painted in paint().
+    tk::Button* edit_cancel_btn_  = nullptr;
+    tk::Button* reply_cancel_btn_ = nullptr;
+    tk::Button* voice_cancel_btn_ = nullptr;
+
+    // Painted-only context an AT should hear (see access_row_count).
+    std::vector<std::pair<std::string, tk::Rect>> access_texts_() const;
     // Emoji/sticker/mic SVG glyphs are now self-painted by tk::Button
     // (Button::set_icon()); ComposeBar just refreshes the hover tint (and,
     // for mic, the recording-state SVG swap) every paint() — see the
@@ -497,7 +528,6 @@ private:
     std::string reply_body_preview_;
     tk::Rect reply_band_rect_{};
     tk::Rect reply_cancel_rect_{};
-    bool press_reply_cancel_ = false;
 
     // Edit state. edit_event_id_ is empty when not in edit mode.
     // Edit mode and reply mode are mutually exclusive.
@@ -507,7 +537,6 @@ private:
     bool edit_is_caption_ = false;
     tk::Rect edit_band_rect_{};
     tk::Rect edit_cancel_rect_{};
-    bool press_edit_cancel_ = false;
 
     // Which compose button is currently showing a tooltip (None = none).
     enum class TooltipBtn { None, Emoji, Sticker, Mic };
@@ -529,7 +558,6 @@ private:
     tk::Rect voice_cancel_rect_{};
     std::unique_ptr<tk::TextLayout> elapsed_layout_;
     std::uint64_t recording_start_ms_ = 0;
-    bool press_voice_cancel_ = false;
 };
 
 } // namespace tesseract::views

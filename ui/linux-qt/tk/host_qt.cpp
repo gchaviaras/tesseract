@@ -2702,6 +2702,11 @@ protected:
         notify_focus_changed(surface_, old, now);
     }
 
+    void on_announce_(const std::string& text, Politeness p) override
+    {
+        tk::qt6::announce(surface_, text, p == Politeness::Assertive);
+    }
+
     // Commits the Ctrl+Tab MRU room switcher (tk::Host::fire_ctrl_key_up_,
     // see its doc comment in host.h) on Ctrl release. An app-wide event
     // filter is used rather than a Surface::keyReleaseEvent override for the

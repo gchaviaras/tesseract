@@ -208,6 +208,10 @@ add_executable(tesseract_tests
     cpp/test_screenshot_director.cpp
     cpp/test_screenshot_fixture.cpp
     cpp/test_screenshot_view_hooks.cpp
+    cpp/test_tk_access_tree_extensions.cpp
+    cpp/test_encryption_overlay_accessibility.cpp
+    cpp/test_lists_accessibility.cpp
+    cpp/test_views_accessibility.cpp
 )
 
 # Screenshot-mode sources are only in tesseract_tk when the mode is ON (they

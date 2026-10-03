@@ -35,7 +35,7 @@ std::vector<std::string> row_names(const tk::AccessNode& n, tk::Role r)
 }
 } // namespace
 
-TEST_CASE("PopupMenu items are MenuItem nodes; separators/disabled are omitted",
+TEST_CASE("PopupMenu items are MenuItem nodes; separators omitted, disabled reported",
          "[popup_menu][accessibility]")
 {
     PopupCapableStubHost host;
@@ -55,7 +55,7 @@ TEST_CASE("PopupMenu items are MenuItem nodes; separators/disabled are omitted",
 
     tk::AccessNode tree = tk::build_access_tree(root);
     CHECK(row_names(tree, tk::Role::MenuItem) ==
-          std::vector<std::string>{"React", "Reply"});
+          std::vector<std::string>{"React", "Delete", "Reply"});
 
     // Invoke the "React" node → fires its on_selected (and on_dismissed).
     const tk::AccessNode* list = nullptr;
@@ -70,8 +70,61 @@ TEST_CASE("PopupMenu items are MenuItem nodes; separators/disabled are omitted",
     find(tree);
     REQUIRE(list != nullptr);
     REQUIRE_FALSE(list->children.empty());
+    CHECK(list->children[1].state.disabled); // "Delete"
+    CHECK_FALSE(tk::invoke_default_action(list->children[1]));
     CHECK(tk::invoke_default_action(list->children[0]));
     CHECK(reacted == 1);
+}
+
+TEST_CASE("PopupMenu is keyboard-driven: arrows skip separators/disabled, Enter "
+         "activates, Escape dismisses",
+         "[popup_menu][accessibility]")
+{
+    PopupCapableStubHost host;
+    auto menu = tk::create_root_widget<PopupMenu>(&host);
+    std::string picked;
+    int dismissed = 0;
+    menu->on_dismissed = [&] { ++dismissed; menu->close(); };
+    std::vector<PopupMenu::Item> items;
+    items.push_back({{}, {}, "React", false, [&] { picked = "React"; }, false, true});
+    items.push_back({{}, {}, "", false, {}, /*is_separator=*/true, true});
+    items.push_back({{}, {}, "Delete", true, [&] { picked = "Delete"; }, false, false});
+    items.push_back({{}, {}, "Reply", false, [&] { picked = "Reply"; }, false, true});
+    menu->open(std::move(items), {});
+
+    auto key = [&](tk::Key k)
+    {
+        tk::KeyEvent e;
+        e.key = k;
+        return menu->on_key_down(e);
+    };
+    auto selected = [&]
+    {
+        tk::AccessNode tree = tk::build_access_tree(host.popups_created[0]->root());
+        for (const auto& n : tree.children)
+            if (n.state.selected)
+                return n.name;
+        return std::string();
+    };
+
+    CHECK(key(tk::Key::Down));
+    CHECK(selected() == "React");
+    CHECK(key(tk::Key::Down)); // skips the separator and disabled "Delete"
+    CHECK(selected() == "Reply");
+    CHECK(key(tk::Key::Down)); // wraps
+    CHECK(selected() == "React");
+    CHECK(key(tk::Key::End));
+    CHECK(selected() == "Reply");
+    CHECK(key(tk::Key::Enter));
+    CHECK(picked == "Reply");
+    CHECK(dismissed == 1);
+
+    std::vector<PopupMenu::Item> again;
+    again.push_back({{}, {}, "React", false, [] {}, false, true});
+    menu->open(std::move(again), {});
+    CHECK(key(tk::Key::Escape));
+    CHECK(dismissed == 2);
+    CHECK_FALSE(menu->is_open());
 }
 
 TEST_CASE("ComboBox dropdown options are selectable ListItem nodes",
@@ -117,10 +170,13 @@ TEST_CASE("ConfirmDialog / AlertDialog report a Dialog role named for their "
                    true},
                   [] {});
     CHECK(confirm->access_role() == tk::Role::Dialog);
-    CHECK(confirm->access_name() == "Leave room?. You can rejoin later.");
+    CHECK(confirm->access_name() == "Leave room?");
+    CHECK(confirm->access_description() == "You can rejoin later.");
+    CHECK(confirm->access_modal());
 
     auto alert = tk::create_root_widget<tesseract::views::AlertDialog>(&host);
     alert->open({"Upload failed", "The file is too large.", "OK", ""}, [] {});
     CHECK(alert->access_role() == tk::Role::Dialog);
-    CHECK(alert->access_name() == "Upload failed. The file is too large.");
+    CHECK(alert->access_name() == "Upload failed");
+    CHECK(alert->access_description() == "The file is too large.");
 }

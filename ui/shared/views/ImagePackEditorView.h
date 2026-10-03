@@ -30,6 +30,7 @@
 
 #include "views/ImagePackTileGridBase.h"
 
+#include "tk/access_tree.h"
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/host.h"
@@ -89,7 +90,7 @@ struct ImagePackEditorResult
 // personal-pack tab — and keeps everything section/header-specific
 // (multi-pack stacking, pack rename, usage toggle, active-pack selection)
 // local to this class.
-class ImagePackSectionList : public ImagePackTileGridBase
+class ImagePackSectionList : public ImagePackTileGridBase, public tk::WidgetRowAccessibility
 {
 public:
     ImagePackSectionList();
@@ -142,6 +143,18 @@ public:
     std::function<void(std::size_t pack_idx, std::size_t tile_idx)> on_tile_remove_requested;
     std::function<void(std::size_t pack_idx, std::size_t tile_idx)> on_tile_shortcode_clicked;
 
+    // ── Accessibility ─────────────────────────────────────────────────────
+    // One row per interactive element, pack by pack: the header (selects the
+    // pack), and when editable its rename / Any / Emoji / Sticker / remove
+    // controls, then each image's shortcode-edit and remove. Each activates
+    // the same callback a click does. Rebuilt in access_row_count().
+    std::size_t access_row_count() const override;
+    tk::Role    access_role_for_widget_row(std::size_t i) const override;
+    std::string access_name_for_widget_row(std::size_t i) const override;
+    tk::AccessState access_state_for_widget_row(std::size_t i) const override;
+    bool        access_activate_widget_row(std::size_t i) override;
+    tk::Rect    access_rect_for_widget_row(std::size_t i) const override;
+
     tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override;
     void     arrange(tk::LayoutCtx&, tk::Rect bounds) override;
     void     paint(tk::PaintCtx&) override;
@@ -174,6 +187,18 @@ private:
     // cheap enough to recompute each time given how few packs/images a room
     // realistically has.
     std::vector<SectionLayout> compute_layout_(float width) const;
+
+    struct AccessRow
+    {
+        tk::Role              role = tk::Role::Button;
+        std::string           name;
+        tk::Rect              rect; // world-space
+        tk::AccessState       state;
+        std::function<void()> activate;
+    };
+    mutable std::vector<AccessRow> access_rows_;
+    // Widget-local, un-scrolled layout rect → world rect.
+    tk::Rect to_world_(const tk::Rect& r) const;
 
     void paint_header_(tk::PaintCtx&, std::size_t pack_idx, const SectionLayout&,
                        tk::Point origin, bool active, bool hovered_remove) const;

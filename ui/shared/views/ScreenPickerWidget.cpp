@@ -44,6 +44,30 @@ ScreenPickerWidget::ScreenPickerWidget(std::vector<tk::ScreenSource> sources)
     });
     tile_rects_.resize(sources_.size());
     thumbs_.resize(sources_.size());
+
+    int screen_no = 0;
+    for (std::size_t i = 0; i < sources_.size(); ++i)
+    {
+        auto* t = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+        // Monitors are numbered so several aren't all just "Screen"; the
+        // platform's own monitor name, when it has one, goes in the
+        // description.
+        if (sources_[i].is_window)
+            t->set_accessible_name(sources_[i].display_name);
+        else
+        {
+            t->set_accessible_name(
+                tk::trf(tk::tr("Screen {0}"), {std::to_string(++screen_no)}));
+            t->set_accessible_description(sources_[i].display_name);
+        }
+        t->on_activate = [this, i]
+        {
+            // Same as a tile click: the callback unmounts (destroys) us.
+            auto cb = std::move(on_source_selected);
+            if (cb) cb(sources_[i].id);
+        };
+        tile_targets_.push_back(t);
+    }
 }
 
 ScreenPickerWidget::~ScreenPickerWidget()
@@ -154,6 +178,8 @@ void ScreenPickerWidget::paint_before_children(tk::PaintCtx& ctx)
         // Apply scroll offset to the stored (unscrolled) tile position.
         tk::Rect r = tile_rects_[i];
         r.y -= scroll_y_;
+        if (i < tile_targets_.size())
+            tile_targets_[i]->set_target_rect(r);
 
         // Skip tiles entirely outside the viewport.
         if (r.y + r.h <= grid_rect_.y || r.y >= grid_rect_.y + grid_rect_.h)

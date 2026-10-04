@@ -172,8 +172,35 @@ bool ScrollableBase::scrollbar_on_pointer_up()
     return true;
 }
 
+bool ScrollableBase::scroll_by_key(const KeyEvent& e)
+{
+    if (e.ctrl || e.alt || e.meta)
+        return false;
+    const float total = content_height();
+    if (total <= bounds_.h || bounds_.h <= 0.0f)
+        return false;
+    // Keep ~one line of the previous page visible so the reader doesn't
+    // lose their place.
+    constexpr float kPageOverlap = 40.0f;
+    const float page = std::max(kPageOverlap, bounds_.h - kPageOverlap);
+    float dy = 0.0f;
+    switch (e.key)
+    {
+    case Key::PageUp: dy = -page; break;
+    case Key::PageDown: dy = page; break;
+    case Key::Home: dy = -(total + bounds_.h); break;
+    case Key::End: dy = total + bounds_.h; break;
+    default: return false;
+    }
+    on_wheel({bounds_.w * 0.5f, bounds_.h * 0.5f}, 0.0f, dy, false);
+    if (auto* h = host())
+        h->request_repaint();
+    return true;
+}
+
 void ScrollableBase::scroll_into_view(Rect world_rect)
 {
+    const float prev = scroll_y_;
     if (world_rect.y < bounds_.y)
     {
         scroll_y_ -= (bounds_.y - world_rect.y);
@@ -183,6 +210,12 @@ void ScrollableBase::scroll_into_view(Rect world_rect)
         scroll_y_ += (world_rect.y + world_rect.h) - (bounds_.y + bounds_.h);
     }
     clamp_scroll();
+    // Several regions bake scroll_y_ into their children's world rects at
+    // arrange() time (RoomInfoPanelBody, SettingsPage, ...); re-arrange so a
+    // Tab-driven scroll actually moves the focused child into view.
+    if (scroll_y_ != prev)
+        if (auto* h = host())
+            h->mark_needs_relayout();
 }
 
 } // namespace tk

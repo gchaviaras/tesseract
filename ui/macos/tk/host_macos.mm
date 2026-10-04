@@ -272,6 +272,7 @@ tk::Key key_from_macos(NSEvent* event)
     case NSPageDownFunctionKey: return tk::Key::PageDown;
     case 0x7F: return tk::Key::Backspace;
     case NSDeleteFunctionKey: return tk::Key::Delete;
+    case NSF10FunctionKey: return tk::Key::F10;
     default: return tk::Key::Unknown;
     }
 }

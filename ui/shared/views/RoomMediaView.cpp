@@ -216,9 +216,76 @@ public:
         tk::ListView::on_pointer_up(local, inside_self);
     }
 
+    // Keyboard: Up/Down (base) move between thumbnail strips, Left/Right
+    // move a cell cursor along a strip (wrapping onto the neighbouring
+    // strip), Enter/Space opens that thumbnail — the same per-cell
+    // activation the accessibility subtree exposes.
+    bool on_key_down(const tk::KeyEvent& e) override
+    {
+        if (!has_focus() || e.ctrl || e.alt || e.meta)
+            return tk::ListView::on_key_down(e);
+        if (e.key == tk::Key::Left || e.key == tk::Key::Right)
+        {
+            const int dir = e.key == tk::Key::Right ? 1 : -1;
+            int row = selected_index();
+            if (row < 0)
+            {
+                // Cold start: first strip, first cell.
+                tk::ListView::on_key_down({tk::Key::Home});
+                cell_ = 0;
+                return true;
+            }
+            const int n = static_cast<int>(cells_(row).size());
+            if (cell_ + dir >= 0 && cell_ + dir < n)
+                cell_ += dir;
+            else
+            {
+                // Hop to the neighbouring strip (base Up/Down skips month
+                // headers), landing on its nearest end.
+                const int before = selected_index();
+                tk::ListView::on_key_down({dir > 0 ? tk::Key::Down : tk::Key::Up});
+                if (selected_index() != before)
+                    cell_ = dir > 0 ? 0 : std::max(0, static_cast<int>(cells_(selected_index()).size()) - 1);
+            }
+            if (auto* h = host()) h->request_repaint();
+            return true;
+        }
+        if (e.key == tk::Key::Enter || e.key == tk::Key::Space)
+        {
+            auto cells = cells_(selected_index());
+            if (cell_ >= 0 && cell_ < static_cast<int>(cells.size()) && cells[static_cast<std::size_t>(cell_)].activate)
+            {
+                cells[static_cast<std::size_t>(cell_)].activate();
+                return true;
+            }
+        }
+        const int before = selected_index();
+        const bool handled = tk::ListView::on_key_down(e);
+        if (selected_index() != before)
+            cell_ = std::min(cell_, std::max(0, static_cast<int>(cells_(selected_index()).size()) - 1));
+        return handled;
+    }
+
+    void paint_own_focus_ring(tk::PaintCtx& ctx) override
+    {
+        auto cells = cells_(selected_index());
+        if (cell_ >= 0 && cell_ < static_cast<int>(cells.size()))
+            tk::paint_focus_ring(ctx, cells[static_cast<std::size_t>(cell_)].rect, 6.0f);
+        else
+            tk::ListView::paint_own_focus_ring(ctx);
+    }
+
 private:
+    std::vector<tk::AccessNode> cells_(int row) const
+    {
+        if (row < 0 || !owner_.adapter_)
+            return {};
+        return owner_.adapter_->access_subtree_for_row(static_cast<std::size_t>(row));
+    }
+
     RoomMediaView& owner_;
     int press_row_ = -1;
+    int cell_ = 0;
 };
 
 // ─────────────────────────────────────────────────────────────────────────

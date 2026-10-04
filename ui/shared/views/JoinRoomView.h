@@ -22,6 +22,7 @@
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/host.h"
+#include "tk/keyboard_target.h"
 #include "tk/text_field.h"
 #include "tk/widget.h"
 
@@ -225,6 +226,9 @@ private:
     // Cached topic layout and its source spans (rebuilt on set_preview).
     std::unique_ptr<tk::TextLayout>    topic_layout_;
     std::vector<tk::TextSpan>          topic_spans_;
+    // Keyboard stand-in for the preview topic's links (placed in paint(),
+    // where topic_rect_ is computed).
+    tk::KeyboardTarget*                topic_target_ = nullptr;
 
     std::string press_link_url_;
     std::string hover_link_url_;

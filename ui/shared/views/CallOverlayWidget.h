@@ -21,6 +21,7 @@
 
 #include "tk/canvas.h"
 #include "tk/controls.h"
+#include "tk/keyboard_target.h"
 #include "tk/widget.h"
 
 #include <tesseract/types.h>
@@ -230,6 +231,9 @@ private:
     tk::Rect duration_rect_{};
     tk::Rect grid_rect_{};
     tk::Rect drag_header_rect_{}; // top 32 px strip, Floating mode only
+    // Keyboard stand-in for the drag header: arrow keys move the floating
+    // bubble (Shift = bigger steps).
+    tk::KeyboardTarget* move_target_ = nullptr;
 };
 
 } // namespace tesseract::views

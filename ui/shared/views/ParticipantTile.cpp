@@ -1,5 +1,7 @@
 #include "ParticipantTile.h"
 
+#include "tk/i18n.h"
+
 #include "icons.h"
 #include "media_utils.h"
 
@@ -32,7 +34,16 @@ constexpr tk::Color kPinBg       {  0,   0,   0, 140};
 
 // ── Construction ──────────────────────────────────────────────────────────────
 
-ParticipantTile::ParticipantTile() = default;
+ParticipantTile::ParticipantTile()
+{
+    pin_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    pin_target_->set_focus_ring_radius(kPinBtnSz * 0.5f + 2.0f);
+    pin_target_->on_activate = [this]
+    {
+        if (on_pin_toggled)
+            on_pin_toggled(state_.participant_id);
+    };
+}
 
 // ── State / configuration ─────────────────────────────────────────────────────
 
@@ -83,12 +94,17 @@ void ParticipantTile::arrange(tk::LayoutCtx& /*ctx*/, tk::Rect bounds)
 {
     bounds_ = bounds;
     // video_rect_ and pin_rect_ are computed in paint() once the letterbox is known.
+    if (bounds.w <= 0.0f || bounds.h <= 0.0f)
+        pin_target_->set_target_rect({}); // a parent may skip painting it
 }
 
 // ── Paint ─────────────────────────────────────────────────────────────────────
 
 void ParticipantTile::paint(tk::PaintCtx& ctx)
 {
+    // Re-placed below once the pin rect is known; a collapsed tile must not
+    // leave a stale, invisible Tab stop behind.
+    pin_target_->set_target_rect({});
     if (bounds_.w <= 0.0f || bounds_.h <= 0.0f)
         return;
 
@@ -213,13 +229,19 @@ void ParticipantTile::paint(tk::PaintCtx& ctx)
                    video_rect.y + kPinInset,
                    kPinBtnSz, kPinBtnSz};
 
-    if (state_.pinned && !video_hover_)
+    // Keyboard stand-in follows the (possibly hidden) button; while it has
+    // focus the button draws as if hovered, so the ring has something in it.
+    pin_target_->set_target_rect(pin_rect_);
+    pin_target_->set_accessible_name(state_.pinned ? tk::tr("Unpin") : tk::tr("Pin"));
+    pin_target_->set_accessible_description(state_.display_name);
+    const bool show_pin = video_hover_ || pin_target_->has_focus();
+    if (state_.pinned && !show_pin)
     {
         ctx.canvas.fill_rounded_rect(pin_rect_, kPinBtnSz * 0.5f, kPinBg);
         pin_icon_.draw(ctx.canvas, ctx.factory, kPinSvg,
                        pin_rect_, kPinBtnSz * 0.7f, kPinAccent);
     }
-    else if (video_hover_)
+    else if (show_pin)
     {
         ctx.canvas.fill_rounded_rect(pin_rect_, kPinBtnSz * 0.5f, kPinBg);
         const tk::Color icon_col = state_.pinned ? kPinAccent : kParticipantTileWhiteSoft;

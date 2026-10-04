@@ -5128,3 +5128,69 @@ msgstr "enviando"
 
 msgid "Message {0}"
 msgstr "Mensaje a {0}"
+
+msgid "Cancel sending"
+msgstr "Cancelar envío"
+
+msgid "Copy room ID"
+msgstr "Copiar ID de la sala"
+
+msgid "Enter collapses or expands it; Left and Right resize it"
+msgstr "Intro la contrae o expande; Izquierda y Derecha cambian su tamaño"
+
+msgid "Link {0} of {1}: {2} — press Enter to open"
+msgstr "Enlace {0} de {1}: {2} — pulsa Intro para abrir"
+
+msgid "Move call window"
+msgstr "Mover la ventana de llamada"
+
+msgid "Pin"
+msgstr "Fijar"
+
+msgid "Resize sidebar"
+msgstr "Redimensionar la barra lateral"
+
+msgid "Retry sending"
+msgstr "Reintentar envío"
+
+msgid "Reveal spoiler"
+msgstr "Mostrar spoiler"
+
+msgid "Room Info"
+msgstr "Información de la sala"
+
+msgid "Room info"
+msgstr "Información de la sala"
+
+msgid "Set status"
+msgstr "Establecer estado"
+
+msgid "Space home"
+msgstr "Inicio del espacio"
+
+msgid "Topic links"
+msgstr "Enlaces del tema"
+
+msgid "Unpin"
+msgstr "Desfijar"
+
+msgid "Use the arrow keys to move it"
+msgstr "Usa las flechas para moverla"
+
+msgid "View avatar"
+msgstr "Ver avatar"
+
+msgid "View profile of {0}"
+msgstr "Ver el perfil de {0}"
+
+msgid "View room avatar"
+msgstr "Ver el avatar de la sala"
+
+msgid "{0} ({1} of {2})"
+msgstr "{0} ({1} de {2})"
+
+msgid "Member {0} of {1}"
+msgstr "Miembro {0} de {1}"
+
+msgid "Screen {0}"
+msgstr "Pantalla {0}"

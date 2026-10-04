@@ -263,6 +263,10 @@ public:
     // World-space rect of cell `idx` (built off bounds_.x/y, like
     // ListView::row_world_rect), or a zero-area rect when out of bounds.
     tk::Rect rect_at(int idx) const;
+    // Aims the keyboard context-menu key at the selected cell (scrolled
+    // into view first).
+    Rect context_anchor_rect() const override;
+    void reveal_context_anchor() override;
 
     // First and last cell indices currently intersecting the viewport,
     // inclusive (a full row's worth of cells at each end, even the ones
@@ -468,6 +472,11 @@ public:
     void scroll_to_top();
     void scroll_to_bottom();
     void scroll_to_index(int idx, bool align_top = false);
+    // Keyboard-driven variant: brings row `idx` into view through
+    // apply_scroll_delta(), so the near-top/near-bottom pagination hooks and
+    // on_scroll fire exactly as for a wheel scroll (scroll_to_index skips
+    // them) — a keyboard user reaching the oldest loaded row loads more.
+    void reveal_index(int idx);
     // Like scroll_to_index, but deferred until heights are valid. Callers that
     // mutate data (which marks heights dirty) can't scroll_to_index immediately
     // because row_offsets_ isn't rebuilt until the next arrange()/paint. Stash
@@ -491,6 +500,14 @@ public:
     // row (e.g. below the last one when the list is shorter than the
     // viewport).
     int index_at(Point local) const;
+
+    // Aims the keyboard context-menu key at the selected row, which
+    // reveal_context_anchor() first scrolls into view.
+    Rect context_anchor_rect() const override;
+    void reveal_context_anchor() override
+    {
+        reveal_index(selected_index());
+    }
 
     // First and last item indices currently intersecting the viewport,
     // inclusive. Returns {0, -1} when the list is empty or not yet laid out.

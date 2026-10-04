@@ -2100,6 +2100,17 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
                                              fir_sc);
 
+        GtkShortcut* info_sc = gtk_shortcut_new(
+            gtk_keyval_trigger_new(GDK_KEY_i, GDK_CONTROL_MASK),
+            gtk_callback_action_new(on_room_info_shortcut_, this, nullptr));
+        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
+                                             info_sc);
+        GtkShortcut* settings_sc = gtk_shortcut_new(
+            gtk_keyval_trigger_new(GDK_KEY_comma, GDK_CONTROL_MASK),
+            gtk_callback_action_new(on_settings_shortcut_, this, nullptr));
+        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
+                                             settings_sc);
+
         GtkShortcut* back_sc = gtk_shortcut_new(
             gtk_keyval_trigger_new(GDK_KEY_Left, GDK_ALT_MASK),
             gtk_callback_action_new(on_nav_back_shortcut_, this, nullptr));
@@ -5942,6 +5953,29 @@ void MainWindow::close_find_in_room_()
         main_app_->room_view()->close_room_search();
     if (main_app_surface_)
         main_app_surface_->relayout();
+}
+
+void MainWindow::forward_ctrl_char_(const char* ch)
+{
+    if (!main_app_)
+        return;
+    tk::KeyEvent event{};
+    event.key = tk::Key::Character;
+    event.text = ch;
+    event.ctrl = true;
+    main_app_->dispatch_key_down(event);
+}
+
+gboolean MainWindow::on_room_info_shortcut_(GtkWidget*, GVariant*, gpointer user_data)
+{
+    static_cast<MainWindow*>(user_data)->forward_ctrl_char_("i");
+    return TRUE;
+}
+
+gboolean MainWindow::on_settings_shortcut_(GtkWidget*, GVariant*, gpointer user_data)
+{
+    static_cast<MainWindow*>(user_data)->forward_ctrl_char_(",");
+    return TRUE;
 }
 
 gboolean MainWindow::on_find_in_room_shortcut_(GtkWidget*, GVariant*,

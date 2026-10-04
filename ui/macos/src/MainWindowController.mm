@@ -6015,6 +6015,23 @@ private:
         _mainAppSurface->relayout();
 }
 
+- (void)showRoomInfoMenuAction:(id)sender
+{
+    (void)sender;
+    // Same path as the canvas-focused Cmd+I (MainAppWidget::
+    // handle_primary_shortcut_), so the behaviour lives in one place. Only
+    // for the main window: a pop-out room window being key must not open
+    // the main window's room info behind it.
+    if (_mainApp && self.window.isKeyWindow)
+    {
+        tk::KeyEvent event{};
+        event.key = tk::Key::Character;
+        event.text = "i";
+        event.meta = true;
+        _mainApp->dispatch_key_down(event);
+    }
+}
+
 - (void)findInConversationMenuAction:(id)sender
 {
     (void)sender;
@@ -6090,6 +6107,7 @@ private:
         return [self _appUIReady];
     }
     if (action == @selector(findInConversationMenuAction:) ||
+        action == @selector(showRoomInfoMenuAction:) ||
         action == @selector(goBackMenuAction:) ||
         action == @selector(goForwardMenuAction:) ||
         action == @selector(cycleRecentRoomsMenuAction:) ||

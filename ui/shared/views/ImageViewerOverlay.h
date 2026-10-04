@@ -71,6 +71,8 @@ public:
 
 protected:
     bool on_content_pointer_down_(tk::Point world, tk::Point local) override;
+    // + / - zoom around the centre, 0 back to fit, arrows pan while zoomed.
+    bool on_content_key_(const tk::KeyEvent& e) override;
     bool on_content_pointer_up_(tk::Point world, tk::Point local,
                                 bool inside_self) override;
     void fire_save_() override;

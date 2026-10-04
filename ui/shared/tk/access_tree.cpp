@@ -316,7 +316,7 @@ AccessNode build_access_tree(Widget* root)
     // While a modal is open, everything behind it is inert for pointer and
     // keyboard already; expose only the modal so an AT can't wander there
     // either.
-    Widget* modal = root->access_modal() ? nullptr : find_modal(root);
+    Widget* modal = root->access_modal() ? nullptr : find_topmost_modal(root);
     if (modal)
         append_child_node(modal, top.children);
     else
@@ -362,6 +362,14 @@ bool invoke_default_action(const AccessNode& node)
     if (auto* rows = dynamic_cast<WidgetRowAccessibility*>(node.widget))
         return rows->access_activate_widget_row(index);
     return false;
+}
+
+Widget* find_topmost_modal(Widget* root)
+{
+    if (!root)
+        return nullptr;
+    Widget* m = find_modal(root);
+    return m == root ? nullptr : m;
 }
 
 } // namespace tk

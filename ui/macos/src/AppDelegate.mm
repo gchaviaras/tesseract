@@ -305,6 +305,9 @@ static NSString* const kActivateRoomKey = @"room_id";
     [goMenu addItemWithTitle:TkTr("Quick Switcher\xe2\x80\xa6")
                       action:@selector(openQuickSwitcherMenuAction:)
                keyEquivalent:@"k"];
+    [goMenu addItemWithTitle:TkTr("Room Info")
+                      action:@selector(showRoomInfoMenuAction:)
+               keyEquivalent:@"i"];
     [goMenu addItem:[NSMenuItem separatorItem]];
     NSMenuItem* cycleItem =
         [goMenu addItemWithTitle:TkTr("Cycle Recent Rooms")
@@ -419,6 +422,10 @@ static NSString* const kActivateRoomKey = @"room_id";
 {
     [_windowController openQuickSwitcherMenuAction:sender];
 }
+- (void)showRoomInfoMenuAction:(id)sender
+{
+    [_windowController showRoomInfoMenuAction:sender];
+}
 - (void)cycleRecentRoomsMenuAction:(id)sender
 {
     [_windowController cycleRecentRoomsMenuAction:sender];
@@ -438,6 +445,7 @@ static NSString* const kActivateRoomKey = @"room_id";
         action == @selector(goBackMenuAction:) ||
         action == @selector(goForwardMenuAction:) ||
         action == @selector(openQuickSwitcherMenuAction:) ||
+        action == @selector(showRoomInfoMenuAction:) ||
         action == @selector(cycleRecentRoomsMenuAction:) ||
         action == @selector(cycleRecentRoomsBackwardMenuAction:))
     {

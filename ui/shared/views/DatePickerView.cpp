@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <iterator>
 #include <sstream>
 
 namespace tesseract::views
@@ -89,6 +90,19 @@ void DatePickerView::open_at(tk::Rect world_rect)
         view_month_ = tm;
         (void)td;
     }
+
+    // Keyboard cursor: today when today's month is shown, else the 1st.
+    // Focus starts on the grid; the ring stays hidden until a key press.
+    {
+        int ty, tm, td;
+        today(ty, tm, td);
+        if (view_year_ == ty && view_month_ == tm)
+            set_cursor_(ty, tm, td);
+        else
+            set_cursor_(view_year_, view_month_, 1);
+    }
+    focus_part_ = FocusPart::Grid;
+    kbd_active_ = false;
 
     // Reset interaction state.
     hovered_zone_ = Zone::None;
@@ -215,6 +229,7 @@ void DatePickerView::paint_overlay(tk::PaintCtx& ctx)
             const float text_y  = header_rect_.y +
                                   (kHeaderH - month_layout_->ascent()) * 0.5f;
             c.draw_text(*month_layout_, {start_x, text_y}, pal.text_primary);
+            month_label_rect_ = {start_x, header_rect_.y, msz.w, kHeaderH};
             const float year_x = start_x + msz.w + kLabelGap;
             c.draw_text(*year_layout_,  {year_x, text_y}, pal.text_primary);
             year_label_rect_ = {year_x, header_rect_.y, ysz.w, kHeaderH};
@@ -326,10 +341,46 @@ void DatePickerView::paint_overlay(tk::PaintCtx& ctx)
         }
     }
 
+    if (kbd_active_)
+        paint_keyboard_focus_(ctx);
+
     c.pop_clip();
     if (revealing)
     {
         c.pop_opacity();
+    }
+}
+
+void DatePickerView::paint_keyboard_focus_(tk::PaintCtx& ctx)
+{
+    // Header labels get a ring hugging the text line rather than the full
+    // header height.
+    const auto label_ring = [this](tk::Rect r)
+    {
+        constexpr float kRingH = 26.0f;
+        return tk::Rect{r.x - 4.0f, header_rect_.y + (kHeaderH - kRingH) * 0.5f,
+                        r.w + 8.0f, kRingH};
+    };
+    switch (focus_part_)
+    {
+    case FocusPart::PrevBtn: tk::paint_focus_ring(ctx, prev_btn_rect_); break;
+    case FocusPart::NextBtn: tk::paint_focus_ring(ctx, next_btn_rect_); break;
+    case FocusPart::TodayBtn: tk::paint_focus_ring(ctx, today_btn_rect_); break;
+    case FocusPart::Month:
+        if (month_label_rect_.w > 0.0f)
+            tk::paint_focus_ring(ctx, label_ring(month_label_rect_));
+        break;
+    case FocusPart::Year:
+        if (year_label_rect_.w > 0.0f)
+            tk::paint_focus_ring(ctx, label_ring(year_label_rect_));
+        break;
+    case FocusPart::Grid:
+        if (const int cell = cursor_cell_(); cell >= 0)
+        {
+            const tk::Rect cr = circle_rect_in(cell_world_rect(cell));
+            tk::paint_focus_ring(ctx, cr, kCellCircleD * 0.5f);
+        }
+        break;
     }
 }
 
@@ -395,9 +446,83 @@ bool DatePickerView::step_month_(int dir)
     // zeroing the first cell's month marker.
     layouts_[0].reset();
     cells_[0].month = 0;
+    // Keep the keyboard cursor on the month now shown.
+    set_cursor_(view_year_, view_month_, cursor_day_);
     if (host())
         host()->request_repaint();
     return true;
+}
+
+void DatePickerView::set_cursor_(int y, int m, int d)
+{
+    m = std::clamp(m, 1, 12);
+    d = std::clamp(d, 1, days_in_month(y, m));
+    const long key = long(y) * 10000 + m * 100 + d;
+    const long max_key = long(max_year_) * 10000 + max_month_ * 100 + max_day_;
+    if (key < 19700101L)
+    {
+        y = 1970; m = 1; d = 1;
+    }
+    else if (key > max_key)
+    {
+        y = max_year_; m = max_month_; d = max_day_;
+    }
+    cursor_year_  = y;
+    cursor_month_ = m;
+    cursor_day_   = d;
+    if (y != view_year_ || m != view_month_)
+    {
+        view_year_  = y;
+        view_month_ = m;
+        layouts_[0].reset();
+        month_layout_.reset();
+        year_layout_.reset();
+        cells_[0].month = 0; // force a cell rebuild on the next paint
+    }
+    if (host())
+        host()->request_repaint();
+}
+
+void DatePickerView::move_cursor_days_(int days)
+{
+    // Noon avoids a DST transition nudging mktime() onto the wrong day.
+    std::tm t{};
+    t.tm_year = cursor_year_ - 1900;
+    t.tm_mon  = cursor_month_ - 1;
+    t.tm_mday = cursor_day_ + days;
+    t.tm_hour = 12;
+    t.tm_isdst = -1;
+    std::mktime(&t);
+    set_cursor_(t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+}
+
+void DatePickerView::move_cursor_months_(int months)
+{
+    const int total = cursor_year_ * 12 + (cursor_month_ - 1) + months;
+    const int y = total / 12;
+    const int m = total % 12 + 1;
+    set_cursor_(y, m, std::min(cursor_day_, days_in_month(y, m)));
+}
+
+int DatePickerView::cursor_cell_() const
+{
+    if (cursor_year_ != view_year_ || cursor_month_ != view_month_ ||
+        view_year_ == 0)
+        return -1;
+    const int idx = first_weekday(view_year_, view_month_) + cursor_day_ - 1;
+    return idx >= 0 && idx < kRows * kCols ? idx : -1;
+}
+
+bool DatePickerView::part_enabled_(FocusPart p) const
+{
+    switch (p)
+    {
+    case FocusPart::PrevBtn: return !(view_year_ == 1970 && view_month_ == 1);
+    case FocusPart::NextBtn:
+        return !(view_year_ == max_year_ && view_month_ == max_month_);
+    case FocusPart::TodayBtn: return today_enabled();
+    default: return true;
+    }
 }
 
 void DatePickerView::pick_cell_(int cell)
@@ -490,7 +615,7 @@ tk::AccessState DatePickerView::access_state_for_widget_row(std::size_t i) const
     {
         const int cell = static_cast<int>(i - kDateRowCell0);
         st.disabled = !cells_[cell].enabled;
-        st.selected = hovered_zone_ == Zone::DayCell && hovered_cell_ == cell;
+        st.selected = cursor_cell_() == cell;
     }
     return st;
 }
@@ -614,6 +739,7 @@ bool DatePickerView::on_wheel(tk::Point local, float /*dx*/, float dy, bool /*is
     month_layout_.reset();
     year_layout_.reset();
     cells_[0].month = 0; // force cell rebuild on next paint
+    set_cursor_(view_year_, view_month_, cursor_day_);
     return true;
 }
 
@@ -635,74 +761,103 @@ bool DatePickerView::on_key_down(const tk::KeyEvent& e)
         on_popup_dismiss();
         return true;
     }
+    if (e.ctrl || e.alt || e.meta)
+        return false;
+    if (cursor_year_ == 0)
+        set_cursor_(view_year_, view_month_, 1);
+
+    const bool was_active = kbd_active_;
+    kbd_active_ = true;
+
+    if (e.key == tk::Key::Tab || e.key == tk::Key::Backtab)
+    {
+        // The first Tab after a mouse open only reveals the cursor where it
+        // already is (the grid), like the first arrow press does.
+        if (!was_active)
+            return true;
+        static constexpr FocusPart kOrder[] = {
+            FocusPart::PrevBtn, FocusPart::Month,   FocusPart::Year,
+            FocusPart::NextBtn, FocusPart::Grid,    FocusPart::TodayBtn};
+        constexpr int n = static_cast<int>(std::size(kOrder));
+        int idx = 0;
+        for (int i = 0; i < n; ++i)
+            if (kOrder[i] == focus_part_)
+                idx = i;
+        const int dir = e.key == tk::Key::Tab ? 1 : -1;
+        for (int step = 0; step < n; ++step)
+        {
+            idx = (idx + dir + n) % n;
+            if (part_enabled_(kOrder[idx]))
+                break;
+        }
+        focus_part_ = kOrder[idx];
+        return true;
+    }
 
     if (e.key == tk::Key::PageUp || e.key == tk::Key::PageDown)
     {
-        step_month_(e.key == tk::Key::PageDown ? 1 : -1);
-        // Cells for the new month haven't been rebuilt yet (no factory
-        // here — paint_overlay() picks it up next frame), so there's
-        // nothing sensible to highlight until then.
-        hovered_zone_ = Zone::None;
-        hovered_cell_ = -1;
+        const int dir = e.key == tk::Key::PageDown ? 1 : -1;
+        move_cursor_months_(e.shift ? dir * 12 : dir);
+        return true;
+    }
+
+    if (e.key == tk::Key::Character && (e.text == "t" || e.text == "T"))
+    {
+        int ty, tm, td;
+        today(ty, tm, td);
+        set_cursor_(ty, tm, td);
+        focus_part_ = FocusPart::Grid;
         return true;
     }
 
     if (e.key == tk::Key::Enter || e.key == tk::Key::Space)
     {
-        if (hovered_zone_ == Zone::DayCell)
-            pick_cell_(hovered_cell_);
+        // The first press after a mouse open only reveals the cursor, so a
+        // stray Enter can't jump to a date the user never saw highlighted.
+        if (!was_active)
+            return true;
+        switch (focus_part_)
+        {
+        case FocusPart::Grid:
+            if (on_date_picked)
+                on_date_picked(cursor_year_, cursor_month_, cursor_day_);
+            break;
+        case FocusPart::PrevBtn: move_cursor_months_(-1); break;
+        case FocusPart::NextBtn: move_cursor_months_(1); break;
+        case FocusPart::TodayBtn: pick_today_(); break;
+        case FocusPart::Month:
+        case FocusPart::Year: focus_part_ = FocusPart::Grid; break;
+        }
         return true;
     }
 
-    int delta = 0;
-    if (e.key == tk::Key::Left) delta = -1;
-    else if (e.key == tk::Key::Right) delta = 1;
-    else if (e.key == tk::Key::Up) delta = -kCols;
-    else if (e.key == tk::Key::Down) delta = kCols;
-    else return false;
-
-    if (cells_[0].year == 0)
-        return false; // grid not built yet
-
-    int next_idx;
-    if (hovered_zone_ != Zone::DayCell || hovered_cell_ < 0)
+    int step = 0; // +1 = later
+    switch (e.key)
     {
-        // Cold start: land on today if it's in view and enabled, else the
-        // first enabled cell.
-        next_idx = -1;
-        for (int i = 0; i < kRows * kCols; ++i)
+    case tk::Key::Left: step = -1; break;
+    case tk::Key::Right: step = 1; break;
+    case tk::Key::Up: step = focus_part_ == FocusPart::Grid ? -kCols : 1; break;
+    case tk::Key::Down: step = focus_part_ == FocusPart::Grid ? kCols : -1; break;
+    case tk::Key::Home:
+    case tk::Key::End:
+        if (focus_part_ == FocusPart::Grid)
         {
-            if (cells_[i].is_today && cells_[i].enabled)
-            {
-                next_idx = i;
-                break;
-            }
+            const int col = (first_weekday(cursor_year_, cursor_month_) +
+                             cursor_day_ - 1) % kCols;
+            move_cursor_days_(e.key == tk::Key::Home ? -col : kCols - 1 - col);
         }
-        if (next_idx < 0)
-        {
-            for (int i = 0; i < kRows * kCols; ++i)
-            {
-                if (cells_[i].enabled)
-                {
-                    next_idx = i;
-                    break;
-                }
-            }
-        }
-    }
-    else
-    {
-        next_idx = hovered_cell_ + delta;
-    }
-
-    // Swallow the key even if there's nowhere to move (e.g. at the grid
-    // edge, or every cell disabled) — matches the "an open popup consumes
-    // input" convention used elsewhere (e.g. tk::ComboBox).
-    if (next_idx < 0 || next_idx >= kRows * kCols || !cells_[next_idx].enabled)
         return true;
-
-    hovered_zone_ = Zone::DayCell;
-    hovered_cell_ = next_idx;
+    default: return false;
+    }
+    if (!was_active)
+        return true; // first arrow just reveals the cursor
+    switch (focus_part_)
+    {
+    case FocusPart::Grid: move_cursor_days_(step); break;
+    case FocusPart::Month: move_cursor_months_(step > 0 ? 1 : -1); break;
+    case FocusPart::Year: move_cursor_months_(step > 0 ? 12 : -12); break;
+    default: break; // arrows on ‹ › Today are swallowed
+    }
     return true;
 }
 

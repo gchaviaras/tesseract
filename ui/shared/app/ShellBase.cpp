@@ -2026,6 +2026,22 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
     // populate_user_strip() call.
     app->user_info()->on_avatar_needed =
         [this](const std::string& mxc) { ensure_user_avatar_(mxc); };
+    app->on_settings_shortcut = [this] { open_app_settings_ui_(); };
+    // Keyboard: Enter on the strip opens the account picker when there's
+    // more than one account to pick from (the click's behaviour), else the
+    // user menu (Settings, Add account, ...), so a single-account user's
+    // Enter isn't a dead key.
+    app->user_info()->set_keyboard_focusable(true);
+    app->user_info()->on_keyboard_activate = [this, app]
+    {
+        views::UserInfo* ui = app->user_info();
+        const tk::Rect b = ui->bounds();
+        const tk::Point centre{b.x + b.w * 0.5f, b.y + b.h * 0.5f};
+        if (account_manager_.accounts().size() >= 2 && ui->on_primary)
+            ui->on_primary(centre);
+        else if (ui->on_secondary)
+            ui->on_secondary(centre);
+    };
 
     // MSC4426: the sidebar strip (not AccountPicker rows) shows a third line
     // for the user's own status, with a "Click to set status" placeholder

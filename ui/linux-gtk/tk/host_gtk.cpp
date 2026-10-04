@@ -3451,6 +3451,8 @@ Key key_from_gdk(guint keyval)
     case GDK_KEY_Page_Down: return Key::PageDown;
     case GDK_KEY_BackSpace: return Key::Backspace;
     case GDK_KEY_Delete: return Key::Delete;
+    case GDK_KEY_Menu: return Key::Menu;
+    case GDK_KEY_F10: return Key::F10;
     default: return Key::Unknown;
     }
 }

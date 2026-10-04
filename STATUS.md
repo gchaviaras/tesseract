@@ -1,6 +1,16 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-03**. 2135 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-04**. 2159 C++ + 765 Rust tests.
+
+> **Keyboard operability (2026-10-04).**
+> Everything reachable by mouse is now reachable by keyboard: focus stays
+> inside open popups and dialogs, Menu/Shift+F10 opens context menus,
+> PageUp/PageDown/Home/End scroll, and Tab-focused icon buttons show their
+> name. The timeline has a message cursor (Left/Right walk a message's
+> links, media, reactions and actions). The date picker cycles its parts
+> with Tab, and Ctrl/⌘+I (room info) and Ctrl+, (Settings) open those
+> views. Painted click areas use `tk::KeyboardTarget` or
+> `tk::RowKeyboardCursor`. Qt6 build + ctest 2159/2159.
 
 > **Accessibility gap pass (2026-10-03).**
 > The access tree now reaches canvas-drawn popups

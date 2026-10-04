@@ -229,6 +229,11 @@ private:
     // Global-scope Ctrl+F shortcut callback — opens per-room find bar.
     static gboolean on_find_in_room_shortcut_(GtkWidget*, GVariant*,
                                               gpointer user_data);
+    // Ctrl+I (room info) / Ctrl+, (Settings) — both forward Ctrl+<ch> to
+    // MainAppWidget::handle_primary_shortcut_ via forward_ctrl_char_().
+    static gboolean on_room_info_shortcut_(GtkWidget*, GVariant*, gpointer);
+    static gboolean on_settings_shortcut_(GtkWidget*, GVariant*, gpointer);
+    void forward_ctrl_char_(const char* ch);
     // Global-scope Alt+Left / Alt+Right shortcut callbacks — room history nav.
     static gboolean on_nav_back_shortcut_(GtkWidget*, GVariant*,
                                           gpointer user_data);

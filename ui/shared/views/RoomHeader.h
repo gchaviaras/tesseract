@@ -14,6 +14,7 @@
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/host.h"
+#include "tk/keyboard_target.h"
 #include "tk/widget.h"
 
 #include <tesseract/types.h>
@@ -200,6 +201,13 @@ private:
     // arrange()). The actual popup is owned by whoever owns
     // on_overflow_requested (RoomView) — see that callback's doc comment.
     tk::Button* more_btn_ = nullptr;
+    // Keyboard stand-in for the clickable avatar/name/topic area: Enter
+    // opens room info (the same on_info_requested a click fires), Left/
+    // Right cycle the topic's links. Pointer-transparent.
+    tk::KeyboardTarget* title_target_ = nullptr;
+public:
+    tk::KeyboardTarget* title_target() const { return title_target_; }
+private:
     // Rebuilt each arrange() pass with whatever's currently collapsed;
     // consumed when more_btn_ is clicked.
     std::vector<PopupMenu::Item> overflow_items_;

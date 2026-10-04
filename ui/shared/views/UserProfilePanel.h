@@ -3,6 +3,7 @@
 #include <tesseract/client.h>
 #include "tk/canvas.h"
 #include "tk/controls.h"
+#include "tk/keyboard_target.h"
 #include "tk/svg.h"
 #include "tk/widget.h"
 
@@ -131,6 +132,8 @@ private:
     tk::Rect card_rect_{};
     tk::Rect backdrop_rect_{};
     tk::Rect avatar_rect_{};
+    // Keyboard stand-in for the avatar (opens the full-size lightbox).
+    tk::KeyboardTarget* avatar_target_ = nullptr;
 
     // Cached text layouts (rebuilt lazily in paint)
     std::unique_ptr<tk::TextLayout> name_layout_;

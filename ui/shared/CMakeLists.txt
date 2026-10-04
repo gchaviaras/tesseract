@@ -123,6 +123,10 @@ set(_tk_sources
     tk/compressed_image_cache.h
     tk/compressed_image_cache.cpp
     tk/interval_timer.h
+    tk/keyboard_target.h
+    tk/keyboard_target.cpp
+    tk/row_cursor.h
+    tk/row_cursor.cpp
     tk/tooltip.h
     tk/tooltip.cpp
     tk/toast.h

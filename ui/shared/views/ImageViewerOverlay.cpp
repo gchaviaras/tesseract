@@ -435,4 +435,43 @@ bool ImageViewerOverlay::on_wheel(tk::Point local, float /*dx*/, float dy, bool 
     return true;
 }
 
+bool ImageViewerOverlay::on_content_key_(const tk::KeyEvent& e)
+{
+    if (e.alt || e.meta || (e.ctrl && e.key != tk::Key::Character))
+        return false;
+    const tk::Rect b = bounds();
+    const tk::Point centre_local{b.w * 0.5f, b.h * 0.5f};
+    if (e.key == tk::Key::Character)
+    {
+        if (e.text == "+" || e.text == "=")
+            return on_wheel(centre_local, 0.0f, -1.0f, false); // zoom in
+        if (e.text == "-")
+            return on_wheel(centre_local, 0.0f, 1.0f, false); // zoom out
+        if (e.text == "0")
+        {
+            zoom_ = fit_zoom_;
+            pan_x_ = 0.0f;
+            pan_y_ = 0.0f;
+            return true;
+        }
+        return false;
+    }
+    constexpr float kPanStep = 48.0f;
+    float dx = 0.0f, dy = 0.0f;
+    switch (e.key)
+    {
+    case tk::Key::Left: dx = kPanStep; break;
+    case tk::Key::Right: dx = -kPanStep; break;
+    case tk::Key::Up: dy = kPanStep; break;
+    case tk::Key::Down: dy = -kPanStep; break;
+    default: return false;
+    }
+    if (base_.w * zoom_ <= b.w && base_.h * zoom_ <= b.h)
+        return false; // whole image visible — nothing to pan
+    pan_x_ += dx;
+    pan_y_ += dy;
+    clamp_pan();
+    return true;
+}
+
 } // namespace tesseract::views

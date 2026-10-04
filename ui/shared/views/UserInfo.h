@@ -6,6 +6,7 @@
 // missing or unfetched URLs fall back to the canvas's initials disc.
 
 #include "tk/canvas.h"
+#include "tk/keyboard_target.h"
 #include "tk/widget.h"
 
 #include <functional>
@@ -124,15 +125,24 @@ public:
 
     bool on_pointer_down(tk::Point local) override;
     void on_pointer_up(tk::Point local, bool inside_self) override;
+
+    // Keyboard access for the sidebar strip (AccountPicker rows stay
+    // mouse/list-driven, so it's opt-in). When on, the strip is a Tab stop:
+    // Enter/Space fires on_keyboard_activate (falling back to on_primary at
+    // the strip's centre), the context-menu key fires on_secondary, and the
+    // editable status line becomes its own Tab stop firing on_status_clicked.
+    void set_keyboard_focusable(bool on) { keyboard_focusable_ = on; }
+    std::function<void()> on_keyboard_activate;
+    bool focusable() const override { return keyboard_focusable_ && enabled_; }
+    bool focus_on_click() const override { return false; }
+    bool on_key_down(const tk::KeyEvent& e) override;
+    bool on_context_menu_key() override;
     bool on_pointer_move(tk::Point local) override;
     void on_pointer_leave() override;
 
     // Row is a clickable target (on_primary) in every current use — the
     // account-picker list and the sidebar user strip — so Button is the
-    // closest match. Not currently keyboard-focusable (no focusable()
-    // override, mouse-only on_pointer_down/up) — that's a separate,
-    // broader keyboard-accessibility gap (see the plan's Phase 5), not
-    // something to silently fix as a side effect of role/name mapping.
+    // closest match. Keyboard-focusable only via set_keyboard_focusable().
     tk::Role access_role() const override
     {
         return tk::Role::Button;
@@ -172,6 +182,9 @@ private:
     std::string avatar_url_;
     std::string status_emoji_;
     std::string status_text_;
+    bool keyboard_focusable_ = false;
+    // Tab stop for the editable status line (see set_keyboard_focusable).
+    tk::KeyboardTarget* status_target_ = nullptr;
     bool status_line_enabled_ = false;
     bool status_editable_ = true;
     bool active_indicator_ = false;

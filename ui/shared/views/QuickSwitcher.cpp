@@ -634,6 +634,8 @@ void QuickSwitcher::paint(tk::PaintCtx& ctx)
     // Recent strip (only when the query is empty). Rebuilt each paint so the
     // hit rects stay in sync with what's drawn.
     recent_chips_.clear();
+    for (auto* t : chip_targets_)
+        t->set_target_rect({});
     if (show_recent_() && !recent_strip_rect_.empty())
     {
         paint_recent_strip_(ctx);
@@ -687,6 +689,31 @@ void QuickSwitcher::paint_recent_strip_(tk::PaintCtx& ctx)
 
     paint_room_chips(ctx, strip, recent_, avatar_provider_, on_room_avatar_needed,
                      style, recent_chips_);
+
+    while (chip_targets_.size() < recent_chips_.size())
+    {
+        const std::size_t idx = chip_targets_.size();
+        auto* t = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+        t->on_activate = [this, idx]
+        {
+            if (idx >= recent_chips_.size())
+                return;
+            const std::string room_id = recent_chips_[idx].second;
+            if (on_room_selected)
+                on_room_selected(room_id);
+            close();
+        };
+        chip_targets_.push_back(t);
+    }
+    for (std::size_t i = 0; i < chip_targets_.size(); ++i)
+    {
+        if (i >= recent_chips_.size())
+            continue; // parked by paint()'s reset
+        chip_targets_[i]->set_target_rect(recent_chips_[i].first);
+        for (const auto& r : recent_)
+            if (r.id == recent_chips_[i].second)
+                chip_targets_[i]->set_accessible_name(r.name.empty() ? r.id : r.name);
+    }
 
     // Separator below the strip.
     tk::Rect ssep{strip.x, strip.y + strip.h - 1.0f, strip.w, 1.0f};

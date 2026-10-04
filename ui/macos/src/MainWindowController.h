@@ -50,6 +50,7 @@
 - (void)goBackMenuAction:(id)sender;
 - (void)goForwardMenuAction:(id)sender;
 - (void)openQuickSwitcherMenuAction:(id)sender;
+- (void)showRoomInfoMenuAction:(id)sender;
 - (void)cycleRecentRoomsMenuAction:(id)sender;
 - (void)cycleRecentRoomsBackwardMenuAction:(id)sender;
 

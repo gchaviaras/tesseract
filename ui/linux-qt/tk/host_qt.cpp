@@ -2900,6 +2900,8 @@ Key key_from_qt(int key)
     case Qt::Key_PageDown: return Key::PageDown;
     case Qt::Key_Backspace: return Key::Backspace;
     case Qt::Key_Delete: return Key::Delete;
+    case Qt::Key_Menu: return Key::Menu;
+    case Qt::Key_F10: return Key::F10;
     default: return Key::Unknown;
     }
 }

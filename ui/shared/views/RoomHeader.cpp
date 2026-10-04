@@ -100,6 +100,20 @@ RoomHeader::RoomHeader()
     calendar_btn_->set_accessible_name(tk::tr("Jump to Date"));
     calendar_btn_->set_on_click([this] { show_date_picker_(); });
 
+    title_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    title_target_->set_accessible_name(tk::tr("Room info"));
+    title_target_->set_focus_ring_radius(6.0f);
+    title_target_->on_activate = [this]
+    {
+        if (!condensed_ && on_info_requested)
+            on_info_requested();
+    };
+    title_target_->on_link_activated = [this](const std::string& url)
+    {
+        if (on_link_clicked)
+            on_link_clicked(url);
+    };
+
     date_picker_ = std::make_unique<DatePickerView>();
     date_picker_->on_date_picked = [this](int y, int m, int d)
     {
@@ -273,6 +287,14 @@ tk::Size RoomHeader::measure(tk::LayoutCtx&, tk::Size constraints)
 void RoomHeader::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
 {
     bounds_ = bounds;
+    // Re-placed over the title area at the end of the full (non-condensed)
+    // layout below; condensed mode has no room-info click to stand in for.
+    if (title_target_)
+    {
+        title_target_->arrange(ctx, {});
+        title_target_->set_links_from_spans(topic_spans_);
+        title_target_->set_accessible_description(display_name_);
+    }
 
     // Action buttons are never shown in condensed mode; hide + zero them so the
     // test rect accessor and hit-testing report no clickable area.
@@ -647,6 +669,20 @@ void RoomHeader::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     {
         call_btn_->set_visible(show_now[3]);
         call_btn_->arrange(ctx, show_now[3] ? call_r : tk::Rect{});
+    }
+
+    // Title keyboard target: from the avatar to just short of the left-most
+    // visible action button.
+    if (title_target_ && !condensed_)
+    {
+        float title_right = bounds.x + bounds.w - kCalBtnMargin;
+        for (tk::Button* b : {calendar_btn_, more_btn_, threads_btn_, search_btn_, call_btn_})
+            if (b && b->visible() && b->bounds().w > 0.0f)
+                title_right = std::min(title_right, b->bounds().x - 4.0f);
+        const float title_x = bounds.x + kRoomHeaderPadX + lead_reserve - 4.0f;
+        if (title_right > title_x)
+            title_target_->arrange(ctx, {title_x, bounds.y + 4.0f,
+                                         title_right - title_x, kHeight - 8.0f});
     }
 
     // Rebuild the overflow item list to match whatever's currently

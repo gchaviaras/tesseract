@@ -89,6 +89,8 @@ void AccountPicker::bind_row_(UserInfo& row, const AccountEntry& e)
     // total count unchanged), so the per-row callbacks capturing a user_id
     // are re-bound on every update, not just the visible fields.
     const std::string uid = e.user_id;
+    // Keyboard: each row is a Tab stop; Enter picks it (on_primary).
+    row.set_keyboard_focusable(true);
     row.on_primary = [this, uid](tk::Point)
     {
         if (on_select)
@@ -172,4 +174,14 @@ void AccountPicker::paint_before_children(tk::PaintCtx& ctx)
                                    ctx.theme.palette.popup_border, 1.0f);
 }
 
+bool AccountPicker::on_key_down(const tk::KeyEvent& e)
+{
+    if ((e.key != tk::Key::Up && e.key != tk::Key::Down) || e.ctrl || e.alt || e.meta)
+        return false;
+    if (auto* h = host())
+        return h->advance_focus(e.key == tk::Key::Down);
+    return false;
+}
+
 } // namespace tesseract::views
+

@@ -19,6 +19,7 @@
 
 #include "tk/canvas.h"
 #include "tk/access_tree.h"
+#include "tk/row_cursor.h"
 #include "tk/widget.h"
 
 #include <functional>
@@ -157,6 +158,11 @@ public:
     }
 
 protected:
+    // Keyboard operation of the same rows (Change / Remove avatar) — the
+    // owning widget forwards its focus/key/ring hooks here (see
+    // AVATAR_ACCESS_ROWS_KEYBOARD below).
+    tk::RowKeyboardCursor avatar_kbd_;
+
     virtual const AvatarEditControl& avatar_control_() const = 0;
     virtual tk::Point avatar_world_origin_() const = 0;
     // remove == false: upload / change.
@@ -165,5 +171,25 @@ protected:
 private:
     mutable std::vector<AvatarEditControl::AccessItem> items_;
 };
+
+// Drop into the public section of a tk::Widget that also derives from
+// AvatarAccessRows: makes the editable avatar a Tab stop whose arrow keys
+// pick Change / Remove and Enter runs it. Clicks keep their behaviour.
+#define AVATAR_ACCESS_ROWS_KEYBOARD                                              \
+    bool focusable() const override                                              \
+    {                                                                            \
+        return enabled() && avatar_control_().editable() &&                      \
+               !avatar_control_().busy();                                        \
+    }                                                                            \
+    bool focus_on_click() const override { return false; }                      \
+    bool on_key_down(const tk::KeyEvent& e) override                             \
+    {                                                                            \
+        return avatar_kbd_.handle_key(*this, *this, e);                          \
+    }                                                                            \
+    void paint_own_focus_ring(tk::PaintCtx& ctx) override                        \
+    {                                                                            \
+        avatar_kbd_.paint_ring(ctx, *this, *this);                               \
+    }                                                                            \
+    void on_focus_lost() override { avatar_kbd_.reset(); }
 
 } // namespace tesseract::views

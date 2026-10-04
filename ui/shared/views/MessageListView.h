@@ -817,21 +817,53 @@ public:
     bool on_right_click(tk::Point local) override;
     void paint(tk::PaintCtx&) override;
 
-    // Opts out of ListView's generic "keyboard-focusable whenever there's a
-    // row, Up/Down + Enter drive on_row_clicked" model — a chat timeline
-    // isn't a select-one-row list (on_message_clicked, the callback
-    // on_row_clicked forwards to, has no listener anywhere in this
-    // codebase), and inheriting that focusable()==true had a real bug: any
-    // click this view claims for its own purposes (text-selection anchor,
-    // spoiler reveal, a reaction chip, etc. — all independent of wanting
-    // keyboard focus) made Host::dispatch_pointer_down's post-dispatch
-    // "claimed + focusable → request_focus" logic steal real OS keyboard
-    // focus onto the whole list, yanking it away from the compose box mid
-    // read/select.
-    bool focusable() const override
+    // Keyboard model (a11y Phase 5). A Tab stop whenever there are
+    // messages, but never focused by a click: any click this view claims
+    // for its own purposes (text-selection anchor, spoiler reveal, a
+    // reaction chip, ...) must not steal keyboard focus from the compose
+    // box — focus_on_click() == false keeps that, the same opt-out
+    // RoomListView's row list uses.
+    //   Up/Down            move a message cursor (skipping system rows)
+    //   PageUp/PageDown,
+    //   Home/End           page / jump through the loaded timeline
+    //   Left/Right         step through the cursor message's parts —
+    //                      links, media, reactions, Reply, More, ... (the
+    //                      same per-message actions exposed to screen
+    //                      readers by access_subtree_for_row), each named
+    //                      in a tooltip
+    //   Enter/Space        activate that part; with none chosen, open the
+    //                      message's More menu (or expand a "N joined"
+    //                      group)
+    //   Menu / Shift+F10   the message's More menu
+    //   Ctrl/Cmd+C         copy the message (when nothing is selected
+    //                      anywhere — see copy_keyboard_cursor_message)
+    //   Escape             drop the chosen part, then on_keyboard_exit
+    bool focusable() const override;
+    bool focus_on_click() const override
     {
         return false;
     }
+    bool on_key_down(const tk::KeyEvent& e) override;
+    bool on_context_menu_key() override;
+    void on_focus_gained() override;
+    void on_focus_lost() override;
+    void paint_own_focus_ring(tk::PaintCtx& ctx) override;
+
+    // Copies the keyboard cursor's message (when this list has focus).
+    // RoomView calls it for Ctrl/Cmd+C once no text selection exists
+    // anywhere. Returns whether anything was copied.
+    bool copy_keyboard_cursor_message();
+
+    // Fired by Escape from the timeline (no part chosen) — the owner moves
+    // focus back to its compose box.
+    std::function<void()> on_keyboard_exit;
+
+    // Index of the cursor message's part chosen with Left/Right, or -1.
+    // Public for tests.
+    int keyboard_part_index() const;
+    // Names of the cursor message's keyboard-reachable parts, in Left/Right
+    // order. Public for tests.
+    std::vector<std::string> keyboard_part_names() const;
 
     // Per-chip geometry for the currently hovered row. Populated by
     // `Adapter::paint_row` during the row's paint pass (geometry is
@@ -1282,6 +1314,31 @@ private:
                                        std::chrono::seconds{30}};
     ShortcodeProvider shortcode_provider_;
     std::unique_ptr<Adapter> adapter_;
+
+    // Keyboard model state (see focusable()'s doc comment).
+    // The cursor message (by event id, so it survives prepends/resets) and
+    // the part chosen with Left/Right (by stable key, so a part added or
+    // removed meanwhile can't redirect Enter to a different action).
+    std::string kbd_event_id_;
+    std::string kbd_part_key_;
+    static std::vector<std::string> kbd_part_keys_(const std::vector<tk::AccessNode>& parts);
+    int kbd_part_index_(const std::vector<tk::AccessNode>& parts) const;
+    // Whether row `idx` is a keyboard cursor stop: a real message, or a
+    // multi-member "N joined" group header.
+    bool kbd_row_navigable_(int idx) const;
+    // Next navigable row from `from` in `dir`, or -1.
+    int kbd_step_row_(int from, int dir) const;
+    // Puts the cursor on the newest message currently on screen (or the
+    // newest loaded one), unless it already sits on a visible message.
+    void kbd_ensure_cursor_();
+    void kbd_select_row_(int idx);
+    // The cursor message's activatable parts, flattened in reading order.
+    std::vector<tk::AccessNode> kbd_parts_() const;
+    // World rect for keyboard-opened popups anchored on a message row,
+    // clamped to the viewport.
+    tk::Rect anchor_for_event_(const std::string& event_id) const;
+    bool kbd_open_more_();
+    void kbd_toggle_membership_group_(int idx);
     std::string pending_scroll_event_id_;
     // See set_relayout_suppressed().
     bool relayout_suppressed_ = false;

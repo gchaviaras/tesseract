@@ -34,6 +34,7 @@
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/host.h"
+#include "tk/row_cursor.h"
 #include "tk/svg.h"
 #include "tk/text_area.h"
 #include "tk/text_field.h"
@@ -155,6 +156,24 @@ public:
     bool        access_activate_widget_row(std::size_t i) override;
     tk::Rect    access_rect_for_widget_row(std::size_t i) const override;
 
+    // Keyboard: a Tab stop whose arrow keys walk the same rows exposed to
+    // assistive technology (pack header, rename, usage, remove, each tile's
+    // edit/remove) — see tk::RowKeyboardCursor.
+    bool focusable() const override
+    {
+        return enabled_ && packs_ && !packs_->empty();
+    }
+    bool focus_on_click() const override { return false; }
+    bool on_key_down(const tk::KeyEvent& e) override
+    {
+        return kbd_.handle_key(*this, *this, e);
+    }
+    void paint_own_focus_ring(tk::PaintCtx& ctx) override
+    {
+        kbd_.paint_ring(ctx, *this, *this);
+    }
+    void on_focus_lost() override { kbd_.reset(); }
+
     tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override;
     void     arrange(tk::LayoutCtx&, tk::Rect bounds) override;
     void     paint(tk::PaintCtx&) override;
@@ -196,6 +215,7 @@ private:
         tk::AccessState       state;
         std::function<void()> activate;
     };
+    tk::RowKeyboardCursor kbd_;
     mutable std::vector<AccessRow> access_rows_;
     // Widget-local, un-scrolled layout rect → world rect.
     tk::Rect to_world_(const tk::Rect& r) const;

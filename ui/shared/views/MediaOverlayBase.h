@@ -159,6 +159,25 @@ protected:
     // return false to let the base dismiss on the matching release.
     virtual bool on_content_pointer_down_(tk::Point world, tk::Point local) = 0;
 
+    // Keyboard counterpart of the content pointer handling (zoom/pan, play/
+    // seek). Reached via on_key_down below — the overlay is never focused
+    // itself, so keys arrive through the root broadcast whenever the focused
+    // chrome button (if any) doesn't consume them.
+    virtual bool on_content_key_(const tk::KeyEvent&) { return false; }
+
+public:
+    // Any key re-reveals auto-hidden full-screen chrome (like moving the
+    // pointer does), then the subclass's on_content_key_ gets it.
+    bool on_key_down(const tk::KeyEvent& e) override
+    {
+        if (!is_open_)
+            return false;
+        note_activity_();
+        return on_content_key_(e);
+    }
+
+protected:
+
     // Forwarded pointer-up after a pending close/save press has been ruled
     // out. Return true if a content press was consumed; return false to let
     // the base resolve a pending outside-tap.

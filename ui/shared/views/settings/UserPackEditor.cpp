@@ -1,5 +1,6 @@
 #include "UserPackEditor.h"
 
+#include "tk/i18n.h"
 #include "tk/text_field.h"
 #include "tk/theme.h"
 
@@ -116,6 +117,51 @@ bool UserPackEditor::on_native_drag_hover(tk::Point /*local*/)
 void UserPackEditor::on_native_drag_leave()
 {
     native_drag_hover_ = false;
+}
+
+std::size_t UserPackEditor::access_row_count() const
+{
+    access_tiles_.clear();
+    const auto layout = layout_tile_row_(bounds_.w, images_.size() + 1, 0.0f);
+    for (std::size_t t = 0; t < images_.size() && t < layout.size(); ++t)
+    {
+        const auto& r = layout[t];
+        access_tiles_.push_back({bounds_.x + r.x, bounds_.y - scroll_y_ + r.y, r.w, r.h});
+    }
+    return committing_ ? 0 : access_tiles_.size() * 2;
+}
+
+tk::Role UserPackEditor::access_role_for_widget_row(std::size_t i) const
+{
+    return i / 2 < access_tiles_.size() ? tk::Role::Button : tk::Role::None;
+}
+
+std::string UserPackEditor::access_name_for_widget_row(std::size_t i) const
+{
+    const std::size_t t = i / 2;
+    if (t >= images_.size())
+        return {};
+    const std::string sc = images_[t].shortcode.empty() ? tk::tr("(no shortcode)")
+                                                        : images_[t].shortcode;
+    return i % 2 == 0 ? tk::trf(tk::tr("Edit shortcode {0}"), {sc})
+                      : tk::trf(tk::tr("Remove {0}"), {sc});
+}
+
+bool UserPackEditor::access_activate_widget_row(std::size_t i)
+{
+    const std::size_t t = i / 2;
+    if (committing_ || t >= images_.size())
+        return false;
+    if (i % 2 == 0)
+        begin_editing_shortcode_(t);
+    else
+        remove_tile_(t);
+    return true;
+}
+
+tk::Rect UserPackEditor::access_rect_for_widget_row(std::size_t i) const
+{
+    return i / 2 < access_tiles_.size() ? access_tiles_[i / 2] : tk::Rect{};
 }
 
 tk::Rect UserPackEditor::shortcode_edit_rect() const

@@ -125,6 +125,9 @@ public:
     // registered popup (this widget, not its owner — see
     // Host::dispatch_pointer_down) — mirrors DatePickerView::on_popup_dismiss.
     void on_popup_dismiss() override;
+    // Holds a real focusable grid (and, for pickers, a search field), so
+    // Tab/Shift-Tab cycles inside it rather than escaping and dismissing.
+    bool popup_scopes_focus() const override { return true; }
 
 protected:
     // ── Layout config (override to change pixel metrics) ─────────────────

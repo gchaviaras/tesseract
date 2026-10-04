@@ -122,6 +122,11 @@ public:
 
 protected:
     bool on_content_pointer_down_(tk::Point world, tk::Point local) override;
+    // Space / K play-pause, Left/Right seek ±5 s, Home restarts.
+    bool on_content_key_(const tk::KeyEvent& e) override;
+    // Relative seek, clamped to [0, duration] and (while streaming) to what's
+    // downloaded so far — the same limit seek_from_scrub_x_ applies.
+    void seek_by_ms_(std::int64_t delta_ms);
     bool on_content_pointer_up_(tk::Point world, tk::Point local,
                                 bool inside_self) override;
     void fire_save_() override;

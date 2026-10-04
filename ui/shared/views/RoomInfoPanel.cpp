@@ -20,6 +20,52 @@ namespace tesseract::views
 
 RoomInfoPanelBody::RoomInfoPanelBody()
 {
+    // Keyboard stand-ins first, so they never precede a real control in
+    // reverse-order pointer dispatch (they're pointer-transparent anyway).
+    avatar_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    avatar_target_->set_accessible_name(tk::tr("View room avatar"));
+    avatar_target_->set_focus_ring_radius(kAvatarD * 0.5f);
+    avatar_target_->on_activate = [this]
+    {
+        if (on_avatar_clicked && !avatar_url_.empty())
+            on_avatar_clicked(avatar_url_, display_name_);
+    };
+    topic_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    topic_target_->set_role(tk::Role::Group);
+    topic_target_->set_accessible_name(tk::tr("Topic links"));
+    topic_target_->on_link_activated = [this](const std::string& url)
+    {
+        if (on_link_clicked)
+            on_link_clicked(url);
+    };
+    media_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    media_target_->set_accessible_name(tk::tr("Media"));
+    media_target_->on_activate = [this]
+    {
+        if (on_media_view_requested)
+            on_media_view_requested(room_id_);
+    };
+    knock_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    knock_target_->set_accessible_name(tk::tr("Requests to join"));
+    knock_target_->on_activate = [this]
+    {
+        if (on_knock_requests_view_requested)
+            on_knock_requests_view_requested(room_id_);
+    };
+    members_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    members_target_->on_activate = [this]
+    {
+        const auto i = static_cast<std::size_t>(member_cursor_);
+        if (i < members_.size() && on_member_clicked)
+        {
+            const auto& mem = members_[i];
+            on_member_clicked(mem.user_id, mem.display_name, mem.avatar_url);
+        }
+    };
+    // The context-menu key's right-click at the target (the cursor row)
+    // reaches on_right_click() — the member menu — with no extra wiring.
+    members_target_->on_key = [this](const tk::KeyEvent& e) { return move_member_cursor_(e); };
+
     if (host())
     {
         auto field = tk::create_widget<tk::TextArea>(this, kTopicEditH);
@@ -147,6 +193,7 @@ RoomInfoPanelBody::RoomInfoPanelBody()
 
 void RoomInfoPanelBody::open(const tesseract::RoomInfo& info)
 {
+    member_cursor_      = 0; // a different room's member list
     room_id_            = info.id;
     display_name_       = info.name;
     avatar_url_         = info.effective_avatar_url();
@@ -535,6 +582,90 @@ void RoomInfoPanelBody::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
 
     // content_height_: natural, unscrolled height of the whole content column.
     content_height_ = y;
+
+    place_keyboard_targets_(lc);
+}
+
+bool RoomInfoPanelBody::move_member_cursor_(const tk::KeyEvent& e)
+{
+    if (e.ctrl || e.alt || e.meta)
+        return false;
+    const int rows = static_cast<int>(std::min(member_rects_.size(), members_.size()));
+    if (rows == 0)
+        return false;
+    int next = member_cursor_;
+    switch (e.key)
+    {
+    case tk::Key::Up: next = std::max(0, member_cursor_ - 1); break;
+    case tk::Key::Down: next = std::min(rows - 1, member_cursor_ + 1); break;
+    case tk::Key::Home: next = 0; break;
+    case tk::Key::End: next = rows - 1; break;
+    default: return false;
+    }
+    member_cursor_ = next;
+    // Move the target (and its ring) onto the new row right away, then keep
+    // that row on screen; scroll_into_view's relayout re-places it after.
+    const tk::Rect r = member_rects_[static_cast<std::size_t>(next)];
+    const tk::Rect w{bounds_.x + r.x + 4.0f, bounds_.y - scroll_y_ + r.y + 1.0f,
+                     r.w - 8.0f, r.h - 2.0f};
+    members_target_->set_target_rect(w);
+    scroll_into_view(w);
+    const auto& mem = members_[static_cast<std::size_t>(next)];
+    members_target_->set_accessible_name(mem.display_name.empty() ? mem.user_id
+                                                                  : mem.display_name);
+    if (auto* h = host())
+    {
+        h->show_tooltip(members_target_, mem.display_name.empty() ? mem.user_id
+                                                                  : mem.display_name,
+                        w);
+        h->request_repaint();
+    }
+    if (member_menu_)
+        member_menu_->close(); // anchored to the previous row
+    return true;
+}
+
+void RoomInfoPanelBody::place_keyboard_targets_(tk::LayoutCtx& lc)
+{
+    const float origin_y = bounds_.y - scroll_y_;
+    const auto world = [&](tk::Rect r)
+    { return tk::Rect{bounds_.x + r.x, origin_y + r.y, r.w, r.h}; };
+    const auto inset = [](tk::Rect r)
+    { return tk::Rect{r.x + 4.0f, r.y + 1.0f, r.w - 8.0f, r.h - 2.0f}; };
+
+    const bool can_view_avatar = !avatar_url_.empty() && on_avatar_clicked;
+    avatar_target_->arrange(lc, can_view_avatar && open_ ? world(avatar_rect_) : tk::Rect{});
+
+    if (topic_links_html_ != topic_html_)
+    {
+        topic_links_html_ = topic_html_;
+        topic_html_spans_ = topic_html_.empty() ? std::vector<tk::TextSpan>{}
+                                                : html_to_spans(topic_html_);
+    }
+    topic_target_->set_links_from_spans(topic_html_.empty() ? topic_spans_
+                                                            : topic_html_spans_);
+    topic_target_->arrange(lc, open_ && !editing_topic_ ? world(topic_rect_) : tk::Rect{});
+
+    media_target_->arrange(lc, open_ ? inset(world(media_row_rect_)) : tk::Rect{});
+    knock_target_->arrange(lc, open_ && knock_row_visible_
+                                   ? inset(world(knock_row_rect_))
+                                   : tk::Rect{});
+
+    const int rows = static_cast<int>(std::min(member_rects_.size(), members_.size()));
+    member_cursor_ = rows > 0 ? std::clamp(member_cursor_, 0, rows - 1) : 0;
+    if (rows > 0 && open_)
+    {
+        const auto& mem = members_[static_cast<std::size_t>(member_cursor_)];
+        members_target_->set_accessible_name(mem.display_name.empty() ? mem.user_id
+                                                                      : mem.display_name);
+        members_target_->set_accessible_description(
+            tk::trf(tk::tr("Member {0} of {1}"),
+                    {std::to_string(member_cursor_ + 1), std::to_string(rows)}));
+        members_target_->arrange(
+            lc, inset(world(member_rects_[static_cast<std::size_t>(member_cursor_)])));
+    }
+    else
+        members_target_->arrange(lc, {});
 }
 
 // ── paint ─────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@
 #include "tk/combobox.h"
 #include "tk/controls.h"
 #include "tk/host.h"
+#include "tk/keyboard_target.h"
 #include "tk/scrollable_base.h"
 #include "tk/svg.h"
 #include "tk/text_area.h"
@@ -183,6 +184,25 @@ private:
     tk::Button* invite_btn_     = nullptr;
     tk::Button* export_btn_     = nullptr;
     tk::Button* leave_btn_      = nullptr;
+
+    // Keyboard stand-ins for the hand-painted clickable parts (avatar,
+    // topic links, member rows, Media / Requests-to-join rows) — placed by
+    // place_keyboard_targets_() at the end of arrange(). The member list is
+    // ONE Tab stop however long it is: members_target_ sits on the row at
+    // member_cursor_ and Up/Down/Home/End move it (Enter opens the profile,
+    // the context-menu key the member menu).
+    tk::KeyboardTarget* avatar_target_  = nullptr;
+    tk::KeyboardTarget* topic_target_   = nullptr;
+    tk::KeyboardTarget* media_target_   = nullptr;
+    tk::KeyboardTarget* knock_target_   = nullptr;
+    tk::KeyboardTarget* members_target_ = nullptr;
+    int member_cursor_ = 0;
+    // Links parsed from the HTML topic, cached per topic_html_ value so
+    // arrange() doesn't re-parse on every layout pass.
+    std::string topic_links_html_;
+    std::vector<tk::TextSpan> topic_html_spans_;
+    void place_keyboard_targets_(tk::LayoutCtx& lc);
+    bool move_member_cursor_(const tk::KeyEvent& e);
 
     // Layout rects — content-local (unscrolled, body-relative x) coordinates; converted to
     // world space at paint time via `bounds_.x` / `bounds_.y - scroll_y_`.

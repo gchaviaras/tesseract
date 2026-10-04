@@ -193,6 +193,11 @@ enum class Key
     PageDown,
     Backspace,
     Delete,
+    // The keyboard context-menu key (Menu / Application key) and F10 —
+    // Shift+F10 is the other standard context-menu chord. See
+    // Widget::on_context_menu_key().
+    Menu,
+    F10,
     Character
 };
 
@@ -465,6 +470,31 @@ public:
         return false;
     }
 
+    // Keyboard context menu (Menu key / Shift+F10). Host::dispatch_key_down
+    // first offers it to the focused widget and then each ancestor via
+    // on_context_menu_key(); when none claims it, it calls
+    // reveal_context_anchor() and then on_right_click() on the focused
+    // widget and each ancestor in turn (never a positional hit-test, so it
+    // can't land on an unrelated widget) at the centre of the focused
+    // widget's context_anchor_rect(). Any widget whose right-click menu
+    // already works gets the keyboard path for free. Override
+    // on_context_menu_key() only when the menu isn't reachable through
+    // on_right_click (e.g. a shell-level menu); override
+    // context_anchor_rect()/reveal_context_anchor() to aim at, and scroll
+    // into view, the focused part of a composite widget (a list's selected
+    // row).
+    virtual bool on_context_menu_key()
+    {
+        return false;
+    }
+    virtual void reveal_context_anchor()
+    {
+    }
+    virtual Rect context_anchor_rect() const
+    {
+        return bounds_;
+    }
+
     // Dropped-file input. `local` is in widget-local coordinates, mirroring
     // on_pointer_down. Reject (return false) WITHOUT moving out of
     // `payload`'s fields, so an unclaimed drop stays intact for the next
@@ -573,6 +603,26 @@ public:
     virtual bool focus_on_click() const
     {
         return true;
+    }
+
+    // While this widget is the Host's registered popup (register_popup()),
+    // whether Tab/Shift-Tab traversal should stay inside its subtree
+    // instead of walking the whole window — which would land outside the
+    // popup and dismiss it (see Host::request_focus). Override to true for
+    // popups that hold real focusable children (pickers with a search field
+    // and grid); leave false for menu/dropdown popups whose Tab means "close
+    // and move on". A popup with nothing focusable inside handles Tab in its
+    // own on_key_down instead (it gets first refusal on every key).
+    virtual bool popup_scopes_focus() const
+    {
+        return false;
+    }
+
+    // Text shown as a tooltip when this widget gains focus via Tab/
+    // Shift-Tab (Host::advance_focus_). Empty (the default) shows none.
+    virtual std::string focus_tooltip_text() const
+    {
+        return {};
     }
 
     virtual void on_focus_gained()

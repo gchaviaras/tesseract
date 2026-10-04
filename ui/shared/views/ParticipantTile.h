@@ -11,6 +11,7 @@
 // draw_bgra_premult_pixels() at paint time — no per-frame copy or conversion.
 
 #include "tk/canvas.h"
+#include "tk/keyboard_target.h"
 #include "tk/svg.h"
 #include "tk/widget.h"
 
@@ -78,7 +79,11 @@ public:
     bool     on_pointer_down(tk::Point local) override;
     void     on_pointer_up(tk::Point local, bool inside) override;
 
+    // Keyboard stand-in for the hover-only pin button (shown while focused).
+    tk::KeyboardTarget* pin_target() const { return pin_target_; }
+
 private:
+    tk::KeyboardTarget* pin_target_ = nullptr;
     State     state_;
     bool      hover_       = false;
     bool      video_hover_ = false;  // true only when pointer is inside the video image rect

@@ -47,6 +47,15 @@ constexpr float kJoinRoomBorderW = 1.0f;
 
 JoinRoomView::JoinRoomView()
 {
+    topic_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    topic_target_->set_role(tk::Role::Group);
+    topic_target_->set_accessible_name(tk::tr("Topic links"));
+    topic_target_->on_link_activated = [this](const std::string& url)
+    {
+        if (on_link_clicked)
+            on_link_clicked(url);
+    };
+
     // host() is nullable: when null (e.g. unit tests constructing this
     // detached, or under a null-host MainAppWidget in tests), the alias
     // field is skipped — alias_field_ stays null, mirroring
@@ -446,6 +455,9 @@ void JoinRoomView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
 
 void JoinRoomView::paint(tk::PaintCtx& ctx)
 {
+    if (topic_target_)
+        topic_target_->set_target_rect({}); // re-placed below if a topic shows
+
     // See pending_focus_'s doc comment: open() defers this because the
     // native alias field's overlay isn't positioned (arrange() hasn't run
     // yet) at the point open() itself runs. paint() always follows arrange()
@@ -625,6 +637,11 @@ void JoinRoomView::paint(tk::PaintCtx& ctx)
                 ctx.canvas.draw_text(*topic_layout_, {cx, topic_y}, pal.text_secondary);
                 ctx.canvas.pop_clip();
                 topic_rect_ = {cx, topic_y, topic_layout_->measure().w, clipped_h};
+                if (topic_target_)
+                {
+                    topic_target_->set_links_from_spans(topic_spans_);
+                    topic_target_->set_target_rect(topic_rect_);
+                }
             }
         }
     }

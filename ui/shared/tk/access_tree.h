@@ -183,4 +183,11 @@ bool invoke_default_action(const AccessNode& node);
 // platform's accessibility root.
 AccessNode build_access_tree(Widget* root);
 
+// The topmost visible widget under `root` (inclusive of its descendants,
+// exclusive of `root` itself) reporting access_modal(), or nullptr —
+// searched in reverse paint order, detached popups first. Shared by
+// build_access_tree (expose only the modal) and Host::advance_focus_
+// (keep Tab/Shift-Tab traversal inside the modal).
+Widget* find_topmost_modal(Widget* root);
+
 } // namespace tk

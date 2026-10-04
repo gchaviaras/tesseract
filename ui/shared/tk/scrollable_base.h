@@ -112,6 +112,18 @@ public:
     // scrollable widget.
     virtual void scroll_into_view(Rect world_rect);
 
+    // Keyboard paging: PageUp/PageDown scroll by one viewport (minus a
+    // little overlap), Home/End jump to the top/bottom. Routed through the
+    // subclass's own on_wheel() so whatever it does after a scroll change
+    // (re-arranging children, ListView's near-top pagination hooks, ...)
+    // runs exactly as for a mouse wheel. Returns true when the key is a
+    // paging key and the content overflows the viewport (consumed even at
+    // an edge, so the key doesn't fall through to an outer region); false
+    // otherwise. Host::dispatch_key_down offers it to every scrollable
+    // ancestor of the focused widget the focused widget itself didn't
+    // consume the key.
+    bool scroll_by_key(const KeyEvent& e);
+
 protected:
     float scroll_y_ = 0;
 

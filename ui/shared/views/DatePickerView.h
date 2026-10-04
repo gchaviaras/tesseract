@@ -73,11 +73,30 @@ public:
     void     on_popup_dismiss() override;
     // Reached via Host's popup-first-refusal path while this picker is the
     // registered popup (see class comment) — not via Tab traversal, since
-    // this widget is never a tree child. Left/Right/Up/Down move the
-    // highlighted day (reusing hovered_cell_ so paint_overlay's existing
-    // hover-highlight logic draws it for free); PageUp/PageDown change
-    // month; Enter/Space picks the highlighted day; Escape dismisses.
+    // this widget is never a tree child, so the picker runs its own
+    // internal focus model:
+    //   Tab / Shift-Tab   cycle ‹ · month · year · › · day grid · Today
+    //   day grid          arrows move a day/week (crossing months),
+    //                     Home/End start/end of the week
+    //   month / year      arrows (or PageUp/PageDown) step that field
+    //   ‹ › Today         Enter/Space activate
+    //   anywhere          PageUp/PageDown ±1 month, Shift+PageUp/PageDown
+    //                     ±1 year, T jumps to today, Escape dismisses;
+    //                     Enter/Space on the grid picks the focused day
     bool     on_key_down(const tk::KeyEvent& event) override;
+
+    // Which internal part holds keyboard focus (see on_key_down). Public
+    // for tests.
+    enum class FocusPart { PrevBtn, Month, Year, NextBtn, Grid, TodayBtn };
+    FocusPart focus_part() const { return focus_part_; }
+    // The keyboard cursor date on the grid (also what Enter picks). Public
+    // for tests.
+    int cursor_year() const { return cursor_year_; }
+    int cursor_month() const { return cursor_month_; }
+    int cursor_day() const { return cursor_day_; }
+    // Currently displayed month. Public for tests.
+    int view_year() const { return view_year_; }
+    int view_month() const { return view_month_; }
 
     // ── Accessibility ─────────────────────────────────────────────────────
     // A grid named by the shown month ("October 2026"): rows are the
@@ -128,6 +147,13 @@ private:
     };
     std::array<CellInfo, kRows * kCols> cells_{};
 
+    // ── keyboard state ────────────────────────────────────────────────────────
+    FocusPart focus_part_ = FocusPart::Grid;
+    int cursor_year_ = 0, cursor_month_ = 0, cursor_day_ = 0;
+    // Set by the first key press after open_at(); gates the focus ring so a
+    // mouse-opened picker shows no keyboard cursor.
+    bool kbd_active_ = false;
+
     // ── hover / press state ───────────────────────────────────────────────────
     enum class Zone { None, PrevBtn, NextBtn, DayCell, TodayBtn };
     Zone pressed_zone_ = Zone::None;
@@ -160,7 +186,9 @@ private:
     // wheel-over-year can navigate years independently of wheel-over-month.
     std::unique_ptr<tk::TextLayout> month_layout_;
     std::unique_ptr<tk::TextLayout> year_layout_;
-    // World-space rect of the year text (updated each paint_overlay call).
+    // World-space rects of the month / year text (updated each
+    // paint_overlay call).
+    tk::Rect month_label_rect_{};
     tk::Rect year_label_rect_{};
     // Per-cell day-number labels — rebuilt by rebuild_cells_() on navigation.
     std::array<std::unique_ptr<tk::TextLayout>, kRows * kCols> cell_layouts_{};
@@ -193,6 +221,20 @@ private:
     bool today_enabled() const;
     // Shift the shown month by -1 / +1 within [1970-01, max]; true if it moved.
     bool step_month_(int dir);
+    // Move the keyboard cursor to (y, m, d), clamped into the selectable
+    // range [1970-01-01, max date], and show its month.
+    void set_cursor_(int y, int m, int d);
+    // Shift the cursor by whole days (crossing month/year boundaries).
+    void move_cursor_days_(int days);
+    // Shift the cursor by whole months / years, clamping the day to the
+    // target month's length.
+    void move_cursor_months_(int months);
+    // Cell index of the cursor in the shown month, or -1.
+    int cursor_cell_() const;
+    // Whether a FocusPart can take keyboard focus right now (‹/› at the
+    // range ends and a disabled Today are skipped by Tab).
+    bool part_enabled_(FocusPart p) const;
+    void paint_keyboard_focus_(tk::PaintCtx& ctx);
     void pick_cell_(int cell);
     void pick_today_();
 

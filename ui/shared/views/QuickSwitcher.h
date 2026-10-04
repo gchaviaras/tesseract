@@ -24,6 +24,7 @@
 
 #include "tk/canvas.h"
 #include "tk/host.h"
+#include "tk/keyboard_target.h"
 #include "tk/list_view.h"
 #include "tk/text_field.h"
 #include "tk/widget.h"
@@ -223,6 +224,8 @@ private:
     tk::Rect recent_strip_rect_{};
     // Per-chip hit rects (widget-local) + room id, rebuilt each paint.
     std::vector<std::pair<tk::Rect, std::string>> recent_chips_;
+    // Keyboard stand-ins for the Recent chips (Tab stops), placed each paint.
+    std::vector<tk::KeyboardTarget*> chip_targets_;
     // Index of the chip currently pressed (-1 = none).
     int pressed_chip_ = -1;
     // True while a pointer-down landed on the dim backdrop (outside the card);

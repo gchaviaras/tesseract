@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tk/keyboard_target.h"
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/scrollable_base.h"
@@ -49,6 +50,10 @@ public:
     // alive_token().lock() before touching this widget from a posted task.
     std::weak_ptr<bool> alive_token() const { return weak_flag(); }
 
+    // Mounted only while picking, and eats every click — a true modal, so
+    // Tab/Shift-Tab stays inside it (Host::advance_focus_).
+    bool access_modal() const override { return visible(); }
+
 private:
     struct TileThumb
     {
@@ -70,6 +75,8 @@ private:
     int                           pressed_tile_idx_ = -1;
 
     tk::Button* cancel_btn_ = nullptr;
+    // One keyboard stand-in per tile (placed in paint, scroll applied).
+    std::vector<tk::KeyboardTarget*> tile_targets_;
 
     // Cached tile rects for hit-testing (set in arrange).
     std::vector<tk::Rect> tile_rects_;

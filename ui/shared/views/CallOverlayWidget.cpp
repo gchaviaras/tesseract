@@ -41,6 +41,33 @@ constexpr tk::Color kCallOverlayMutedRed {220,  60,  60, 255};
 
 CallOverlayWidget::CallOverlayWidget()
 {
+    move_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    move_target_->set_accessible_name(tk::tr("Move call window"));
+    move_target_->set_accessible_description(tk::tr("Use the arrow keys to move it"));
+    move_target_->on_activate = [] {}; // focus stop for its arrow keys
+    move_target_->on_key = [this](const tk::KeyEvent& e)
+    {
+        if (mode_ != Mode::Floating || e.ctrl || e.alt || e.meta)
+            return false;
+        const float step = e.shift ? 64.0f : 16.0f;
+        float dx = 0.0f, dy = 0.0f;
+        switch (e.key)
+        {
+        case tk::Key::Left: dx = -step; break;
+        case tk::Key::Right: dx = step; break;
+        case tk::Key::Up: dy = -step; break;
+        case tk::Key::Down: dy = step; break;
+        default: return false;
+        }
+        // Seed from the on-screen (parent-clamped) position, like a drag.
+        float_x_ = bounds_.x + dx;
+        float_y_ = bounds_.y + dy;
+        if (on_float_position_changed) on_float_position_changed(float_x_, float_y_);
+        if (auto* h = host()) h->mark_needs_relayout();
+        if (repaint_requester_) repaint_requester_();
+        return true;
+    };
+
     auto mute = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
                                              tk::Button::Variant::Icon);
     mute_btn_ = add_child(std::move(mute));
@@ -557,6 +584,7 @@ void CallOverlayWidget::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     drag_header_rect_ = (mode_ == Mode::Floating)
         ? tk::Rect{bounds_.x, bounds_.y, bounds_.w, kDragHeaderH}
         : tk::Rect{};
+    move_target_->arrange(ctx, drag_header_rect_);
 
     const float grid_top = (mode_ == Mode::Floating)
         ? bounds_.y + kDragHeaderH

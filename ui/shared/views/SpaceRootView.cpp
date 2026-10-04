@@ -4,6 +4,7 @@
 #include "media_utils.h"
 
 #include "tk/i18n.h"
+#include "tk/keyboard_target.h"
 #include "tk/theme.h"
 
 #include <algorithm>
@@ -21,7 +22,18 @@ namespace tesseract::views
 class SpaceRootView::TopicLinkLabel : public tk::Widget
 {
 protected:
-    TopicLinkLabel() = default;
+    TopicLinkLabel()
+    {
+        // Keyboard stand-in: Left/Right cycle the topic's links.
+        target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+        target_->set_role(tk::Role::Group);
+        target_->set_accessible_name(tk::tr("Topic links"));
+        target_->on_link_activated = [this](const std::string& url)
+        {
+            if (on_link_clicked)
+                on_link_clicked(url);
+        };
+    }
     TK_WIDGET_FACTORY_FRIEND(TopicLinkLabel)
 
 public:
@@ -47,9 +59,11 @@ public:
         return layout_ ? layout_->measure() : tk::Size{};
     }
 
-    void arrange(tk::LayoutCtx&, tk::Rect bounds) override
+    void arrange(tk::LayoutCtx& ctx, tk::Rect bounds) override
     {
         bounds_ = bounds;
+        target_->set_links_from_spans(spans_);
+        target_->arrange(ctx, bounds);
     }
 
     void paint(tk::PaintCtx& ctx) override
@@ -127,6 +141,7 @@ private:
     tk::Color colour_{};
     std::string press_url_;
     std::string hover_url_;
+    tk::KeyboardTarget* target_ = nullptr;
 };
 
 SpaceRootView::SpaceRootView()

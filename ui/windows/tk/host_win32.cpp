@@ -4637,6 +4637,8 @@ Key key_from_win32(WPARAM vk, bool shift)
     case VK_NEXT: return Key::PageDown;
     case VK_BACK: return Key::Backspace;
     case VK_DELETE: return Key::Delete;
+    case VK_APPS: return Key::Menu;
+    case VK_F10: return Key::F10;
     default: return Key::Unknown;
     }
 }

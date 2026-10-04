@@ -162,6 +162,9 @@ public:
     // ── Quick switcher (Ctrl+K) ───────────────────────────────────────────
 
     std::function<void()> on_quick_switch_shortcut;
+    // Ctrl+, / Cmd+, — open app Settings. Wired once for every shell by
+    // ShellBase::wire_main_app_widget_().
+    std::function<void()> on_settings_shortcut;
     void show_quick_switch(bool show);
     QuickSwitcher* quick_switcher() const { return quick_switcher_; }
 

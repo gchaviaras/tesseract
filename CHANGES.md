@@ -5,6 +5,14 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-04
+
+- feat(a11y): keyboard access across the toolkit. Popups that hold fields keep Tab inside them, and an open dialog keeps Tab from reaching what's behind it. Menu / Shift+F10 opens the focused item's context menu, PageUp/PageDown/Home/End scroll, and Tab-focused icon buttons show their name. Qt6 build + ctest 2159/2159
+- feat(a11y): the date picker no longer closes on Tab; Tab cycles ‹, month, year, › and Today, and arrow keys move a day or week across months. Shift+PageUp/PageDown change the year and T jumps to today. Qt6 build + ctest 2159/2159
+- feat(a11y): the timeline is a Tab stop. Up/Down move between messages, Left/Right step through a message's links, media, reactions and actions, Enter or the Menu key opens More, and Escape returns to the composer. Qt6 build + ctest 2159/2159
+- feat(a11y): new keyboard routes: Ctrl/⌘+I opens room info, Ctrl+, opens Settings, the room-header title, user strip, space header and sidebar grip are Tab stops, and topic links cycle with Left/Right. Qt6 build + ctest 2159/2159
+- feat(a11y): room-info rows, media-gallery thumbnails, image-pack editors, avatar change/remove, the room ID, call pin and screen-share tiles, quick-switcher recents and account-picker rows work from the keyboard; the video viewer takes Space/←/→ and the image viewer +/−/0/arrows. Qt6 build + ctest 2159/2159
+
 ### 2026-10-03
 
 - feat(a11y): accessibility framework: canvas popups and grids are reachable, an open dialog hides what's behind it, and `Host::announce()` speaks status (toasts, status line, send failures, call join/leave). The four bridges push name/state changes while a screen reader is attached. Qt6 build + ctest 2135/2135

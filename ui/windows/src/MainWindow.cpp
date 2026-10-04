@@ -1297,6 +1297,17 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
                 self->main_app_->dispatch_key_down(event);
             }
         }
+        if (LOWORD(wParam) == IDC_ROOM_INFO || LOWORD(wParam) == IDC_SETTINGS)
+        {
+            if (self->main_app_)
+            {
+                tk::KeyEvent event{};
+                event.key = tk::Key::Character;
+                event.text = LOWORD(wParam) == IDC_ROOM_INFO ? "i" : ",";
+                event.ctrl = true;
+                self->main_app_->dispatch_key_down(event);
+            }
+        }
         if (LOWORD(wParam) == IDC_FIND_IN_ROOM)
         {
             if (self->main_app_)
@@ -1842,7 +1853,7 @@ void MainWindow::on_create(HWND hwnd)
     // controls eat WM_KEYDOWN before it reaches this window's wnd_proc, so a
     // plain key handler only fires when the canvas has focus.
     {
-        ACCEL accs[7]{};
+        ACCEL accs[9]{};
         accs[0].fVirt = FCONTROL | FVIRTKEY;
         accs[0].key   = 'K';
         accs[0].cmd   = IDC_QUICK_SWITCH;
@@ -1870,7 +1881,13 @@ void MainWindow::on_create(HWND hwnd)
         accs[6].fVirt = FCONTROL | FSHIFT | FVIRTKEY;
         accs[6].key   = VK_TAB;
         accs[6].cmd   = IDC_MRU_PREV;
-        accel_ = CreateAcceleratorTableW(accs, 7);
+        accs[7].fVirt = FCONTROL | FVIRTKEY;
+        accs[7].key   = 'I';
+        accs[7].cmd   = IDC_ROOM_INFO;
+        accs[8].fVirt = FCONTROL | FVIRTKEY;
+        accs[8].key   = VK_OEM_COMMA;
+        accs[8].cmd   = IDC_SETTINGS;
+        accel_ = CreateAcceleratorTableW(accs, 9);
     }
 
     Gdiplus::GdiplusStartupInput gsi;

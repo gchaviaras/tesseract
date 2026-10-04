@@ -25,6 +25,15 @@ namespace {
 
 UserProfilePanel::UserProfilePanel()
 {
+    avatar_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    avatar_target_->set_accessible_name(tk::tr("View avatar"));
+    avatar_target_->set_focus_ring_radius(kAvatarD * 0.5f);
+    avatar_target_->on_activate = [this]
+    {
+        if (on_avatar_clicked && !avatar_url_.empty())
+            on_avatar_clicked(avatar_url_, display_name_);
+    };
+
     close_btn_ = add_child(
         tk::create_widget<tk::Button>(this, tk::tr("\xC3\x97"), std::function<void()>{},
                                      tk::Button::Variant::Icon));
@@ -269,6 +278,8 @@ void UserProfilePanel::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     const float av_x = card_rect_.x + (kCardW - kAvatarD) * 0.5f;
     const float av_y = card_rect_.y + kHeaderH;
     avatar_rect_     = {av_x, av_y, kAvatarD, kAvatarD};
+    avatar_target_->arrange(lc, !avatar_url_.empty() && on_avatar_clicked ? avatar_rect_
+                                                                          : tk::Rect{});
 
     // Buttons: full inner width, stacked below text rows (and extended fields).
     const float btn_x = card_rect_.x + kPadX;

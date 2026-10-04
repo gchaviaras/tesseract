@@ -49,7 +49,37 @@ tk::Color id_colour(const tk::Theme& theme)
 
 // ---------------------------------------------------------------------------
 
-UserInfo::UserInfo() = default;
+UserInfo::UserInfo()
+{
+    status_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+    status_target_->set_accessible_name(tk::tr("Set status"));
+    status_target_->on_activate = [this]
+    {
+        if (on_status_clicked)
+            on_status_clicked();
+    };
+}
+
+bool UserInfo::on_key_down(const tk::KeyEvent& e)
+{
+    if (!has_focus() || e.ctrl || e.alt || e.meta)
+        return false;
+    if (e.key != tk::Key::Enter && e.key != tk::Key::Space)
+        return false;
+    if (on_keyboard_activate)
+        on_keyboard_activate();
+    else if (on_primary)
+        on_primary({bounds_.x + bounds_.w * 0.5f, bounds_.y + bounds_.h * 0.5f});
+    return true;
+}
+
+bool UserInfo::on_context_menu_key()
+{
+    if (!on_secondary)
+        return false;
+    on_secondary({bounds_.x + bounds_.w * 0.5f, bounds_.y + bounds_.h * 0.5f});
+    return true;
+}
 
 void UserInfo::set_display_name(std::string name)
 {
@@ -293,6 +323,8 @@ void UserInfo::paint(tk::PaintCtx& ctx)
     if (icon_only_)
     {
         status_rect_ = {};
+        if (status_target_)
+            status_target_->set_target_rect({});
         return;
     }
 
@@ -456,6 +488,12 @@ void UserInfo::paint(tk::PaintCtx& ctx)
         status_rect_ = {text_x, status_y - kUserInfoLineGap * 0.5f, text_w,
                         std::max(status_line_h + kUserInfoLineGap,
                                  bounds_.y + bounds_.h - status_y)};
+    }
+    if (status_target_)
+    {
+        const bool status_stop = keyboard_focusable_ && status_line_enabled_ &&
+                                 status_editable_ && on_status_clicked;
+        status_target_->set_target_rect(status_stop ? status_rect_ : tk::Rect{});
     }
 }
 

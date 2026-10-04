@@ -320,6 +320,17 @@ public:
     {
         return accessible_name_.empty() ? label_ : accessible_name_;
     }
+    // Icon-only buttons show their accessible name as a tooltip when
+    // reached by Tab — the keyboard counterpart of the hover tooltip their
+    // owning views show — so a sighted keyboard user can tell them apart.
+    // label_ is deliberately not used: on icon-only buttons it's often a
+    // raw glyph test hook (see set_accessible_name()).
+    std::string focus_tooltip_text() const override
+    {
+        const bool icon_only = variant_ == Variant::Icon ||
+                               (!icon_svg_.empty() && !icon_leading_);
+        return icon_only ? accessible_name_ : std::string{};
+    }
     // click() already guards on enabled_/on_click_, matching the pointer
     // and Enter/Space activation paths — nothing extra needed here beyond
     // reporting whether it actually had something to invoke.

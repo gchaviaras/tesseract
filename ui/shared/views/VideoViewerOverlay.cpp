@@ -768,6 +768,58 @@ void VideoViewerOverlay::seek_from_scrub_x_(float world_x)
     }
 }
 
+bool VideoViewerOverlay::on_content_key_(const tk::KeyEvent& e)
+{
+    if (e.ctrl || e.alt || e.meta || !video_player_)
+        return false;
+    switch (e.key)
+    {
+    case tk::Key::Space:
+        do_play_or_pause();
+        return true;
+    case tk::Key::Character:
+        if (e.text == "k" || e.text == "K")
+        {
+            do_play_or_pause();
+            return true;
+        }
+        return false;
+    case tk::Key::Left:
+        seek_by_ms_(-5000);
+        return true;
+    case tk::Key::Right:
+        seek_by_ms_(5000);
+        return true;
+    case tk::Key::Home:
+        seek_by_ms_(-static_cast<std::int64_t>(video_player_->position_ms()));
+        return true;
+    default:
+        return false;
+    }
+}
+
+void VideoViewerOverlay::seek_by_ms_(std::int64_t delta_ms)
+{
+    if (!video_player_)
+        return;
+    const std::uint64_t dur = video_player_->duration_ms() > 0
+                                  ? video_player_->duration_ms()
+                                  : duration_ms_;
+    if (dur == 0)
+        return;
+    std::int64_t target = static_cast<std::int64_t>(video_player_->position_ms()) + delta_ms;
+    std::int64_t limit = static_cast<std::int64_t>(dur);
+    if (is_streaming_ && stream_total_size_ > 0)
+    {
+        const double buffered = std::clamp(static_cast<double>(stream_bytes_fed_) /
+                                               static_cast<double>(stream_total_size_),
+                                           0.0, 1.0);
+        limit = static_cast<std::int64_t>(buffered * static_cast<double>(dur));
+    }
+    target = std::clamp<std::int64_t>(target, 0, std::max<std::int64_t>(0, limit));
+    video_player_->seek(static_cast<std::uint64_t>(target));
+}
+
 void VideoViewerOverlay::fire_save_()
 {
     on_save(source_json_, mime_type_);

@@ -20,7 +20,9 @@
 
 #include "views/ImagePackTileGridBase.h"
 
+#include "tk/access_tree.h"
 #include "tk/canvas.h"
+#include "tk/row_cursor.h"
 #include "tk/widget.h"
 
 #include <tesseract/image_pack.h>
@@ -40,7 +42,7 @@ class TextField;
 namespace tesseract::views
 {
 
-class UserPackEditor : public ImagePackTileGridBase
+class UserPackEditor : public ImagePackTileGridBase, public tk::WidgetRowAccessibility
 {
 public:
     UserPackEditor();
@@ -137,6 +139,20 @@ public:
     bool on_native_drag_hover(tk::Point local) override;
     void on_native_drag_leave() override;
 
+    // Accessibility: one "Edit shortcode" and one "Remove" row per tile,
+    // mirroring ImagePackSectionList. The keyboard walks the same rows
+    // (tk::RowKeyboardCursor).
+    std::size_t access_row_count() const override;
+    tk::Role    access_role_for_widget_row(std::size_t i) const override;
+    std::string access_name_for_widget_row(std::size_t i) const override;
+    bool        access_activate_widget_row(std::size_t i) override;
+    tk::Rect    access_rect_for_widget_row(std::size_t i) const override;
+    bool focusable() const override { return enabled_ && !images_.empty() && !committing_; }
+    bool focus_on_click() const override { return false; }
+    bool on_key_down(const tk::KeyEvent& e) override { return kbd_.handle_key(*this, *this, e); }
+    void paint_own_focus_ring(tk::PaintCtx& ctx) override { kbd_.paint_ring(ctx, *this, *this); }
+    void on_focus_lost() override { kbd_.reset(); }
+
     // Test accessors.
     const std::vector<StagedPackImage>& images() const { return images_; }
     bool drag_hover() const { return native_drag_hover_; }
@@ -152,6 +168,9 @@ private:
     void layout_changed_();
 
     std::vector<StagedPackImage> images_;
+    tk::RowKeyboardCursor kbd_;
+    // Tile rects (world) cached by access_row_count() for the row getters.
+    mutable std::vector<tk::Rect> access_tiles_;
     std::vector<std::string> removed_shortcodes_;
     bool committing_ = false;
     bool dirty_      = false;

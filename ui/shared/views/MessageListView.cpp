@@ -10,6 +10,7 @@
 #include "tk/animator.h"
 #include "tk/hash_combine.h"
 #include "tk/i18n.h"
+#include "tk/key_shortcuts.h"
 #include "tk/loading_spinner.h"
 #include "tk/pill.h"
 #include "tk/svg.h"
@@ -3295,8 +3296,34 @@ public:
         MessageListView* v = &owner_;
         const std::string ev = m.event_id;
 
+        // ── Sender ─────────────────────────────────────────────────────
+        if (!m.sender.empty() && owner_.on_sender_clicked)
+        {
+            const std::string who = m.sender_name.empty() ? m.sender : m.sender_name;
+            out.push_back(action_node_(
+                tk::trf(tk::tr("View profile of {0}"), {who}),
+                [v, uid = m.sender, name = m.sender_name, av = m.sender_avatar_url]
+                {
+                    if (!v->on_sender_clicked)
+                        return false;
+                    v->on_sender_clicked(uid, name, av);
+                    return true;
+                }));
+        }
+
         // ── Content: reply quote, links, preview cards, thread, media ──
         // Each opens exactly what the corresponding click does.
+        if (m.formatted_body.find("data-mx-spoiler") != std::string::npos &&
+            !owner_.spoilers_.is_revealed(ev))
+        {
+            out.push_back(action_node_(tk::tr("Reveal spoiler"),
+                                       [v, ev]
+                                       {
+                                           v->spoilers_.reveal(ev);
+                                           v->invalidate_data();
+                                           return true;
+                                       }));
+        }
         if (m.has_reply())
             out.push_back(action_node_(tk::tr("Jump to replied message"),
                                        [v, ev] { return v->jump_to_reply_original_(ev); }));
@@ -3472,7 +3499,7 @@ public:
                 {
                     if (!v->on_add_reaction_requested)
                         return false;
-                    v->on_add_reaction_requested(ev, {});
+                    v->on_add_reaction_requested(ev, v->anchor_for_event_(ev));
                     return true;
                 }));
         actions.children.push_back(action_node_(
@@ -3524,8 +3551,32 @@ public:
                 {
                     if (!v->on_more_requested)
                         return false;
-                    v->on_more_requested(ev, {}, can_delete, can_pin,
-                                         is_pinned, can_forward);
+                    v->on_more_requested(ev, v->anchor_for_event_(ev), can_delete,
+                                         can_pin, is_pinned, can_forward);
+                    return true;
+                }));
+            actions.children.back().subtree_id = "action:more";
+        }
+        if (m.pending_state == MessageRowData::PendingState::Failed &&
+            !m.pending_txn_id.empty())
+        {
+            if (m.pending_recoverable)
+                actions.children.push_back(action_node_(
+                    tk::tr("Retry sending"),
+                    [v, txn = m.pending_txn_id]
+                    {
+                        if (!v->on_retry_send)
+                            return false;
+                        v->on_retry_send(txn);
+                        return true;
+                    }));
+            actions.children.push_back(action_node_(
+                tk::tr("Cancel sending"),
+                [v, txn = m.pending_txn_id]
+                {
+                    if (!v->on_abort_send)
+                        return false;
+                    v->on_abort_send(txn);
                     return true;
                 }));
         }
@@ -3546,6 +3597,22 @@ public:
             rr_node.role = tk::Role::StaticText;
             rr_node.subtree_id = "receipts";
             rr_node.name = tk::trf(tk::tr("Read by {0}"), {names});
+            // The "+N" overflow pill's popup, for the receipts beyond the
+            // painted disc cluster.
+            if (m.read_receipts.size() > kReceiptCap && owner_.on_receipt_overflow_clicked)
+            {
+                rr_node.role = tk::Role::Button;
+                rr_node.activate =
+                    [v, ev, hidden = std::vector<tesseract::ReadReceipt>(
+                                m.read_receipts.begin() + kReceiptCap,
+                                m.read_receipts.end())]
+                {
+                    if (!v->on_receipt_overflow_clicked)
+                        return false;
+                    v->on_receipt_overflow_clicked(ev, v->anchor_for_event_(ev), hidden);
+                    return true;
+                };
+            }
             out.push_back(std::move(rr_node));
         }
         return out;
@@ -9030,6 +9097,11 @@ bool MessageListView::on_right_click(tk::Point /*local*/)
 
 bool MessageListView::on_pointer_down(tk::Point local)
 {
+    // A click may move the base selection; drop the keyboard cursor's
+    // identity and chosen part so a later Enter can't fire a part the user
+    // never saw announced on the clicked row.
+    kbd_event_id_.clear();
+    kbd_part_key_.clear();
     if (gate_blocks_input_())
     {
         return false; // list not painted yet
@@ -10950,4 +11022,354 @@ std::string with_membership_reason(std::string phrase, const MessageRowData& m)
     }
 }
 
+// ── Keyboard model (a11y Phase 5) ─────────────────────────────────────────
+// See focusable()'s doc comment in MessageListView.h for the key map.
+
+namespace
+{
+// Depth-first flatten of the activatable nodes in a row's access subtree
+// (reactions sit inside a "Reactions" group, actions inside "Message
+// actions").
+void collect_activatable(const std::vector<tk::AccessNode>& nodes,
+                         std::vector<tk::AccessNode>& out)
+{
+    for (const auto& n : nodes)
+    {
+        if (n.activate)
+            out.push_back(n);
+        collect_activatable(n.children, out);
+    }
+}
+} // namespace
+
+bool MessageListView::focusable() const
+{
+    return enabled() && !messages_.empty();
+}
+
+bool MessageListView::kbd_row_navigable_(int idx) const
+{
+    if (idx < 0 || idx >= static_cast<int>(messages_.size()))
+        return false;
+    const auto i = static_cast<std::size_t>(idx);
+    // Rows folded into a collapsed group (or otherwise not laid out) have no
+    // height — nothing to land on.
+    if (row_world_rect(idx).h < 1.0f)
+        return false;
+    if (!is_virtual_event(messages_[i].kind))
+        return true;
+    return adapter_->is_membership_group_start(i) &&
+           adapter_->membership_group_end(i) - i > 1;
+}
+
+int MessageListView::kbd_step_row_(int from, int dir) const
+{
+    for (int i = from + dir; i >= 0 && i < static_cast<int>(messages_.size()); i += dir)
+        if (kbd_row_navigable_(i))
+            return i;
+    return -1;
+}
+
+void MessageListView::kbd_select_row_(int idx)
+{
+    if (idx < 0)
+        return;
+    kbd_part_key_.clear();
+    kbd_event_id_ = messages_[static_cast<std::size_t>(idx)].event_id;
+    set_selected_index(idx);
+    reveal_index(idx); // fires the near-top pagination hook like a wheel scroll
+    if (auto* h = host())
+        h->request_repaint();
+}
+
+void MessageListView::kbd_ensure_cursor_()
+{
+    // The cursor follows its message, not its row number: history prepends,
+    // resets and removals shift indices underneath it.
+    if (!kbd_event_id_.empty())
+    {
+        const int idx = message_index_of(kbd_event_id_);
+        if (idx < 0)
+        {
+            kbd_event_id_.clear();
+            kbd_part_key_.clear();
+        }
+        else if (idx != selected_index())
+            set_selected_index(idx);
+    }
+    const auto [first, last] = visible_range();
+    const int sel = selected_index();
+    if (kbd_row_navigable_(sel) && sel >= first && sel <= last)
+    {
+        kbd_event_id_ = messages_[static_cast<std::size_t>(sel)].event_id;
+        return;
+    }
+    int pick = -1;
+    for (int i = std::min(last, static_cast<int>(messages_.size()) - 1);
+         i >= std::max(first, 0); --i)
+    {
+        if (kbd_row_navigable_(i))
+        {
+            pick = i;
+            break;
+        }
+    }
+    if (pick < 0)
+        pick = kbd_step_row_(static_cast<int>(messages_.size()), -1);
+    if (pick >= 0)
+    {
+        kbd_part_key_.clear();
+        kbd_event_id_ = messages_[static_cast<std::size_t>(pick)].event_id;
+        set_selected_index(pick);
+    }
+}
+
+std::vector<std::string> MessageListView::kbd_part_keys_(const std::vector<tk::AccessNode>& parts)
+{
+    // A part's identity: its subtree_id when it has one (reactions, thread,
+    // More, ...), else its name plus which occurrence of that name it is
+    // (two links with the same text stay distinct).
+    std::vector<std::string> keys;
+    keys.reserve(parts.size());
+    for (std::size_t i = 0; i < parts.size(); ++i)
+    {
+        if (!parts[i].subtree_id.empty())
+        {
+            keys.push_back(parts[i].subtree_id);
+            continue;
+        }
+        int nth = 0;
+        for (std::size_t j = 0; j < i; ++j)
+            if (parts[j].subtree_id.empty() && parts[j].name == parts[i].name)
+                ++nth;
+        keys.push_back(parts[i].name + "#" + std::to_string(nth));
+    }
+    return keys;
+}
+
+int MessageListView::kbd_part_index_(const std::vector<tk::AccessNode>& parts) const
+{
+    if (kbd_part_key_.empty())
+        return -1;
+    const auto keys = kbd_part_keys_(parts);
+    for (std::size_t i = 0; i < keys.size(); ++i)
+        if (keys[i] == kbd_part_key_)
+            return static_cast<int>(i);
+    return -1; // the chosen part is gone — nothing is chosen any more
+}
+
+int MessageListView::keyboard_part_index() const
+{
+    return kbd_part_index_(kbd_parts_());
+}
+
+std::vector<tk::AccessNode> MessageListView::kbd_parts_() const
+{
+    std::vector<tk::AccessNode> out;
+    const int sel = selected_index();
+    if (sel < 0 || sel >= static_cast<int>(messages_.size()))
+        return out;
+    collect_activatable(adapter_->access_subtree_for_row(static_cast<std::size_t>(sel)),
+                        out);
+    return out;
+}
+
+std::vector<std::string> MessageListView::keyboard_part_names() const
+{
+    std::vector<std::string> names;
+    for (const auto& n : kbd_parts_())
+        names.push_back(n.name);
+    return names;
+}
+
+tk::Rect MessageListView::anchor_for_event_(const std::string& event_id) const
+{
+    const int idx = message_index_of(event_id);
+    tk::Rect r = idx >= 0 ? row_world_rect(idx) : tk::Rect{};
+    const float top = std::max(r.y, bounds_.y);
+    const float bottom = std::min(r.y + r.h, bounds_.y + bounds_.h);
+    if (r.w <= 0.0f || bottom <= top)
+        return {bounds_.x + bounds_.w * 0.5f, bounds_.y + bounds_.h * 0.5f, 0.0f, 0.0f};
+    // A thin strip at the row's right edge: popups open beside the message
+    // the way they do from the hover pill.
+    return {r.x + r.w - 48.0f, top, 40.0f, std::min(bottom - top, 32.0f)};
+}
+
+bool MessageListView::kbd_open_more_()
+{
+    const int sel = selected_index();
+    if (sel < 0 || sel >= static_cast<int>(messages_.size()))
+        return false;
+    for (const auto& n : kbd_parts_())
+        if (n.subtree_id == "action:more")
+            return n.activate();
+    return false;
+}
+
+void MessageListView::kbd_toggle_membership_group_(int idx)
+{
+    const std::string key = messages_[static_cast<std::size_t>(idx)].event_id;
+    membership_groups_.toggle(key);
+    const auto start = static_cast<std::size_t>(idx);
+    invalidate_rows(start, adapter_->membership_group_end(start));
+}
+
+bool MessageListView::on_key_down(const tk::KeyEvent& e)
+{
+    if (!has_focus() || messages_.empty())
+        return false;
+    kbd_ensure_cursor_();
+    const int sel = selected_index();
+    if (sel < 0)
+        return false;
+    const bool plain = !e.ctrl && !e.alt && !e.meta;
+
+    // Ctrl/Cmd+C is RoomView's: it copies any text selection (this list's
+    // or the thread panel's) first, and only then this cursor's message
+    // via copy_keyboard_cursor_message().
+    if (!plain)
+        return false;
+
+    switch (e.key)
+    {
+    case tk::Key::Up:
+    case tk::Key::Down:
+    {
+        const int next = kbd_step_row_(sel, e.key == tk::Key::Down ? 1 : -1);
+        if (next >= 0)
+            kbd_select_row_(next);
+        return true; // at an edge: stay put rather than escape the list
+    }
+    case tk::Key::PageUp:
+    case tk::Key::PageDown:
+    {
+        const auto [first, last] = visible_range();
+        const int page = std::max(1, last - first);
+        const int dir = e.key == tk::Key::PageDown ? 1 : -1;
+        int target = sel;
+        for (int i = 0; i < page; ++i)
+        {
+            const int step = kbd_step_row_(target, dir);
+            if (step < 0)
+                break;
+            target = step;
+        }
+        kbd_select_row_(target);
+        return true;
+    }
+    case tk::Key::Home:
+        kbd_select_row_(kbd_step_row_(-1, 1));
+        return true;
+    case tk::Key::End:
+        kbd_select_row_(kbd_step_row_(static_cast<int>(messages_.size()), -1));
+        if (on_return_to_live && historical_mode_)
+            on_return_to_live();
+        return true;
+    case tk::Key::Left:
+    case tk::Key::Right:
+    {
+        const auto parts = kbd_parts_();
+        if (parts.empty())
+            return true;
+        const int n = static_cast<int>(parts.size());
+        int part = kbd_part_index_(parts);
+        if (part < 0)
+            part = e.key == tk::Key::Right ? 0 : n - 1;
+        else
+            part = (part + (e.key == tk::Key::Right ? 1 : -1) + n) % n;
+        kbd_part_key_ = kbd_part_keys_(parts)[static_cast<std::size_t>(part)];
+        if (auto* h = host())
+        {
+            h->show_tooltip(this,
+                            tk::trf(tk::tr("{0} ({1} of {2})"),
+                                    {parts[static_cast<std::size_t>(part)].name,
+                                     std::to_string(part + 1), std::to_string(n)}),
+                            anchor_for_event_(messages_[static_cast<std::size_t>(sel)].event_id));
+            h->request_repaint();
+        }
+        return true;
+    }
+    case tk::Key::Enter:
+    case tk::Key::Space:
+    {
+        const auto parts = kbd_parts_();
+        if (const int part = kbd_part_index_(parts); part >= 0)
+        {
+            const auto node = parts[static_cast<std::size_t>(part)];
+            node.activate();
+            return true;
+        }
+        kbd_part_key_.clear(); // a vanished part never falls through to another
+        if (is_virtual_event(messages_[static_cast<std::size_t>(sel)].kind))
+        {
+            kbd_toggle_membership_group_(sel);
+            return true;
+        }
+        kbd_open_more_();
+        return true;
+    }
+    case tk::Key::Escape:
+        if (!kbd_part_key_.empty())
+        {
+            kbd_part_key_.clear();
+            return true;
+        }
+        if (on_keyboard_exit)
+        {
+            on_keyboard_exit();
+            return true;
+        }
+        return false;
+    default:
+        return false;
+    }
+}
+
+bool MessageListView::copy_keyboard_cursor_message()
+{
+    if (!has_focus() || !on_set_clipboard || messages_.empty())
+        return false;
+    kbd_ensure_cursor_();
+    const int sel = selected_index();
+    if (sel < 0 || sel >= static_cast<int>(messages_.size()))
+        return false;
+    on_set_clipboard(message_access_body(messages_[static_cast<std::size_t>(sel)]));
+    return true;
+}
+
+bool MessageListView::on_context_menu_key()
+{
+    if (!has_focus())
+        return false;
+    kbd_ensure_cursor_();
+    return kbd_open_more_();
+}
+
+void MessageListView::on_focus_gained()
+{
+    kbd_ensure_cursor_();
+}
+
+void MessageListView::on_focus_lost()
+{
+    kbd_part_key_.clear();
+}
+
+void MessageListView::paint_own_focus_ring(tk::PaintCtx& ctx)
+{
+    const int sel = selected_index();
+    if (sel < 0)
+    {
+        tk::Widget::paint_own_focus_ring(ctx);
+        return;
+    }
+    tk::Rect r = row_world_rect(sel);
+    const float top = std::max(r.y, bounds_.y) + 1.0f;
+    const float bottom = std::min(r.y + r.h, bounds_.y + bounds_.h) - 1.0f;
+    if (bottom <= top)
+        return; // cursor row scrolled out of view
+    tk::paint_focus_ring(ctx, {r.x + 4.0f, top, r.w - 8.0f, bottom - top}, 6.0f);
+}
+
 } // namespace tesseract::views
+

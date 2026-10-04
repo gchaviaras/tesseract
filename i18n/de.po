@@ -4990,3 +4990,69 @@ msgstr "wird gesendet"
 
 msgid "Message {0}"
 msgstr "Nachricht an {0}"
+
+msgid "Cancel sending"
+msgstr "Senden abbrechen"
+
+msgid "Copy room ID"
+msgstr "Raum-ID kopieren"
+
+msgid "Enter collapses or expands it; Left and Right resize it"
+msgstr "Eingabe klappt sie ein oder aus; Links und Rechts ändern die Breite"
+
+msgid "Link {0} of {1}: {2} — press Enter to open"
+msgstr "Link {0} von {1}: {2} — Eingabe zum Öffnen"
+
+msgid "Move call window"
+msgstr "Anruffenster verschieben"
+
+msgid "Pin"
+msgstr "Anheften"
+
+msgid "Resize sidebar"
+msgstr "Seitenleiste anpassen"
+
+msgid "Retry sending"
+msgstr "Erneut senden"
+
+msgid "Reveal spoiler"
+msgstr "Spoiler anzeigen"
+
+msgid "Room Info"
+msgstr "Rauminfo"
+
+msgid "Room info"
+msgstr "Rauminfo"
+
+msgid "Set status"
+msgstr "Status festlegen"
+
+msgid "Space home"
+msgstr "Space-Startseite"
+
+msgid "Topic links"
+msgstr "Links im Thema"
+
+msgid "Unpin"
+msgstr "Nicht mehr anheften"
+
+msgid "Use the arrow keys to move it"
+msgstr "Mit den Pfeiltasten verschieben"
+
+msgid "View avatar"
+msgstr "Avatar anzeigen"
+
+msgid "View profile of {0}"
+msgstr "Profil von {0} anzeigen"
+
+msgid "View room avatar"
+msgstr "Raumavatar anzeigen"
+
+msgid "{0} ({1} of {2})"
+msgstr "{0} ({1} von {2})"
+
+msgid "Member {0} of {1}"
+msgstr "Mitglied {0} von {1}"
+
+msgid "Screen {0}"
+msgstr "Bildschirm {0}"

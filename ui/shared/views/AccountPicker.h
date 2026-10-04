@@ -77,6 +77,9 @@ public:
     tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override;
     void arrange(tk::LayoutCtx&, tk::Rect bounds) override;
     void paint_before_children(tk::PaintCtx&) override;
+    // Up/Down move between rows (Tab/Shift-Tab already do); Enter on a row
+    // selects it (UserInfo's own keyboard handling).
+    bool on_key_down(const tk::KeyEvent& e) override;
 
 private:
     void rebuild_rows();

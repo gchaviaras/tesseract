@@ -70,6 +70,8 @@ public:
     std::function<void()> on_upload_clicked;
     std::function<void()> on_remove_clicked;
 
+    AVATAR_ACCESS_ROWS_KEYBOARD
+
     tk::Size measure(tk::LayoutCtx&, tk::Size) override { return {kAvatarD, kAvatarD}; }
 
     void arrange(tk::LayoutCtx&, tk::Rect bounds) override
@@ -261,6 +263,23 @@ public:
         return true;
     }
     void on_pointer_leave() override { hovered_ = false; }
+
+    // Keyboard: a Tab stop; Enter/Space copies, like the click.
+    bool focusable() const override { return enabled() && !room_id_.empty(); }
+    bool focus_on_click() const override { return false; }
+    bool on_key_down(const tk::KeyEvent& e) override
+    {
+        if (!has_focus() || (e.key != tk::Key::Enter && e.key != tk::Key::Space))
+            return false;
+        if (on_clicked) on_clicked(room_id_);
+        return true;
+    }
+    tk::Role access_role() const override
+    {
+        return room_id_.empty() ? tk::Role::None : tk::Role::Button;
+    }
+    std::string access_name() const override { return tk::tr("Copy room ID"); }
+    std::string access_description() const override { return room_id_; }
 
 private:
     tk::Label*  label_ = nullptr; // "Room ID" caption, muted

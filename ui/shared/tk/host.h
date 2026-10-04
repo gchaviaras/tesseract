@@ -1400,6 +1400,10 @@ protected:
     // once per appearance (set_content() is reasserted every paint frame
     // while visible, so it can't safely detect "just appeared" itself).
     bool        tooltip_reveal_pending_ = false;
+    // Set by advance_focus_ for a focus tooltip: when the dwell delay ends,
+    // re-anchor to the focused widget's bounds then, since the Tab that
+    // focused it may also have scrolled it (applied on the next layout).
+    bool        tooltip_anchor_follows_focus_ = false;
     std::uint64_t tooltip_gen_   = 0;
     static constexpr int kTooltipShowDelayMs = 500;
 

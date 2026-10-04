@@ -314,6 +314,28 @@ void ListView::scroll_to_index(int idx, bool align_top)
     clamp_scroll();
 }
 
+void ListView::reveal_index(int idx)
+{
+    if (!adapter_ || idx < 0 || static_cast<std::size_t>(idx) + 1 >= row_offsets_.size())
+        return;
+    const float top = row_offsets_[static_cast<std::size_t>(idx)];
+    const float bot = row_offsets_[static_cast<std::size_t>(idx) + 1];
+    float target = scroll_y_;
+    if (top < scroll_y_)
+        target = top;
+    else if (bot > scroll_y_ + bounds_.h)
+        target = bot - bounds_.h;
+    if (target != scroll_y_)
+        apply_scroll_delta(target - scroll_y_);
+    else
+    {
+        // Already visible (e.g. the cursor reached the oldest loaded row
+        // without scrolling): still give pagination a chance.
+        maybe_fire_near_top();
+        maybe_fire_near_bottom();
+    }
+}
+
 void ListView::consume_pending_scroll_()
 {
     if (pending_scroll_idx_ < 0)
@@ -1260,6 +1282,19 @@ void GridView::on_pointer_drag(Point local)
     scrollbar_on_pointer_drag(local);
 }
 
+void GridView::reveal_context_anchor()
+{
+    const Rect r = rect_at(selected_index_);
+    if (r.w > 0.0f && r.h > 0.0f)
+        scroll_into_view(r);
+}
+
+Rect GridView::context_anchor_rect() const
+{
+    const Rect r = rect_at(selected_index_);
+    return r.w > 0.0f && r.h > 0.0f ? r : bounds_;
+}
+
 bool GridView::on_right_click(Point local)
 {
     if (!adapter_ || !on_cell_context_requested)
@@ -1467,7 +1502,41 @@ bool ListView::on_key_down(const KeyEvent& e)
             return false; // already at the edge — let it bubble
         }
         set_selected_index(next);
-        scroll_to_index(next);
+        reveal_index(next);
+        return true;
+    }
+    if (!e.ctrl && !e.alt && !e.meta &&
+        (e.key == Key::Home || e.key == Key::End))
+    {
+        const int n = static_cast<int>(adapter_->count());
+        const int next = e.key == Key::Home ? next_selectable_(-1, 1)
+                                            : next_selectable_(n, -1);
+        if (next < 0)
+            return false;
+        set_selected_index(next);
+        reveal_index(next);
+        return true;
+    }
+    if (!e.ctrl && !e.alt && !e.meta &&
+        (e.key == Key::PageUp || e.key == Key::PageDown))
+    {
+        // Step by however many rows fit in the viewport (at least one),
+        // stopping early at the last selectable row in that direction.
+        const auto [first, last] = visible_range();
+        const int page = std::max(1, last - first);
+        const int dir = e.key == Key::PageDown ? 1 : -1;
+        int target = selected_index_;
+        for (int i = 0; i < page; ++i)
+        {
+            const int step = next_selectable_(target, dir);
+            if (step < 0)
+                break;
+            target = step;
+        }
+        if (target < 0 || target == selected_index_)
+            return false; // at the edge — let the scroll fallback have it
+        set_selected_index(target);
+        reveal_index(target);
         return true;
     }
     if (e.key == Key::Enter || e.key == Key::Space)
@@ -1483,6 +1552,24 @@ bool ListView::on_key_down(const KeyEvent& e)
         return true;
     }
     return false;
+}
+
+Rect ListView::context_anchor_rect() const
+{
+    if (!adapter_ || selected_index_ < 0 ||
+        selected_index_ >= static_cast<int>(adapter_->count()))
+        return bounds_;
+    // Clamp to the viewport: a selection scrolled out of view still gets a
+    // menu anchored on-screen, and the synthesised right-click must land
+    // inside bounds_ for dispatch_right_click to reach this list at all.
+    Rect r = row_world_rect(selected_index_);
+    const float top = std::max(r.y, bounds_.y);
+    const float bottom = std::min(r.y + r.h, bounds_.y + bounds_.h);
+    if (bottom <= top)
+        return bounds_;
+    r.y = top;
+    r.h = bottom - top;
+    return r;
 }
 
 } // namespace tk

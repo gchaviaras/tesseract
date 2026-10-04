@@ -3,8 +3,10 @@
 #include "icons.h"
 #include "media_utils.h"
 #include "sidebar_metrics.h"
+#include "tk/access_tree.h"
 #include "tk/i18n.h"
 #include "tk/key_shortcuts.h"
+#include "tk/keyboard_target.h"
 #include "tk/layout.h"
 #include "tk/svg.h"
 #include "tk/theme.h"
@@ -49,6 +51,15 @@ public:
         name_lbl_ = add_child(std::move(name));
         name_lbl_->set_halign(tk::TextHAlign::Leading);
         name_lbl_->set_trim(tk::TextTrim::Ellipsis);
+
+        // Keyboard stand-in for the clickable avatar + name (on_header).
+        header_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+        header_target_->set_accessible_name(tk::tr("Space home"));
+        header_target_->on_activate = [this]
+        {
+            if (on_header)
+                on_header();
+        };
     }
 
     std::function<void()> on_back;
@@ -88,6 +99,14 @@ public:
             name_lbl_->arrange(ctx,
                                {name_x, bounds.y + (kHeight - kNameH) * 0.5f,
                                 name_w, kNameH});
+        }
+        if (header_target_)
+        {
+            tk::Rect r = header_rect_();
+            r.y += 3.0f;
+            r.h -= 6.0f;
+            header_target_->arrange(ctx, r);
+            header_target_->set_accessible_description(space_name_);
         }
     }
 
@@ -196,6 +215,8 @@ public:
     }
 
 private:
+    tk::KeyboardTarget* header_target_ = nullptr;
+
     tk::Rect header_rect_() const
     {
         return {bounds_.x + kPad + kBtnW,
@@ -484,6 +505,41 @@ public:
 
         auto panel = std::make_unique<ChatPanelWidget>();
         chat_panel_ = add_child(std::move(panel));
+
+        // Keyboard stand-in for the separator grip: Enter toggles icon-only
+        // mode (the grip's click), Left/Right resize (its drag).
+        grip_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
+        grip_target_->set_accessible_name(tk::tr("Resize sidebar"));
+        grip_target_->set_accessible_description(
+            tk::tr("Enter collapses or expands it; Left and Right resize it"));
+        grip_target_->set_focus_ring_radius(kGripR + 2.0f);
+        grip_target_->on_activate = [this]
+        {
+            collapsed_ = !collapsed_;
+            commit_keyboard_resize_();
+        };
+        grip_target_->on_key = [this](const tk::KeyEvent& e)
+        {
+            if ((e.key != tk::Key::Left && e.key != tk::Key::Right) ||
+                e.ctrl || e.alt || e.meta)
+                return false;
+            constexpr float kStep = 16.0f;
+            if (collapsed_)
+            {
+                if (e.key == tk::Key::Right)
+                    collapsed_ = false;
+            }
+            else
+            {
+                const float raw = sidebar_w_ + (e.key == tk::Key::Right ? kStep : -kStep);
+                const auto r = resolve_sidebar_drag(raw, max_sidebar_w_);
+                collapsed_ = r.collapsed;
+                if (!r.collapsed)
+                    sidebar_w_ = r.width;
+            }
+            commit_keyboard_resize_();
+            return true;
+        };
     }
 
     SidebarWidget* sidebar() const { return sidebar_; }
@@ -574,8 +630,15 @@ public:
                 chat_panel_->arrange(
                     ctx, {chat_x, bounds.y, bounds.w - eff_w - kSepW, bounds.h});
             }
+            if (grip_target_)
+            {
+                const tk::Rect g = grip_rect_();
+                grip_target_->arrange(ctx, {g.x - 2.0f, g.y - 2.0f, g.w + 4.0f, g.h + 4.0f});
+            }
             return;
         }
+        if (grip_target_)
+            grip_target_->arrange(ctx, {}); // no separator in narrow mode
 
         // Narrow: only the active pane is shown, full width. Icon-only mode is
         // dropped here (it's a single full-width pane). Both children still get
@@ -807,6 +870,13 @@ private:
         }
     }
 
+    void commit_keyboard_resize_()
+    {
+        apply_icon_only_();
+        if (host()) host()->mark_needs_relayout();
+        if (on_resize_committed_) on_resize_committed_(sidebar_w_, collapsed_);
+    }
+
     void apply_icon_only_()
     {
         if (!sidebar_) return;
@@ -819,6 +889,7 @@ private:
 
     SidebarWidget* sidebar_ = nullptr;
     ChatPanelWidget* chat_panel_ = nullptr;
+    tk::KeyboardTarget* grip_target_ = nullptr;
     Pane active_pane_ = Pane::List;
     bool is_narrow_ = false;
 
@@ -1281,6 +1352,30 @@ bool MainAppWidget::handle_primary_shortcut_(const tk::KeyEvent& event)
             return true;
         }
     }
+    // Ctrl+I / Cmd+I and Ctrl+, / Cmd+, open views on top of the room, so
+    // they stay inert while anything already covers it: a scoped panel or
+    // overlay, an open popup, or a modal dialog.
+    const bool covered =
+        host() && (host()->focus_scope() || host()->popup() ||
+                   tk::find_topmost_modal(this) != nullptr);
+    // Ctrl+I / Cmd+I: room info for the open room — the keyboard route to
+    // everything that panel hosts (settings, invite, members, media, ...).
+    if (tk::primary_shortcut(event) && tk::shortcut_char(event, 'i') && !event.shift)
+    {
+        if (!covered && room_view_ && room_view_->has_room() && room_view_->visible())
+        {
+            room_view_->show_room_info();
+            return true;
+        }
+    }
+    // Ctrl+, / Cmd+, (the platform-standard preferences chord).
+    if (tk::primary_shortcut(event) && event.key == tk::Key::Character &&
+        event.text == "," && !event.shift && on_settings_shortcut)
+    {
+        if (!covered)
+            on_settings_shortcut();
+        return true;
+    }
     if (tk::primary_shortcut(event) && tk::shortcut_char(event, 'f'))
     {
         if (event.shift)
@@ -1454,6 +1549,12 @@ tk::Widget* MainAppWidget::active_transient_overlay_() const
         return qr_grant_view_;
     if (encryption_setup_ && encryption_setup_->visible())
         return encryption_setup_;
+    if (export_history_dialog_ && export_history_dialog_->is_open())
+        return export_history_dialog_;
+    if (screen_picker_ && screen_picker_->visible())
+        return screen_picker_;
+    if (camera_widget_ && camera_widget_->visible())
+        return camera_widget_;
     return nullptr;
 }
 

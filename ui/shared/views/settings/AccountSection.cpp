@@ -95,6 +95,7 @@ public:
     bool on_pointer_down(tk::Point local) override;
     bool on_pointer_move(tk::Point local) override;
     void on_pointer_leave() override;
+    AVATAR_ACCESS_ROWS_KEYBOARD
 
 protected:
     const AvatarEditControl& avatar_control_() const override { return avatar_; }

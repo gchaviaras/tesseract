@@ -633,6 +633,8 @@ private:
     static constexpr int IDC_FIND_IN_ROOM = 134;
     static constexpr int IDC_MRU_NEXT = 135; // Ctrl+Tab
     static constexpr int IDC_MRU_PREV = 136; // Ctrl+Shift+Tab
+    static constexpr int IDC_ROOM_INFO = 137; // Ctrl+I
+    static constexpr int IDC_SETTINGS  = 138; // Ctrl+,
 
     // Application accelerator table (Ctrl+K → quick switcher). Built in
     // on_create, applied by pre_translate_message so the shortcut fires even

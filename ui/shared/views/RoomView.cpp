@@ -400,6 +400,12 @@ void RoomView::wire_message_list_callbacks_(MessageListView* ml)
     {
         if (compose_bar_) compose_bar_->focus();
     };
+    // Escape out of the keyboard-focused timeline (main or thread — both
+    // send through the one compose bar) goes back to typing.
+    ml->on_keyboard_exit = [this]
+    {
+        if (compose_bar_) compose_bar_->focus();
+    };
 
     ml->on_more_requested =
         [this, ml](const std::string& event_id, tk::Rect anchor,
@@ -2395,25 +2401,17 @@ void RoomView::paint(tk::PaintCtx& ctx)
     // dispatch, just for keyboard focus instead. Re-synced every paint
     // rather than pushed from each panel's open()/close(), so it can't drift
     // out of sync and covers all five panels uniformly. The emoji/sticker
-    // pickers and the read-receipt popup need their own entries here too,
-    // separate from active_overlay_panel_(): they're register_popup()'d but
-    // deliberately never add_child()'d into this tree (see
-    // show_emoji_picker_'s doc comment), so without an explicit scope,
-    // next_focusable() can't find their currently-focused widget in the
-    // tree it walks and falls back to the first focusable widget in the
-    // whole app — which then dismisses the popup, since focus landing
-    // outside it is indistinguishable from an outside click (see
-    // Host::request_focus's doc comment).
+    // pickers and the read-receipt popup need no entry here: they're
+    // register_popup()'d and report popup_scopes_focus(), which
+    // Host::advance_focus_ honours on its own.
     if (ctx.host)
     {
         if (tk::Widget* o = active_overlay_panel_())
             ctx.host->set_focus_scope(o);
-        else if (emoji_picker_visible_ && emoji_picker_)
-            ctx.host->set_focus_scope(emoji_picker_.get());
-        else if (sticker_picker_visible_ && sticker_picker_)
-            ctx.host->set_focus_scope(sticker_picker_.get());
-        else if (receipt_popup_visible_ && receipt_popup_)
-            ctx.host->set_focus_scope(receipt_popup_.get());
+        else if (call_lobby_ && call_lobby_->is_open())
+            // Covers the timeline + compose bar, which stay visible() under
+            // it — without a scope Tab would wander into them.
+            ctx.host->set_focus_scope(call_lobby_);
         else
             ctx.host->clear_focus_scope();
     }
@@ -2560,6 +2558,10 @@ MessageListView* RoomView::selection_list_() const
     // one under a modal overlay — any active focus scope it isn't part of:
     // RoomView's own panels, MainAppWidget's transient overlays — holds a
     // selection the user can't see, which a Ctrl+C must not copy.
+    // An open popup (emoji/sticker picker, receipt popup, a menu) covers
+    // the timeline the same way.
+    if (host() && host()->popup())
+        return nullptr;
     tk::Widget* scope = host() ? host()->focus_scope() : nullptr;
     const auto usable = [scope](MessageListView* ml)
     {
@@ -2593,7 +2595,15 @@ bool RoomView::on_key_down(const tk::KeyEvent& event)
 {
     if (tk::primary_shortcut(event) && !event.shift &&
         tk::shortcut_char(event, 'c'))
-        return copy_active_selection();
+    {
+        if (copy_active_selection())
+            return true;
+        // No text selection anywhere: copy the keyboard-focused timeline's
+        // cursor message (no-op unless that list has focus).
+        MessageListView* thread_ml = thread_view_ ? thread_view_->message_list() : nullptr;
+        return (message_list_ && message_list_->copy_keyboard_cursor_message()) ||
+               (thread_ml && thread_ml->copy_keyboard_cursor_message());
+    }
     return false;
 }
 

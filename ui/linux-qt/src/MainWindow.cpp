@@ -390,6 +390,14 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         };
 
         // ---- User info strip ----
+        // The mouse right-click path is the surface-level region check in
+        // customContextMenuRequested below; this is the keyboard route
+        // (context-menu key / Enter with one account).
+        mainApp_->user_info()->on_secondary = [this](tk::Point world)
+        {
+            onUserStripContextMenu(mainAppSurface_->mapToGlobal(
+                QPoint(static_cast<int>(world.x), static_cast<int>(world.y))));
+        };
         mainApp_->user_info()->on_primary = [this](tk::Point world)
         {
             if (account_manager_.accounts().size() < 2)
@@ -1443,6 +1451,29 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
                     tk::KeyEvent event{};
                     event.key = tk::Key::Character;
                     event.text = "f";
+                    event.ctrl = true;
+                    mainApp_->dispatch_key_down(event);
+                });
+    }
+    // Ctrl+I (room info) and Ctrl+, (Settings): window-scoped — unlike
+    // Ctrl+K they act on this window's room, so a pop-out room window must
+    // not trigger them here — but still fire while the composer's native
+    // text control has focus. MainAppWidget::handle_primary_shortcut_ owns
+    // what they do.
+    for (const auto& [seq, text] :
+         {std::pair{QKeySequence(Qt::CTRL | Qt::Key_I), "i"},
+          std::pair{QKeySequence(Qt::CTRL | Qt::Key_Comma), ","}})
+    {
+        auto* sc = new QShortcut(seq, this);
+        sc->setContext(Qt::WindowShortcut);
+        connect(sc, &QShortcut::activated, this,
+                [this, text = std::string(text)]
+                {
+                    if (!mainApp_)
+                        return;
+                    tk::KeyEvent event{};
+                    event.key = tk::Key::Character;
+                    event.text = text;
                     event.ctrl = true;
                     mainApp_->dispatch_key_down(event);
                 });

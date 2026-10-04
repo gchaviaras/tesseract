@@ -61,6 +61,9 @@ public:
     void     arrange(tk::LayoutCtx&, tk::Rect bounds) override;
     void     paint_before_children(tk::PaintCtx&) override;
     bool     on_pointer_down(tk::Point local) override;
+    // Full-surface overlay: keep Tab from reaching the inert UI behind it.
+    // Escape is handled by MainAppWidget::dismiss_top_transient_().
+    bool     access_modal() const override { return visible(); }
 
 private:
     std::unique_ptr<tk::VideoCapture> capture_;

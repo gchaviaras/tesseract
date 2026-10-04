@@ -193,6 +193,7 @@ add_executable(tesseract_tests
     cpp/test_tk_host_file_drop.cpp
     cpp/test_tk_drag_drop.cpp
     cpp/test_tk_host_focus.cpp
+    cpp/test_tk_keyboard_nav.cpp
     cpp/test_tk_tooltip.cpp
     cpp/test_tk_toast.cpp
     cpp/test_timeline_media_controller.cpp

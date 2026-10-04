@@ -1,5 +1,7 @@
 #include "host.h"
 
+#include "access_tree.h" // find_topmost_modal (modal-scoped Tab traversal)
+#include "scrollable_base.h" // keyboard paging fallback (scroll_by_key)
 #include "controls.h" // tk::Button (dynamic_cast + set_hovered in hover tracking)
 #include "widget.h"
 
@@ -513,10 +515,26 @@ bool Host::advance_focus_(bool forward)
     Widget* root = input_root_();
     if (!root)
         return false;
+    // Narrowing order: an explicit focus scope wins — its owner (RoomView,
+    // MainAppWidget) already picks whichever overlay is on top, including a
+    // non-modal one stacked over a modal. With no scope set, the topmost
+    // open modal dialog (access_modal()) keeps Tab inside it — the fallback
+    // for surfaces whose owners set no scope (Settings, login, pop-outs). A
+    // registered popup that scopes focus beats both, since it paints above
+    // everything.
     if (Widget* scope = focus_scope_.lock().get();
         scope && scope->visible_in_tree())
     {
         root = scope;
+    }
+    else if (Widget* modal = find_topmost_modal(root))
+    {
+        root = modal;
+    }
+    if (auto p = popup_.lock();
+        p && p->popup_scopes_focus() && p->visible_in_tree())
+    {
+        root = p.get();
     }
     Widget* next = next_focusable(root, focused_widget_.lock().get(), forward);
     if (!next)
@@ -526,12 +544,24 @@ bool Host::advance_focus_(bool forward)
     // actually lands on a new widget — Tab/Shift-Tab traversal is the one
     // case among request_focus()'s callers that should show the ring.
     focus_visible_ = true;
+    if (std::string tip = next->focus_tooltip_text(); !tip.empty())
+    {
+        show_tooltip(next, std::move(tip), next->bounds());
+        tooltip_anchor_follows_focus_ = true;
+    }
+    else
+        cancel_tooltip_();
     return true;
 }
 
 bool Host::dispatch_key_down(const KeyEvent& event)
 {
     fire_user_activity_();
+    // Any key other than the Tab that may re-show one (advance_focus_)
+    // dismisses a tooltip — e.g. Enter activating a Tab-focused icon
+    // button shouldn't leave its focus tooltip floating over what opens.
+    if (event.key != Key::Tab && event.key != Key::Backtab)
+        cancel_tooltip_();
     // A drag in progress is the most "modal" transient state a surface can
     // be in — Escape cancels it ahead of every other Escape-consumer below
     // (popup dismiss, etc.), which would be reaching for state that no
@@ -560,7 +590,40 @@ bool Host::dispatch_key_down(const KeyEvent& event)
         request_repaint();
         return true;
     }
-    if (event.key == Key::Tab || event.key == Key::Backtab)
+    const bool context_menu_key =
+        event.key == Key::Menu ||
+        (event.key == Key::F10 && event.shift && !event.ctrl && !event.alt &&
+         !event.meta);
+    if (context_menu_key)
+    {
+        if (auto f = focused_widget_.lock())
+        {
+            for (Widget* w = f.get(); w; w = w->parent())
+            {
+                if (w->on_context_menu_key())
+                {
+                    request_repaint();
+                    return true;
+                }
+            }
+            // No custom handler — deliver the right-click a mouse user would
+            // make on the focused element, along the focus chain only (see
+            // Widget::on_context_menu_key's doc comment).
+            f->reveal_context_anchor();
+            const Rect a = f->context_anchor_rect();
+            const Point c{a.x + a.w * 0.5f, a.y + a.h * 0.5f};
+            for (Widget* w = f.get(); w; w = w->parent())
+            {
+                const Rect b = w->bounds();
+                if (w->on_right_click({c.x - b.x, c.y - b.y}))
+                {
+                    request_repaint();
+                    return true;
+                }
+            }
+        }
+    }
+    else if (event.key == Key::Tab || event.key == Key::Backtab)
     {
         // Checked independent of whether a widget is currently focused —
         // next_focusable(..., nullptr, ...) picks the first/last candidate
@@ -580,6 +643,18 @@ bool Host::dispatch_key_down(const KeyEvent& event)
         {
             request_repaint();
             return true;
+        }
+        // PageUp/PageDown/Home/End the focused widget didn't use scroll
+        // the nearest scrollable region around it — e.g. a Settings page
+        // while one of its buttons has focus.
+        for (Widget* w = f.get(); w; w = w->parent())
+        {
+            if (auto* region = dynamic_cast<ScrollableBase*>(w);
+                region && region->scroll_by_key(event))
+            {
+                request_repaint();
+                return true;
+            }
         }
     }
     Widget* root = input_root_();
@@ -640,6 +715,7 @@ void Host::drain_deferred_deletions_()
 void Host::show_tooltip(const void* owner, std::string text, Rect anchor_world,
                         bool from_popup)
 {
+    tooltip_anchor_follows_focus_ = false;
     // A real popup is open — tooltips are suppressed entirely, unless this
     // request comes from the popup's own content (see from_popup's doc
     // comment in host.h).
@@ -674,6 +750,9 @@ void Host::show_tooltip(const void* owner, std::string text, Rect anchor_world,
     const auto gen = ++tooltip_gen_;
     post_delayed(kTooltipShowDelayMs, guarded([this, gen, owner] {
         if (gen != tooltip_gen_ || owner != tooltip_owner_) return; // superseded/cancelled
+        if (tooltip_anchor_follows_focus_)
+            if (auto f = focused_widget_.lock(); f && f.get() == owner)
+                tooltip_anchor_ = f->bounds();
         tooltip_visible_ = true;
         tooltip_reveal_pending_ = true;
         request_repaint();

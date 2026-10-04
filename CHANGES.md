@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-04
 
+- build: smaller build directories. Linux objects and executables compress their debug info (`-gz=zlib`, `--compress-debug-sections=zlib`), and Cargo incremental compilation of the Rust SDK crate is off unless `-DTESSERACT_CARGO_INCREMENTAL=ON`. Linux Debug build + ctest 2180/2180
 - build: `windows-xwin-debug`/`-release` presets cross-compile the Win32 build from Linux (clang-cl + lld-link against an xwin-provided MSVC CRT/SDK; one-time `cmake/toolchains/xwin-setup.sh`). MSVC ABI rather than MinGW because LiveKit's prebuilt libwebrtc is MSVC-only. Linux cross build links `Tesseract.exe`
 - feat(a11y): Keyboard Shortcuts overlay. Ctrl/⌘+/, F1 or the user menu (macOS: Help menu) lists every shortcut, grouped. Shortcuts now live in one registry (`views/shortcut_registry.h`) that the shells bind accelerators from and shared key handlers match against, so the list can't drift. Qt6 build + ctest 2180/2180
 - feat(a11y): keyboard access across the toolkit. Popups that hold fields keep Tab inside them, and an open dialog keeps Tab from reaching what's behind it. Menu / Shift+F10 opens the focused item's context menu, PageUp/PageDown/Home/End scroll, and Tab-focused icon buttons show their name. Qt6 build + ctest 2159/2159

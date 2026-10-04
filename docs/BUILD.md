@@ -184,6 +184,22 @@ The three archives (`tesseract_sdk_bridge_cxx`, `tesseract_client`,
 linked with `WHOLE_ARCHIVE` to guarantee all symbols are present regardless of
 link order.
 
+### Build-directory size
+
+- **Cargo incremental compilation** is off by default for the Rust SDK crate.
+  Its cache costs several GB per build directory, and cargo never deletes the
+  cache of a superseded configuration (any env/flag change starts a fresh
+  one). `-DTESSERACT_CARGO_INCREMENTAL=ON` turns it back on for faster
+  rebuilds while iterating on `sdk/src/*.rs`.
+- **Compressed debug info** (Linux): object files build with `-gz=zlib` and
+  executables link with `--compress-debug-sections=zlib`. Every UI and test
+  executable carries the whole Rust archive's debug info, so this roughly
+  halves Debug executables. gdb, lldb and addr2line read it transparently.
+- **Stale cargo artifacts** still accumulate under `<build>/cargo/build/` when
+  the crate's configuration changes, as old `libtesseract_sdk_ffi-<hash>.a`
+  copies (~2 GB each in Debug). Delete all but the newest, or use
+  `cargo sweep`.
+
 ### Unity builds and precompiled headers
 
 `-DTESSERACT_UNITY_BUILD=OFF` (default `ON`) disables CMake's unity build

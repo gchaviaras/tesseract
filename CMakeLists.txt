@@ -225,6 +225,27 @@ endif()
 # ---------------------------------------------------------------------------
 include(${CMAKE_SOURCE_DIR}/cmake/Hardening.cmake)
 
+# Compress DWARF debug info (ELF only). Every UI and test executable links the
+# whole Rust archive, debug info included, so uncompressed Debug executables
+# run to hundreds of MB each. -gz compresses our own object files' debug
+# sections; the linker flag compresses the executable's, which also covers
+# the Rust archive's (rustc can only compress its own on nightly). zlib rather
+# than zstd: every gdb/lldb/addr2line build reads it. Probed, so a toolchain
+# without support just skips it.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    include(CheckCXXCompilerFlag)
+    include(CheckLinkerFlag)
+    check_cxx_compiler_flag(-gz=zlib TESSERACT_HAVE_GZ_ZLIB)
+    check_linker_flag(CXX "-Wl,--compress-debug-sections=zlib"
+        TESSERACT_HAVE_LD_COMPRESS_DEBUG)
+    if(TESSERACT_HAVE_GZ_ZLIB)
+        add_compile_options(-gz=zlib)
+    endif()
+    if(TESSERACT_HAVE_LD_COMPRESS_DEBUG)
+        add_link_options(-Wl,--compress-debug-sections=zlib)
+    endif()
+endif()
+
 # Linux Release builds have no -g today, so a crash report's addresses have
 # nothing to symbolicate against. -g1 (line tables + minimal symbol info, not
 # full -g) keeps binary size close to today's while making addr2line/gdb
@@ -303,6 +324,17 @@ corrosion_import_crate(MANIFEST_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml)
 # it vendors instead, so a NASM install is still not required.
 corrosion_set_env_vars(tesseract_sdk_ffi
     TESSERACT_UI=${TESSERACT_UI})
+
+# Cargo's incremental cache for tesseract_sdk_ffi runs to several GB per build
+# configuration, and cargo never deletes the cache of a superseded one (any
+# env/flag change starts a new one). Off by default; turn it on to speed up
+# rebuilds while iterating on sdk/src/*.rs.
+option(TESSERACT_CARGO_INCREMENTAL
+    "Use Cargo incremental compilation for the Rust SDK crate (faster Rust rebuilds, several GB of extra disk per build dir)"
+    OFF)
+if(NOT TESSERACT_CARGO_INCREMENTAL)
+    corrosion_set_env_vars(tesseract_sdk_ffi CARGO_INCREMENTAL=0)
+endif()
 if(MSVC)
     corrosion_set_env_vars(tesseract_sdk_ffi AWS_LC_SYS_PREBUILT_NASM=1)
 endif()

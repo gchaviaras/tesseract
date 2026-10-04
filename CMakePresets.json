@@ -29,6 +29,24 @@
       }
     },
     {
+      "name": "windows-xwin-debug",
+      "displayName": "Windows – Win32 cross-compiled from Linux via xwin (Debug)",
+      "inherits": "base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+      "toolchainFile": "${sourceDir}/cmake/toolchains/xwin-x86_64.cmake",
+      "cacheVariables": {
+        "TESSERACT_UI": "win32"
+      }
+    },
+    {
+      "name": "windows-xwin-release",
+      "displayName": "Windows – Win32 cross-compiled from Linux via xwin (Release)",
+      "inherits": "windows-xwin-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
       "name": "linux-debug",
       "displayName": "Linux – GTK4 + Qt6 (Debug)",
       "inherits": "base",
@@ -87,6 +105,8 @@
   "buildPresets": [
     { "name": "windows-debug",              "configurePreset": "windows-debug"              },
     { "name": "windows-release",            "configurePreset": "windows-release"            },
+    { "name": "windows-xwin-debug",         "configurePreset": "windows-xwin-debug"         },
+    { "name": "windows-xwin-release",       "configurePreset": "windows-xwin-release"       },
     { "name": "linux-debug",                "configurePreset": "linux-debug"                },
     { "name": "linux-release",              "configurePreset": "linux-release"              },
     { "name": "macos-appkit-arm64-debug",   "configurePreset": "macos-appkit-arm64-debug"   },

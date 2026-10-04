@@ -414,32 +414,6 @@ if(APPLE)
         "PKG_CONFIG_PATH=${_opus_pkgconfig_dir}/pkgconfig")
 endif()
 
-# MinGW cross-compilation on a case-sensitive host (Linux): Rust crates emit
-# Windows-style mixed-case link library names (e.g. "Bcrypt", "Ws2_32") via
-# `cargo:rustc-link-lib=`. MinGW's import stubs are lowercase on disk
-# (libbcrypt.a, libws2_32.a), so the linker fails on Linux.
-# Fix: lowercase every entry in the Rust target's INTERFACE_LINK_LIBRARIES
-# that looks like a bare library name or a -l flag.
-if(CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    get_target_property(_rust_iface tesseract_sdk_ffi-static INTERFACE_LINK_LIBRARIES)
-    if(_rust_iface)
-        set(_fixed "")
-        foreach(_entry IN LISTS _rust_iface)
-            if(_entry MATCHES "^-l(.+)$")
-                string(TOLOWER "${CMAKE_MATCH_1}" _lower)
-                list(APPEND _fixed "-l${_lower}")
-            elseif(_entry MATCHES "^[A-Za-z][A-Za-z0-9_]+$")
-                string(TOLOWER "${_entry}" _lower)
-                list(APPEND _fixed "${_lower}")
-            else()
-                list(APPEND _fixed "${_entry}")
-            endif()
-        endforeach()
-        set_target_properties(tesseract_sdk_ffi-static PROPERTIES
-            INTERFACE_LINK_LIBRARIES "${_fixed}")
-    endif()
-endif()
-
 # ---------------------------------------------------------------------------
 # MSVC environment forwarding via .cargo/config.toml
 # ---------------------------------------------------------------------------
@@ -485,7 +459,29 @@ if(MSVC)
         add_link_options("$<$<CONFIG:Release>:/OPT:ICF>")
         add_compile_options("$<$<CONFIG:Release>:/Zi>")
     endif()
+endif()
 
+if(MSVC AND NOT CMAKE_HOST_WIN32)
+    # Cross-compiling from Linux with clang-cl against an xwin sysroot
+    # (cmake/toolchains/xwin-x86_64.cmake). There is no registry or cl.exe to
+    # derive INCLUDE/LIB from, and the .cargo/config.toml written below would
+    # clobber a developer's own config in the source tree — so hand Cargo the
+    # same settings through its environment instead. cc-rs picks up the
+    # target-suffixed CC/CXX/AR/CFLAGS for the C/C++ the Rust crates compile.
+    # The staticlib never links on the Rust side; the linker is set only so
+    # nothing falls back to a non-existent link.exe.
+    corrosion_set_env_vars(tesseract_sdk_ffi
+        "CC_x86_64_pc_windows_msvc=${CMAKE_C_COMPILER}"
+        "CXX_x86_64_pc_windows_msvc=${CMAKE_CXX_COMPILER}"
+        "AR_x86_64_pc_windows_msvc=${CMAKE_AR}"
+        "CFLAGS_x86_64_pc_windows_msvc=${TESSERACT_MSVC_CROSS_CFLAGS}"
+        "CXXFLAGS_x86_64_pc_windows_msvc=${TESSERACT_MSVC_CROSS_CFLAGS}"
+        "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=${CMAKE_LINKER}"
+        # Same as the [target]/[profile.dev] tables in the generated
+        # config.toml below — see the rationale there.
+        "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS=-C target-feature=+crt-static"
+        CARGO_PROFILE_DEV_CODEGEN_UNITS=1)
+elseif(MSVC)
     # --- derive MSVC tools dir from cl.exe path ---
     # cl.exe lives at <VCToolsDir>/bin/Host<arch>/<arch>/cl.exe
     get_filename_component(_cc "${CMAKE_CXX_COMPILER}" DIRECTORY)   # …/bin/Hostx64/x64
@@ -782,6 +778,9 @@ include(${CMAKE_SOURCE_DIR}/cmake/Installers.cmake)
 
 # ---------------------------------------------------------------------------
 # MSIX packaging (Windows/MSVC only) — Store + direct-distribution editions,
-# built alongside the NSIS installer above rather than replacing it.
+# built alongside the NSIS installer above rather than replacing it. Skipped
+# for the xwin cross-compile: MakeAppx/SignTool only exist on Windows.
 # ---------------------------------------------------------------------------
-include(${CMAKE_SOURCE_DIR}/cmake/Msix.cmake)
+if(CMAKE_HOST_WIN32 OR NOT MSVC)
+    include(${CMAKE_SOURCE_DIR}/cmake/Msix.cmake)
+endif()

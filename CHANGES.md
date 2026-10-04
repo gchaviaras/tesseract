@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-04
 
+- feat(switcher): recently visited rooms (Ctrl+Tab switcher, Ctrl+K "Recent" strip) persist across restarts, per account, synced as `recent_rooms` in the `im.gnomos.tesseract` prefs. Clear all caches forgets them with the tab layout. Qt6 build + ctest 2184/2184, user-verified Qt6
 - build: smaller build directories. Linux objects and executables compress their debug info (`-gz=zlib`, `--compress-debug-sections=zlib`), and Cargo incremental compilation of the Rust SDK crate is off unless `-DTESSERACT_CARGO_INCREMENTAL=ON`. Linux Debug build + ctest 2180/2180
 - build: `windows-xwin-debug`/`-release` presets cross-compile the Win32 build from Linux (clang-cl + lld-link against an xwin-provided MSVC CRT/SDK; one-time `cmake/toolchains/xwin-setup.sh`). MSVC ABI rather than MinGW because LiveKit's prebuilt libwebrtc is MSVC-only. Linux cross build links `Tesseract.exe`
 - feat(a11y): Keyboard Shortcuts overlay. Ctrl/⌘+/, F1 or the user menu (macOS: Help menu) lists every shortcut, grouped. Shortcuts now live in one registry (`views/shortcut_registry.h`) that the shells bind accelerators from and shared key handlers match against, so the list can't drift. Qt6 build + ctest 2180/2180

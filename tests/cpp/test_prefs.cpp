@@ -129,3 +129,33 @@ TEST_CASE("Prefs serialize writes bridge overrides and parse reads them back")
     auto cleared = parse(serialize(p, R"({"bridge_overrides":["!a:x"]})"));
     CHECK(cleared.bridge_not_bridged_overrides.empty());
 }
+
+TEST_CASE("Prefs recent_rooms round-trips in visit order")
+{
+    PrefsData p;
+    p.recent_rooms = {"!c:x", "!a:x", "!b:x"};
+    auto back = parse(serialize(p));
+    CHECK(back.recent_rooms == std::vector<std::string>{"!c:x", "!a:x", "!b:x"});
+}
+
+TEST_CASE("Prefs parse without recent_rooms gives an empty list")
+{
+    CHECK(parse(R"({"last_room":"!r:x"})").recent_rooms.empty());
+}
+
+TEST_CASE("Prefs serialize with empty recent_rooms removes the stored key")
+{
+    PrefsData p;
+    auto json = serialize(p, R"({"recent_rooms":["!a:x"]})");
+    CHECK(json.find("recent_rooms") == std::string::npos);
+    CHECK(parse(json).recent_rooms.empty());
+}
+
+TEST_CASE("Prefs layout save carries recent_rooms alongside the tab layout")
+{
+    auto p         = tesseract::Prefs::room_layout("!b:x", {"!a:x", "!b:x"});
+    p.recent_rooms = {"!b:x", "!z:x"};
+    auto back      = parse(serialize(p, R"({"recent_rooms":["!old:x"],"future":1})"));
+    CHECK(back.last_room == "!b:x");
+    CHECK(back.recent_rooms == std::vector<std::string>{"!b:x", "!z:x"});
+}

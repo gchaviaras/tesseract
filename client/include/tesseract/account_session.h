@@ -65,6 +65,12 @@ struct AccountSession
     /// `im.gnomos.tesseract` account-data event. Includes last_room.
     std::vector<std::string> open_rooms;
 
+    /// Most-recently-visited room IDs (front = most recent), restored from
+    /// the `im.gnomos.tesseract` account-data event. Holds this account's MRU
+    /// while another account is active; ShellBase::recent_room_ids_ is the
+    /// live copy for the active account.
+    std::vector<std::string> recent_rooms;
+
     /// Room IDs the user has locally marked "not actually bridged", restored
     /// from the `im.gnomos.tesseract` account-data event. Overrides
     /// `RoomInfo::is_bridged` for that room — see

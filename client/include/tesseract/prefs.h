@@ -20,6 +20,9 @@ struct PrefsData
     /// Default emoji skin tone as an `emoji::skin_tone_key()` string
     /// ("medium", …). Empty = default (yellow) presentation.
     std::string emoji_skin_tone;
+    /// Most-recently-visited room IDs (front = most recent), feeding the
+    /// Ctrl+Tab MRU switcher and the quick switcher's "Recent" strip.
+    std::vector<std::string> recent_rooms;
 };
 
 /// Parse / serialize helpers for the `im.gnomos.tesseract` JSON content object.

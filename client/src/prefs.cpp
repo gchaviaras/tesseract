@@ -32,6 +32,7 @@ PrefsData parse(const std::string& json_str)
         p.open_rooms = j.value("open_rooms", std::vector<std::string>{});
         p.bridge_not_bridged_overrides = j.value("bridge_overrides", std::vector<std::string>{});
         p.emoji_skin_tone = j.value("emoji_skin_tone", std::string{});
+        p.recent_rooms = j.value("recent_rooms", std::vector<std::string>{});
     }
     catch (...)
     {
@@ -61,6 +62,10 @@ std::string serialize(const PrefsData& p, const std::string& base_json)
         j.erase("emoji_skin_tone");
     else
         j["emoji_skin_tone"] = p.emoji_skin_tone;
+    if (p.recent_rooms.empty())
+        j.erase("recent_rooms");
+    else
+        j["recent_rooms"] = p.recent_rooms;
     return j.dump();
 }
 

@@ -672,7 +672,10 @@ protected:
     bool app_settings_open_ = false;
     // Most-recently-visited room IDs in visit order (front = most recent),
     // recorded in after_active_room_changed_(). Feeds the Ctrl+K quick
-    // switcher's "Recent" strip. In-memory only (not persisted across restarts).
+    // switcher's "Recent" strip and the Ctrl+Tab MRU switcher. Persisted per
+    // account as im.gnomos.tesseract "recent_rooms" by
+    // persist_room_layout_pref_(); seeded from AccountSession::recent_rooms on
+    // account activation.
     std::vector<std::string> recent_room_ids_;
     static constexpr std::size_t kRecentRoomsMax = 8;
     // Navigation history for Alt+Left / Alt+Right back-forward traversal.
@@ -2156,6 +2159,7 @@ protected:
         std::string                 avatar_url;
         std::string                 last_room;
         std::vector<std::string>    open_rooms;
+        std::vector<std::string>    recent_rooms;
         std::vector<std::string>    bridge_not_bridged_overrides;
         tesseract::emoji::SkinTone  emoji_skin_tone = tesseract::emoji::SkinTone::None;
         std::string                 prefs_json = "{}";

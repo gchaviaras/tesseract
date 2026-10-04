@@ -8200,6 +8200,7 @@ ShellBase::RestoreIOResult ShellBase::restore_all_accounts_blocking_(bool networ
             auto prefs = tesseract::Prefs::parse(acc.prefs_json);
             acc.last_room  = prefs.last_room;
             acc.open_rooms = prefs.open_rooms;
+            acc.recent_rooms = prefs.recent_rooms;
             acc.bridge_not_bridged_overrides = prefs.bridge_not_bridged_overrides;
             acc.emoji_skin_tone = tesseract::emoji::skin_tone_from_key(prefs.emoji_skin_tone);
         }
@@ -8245,6 +8246,7 @@ ShellBase::finish_restore_accounts_ui_(RestoreIOResult&& io)
         session->avatar_url  = acc.avatar_url;
         session->last_room   = acc.last_room;
         session->open_rooms  = std::move(acc.open_rooms);
+        session->recent_rooms = std::move(acc.recent_rooms);
         session->bridge_not_bridged_overrides = std::move(acc.bridge_not_bridged_overrides);
         session->emoji_skin_tone = acc.emoji_skin_tone;
         session->prefs_json = std::move(acc.prefs_json);
@@ -8406,6 +8408,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
         auto prefs = tesseract::Prefs::parse(session->prefs_json);
         session->last_room  = prefs.last_room;
         session->open_rooms = prefs.open_rooms;
+        session->recent_rooms = prefs.recent_rooms;
         session->bridge_not_bridged_overrides = prefs.bridge_not_bridged_overrides;
         session->emoji_skin_tone = tesseract::emoji::skin_tone_from_key(prefs.emoji_skin_tone);
     }
@@ -8732,6 +8735,10 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
 
     reset_server_info_();
     push_own_status_to_strip_(); // blank the strip status until the new fetch
+    // Keep the outgoing account's MRU on its session so switching back (or the
+    // next save of that account's prefs) sees its latest visits.
+    if (active_account_)
+        active_account_->recent_rooms = recent_room_ids_;
     active_account_ = new_session;
     auto& sess = *active_account_;
     // ...and bring back the incoming account's own pop-out rooms' state.
@@ -8792,6 +8799,9 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
     }
 
     my_user_id_ = sess.user_id;
+    recent_room_ids_ = sess.recent_rooms;
+    if (recent_room_ids_.size() > kRecentRoomsMax)
+        recent_room_ids_.resize(kRecentRoomsMax);
     my_display_name_ = sess.display_name;
     my_avatar_url_ = sess.avatar_url;
     restore_gate_ticks_ = 0;
@@ -9741,6 +9751,17 @@ void ShellBase::handle_account_prefs_updated_ui_(std::string user_id,
             apply_bridge_overrides_(it->second, active_account_->bridge_not_bridged_overrides);
         if (!current_room_id_.empty())
             refresh_bridge_dependent_ui_(current_room_id_);
+    }
+
+    // Adopt the synced MRU only while ours is still empty (fresh login, before
+    // the first visit): once the user has visited a room the local order wins,
+    // so another device's save can't reorder the list mid Ctrl+Tab cycle.
+    if (recent_room_ids_.empty() && !prefs.recent_rooms.empty())
+    {
+        recent_room_ids_ = prefs.recent_rooms;
+        if (recent_room_ids_.size() > kRecentRoomsMax)
+            recent_room_ids_.resize(kRecentRoomsMax);
+        active_account_->recent_rooms = recent_room_ids_;
     }
 
     if (!prefs.open_rooms.empty() && pending_restore_rooms_.empty() &&
@@ -12456,7 +12477,8 @@ void ShellBase::restart_sdk_begin_(
     // Forget the open-tab layout entirely: clear it locally now, and Phase B
     // pushes an empty im.gnomos.tesseract account-data event (while sync is
     // still live) so the resync can't bring the tabs back.
-    // Only the layout is forgotten — bridge overrides, the emoji skin tone
+    // Only the layout (and the recent-rooms history) is forgotten — bridge
+    // overrides, the emoji skin tone
     // and any keys this build doesn't write are carried over.
     auto empty_layout_data = tesseract::Prefs::room_layout(std::string{}, {});
     if (active_account_)
@@ -12471,10 +12493,12 @@ void ShellBase::restart_sdk_begin_(
     current_room_id_.clear();
     tabs_.clear();
     active_tab_idx_ = 0;
+    recent_room_ids_.clear();
     if (active_account_)
     {
         active_account_->open_rooms.clear();
         active_account_->last_room.clear();
+        active_account_->recent_rooms.clear();
     }
     account_data_dirty_ = false;
     pending_restore_rooms_.clear();
@@ -13087,7 +13111,9 @@ void ShellBase::persist_room_layout_pref_(bool blocking)
         prefs_data.bridge_not_bridged_overrides = active_account_->bridge_not_bridged_overrides;
         prefs_data.emoji_skin_tone =
             tesseract::emoji::skin_tone_key(active_account_->emoji_skin_tone);
+        active_account_->recent_rooms = recent_room_ids_;
     }
+    prefs_data.recent_rooms = recent_room_ids_;
     // Overlay onto the last known event so keys this build doesn't write
     // survive.
     const std::string json = tesseract::Prefs::serialize(

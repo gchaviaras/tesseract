@@ -1,4 +1,5 @@
 #import "MainWindowController.h"
+#include "views/shortcut_registry.h"
 #import "tk_locale.h"
 #import "LoginView.h"
 #import "MacOSTrayIcon.h"
@@ -6097,9 +6098,28 @@ private:
         _mainAppSurface->relayout();
 }
 
+- (void)showKeyboardShortcutsMenuAction:(id)sender
+{
+    (void)sender;
+    // Same path as ⌘/ pressed on the canvas (MainAppWidget::
+    // handle_primary_shortcut_), so the toggle and the "inert while another
+    // dialog covers the app" rule live in one place. Main window only, like
+    // Room Info: it's a Window-scoped shortcut.
+    if (_mainApp && self.window.isKeyWindow)
+    {
+        const auto& chords =
+            tesseract::views::shortcut(tesseract::views::ShortcutId::ShowShortcuts).chords;
+        if (!chords.empty())
+            _mainApp->dispatch_key_down(tk::to_key_event(chords.front()));
+        if (_mainAppSurface)
+            _mainAppSurface->relayout();
+    }
+}
+
 - (BOOL)validateMenuAction:(SEL)action
 {
     if (action == @selector(openSettingsMenuAction:) ||
+        action == @selector(showKeyboardShortcutsMenuAction:) ||
         action == @selector(addRoomMenuAction:) ||
         action == @selector(searchAllMessagesMenuAction:) ||
         action == @selector(openQuickSwitcherMenuAction:))

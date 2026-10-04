@@ -1,4 +1,5 @@
 #include "DatePickerView.h"
+#include "shortcut_registry.h"
 
 #include "tk/host.h"
 #include "tk/i18n.h"
@@ -794,14 +795,28 @@ bool DatePickerView::on_key_down(const tk::KeyEvent& e)
         return true;
     }
 
-    if (e.key == tk::Key::PageUp || e.key == tk::Key::PageDown)
+    if (matches(ShortcutId::DatePrevMonth, e))
     {
-        const int dir = e.key == tk::Key::PageDown ? 1 : -1;
-        move_cursor_months_(e.shift ? dir * 12 : dir);
+        move_cursor_months_(-1);
+        return true;
+    }
+    if (matches(ShortcutId::DateNextMonth, e))
+    {
+        move_cursor_months_(1);
+        return true;
+    }
+    if (matches(ShortcutId::DatePrevYear, e))
+    {
+        move_cursor_months_(-12);
+        return true;
+    }
+    if (matches(ShortcutId::DateNextYear, e))
+    {
+        move_cursor_months_(12);
         return true;
     }
 
-    if (e.key == tk::Key::Character && (e.text == "t" || e.text == "T"))
+    if (matches(ShortcutId::DateToday, e))
     {
         int ty, tm, td;
         today(ty, tm, td);

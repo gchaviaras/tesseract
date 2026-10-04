@@ -5056,3 +5056,207 @@ msgstr "Mitglied {0} von {1}"
 
 msgid "Screen {0}"
 msgstr "Bildschirm {0}"
+
+msgid "Activate the focused control"
+msgstr "Fokussiertes Steuerelement aktivieren"
+
+msgid "Alt"
+msgstr "Alt"
+
+msgid "Backspace"
+msgstr "Rücktaste"
+
+msgid "Choose a skin tone for the selected emoji"
+msgstr "Hautton für das ausgewählte Emoji wählen"
+
+msgid "Choose the highlighted suggestion"
+msgstr "Hervorgehobenen Vorschlag übernehmen"
+
+msgid "Close the open dialog, panel or menu"
+msgstr "Offenen Dialog, Bereich oder Menü schließen"
+
+msgid "Copy the selected text or message"
+msgstr "Ausgewählten Text oder Nachricht kopieren"
+
+msgid "Ctrl"
+msgstr "Strg"
+
+msgid "Cycle through recent rooms"
+msgstr "Letzte Räume durchlaufen"
+
+msgid "Cycle through recent rooms backward"
+msgstr "Letzte Räume rückwärts durchlaufen"
+
+msgid "Date picker"
+msgstr "Datumsauswahl"
+
+msgid "Delete"
+msgstr "Entf"
+
+msgid "Edit your last message (in an empty message box)"
+msgstr "Deine letzte Nachricht bearbeiten (in einem leeren Nachrichtenfeld)"
+
+msgid "End"
+msgstr "Ende"
+
+msgid "Enter"
+msgstr "Eingabe"
+
+msgid "Esc"
+msgstr "Esc"
+
+msgid "Find in this room"
+msgstr "In diesem Raum suchen"
+
+msgid "Fit the image to the window"
+msgstr "Bild an Fenster anpassen"
+
+msgid "Go back to the message box"
+msgstr "Zurück zum Nachrichtenfeld"
+
+msgid "Go back to the previous room"
+msgstr "Zurück zum vorherigen Raum"
+
+msgid "Go forward to the next room"
+msgstr "Weiter zum nächsten Raum"
+
+msgid "Go to the start / end of the week"
+msgstr "Zum Anfang / Ende der Woche"
+
+msgid "Go to today"
+msgstr "Zu heute springen"
+
+msgid "Help"
+msgstr "Hilfe"
+
+msgid "Home"
+msgstr "Pos1"
+
+msgid "Image and video viewer"
+msgstr "Bild- und Videobetrachter"
+
+msgid "Jump to a room"
+msgstr "Zu einem Raum springen"
+
+msgid "Keyboard Shortcuts"
+msgstr "Tastenkürzel"
+
+msgid "Keyboard Shortcuts…"
+msgstr "Tastenkürzel …"
+
+msgid "Menu"
+msgstr "Menü"
+
+msgid "Message box"
+msgstr "Nachrichtenfeld"
+
+msgid "Move a page of messages up / down"
+msgstr "Eine Seite Nachrichten nach oben / unten"
+
+msgid "Move by day / week"
+msgstr "Um einen Tag / eine Woche bewegen"
+
+msgid "Move through suggestions and results"
+msgstr "Durch Vorschläge und Ergebnisse bewegen"
+
+msgid "Move to the next / previous control"
+msgstr "Zum nächsten / vorherigen Steuerelement"
+
+msgid "Navigation"
+msgstr "Navigation"
+
+msgid "Next year"
+msgstr "Nächstes Jahr"
+
+msgid "Open the menu for the focused item"
+msgstr "Menü des fokussierten Elements öffnen"
+
+msgid "Open the selected part or the message's actions"
+msgstr "Ausgewählten Teil oder Nachrichtenaktionen öffnen"
+
+msgid "Page Down"
+msgstr "Bild ab"
+
+msgid "Page Up"
+msgstr "Bild auf"
+
+msgid "Pan a zoomed image"
+msgstr "Vergrößertes Bild verschieben"
+
+msgid "Pick the selected date"
+msgstr "Ausgewähltes Datum übernehmen"
+
+msgid "Pickers and lists"
+msgstr "Auswahlfenster und Listen"
+
+msgid "Play / pause a video"
+msgstr "Video abspielen / pausieren"
+
+msgid "Previous year"
+msgstr "Vorheriges Jahr"
+
+msgid "Remove the selected room from the space"
+msgstr "Ausgewählten Raum aus dem Space entfernen"
+
+msgid "Restart the video"
+msgstr "Video neu starten"
+
+msgid "Scroll to the top / bottom"
+msgstr "Nach ganz oben / unten scrollen"
+
+msgid "Scroll up / down a page"
+msgstr "Eine Seite nach oben / unten scrollen"
+
+msgid "Search your messages"
+msgstr "Deine Nachrichten durchsuchen"
+
+msgid "Select the newest message"
+msgstr "Neueste Nachricht auswählen"
+
+msgid "Select the oldest loaded message"
+msgstr "Älteste geladene Nachricht auswählen"
+
+msgid "Select the previous / next message"
+msgstr "Vorherige / nächste Nachricht auswählen"
+
+msgid "Send the message"
+msgstr "Nachricht senden"
+
+msgid "Shift"
+msgstr "Umschalt"
+
+msgid "Show keyboard shortcuts"
+msgstr "Tastenkürzel anzeigen"
+
+msgid "Show room info"
+msgstr "Rauminfo anzeigen"
+
+msgid "Skip back 5 seconds"
+msgstr "5 Sekunden zurück"
+
+msgid "Skip forward 5 seconds"
+msgstr "5 Sekunden vor"
+
+msgid "Space"
+msgstr "Leertaste"
+
+msgid "Start a new line"
+msgstr "Neue Zeile beginnen"
+
+msgid "Step through links and attachments in a message"
+msgstr "Links und Anhänge einer Nachricht durchgehen"
+
+msgid "Super"
+msgstr "Super"
+
+msgid "Tab"
+msgstr "Tab"
+
+msgid "Win"
+msgstr "Win"
+
+msgid "Zoom in"
+msgstr "Vergrößern"
+
+msgid "Zoom out"
+msgstr "Verkleinern"

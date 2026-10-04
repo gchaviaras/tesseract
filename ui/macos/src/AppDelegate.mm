@@ -7,6 +7,7 @@
 #include "tesseract/launch_args.h"
 #include "tesseract/paths.h"
 #include "tk/single_instance.h"
+#include "views/shortcut_registry.h"
 #include <string>
 #include <utility>
 
@@ -209,6 +210,36 @@ static NSString* const kActivateRoomKey = @"room_id";
     });
 }
 
+// Give a menu item the key equivalent of a shared-registry shortcut, so the
+// menu shows (and fires on) exactly the chord the rest of the app uses.
+static void TkApplyShortcut(NSMenuItem* item, tesseract::views::ShortcutId id)
+{
+    const auto& chords = tesseract::views::shortcut(id).chords;
+    if (chords.empty())
+        return;
+    const tk::KeyChord& c = chords.front();
+    NSString* key = @"";
+    switch (c.key)
+    {
+    case tk::Key::Character:
+        key = [NSString stringWithUTF8String:c.text.c_str()];
+        break;
+    case tk::Key::Tab: key = @"\t"; break;
+    default: return;
+    }
+    NSEventModifierFlags mask = 0;
+    if (c.mods & (tk::ModPrimary | tk::ModMeta))
+        mask |= NSEventModifierFlagCommand;
+    if (c.mods & tk::ModCtrl)
+        mask |= NSEventModifierFlagControl;
+    if (c.mods & tk::ModShift)
+        mask |= NSEventModifierFlagShift;
+    if (c.mods & tk::ModAlt)
+        mask |= NSEventModifierFlagOption;
+    item.keyEquivalent = key;
+    item.keyEquivalentModifierMask = mask;
+}
+
 - (void)_installMenuBar
 {
     NSMenu* mainMenu = [[NSMenu alloc] initWithTitle:@""];
@@ -220,9 +251,10 @@ static NSString* const kActivateRoomKey = @"room_id";
                        action:@selector(orderFrontStandardAboutPanel:)
                 keyEquivalent:@""];
     [appMenu addItem:[NSMenuItem separatorItem]];
-    [appMenu addItemWithTitle:TkTr("Settings\xe2\x80\xa6")
-                       action:@selector(openSettingsMenuAction:)
-                keyEquivalent:@","];
+    TkApplyShortcut([appMenu addItemWithTitle:TkTr("Settings\xe2\x80\xa6")
+                                       action:@selector(openSettingsMenuAction:)
+                                keyEquivalent:@""],
+                    tesseract::views::ShortcutId::Settings);
     [appMenu addItem:[NSMenuItem separatorItem]];
     [appMenu addItemWithTitle:TkTr("Hide Tesseract")
                        action:@selector(hide:)
@@ -270,17 +302,14 @@ static NSString* const kActivateRoomKey = @"room_id";
     NSMenuItem* findItem =
         [editMenu addItemWithTitle:TkTr("Find") action:nil keyEquivalent:@""];
     NSMenu* findMenu = [[NSMenu alloc] initWithTitle:TkTr("Find")];
-    NSMenuItem* findInConvItem =
-        [findMenu addItemWithTitle:TkTr("Find\xe2\x80\xa6")
-                            action:@selector(findInConversationMenuAction:)
-                     keyEquivalent:@"f"];
-    findInConvItem.keyEquivalentModifierMask = NSEventModifierFlagCommand;
-    NSMenuItem* searchAllItem =
-        [findMenu addItemWithTitle:TkTr("Search Your Messages\xe2\x80\xa6")
-                            action:@selector(searchAllMessagesMenuAction:)
-                     keyEquivalent:@"f"];
-    searchAllItem.keyEquivalentModifierMask =
-        NSEventModifierFlagCommand | NSEventModifierFlagShift;
+    TkApplyShortcut([findMenu addItemWithTitle:TkTr("Find\xe2\x80\xa6")
+                                        action:@selector(findInConversationMenuAction:)
+                                 keyEquivalent:@""],
+                    tesseract::views::ShortcutId::FindInRoom);
+    TkApplyShortcut([findMenu addItemWithTitle:TkTr("Search Your Messages\xe2\x80\xa6")
+                                        action:@selector(searchAllMessagesMenuAction:)
+                                 keyEquivalent:@""],
+                    tesseract::views::ShortcutId::SearchMessages);
     findItem.submenu = findMenu;
 
     [editMenu addItem:[NSMenuItem separatorItem]];
@@ -295,31 +324,33 @@ static NSString* const kActivateRoomKey = @"room_id";
     // ── Go menu ───────────────────────────────────────────────────────
     NSMenuItem* goItem = [[NSMenuItem alloc] init];
     NSMenu* goMenu = [[NSMenu alloc] initWithTitle:TkTr("Go")];
-    [goMenu addItemWithTitle:TkTr("Go Back")
-                      action:@selector(goBackMenuAction:)
-               keyEquivalent:@"["];
-    [goMenu addItemWithTitle:TkTr("Go Forward")
-                      action:@selector(goForwardMenuAction:)
-               keyEquivalent:@"]"];
+    using tesseract::views::ShortcutId;
+    TkApplyShortcut([goMenu addItemWithTitle:TkTr("Go Back")
+                                      action:@selector(goBackMenuAction:)
+                               keyEquivalent:@""],
+                    ShortcutId::HistoryBack);
+    TkApplyShortcut([goMenu addItemWithTitle:TkTr("Go Forward")
+                                      action:@selector(goForwardMenuAction:)
+                               keyEquivalent:@""],
+                    ShortcutId::HistoryForward);
     [goMenu addItem:[NSMenuItem separatorItem]];
-    [goMenu addItemWithTitle:TkTr("Quick Switcher\xe2\x80\xa6")
-                      action:@selector(openQuickSwitcherMenuAction:)
-               keyEquivalent:@"k"];
-    [goMenu addItemWithTitle:TkTr("Room Info")
-                      action:@selector(showRoomInfoMenuAction:)
-               keyEquivalent:@"i"];
+    TkApplyShortcut([goMenu addItemWithTitle:TkTr("Quick Switcher\xe2\x80\xa6")
+                                      action:@selector(openQuickSwitcherMenuAction:)
+                               keyEquivalent:@""],
+                    ShortcutId::QuickSwitcher);
+    TkApplyShortcut([goMenu addItemWithTitle:TkTr("Room Info")
+                                      action:@selector(showRoomInfoMenuAction:)
+                               keyEquivalent:@""],
+                    ShortcutId::RoomInfo);
     [goMenu addItem:[NSMenuItem separatorItem]];
-    NSMenuItem* cycleItem =
-        [goMenu addItemWithTitle:TkTr("Cycle Recent Rooms")
-                          action:@selector(cycleRecentRoomsMenuAction:)
-                   keyEquivalent:@"\t"];
-    cycleItem.keyEquivalentModifierMask = NSEventModifierFlagControl;
-    NSMenuItem* cycleBackItem =
-        [goMenu addItemWithTitle:TkTr("Cycle Recent Rooms Backward")
-                          action:@selector(cycleRecentRoomsBackwardMenuAction:)
-                   keyEquivalent:@"\t"];
-    cycleBackItem.keyEquivalentModifierMask =
-        NSEventModifierFlagControl | NSEventModifierFlagShift;
+    TkApplyShortcut([goMenu addItemWithTitle:TkTr("Cycle Recent Rooms")
+                                      action:@selector(cycleRecentRoomsMenuAction:)
+                               keyEquivalent:@""],
+                    ShortcutId::RecentRoomNext);
+    TkApplyShortcut([goMenu addItemWithTitle:TkTr("Cycle Recent Rooms Backward")
+                                      action:@selector(cycleRecentRoomsBackwardMenuAction:)
+                               keyEquivalent:@""],
+                    ShortcutId::RecentRoomPrev);
     goItem.submenu = goMenu;
     [mainMenu addItem:goItem];
 
@@ -335,6 +366,17 @@ static NSString* const kActivateRoomKey = @"room_id";
     winItem.submenu = winMenu;
     [mainMenu addItem:winItem];
     NSApp.windowsMenu = winMenu;
+
+    // ── Help menu ─────────────────────────────────────────────────────
+    NSMenuItem* helpItem = [[NSMenuItem alloc] init];
+    NSMenu* helpMenu = [[NSMenu alloc] initWithTitle:TkTr("Help")];
+    TkApplyShortcut([helpMenu addItemWithTitle:TkTr("Keyboard Shortcuts")
+                                        action:@selector(showKeyboardShortcutsMenuAction:)
+                                 keyEquivalent:@""],
+                    ShortcutId::ShowShortcuts);
+    helpItem.submenu = helpMenu;
+    [mainMenu addItem:helpItem];
+    NSApp.helpMenu = helpMenu;
 
     NSApp.mainMenu = mainMenu;
 }
@@ -434,6 +476,10 @@ static NSString* const kActivateRoomKey = @"room_id";
 {
     [_windowController cycleRecentRoomsBackwardMenuAction:sender];
 }
+- (void)showKeyboardShortcutsMenuAction:(id)sender
+{
+    [_windowController showKeyboardShortcutsMenuAction:sender];
+}
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
 {
@@ -447,7 +493,8 @@ static NSString* const kActivateRoomKey = @"room_id";
         action == @selector(openQuickSwitcherMenuAction:) ||
         action == @selector(showRoomInfoMenuAction:) ||
         action == @selector(cycleRecentRoomsMenuAction:) ||
-        action == @selector(cycleRecentRoomsBackwardMenuAction:))
+        action == @selector(cycleRecentRoomsBackwardMenuAction:) ||
+        action == @selector(showKeyboardShortcutsMenuAction:))
     {
         return [_windowController validateMenuAction:action];
     }

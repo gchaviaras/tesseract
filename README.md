@@ -133,10 +133,11 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - Light / dark / system themes
 - Windows: installable via the Microsoft Store, direct sideload (MSIX), NSIS, or `winget install Tesseract.Matrix`; taskbar unread/mention overlays, thumbnail controls, and Jump Lists
 - Linux: system-wide room/contact search via GNOME Shell search and KRunner; MPRIS media controls for voice/audio playback; installable via a self-hosted Flatpak repo (not Flathub — see [packaging/flatpak/README.md](packaging/flatpak/README.md)), plus DEB/RPM/AppImage/AUR
-- macOS: Now Playing integration for voice/audio playback; rooms and contacts indexed for Spotlight search; every keyboard-shortcut action (Settings, Add Room, Find, Search Your Messages, Go Back/Forward, Quick Switcher, Cycle Recent Rooms) has an application menu-bar entry
+- macOS: Now Playing integration for voice/audio playback; rooms and contacts indexed for Spotlight search; every keyboard-shortcut action (Settings, Add Room, Find, Search Your Messages, Go Back/Forward, Quick Switcher, Room Info, Cycle Recent Rooms, Keyboard Shortcuts) has an application menu-bar entry
 
 ## Quick usage reference 
 #### All this is probably going to change, but it wasn't written anywhere.
+- Ctrl+/ (⌘/ on macOS) or F1 = list every keyboard shortcut (also in the user menu; Help menu on macOS)
 - Ctrl+click on room = open room in a tab
 - Ctrl+click on a room tab = open room in a separate window
 - Right click on the user info (bottom left) to add an account or open settings

@@ -8098,6 +8098,10 @@ std::vector<ShellBase::UserMenuItem> ShellBase::build_user_menu_items_(
 {
     std::vector<UserMenuItem> items;
     items.push_back({tk::tr("Settings\xe2\x80\xa6"),    std::move(open_settings)});
+    // Opened in the shared tree, so no shell needs its own callback for it.
+    if (main_app_)
+        items.push_back({tk::tr("Keyboard Shortcuts\xe2\x80\xa6"),
+                         [app = main_app_] { app->show_keyboard_shortcuts(); }});
     if (verify_session)
         items.push_back({tk::tr("Verify this session\xe2\x80\xa6"), std::move(verify_session)});
     items.push_back({tk::tr("Add Account\xe2\x80\xa6"), std::move(add_account)});

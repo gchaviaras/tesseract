@@ -1,4 +1,5 @@
 #include "SpaceChildRoomGrid.h"
+#include "shortcut_registry.h"
 #include "media_utils.h"
 
 #include "tk/drag_gesture.h"
@@ -115,7 +116,7 @@ public:
     {
         if (tk::GridView::on_key_down(e))
             return true; // preserves arrow/Enter/Space navigation
-        if (owner && owner->can_manage_ && e.key == tk::Key::Delete &&
+        if (owner && owner->can_manage_ && matches(ShortcutId::RemoveFromSpace, e) &&
             selected_index() >= 0)
         {
             if (on_delete_requested)

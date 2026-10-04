@@ -24,6 +24,7 @@
 #include "tk/theme.h"
 #include "tk/video_decode.h"
 #include "views/media_drop.h"
+#include "views/shortcut_registry.h"
 #include "views/text_util.h"
 
 #include <cairo.h>
@@ -37,6 +38,7 @@
 #include <tesseract/visual.h>
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <cmath>
@@ -2069,80 +2071,40 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         gtk_widget_add_controller(window_, key_ctl);
     }
 
-    // Ctrl+K opens the quick switcher. A global-scope GtkShortcutController
-    // fires even while a native entry / text view holds focus — the bubble-
-    // phase key controller above lets the focused widget swallow Ctrl+K first.
+    // Global shortcuts (Ctrl+K, Ctrl+F, Ctrl+Tab, Alt+Left, Ctrl+/, ...),
+    // bound from the shared registry. A global-scope GtkShortcutController
+    // fires even while a native entry / text view holds focus (the
+    // bubble-phase key controller above would let the focused widget
+    // swallow them first). Capture phase, so these also win over the focused
+    // text widget's own key bindings (GtkText/GtkTextView bind Ctrl+/ to
+    // select-all), the way Qt's application shortcuts do. Each forwards the chord's KeyEvent into
+    // the widget tree, and MainAppWidget decides what it does. Ctrl+Tab's
+    // commit-on-Ctrl-release is handled by key_ctl's key-released signal
+    // above — GtkShortcutController only ever fires on key-down/repeat.
     {
         GtkEventController* sc = gtk_shortcut_controller_new();
         gtk_shortcut_controller_set_scope(GTK_SHORTCUT_CONTROLLER(sc),
                                           GTK_SHORTCUT_SCOPE_GLOBAL);
-        GtkShortcut* shortcut = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_k, GDK_CONTROL_MASK),
-            gtk_callback_action_new(on_quick_switch_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             shortcut);
-
-        // Ctrl+Shift+F: open global message search. GTK normalizes a shifted
-        // key event to the unshifted lowercase keyval before matching, so the
-        // trigger keyval must be lowercase `f` (mirrors the Ctrl+K trigger).
-        GtkShortcut* search_sc = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_f,
-                                   GdkModifierType(GDK_CONTROL_MASK |
-                                                   GDK_SHIFT_MASK)),
-            gtk_callback_action_new(on_message_search_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             search_sc);
-
-        // Ctrl+F: open per-room "find in conversation".
-        GtkShortcut* fir_sc = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_f, GDK_CONTROL_MASK),
-            gtk_callback_action_new(on_find_in_room_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             fir_sc);
-
-        GtkShortcut* info_sc = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_i, GDK_CONTROL_MASK),
-            gtk_callback_action_new(on_room_info_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             info_sc);
-        GtkShortcut* settings_sc = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_comma, GDK_CONTROL_MASK),
-            gtk_callback_action_new(on_settings_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             settings_sc);
-
-        GtkShortcut* back_sc = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_Left, GDK_ALT_MASK),
-            gtk_callback_action_new(on_nav_back_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             back_sc);
-
-        GtkShortcut* fwd_sc = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_Right, GDK_ALT_MASK),
-            gtk_callback_action_new(on_nav_fwd_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             fwd_sc);
-
-        // Ctrl+Tab / Ctrl+Shift+Tab: MRU room switcher (Alt-Tab-style — see
-        // MruSwitcher.h). Committing on Ctrl-release is handled separately,
-        // by the window-scoped key-released signal on key_ctl above (see its
-        // own doc comment) — GtkShortcutController only ever fires on
-        // key-down/repeat.
-        GtkShortcut* mru_next_sc = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_Tab, GDK_CONTROL_MASK),
-            gtk_callback_action_new(on_mru_next_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             mru_next_sc);
-        // GTK reports Shift+Tab as the distinct keyval GDK_KEY_ISO_Left_Tab,
-        // not GDK_KEY_Tab with the shift bit set — mirrors how
-        // host_gtk.cpp's own key_from_gdk() distinguishes Key::Tab from
-        // Key::Backtab.
-        GtkShortcut* mru_prev_sc = gtk_shortcut_new(
-            gtk_keyval_trigger_new(GDK_KEY_ISO_Left_Tab, GDK_CONTROL_MASK),
-            gtk_callback_action_new(on_mru_prev_shortcut_, this, nullptr));
-        gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
-                                             mru_prev_sc);
-
+        gtk_event_controller_set_propagation_phase(sc, GTK_PHASE_CAPTURE);
+        for (const auto& def : tesseract::views::shortcuts())
+        {
+            if (def.scope == tesseract::views::ShortcutScope::Contextual)
+                continue;
+            for (const auto& chord : def.chords)
+            {
+                GtkShortcutTrigger* trigger = gtk_trigger_from_chord_(chord);
+                if (!trigger)
+                    continue;
+                auto* binding = new ShortcutBinding_{this, tk::to_key_event(chord)};
+                GtkShortcut* shortcut = gtk_shortcut_new(
+                    trigger,
+                    gtk_callback_action_new(
+                        on_registry_shortcut_, binding,
+                        [](gpointer data) { delete static_cast<ShortcutBinding_*>(data); }));
+                gtk_shortcut_controller_add_shortcut(GTK_SHORTCUT_CONTROLLER(sc),
+                                                     shortcut);
+            }
+        }
         gtk_widget_add_controller(window_, sc);
     }
 
@@ -5905,37 +5867,6 @@ void MainWindow::on_msg_right_click_(GtkGestureClick* gesture, int /*n_press*/,
     gtk_popover_popup(GTK_POPOVER(self->sticker_ctx_menu_));
 }
 
-gboolean MainWindow::on_quick_switch_shortcut_(GtkWidget*, GVariant*,
-                                               gpointer user_data)
-{
-    auto* self = static_cast<MainWindow*>(user_data);
-    if (self->main_app_)
-    {
-        tk::KeyEvent event{};
-        event.key = tk::Key::Character;
-        event.text = "k";
-        event.ctrl = true;
-        self->main_app_->dispatch_key_down(event);
-    }
-    return TRUE;
-}
-
-gboolean MainWindow::on_message_search_shortcut_(GtkWidget*, GVariant*,
-                                                 gpointer user_data)
-{
-    auto* self = static_cast<MainWindow*>(user_data);
-    if (self->main_app_)
-    {
-        tk::KeyEvent event{};
-        event.key = tk::Key::Character;
-        event.text = "f";
-        event.ctrl = true;
-        event.shift = true;
-        self->main_app_->dispatch_key_down(event);
-    }
-    return TRUE;
-}
-
 void MainWindow::open_find_in_room_()
 {
     if (!main_app_ || !main_app_->room_view())
@@ -5955,98 +5886,49 @@ void MainWindow::close_find_in_room_()
         main_app_surface_->relayout();
 }
 
-void MainWindow::forward_ctrl_char_(const char* ch)
+// A registry chord as a GTK trigger; null for keys not bound here.
+GtkShortcutTrigger* MainWindow::gtk_trigger_from_chord_(const tk::KeyChord& chord)
 {
-    if (!main_app_)
-        return;
-    tk::KeyEvent event{};
-    event.key = tk::Key::Character;
-    event.text = ch;
-    event.ctrl = true;
-    main_app_->dispatch_key_down(event);
-}
-
-gboolean MainWindow::on_room_info_shortcut_(GtkWidget*, GVariant*, gpointer user_data)
-{
-    static_cast<MainWindow*>(user_data)->forward_ctrl_char_("i");
-    return TRUE;
-}
-
-gboolean MainWindow::on_settings_shortcut_(GtkWidget*, GVariant*, gpointer user_data)
-{
-    static_cast<MainWindow*>(user_data)->forward_ctrl_char_(",");
-    return TRUE;
-}
-
-gboolean MainWindow::on_find_in_room_shortcut_(GtkWidget*, GVariant*,
-                                               gpointer user_data)
-{
-    auto* self = static_cast<MainWindow*>(user_data);
-    if (self->main_app_)
+    guint keyval = 0;
+    unsigned mods = 0;
+    if (chord.mods & (tk::ModPrimary | tk::ModCtrl))
+        mods |= GDK_CONTROL_MASK;
+    if (chord.mods & tk::ModAlt)
+        mods |= GDK_ALT_MASK;
+    if (chord.mods & tk::ModMeta)
+        mods |= GDK_META_MASK;
+    // Shift+Tab is its own keyval (below), so it carries no Shift bit.
+    if ((chord.mods & tk::ModShift) && chord.key != tk::Key::Tab)
+        mods |= GDK_SHIFT_MASK;
+    switch (chord.key)
     {
-        tk::KeyEvent event{};
-        event.key = tk::Key::Character;
-        event.text = "f";
-        event.ctrl = true;
-        self->main_app_->dispatch_key_down(event);
+    case tk::Key::Character:
+        // GTK normalizes a shifted key event to the unshifted lowercase
+        // keyval before matching, so letter triggers use the lowercase keyval.
+        if (chord.text.size() == 1)
+            keyval = gdk_unicode_to_keyval(static_cast<guint32>(
+                std::tolower(static_cast<unsigned char>(chord.text.front()))));
+        break;
+    case tk::Key::Tab:
+        // GTK reports Shift+Tab as the distinct keyval GDK_KEY_ISO_Left_Tab
+        // (as host_gtk.cpp's key_from_gdk does), not Tab plus the shift bit.
+        keyval = (chord.mods & tk::ModShift) ? GDK_KEY_ISO_Left_Tab : GDK_KEY_Tab;
+        break;
+    case tk::Key::Left: keyval = GDK_KEY_Left; break;
+    case tk::Key::Right: keyval = GDK_KEY_Right; break;
+    case tk::Key::F1: keyval = GDK_KEY_F1; break;
+    default: break;
     }
-    return TRUE;
+    if (keyval == 0 || keyval == GDK_KEY_VoidSymbol)
+        return nullptr;
+    return gtk_keyval_trigger_new(keyval, static_cast<GdkModifierType>(mods));
 }
 
-gboolean MainWindow::on_nav_back_shortcut_(GtkWidget*, GVariant*,
-                                           gpointer user_data)
+gboolean MainWindow::on_registry_shortcut_(GtkWidget*, GVariant*, gpointer user_data)
 {
-    auto* self = static_cast<MainWindow*>(user_data);
-    if (self->main_app_)
-    {
-        tk::KeyEvent event{};
-        event.key = tk::Key::Left;
-        event.alt = true;
-        self->main_app_->dispatch_key_down(event);
-    }
-    return TRUE;
-}
-
-gboolean MainWindow::on_nav_fwd_shortcut_(GtkWidget*, GVariant*,
-                                          gpointer user_data)
-{
-    auto* self = static_cast<MainWindow*>(user_data);
-    if (self->main_app_)
-    {
-        tk::KeyEvent event{};
-        event.key = tk::Key::Right;
-        event.alt = true;
-        self->main_app_->dispatch_key_down(event);
-    }
-    return TRUE;
-}
-
-gboolean MainWindow::on_mru_next_shortcut_(GtkWidget*, GVariant*,
-                                           gpointer user_data)
-{
-    auto* self = static_cast<MainWindow*>(user_data);
-    if (self->main_app_)
-    {
-        tk::KeyEvent event{};
-        event.key = tk::Key::Tab;
-        event.ctrl = true;
-        self->main_app_->dispatch_key_down(event);
-    }
-    return TRUE;
-}
-
-gboolean MainWindow::on_mru_prev_shortcut_(GtkWidget*, GVariant*,
-                                           gpointer user_data)
-{
-    auto* self = static_cast<MainWindow*>(user_data);
-    if (self->main_app_)
-    {
-        tk::KeyEvent event{};
-        event.key = tk::Key::Tab;
-        event.ctrl = true;
-        event.shift = true;
-        self->main_app_->dispatch_key_down(event);
-    }
+    auto* binding = static_cast<ShortcutBinding_*>(user_data);
+    if (binding->self->main_app_)
+        binding->self->main_app_->dispatch_key_down(binding->event);
     return TRUE;
 }
 

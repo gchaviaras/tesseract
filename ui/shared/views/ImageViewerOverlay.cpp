@@ -1,4 +1,5 @@
 #include "ImageViewerOverlay.h"
+#include "shortcut_registry.h"
 #include "icons.h"
 #include "media_utils.h"
 
@@ -437,25 +438,21 @@ bool ImageViewerOverlay::on_wheel(tk::Point local, float /*dx*/, float dy, bool 
 
 bool ImageViewerOverlay::on_content_key_(const tk::KeyEvent& e)
 {
-    if (e.alt || e.meta || (e.ctrl && e.key != tk::Key::Character))
-        return false;
     const tk::Rect b = bounds();
     const tk::Point centre_local{b.w * 0.5f, b.h * 0.5f};
-    if (e.key == tk::Key::Character)
+    if (matches(ShortcutId::ImageZoomIn, e))
+        return on_wheel(centre_local, 0.0f, -1.0f, false);
+    if (matches(ShortcutId::ImageZoomOut, e))
+        return on_wheel(centre_local, 0.0f, 1.0f, false);
+    if (matches(ShortcutId::ImageFit, e))
     {
-        if (e.text == "+" || e.text == "=")
-            return on_wheel(centre_local, 0.0f, -1.0f, false); // zoom in
-        if (e.text == "-")
-            return on_wheel(centre_local, 0.0f, 1.0f, false); // zoom out
-        if (e.text == "0")
-        {
-            zoom_ = fit_zoom_;
-            pan_x_ = 0.0f;
-            pan_y_ = 0.0f;
-            return true;
-        }
-        return false;
+        zoom_ = fit_zoom_;
+        pan_x_ = 0.0f;
+        pan_y_ = 0.0f;
+        return true;
     }
+    if (e.alt || e.meta || e.ctrl)
+        return false;
     constexpr float kPanStep = 48.0f;
     float dx = 0.0f, dy = 0.0f;
     switch (e.key)

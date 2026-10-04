@@ -28,6 +28,7 @@
 // compose_text_area_rect().
 
 #include "ConfirmDialog.h"
+#include "KeyboardShortcutsOverlay.h"
 #include "ExportHistoryDialog.h"
 #include "CameraWidget.h"
 #include "EncryptionSetupOverlay.h"
@@ -183,6 +184,16 @@ public:
     void cancel_mru_cycle();
     bool mru_cycle_active() const;
     MruSwitcher* mru_switcher() const { return mru_switcher_; }
+
+    // ── Keyboard shortcuts overlay (Ctrl+/ / F1) ─────────────────────────
+
+    // Opens the read-only list of keyboard shortcuts (the user-menu and
+    // macOS Help-menu route; the keys toggle it via on_key_down).
+    void show_keyboard_shortcuts();
+    KeyboardShortcutsOverlay* keyboard_shortcuts_overlay() const
+    {
+        return shortcuts_overlay_;
+    }
 
     // ── Message search (Ctrl+Shift+F) ─────────────────────────────────────
 
@@ -450,6 +461,9 @@ private:
     // dismissing it never cancels an in-progress export — see
     // ExportHistoryDialog.h's class doc.
     ExportHistoryDialog* export_history_dialog_ = nullptr;
+
+    // Read-only keyboard shortcuts list (Ctrl+/ / F1).
+    KeyboardShortcutsOverlay* shortcuts_overlay_ = nullptr;
 
     // Ctrl+K quick switcher — topmost overlay (added/painted after everything
     // else). Hidden until show_quick_switch(true).

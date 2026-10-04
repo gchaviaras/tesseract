@@ -31,6 +31,7 @@ using std::min;
 #include "tk/canvas.h"
 #include "tk/host.h"
 #include "tk/host_win32.h"
+#include "tk/key_chord.h"
 #include "views/format.h"
 #include "views/BrandView.h"
 #include "views/MainAppWidget.h"
@@ -626,20 +627,26 @@ private:
                              std::shared_ptr<bool> target_alive = nullptr)
         override;
 
-    static constexpr int IDC_QUICK_SWITCH = 130;
-    static constexpr int IDC_NAV_BACK = 131;
-    static constexpr int IDC_NAV_FWD  = 132;
-    static constexpr int IDC_MESSAGE_SEARCH = 133;
-    static constexpr int IDC_FIND_IN_ROOM = 134;
-    static constexpr int IDC_MRU_NEXT = 135; // Ctrl+Tab
-    static constexpr int IDC_MRU_PREV = 136; // Ctrl+Shift+Tab
-    static constexpr int IDC_ROOM_INFO = 137; // Ctrl+I
-    static constexpr int IDC_SETTINGS  = 138; // Ctrl+,
+    // WM_COMMAND ids IDC_SHORTCUT_BASE + i are the global shortcuts from
+    // views/shortcut_registry.h; accel_events_[i] is the KeyEvent the i-th
+    // forwards to main_app_->dispatch_key_down.
+    static constexpr int IDC_SHORTCUT_BASE = 130;
+    static constexpr std::size_t kMaxShortcuts = 64;
+    std::vector<tk::KeyEvent> accel_events_;
+    // A registry chord as an accelerator (fVirt + key); false when it has
+    // no accelerator form on the active keyboard layout.
+    static bool accel_from_chord_(const tk::KeyChord& chord, ACCEL& out);
 
-    // Application accelerator table (Ctrl+K → quick switcher). Built in
-    // on_create, applied by pre_translate_message so the shortcut fires even
-    // while the compose / search edit controls have focus.
+    // Accelerator tables built from the registry by rebuild_accelerators_
+    // (on create, and again when the keyboard layout changes), applied by
+    // pre_translate_message so the shortcuts fire even while the compose /
+    // search edit controls have focus. accel_: every global shortcut, for
+    // this window; accel_app_: Application-scoped ones only, for pop-outs.
+    void rebuild_accelerators_();
+    void destroy_accelerators_();
     HACCEL accel_ = nullptr;
+    HACCEL accel_app_ = nullptr;
+    HKL accel_layout_ = nullptr; // layout the tables were built for
 };
 
 } // namespace win32

@@ -2,10 +2,10 @@
 
 #include "icons.h"
 #include "media_utils.h"
+#include "shortcut_registry.h"
 #include "sidebar_metrics.h"
 #include "tk/access_tree.h"
 #include "tk/i18n.h"
-#include "tk/key_shortcuts.h"
 #include "tk/keyboard_target.h"
 #include "tk/layout.h"
 #include "tk/svg.h"
@@ -1163,6 +1163,13 @@ MainAppWidget::MainAppWidget()
     auto export_dialog = std::make_unique<ExportHistoryDialog>();
     export_history_dialog_ = overlay_stack_->add_child(std::move(export_dialog));
 
+    // Keyboard shortcuts list — same open()/close()-gated treatment.
+    shortcuts_overlay_ = overlay_stack_->add_child(
+        tk::create_root_widget<KeyboardShortcutsOverlay>(host));
+    shortcuts_overlay_->on_layout_changed = [this]() {
+        notify_layout_changed_();
+    };
+
     // Ctrl+K quick switcher — added last so it paints above (and hit-tests
     // before) every other overlay. Hidden until show_quick_switch(true).
     auto qs = tk::create_root_widget<QuickSwitcher>(host);
@@ -1344,7 +1351,7 @@ void MainAppWidget::set_room_visible_(bool visible)
 
 bool MainAppWidget::handle_primary_shortcut_(const tk::KeyEvent& event)
 {
-    if (tk::primary_shortcut(event) && tk::shortcut_char(event, 'k') && !event.shift)
+    if (matches(ShortcutId::QuickSwitcher, event))
     {
         if (on_quick_switch_shortcut)
         {
@@ -1358,9 +1365,20 @@ bool MainAppWidget::handle_primary_shortcut_(const tk::KeyEvent& event)
     const bool covered =
         host() && (host()->focus_scope() || host()->popup() ||
                    tk::find_topmost_modal(this) != nullptr);
+    // Ctrl+/ / Cmd+/ or F1 toggles the keyboard shortcuts overlay. Opening
+    // it is inert while something else covers the app, like Ctrl+I; the
+    // overlay itself is one of those covers, so the same key closes it.
+    if (matches(ShortcutId::ShowShortcuts, event))
+    {
+        if (shortcuts_overlay_ && shortcuts_overlay_->is_open())
+            shortcuts_overlay_->close();
+        else if (!covered)
+            show_keyboard_shortcuts();
+        return true;
+    }
     // Ctrl+I / Cmd+I: room info for the open room — the keyboard route to
     // everything that panel hosts (settings, invite, members, media, ...).
-    if (tk::primary_shortcut(event) && tk::shortcut_char(event, 'i') && !event.shift)
+    if (matches(ShortcutId::RoomInfo, event))
     {
         if (!covered && room_view_ && room_view_->has_room() && room_view_->visible())
         {
@@ -1369,41 +1387,38 @@ bool MainAppWidget::handle_primary_shortcut_(const tk::KeyEvent& event)
         }
     }
     // Ctrl+, / Cmd+, (the platform-standard preferences chord).
-    if (tk::primary_shortcut(event) && event.key == tk::Key::Character &&
-        event.text == "," && !event.shift && on_settings_shortcut)
+    if (matches(ShortcutId::Settings, event) && on_settings_shortcut)
     {
         if (!covered)
             on_settings_shortcut();
         return true;
     }
-    if (tk::primary_shortcut(event) && tk::shortcut_char(event, 'f'))
+    if (matches(ShortcutId::SearchMessages, event))
     {
-        if (event.shift)
+        if (on_message_search_shortcut)
         {
-            if (on_message_search_shortcut)
-            {
-                on_message_search_shortcut();
-                return true;
-            }
-        }
-        else if (on_find_in_room_shortcut)
-        {
-            on_find_in_room_shortcut();
+            on_message_search_shortcut();
             return true;
         }
+    }
+    else if (matches(ShortcutId::FindInRoom, event) && on_find_in_room_shortcut)
+    {
+        on_find_in_room_shortcut();
+        return true;
     }
     return false;
 }
 
 bool MainAppWidget::handle_mru_shortcut_(const tk::KeyEvent& event)
 {
-    if (!event.ctrl || event.key != tk::Key::Tab)
+    const bool next = matches(ShortcutId::RecentRoomNext, event);
+    if (!next && !matches(ShortcutId::RecentRoomPrev, event))
     {
         return false;
     }
     if (mru_cycle_active())
     {
-        advance_mru_cycle(event.shift ? -1 : +1);
+        advance_mru_cycle(next ? +1 : -1);
     }
     else
     {
@@ -1414,16 +1429,7 @@ bool MainAppWidget::handle_mru_shortcut_(const tk::KeyEvent& event)
 
 bool MainAppWidget::handle_history_shortcut_(const tk::KeyEvent& event)
 {
-    const bool linux_windows_back = event.alt && !event.ctrl && !event.meta &&
-        event.key == tk::Key::Left;
-    const bool linux_windows_forward = event.alt && !event.ctrl && !event.meta &&
-        event.key == tk::Key::Right;
-    const bool mac_back = event.meta && !event.ctrl && !event.alt && !event.shift &&
-        event.key == tk::Key::Character && event.text == "[";
-    const bool mac_forward = event.meta && !event.ctrl && !event.alt && !event.shift &&
-        event.key == tk::Key::Character && event.text == "]";
-
-    if (linux_windows_back || mac_back)
+    if (matches(ShortcutId::HistoryBack, event))
     {
         if (on_history_back_shortcut)
         {
@@ -1431,7 +1437,7 @@ bool MainAppWidget::handle_history_shortcut_(const tk::KeyEvent& event)
             return true;
         }
     }
-    if (linux_windows_forward || mac_forward)
+    if (matches(ShortcutId::HistoryForward, event))
     {
         if (on_history_forward_shortcut)
         {
@@ -1477,6 +1483,12 @@ bool MainAppWidget::dismiss_top_transient_()
         // Escape here means "cancel the switch, stay on the current room" —
         // not just dismiss, hence cancel() rather than close().
         mru_switcher_->cancel();
+        return true;
+    }
+    // Paints above confirm_dialog_ (added to overlay_stack_ after it).
+    if (shortcuts_overlay_ && shortcuts_overlay_->is_open())
+    {
+        shortcuts_overlay_->close();
         return true;
     }
     if (confirm_dialog_ && confirm_dialog_->is_open())
@@ -1539,6 +1551,8 @@ tk::Widget* MainAppWidget::active_transient_overlay_() const
         return message_search_;
     if (quick_switcher_ && quick_switcher_->is_open())
         return quick_switcher_;
+    if (shortcuts_overlay_ && shortcuts_overlay_->is_open())
+        return shortcuts_overlay_;
     if (confirm_dialog_ && confirm_dialog_->is_open())
         return confirm_dialog_;
     if (vid_viewer_ && vid_viewer_->is_open())
@@ -1910,12 +1924,22 @@ void MainAppWidget::show_message_search(bool show)
     }
 }
 
+void MainAppWidget::show_keyboard_shortcuts()
+{
+    if (!shortcuts_overlay_)
+        return;
+    shortcuts_overlay_->open();
+    if (auto* h = host())
+        h->mark_needs_relayout();
+}
+
 // ── Native overlay rect queries ────────────────────────────────────────────
 
 bool MainAppWidget::any_modal_open_() const
 {
     const bool existing_modals =
            (confirm_dialog_    && confirm_dialog_->is_open()) ||
+           (shortcuts_overlay_ && shortcuts_overlay_->is_open()) ||
            (room_view_         && room_view_->is_overlay_open()) ||
            (img_viewer_        && img_viewer_->is_open()) ||
            (vid_viewer_        && vid_viewer_->is_open()) ||

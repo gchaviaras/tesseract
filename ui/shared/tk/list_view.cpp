@@ -1,5 +1,6 @@
 #include "list_view.h"
 #include "host.h"
+#include "key_chord.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1397,7 +1398,7 @@ bool GridView::on_key_down(const KeyEvent& e)
         {
             return false;
         }
-        if (e.key == Key::Enter && e.shift && on_cell_context_requested &&
+        if (chord_matches(cell_secondary_action_chord(), e) && on_cell_context_requested &&
             on_cell_context_requested(selected_index_))
         {
             return true;

@@ -18,6 +18,7 @@
 #include "tk/canvas.h"
 #include "tk/host.h"
 #include "tk/host_gtk.h"
+#include "tk/key_chord.h"
 #include "views/AccountPicker.h"
 #include "views/BrandView.h"
 #include "views/ComposePopups.h"
@@ -219,33 +220,16 @@ private:
     static void on_window_key_released_(GtkEventControllerKey*, guint keyval,
                                         guint, GdkModifierType,
                                         gpointer user_data);
-    // Global-scope Ctrl+K shortcut callback — opens the quick switcher even
-    // while a native entry / text view holds focus.
-    static gboolean on_quick_switch_shortcut_(GtkWidget*, GVariant*,
-                                              gpointer user_data);
-    // Global-scope Ctrl+Shift+F shortcut callback — opens message search.
-    static gboolean on_message_search_shortcut_(GtkWidget*, GVariant*,
-                                                gpointer user_data);
-    // Global-scope Ctrl+F shortcut callback — opens per-room find bar.
-    static gboolean on_find_in_room_shortcut_(GtkWidget*, GVariant*,
-                                              gpointer user_data);
-    // Ctrl+I (room info) / Ctrl+, (Settings) — both forward Ctrl+<ch> to
-    // MainAppWidget::handle_primary_shortcut_ via forward_ctrl_char_().
-    static gboolean on_room_info_shortcut_(GtkWidget*, GVariant*, gpointer);
-    static gboolean on_settings_shortcut_(GtkWidget*, GVariant*, gpointer);
-    void forward_ctrl_char_(const char* ch);
-    // Global-scope Alt+Left / Alt+Right shortcut callbacks — room history nav.
-    static gboolean on_nav_back_shortcut_(GtkWidget*, GVariant*,
-                                          gpointer user_data);
-    static gboolean on_nav_fwd_shortcut_(GtkWidget*, GVariant*,
-                                         gpointer user_data);
-    // Global-scope Ctrl+Tab / Ctrl+Shift+Tab shortcut callbacks — MRU room
-    // switcher (Alt-Tab-style). Ctrl-release (which commits the switch) is
-    // handled separately, by on_window_key_released_ below.
-    static gboolean on_mru_next_shortcut_(GtkWidget*, GVariant*,
-                                          gpointer user_data);
-    static gboolean on_mru_prev_shortcut_(GtkWidget*, GVariant*,
-                                          gpointer user_data);
+    // Global shortcuts bound from views/shortcut_registry.h: each native
+    // binding carries the KeyEvent it forwards to main_app_->
+    // dispatch_key_down (owned by its GtkCallbackAction, freed with it).
+    struct ShortcutBinding_
+    {
+        MainWindow* self;
+        tk::KeyEvent event;
+    };
+    static GtkShortcutTrigger* gtk_trigger_from_chord_(const tk::KeyChord& chord);
+    static gboolean on_registry_shortcut_(GtkWidget*, GVariant*, gpointer user_data);
     static gboolean on_window_close_request_(GtkWindow* window,
                                              gpointer user_data);
 

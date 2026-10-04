@@ -1,6 +1,7 @@
 #include "host.h"
 
 #include "access_tree.h" // find_topmost_modal (modal-scoped Tab traversal)
+#include "key_chord.h"
 #include "scrollable_base.h" // keyboard paging fallback (scroll_by_key)
 #include "controls.h" // tk::Button (dynamic_cast + set_hovered in hover tracking)
 #include "widget.h"
@@ -590,10 +591,9 @@ bool Host::dispatch_key_down(const KeyEvent& event)
         request_repaint();
         return true;
     }
-    const bool context_menu_key =
-        event.key == Key::Menu ||
-        (event.key == Key::F10 && event.shift && !event.ctrl && !event.alt &&
-         !event.meta);
+    bool context_menu_key = false;
+    for (const KeyChord& chord : context_menu_chords())
+        context_menu_key = context_menu_key || chord_matches(chord, event);
     if (context_menu_key)
     {
         if (auto f = focused_widget_.lock())

@@ -35,6 +35,8 @@ ui/
                   EmojiPicker, StickerPicker, AccountPicker;
                   ImageViewerOverlay, VideoViewerOverlay, ShortcodePopup;
                   SettingsView, JoinRoomView, UserInfo;
+                  shortcut_registry (every keyboard shortcut, one table) +
+                  KeyboardShortcutsOverlay (Ctrl+/ / F1 list built from it);
                   EncryptionSetupOverlay (the one encryption dialog: recovery-key
                   setup, unlocking, SAS emoji verification) + EncryptionReminderBanner;
                   html_spans (HTML→TextSpan / →BodyBlocks), table_layout
@@ -103,6 +105,7 @@ Each Catch2 `TEST_CASE` is registered as a separate ctest test. See [docs/BUILD.
 | `ui/shared/tk/host.h` | Per-platform `Host` + `NativeTextField` / `NativeTextArea` canvas-rendered native controls |
 | `ui/shared/tk/widget.h` | Widget tree base: measure → arrange → paint + pointer dispatch |
 | `ui/shared/views/*.h` | Cross-platform views mounted by every native shell |
+| `ui/shared/views/shortcut_registry.h` | The one table of keyboard shortcuts: shells bind global accelerators from it, `MainAppWidget` and shared views match keys with `matches()`, and the Keyboard Shortcuts overlay lists it. Add a new shortcut here, never as a hand-written binding in a shell |
 | `ui/shared/app/ShellBase.h` | Platform-agnostic shell state + pure-virtual hooks shared by all four shells |
 | `ui/shared/app/EventHandlerBase.h` | `IEventHandler` adapter: marshals SDK callbacks → UI thread → `handle_*_ui_()` virtuals |
 | `ui/shared/app/RoomWindowBase.h` | Base for secondary (popout) room windows; each platform shell provides a concrete subclass |

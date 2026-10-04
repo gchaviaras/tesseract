@@ -53,6 +53,7 @@
 - (void)showRoomInfoMenuAction:(id)sender;
 - (void)cycleRecentRoomsMenuAction:(id)sender;
 - (void)cycleRecentRoomsBackwardMenuAction:(id)sender;
+- (void)showKeyboardShortcutsMenuAction:(id)sender;
 
 /// Whether a given menu action selector should be enabled right now.
 /// Consulted from AppDelegate's -validateUserInterfaceItem:.

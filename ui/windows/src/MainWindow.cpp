@@ -5,6 +5,7 @@
 #include "CallWindow.h"
 #include "views/BrandView.h"
 #include "views/media_drop.h"
+#include "views/shortcut_registry.h"
 #include "Win32Notifier.h"
 #include "Win32Autostart.h"
 #include "Win32PowerMonitor.h"
@@ -1274,81 +1275,14 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
         // field is a NativeTextField overlay handled by its set_on_changed
         // lambda. User context menu items invoke callbacks directly in
         // show_user_context_menu_ (no PostMessageW).
-        if (LOWORD(wParam) == IDC_QUICK_SWITCH)
+        // Registry shortcuts (see the accelerator table built in on_create):
+        // forward the chord's KeyEvent; MainAppWidget decides what it does.
+        if (const int idx = LOWORD(wParam) - IDC_SHORTCUT_BASE;
+            idx >= 0 && idx < static_cast<int>(self->accel_events_.size()))
         {
             if (self->main_app_)
-            {
-                tk::KeyEvent event{};
-                event.key = tk::Key::Character;
-                event.text = "k";
-                event.ctrl = true;
-                self->main_app_->dispatch_key_down(event);
-            }
-        }
-        if (LOWORD(wParam) == IDC_MESSAGE_SEARCH)
-        {
-            if (self->main_app_)
-            {
-                tk::KeyEvent event{};
-                event.key = tk::Key::Character;
-                event.text = "f";
-                event.ctrl = true;
-                event.shift = true;
-                self->main_app_->dispatch_key_down(event);
-            }
-        }
-        if (LOWORD(wParam) == IDC_ROOM_INFO || LOWORD(wParam) == IDC_SETTINGS)
-        {
-            if (self->main_app_)
-            {
-                tk::KeyEvent event{};
-                event.key = tk::Key::Character;
-                event.text = LOWORD(wParam) == IDC_ROOM_INFO ? "i" : ",";
-                event.ctrl = true;
-                self->main_app_->dispatch_key_down(event);
-            }
-        }
-        if (LOWORD(wParam) == IDC_FIND_IN_ROOM)
-        {
-            if (self->main_app_)
-            {
-                tk::KeyEvent event{};
-                event.key = tk::Key::Character;
-                event.text = "f";
-                event.ctrl = true;
-                self->main_app_->dispatch_key_down(event);
-            }
-        }
-        if (LOWORD(wParam) == IDC_NAV_BACK)
-        {
-            if (self->main_app_)
-            {
-                tk::KeyEvent event{};
-                event.key = tk::Key::Left;
-                event.alt = true;
-                self->main_app_->dispatch_key_down(event);
-            }
-        }
-        if (LOWORD(wParam) == IDC_NAV_FWD)
-        {
-            if (self->main_app_)
-            {
-                tk::KeyEvent event{};
-                event.key = tk::Key::Right;
-                event.alt = true;
-                self->main_app_->dispatch_key_down(event);
-            }
-        }
-        if (LOWORD(wParam) == IDC_MRU_NEXT || LOWORD(wParam) == IDC_MRU_PREV)
-        {
-            if (self->main_app_)
-            {
-                tk::KeyEvent event{};
-                event.key = tk::Key::Tab;
-                event.ctrl = true;
-                event.shift = (LOWORD(wParam) == IDC_MRU_PREV);
-                self->main_app_->dispatch_key_down(event);
-            }
+                self->main_app_->dispatch_key_down(
+                    self->accel_events_[static_cast<std::size_t>(idx)]);
         }
         return 0;
 
@@ -1774,11 +1708,7 @@ MainWindow::~MainWindow()
     // login_view_ calls cancel_oauth() + joins its worker on destruction.
     // Tear it down while the client pointers are still alive.
     login_view_.reset();
-    if (accel_)
-    {
-        DestroyAcceleratorTable(accel_);
-        accel_ = nullptr;
-    }
+    destroy_accelerators_();
     theme::shutdown();
     if (gdiplus_token_)
     {
@@ -1848,47 +1778,8 @@ bool MainWindow::create(int nCmdShow)
 void MainWindow::on_create(HWND hwnd)
 {
     taskbar_.register_main_window(hwnd, [this] { navigate_tray_unread_(); });
-    // Application accelerator table: Ctrl+K opens the quick switcher even when
-    // a native edit control (compose / search) holds keyboard focus — those
-    // controls eat WM_KEYDOWN before it reaches this window's wnd_proc, so a
-    // plain key handler only fires when the canvas has focus.
-    {
-        ACCEL accs[9]{};
-        accs[0].fVirt = FCONTROL | FVIRTKEY;
-        accs[0].key   = 'K';
-        accs[0].cmd   = IDC_QUICK_SWITCH;
-        accs[1].fVirt = FALT | FVIRTKEY;
-        accs[1].key   = VK_LEFT;
-        accs[1].cmd   = IDC_NAV_BACK;
-        accs[2].fVirt = FALT | FVIRTKEY;
-        accs[2].key   = VK_RIGHT;
-        accs[2].cmd   = IDC_NAV_FWD;
-        accs[3].fVirt = FCONTROL | FSHIFT | FVIRTKEY;
-        accs[3].key   = 'F';
-        accs[3].cmd   = IDC_MESSAGE_SEARCH;
-        accs[4].fVirt = FCONTROL | FVIRTKEY;
-        accs[4].key   = 'F';
-        accs[4].cmd   = IDC_FIND_IN_ROOM;
-        // MRU room switcher (Ctrl+Tab / Ctrl+Shift+Tab): TranslateAccelerator
-        // re-fires WM_COMMAND for every OS key-repeat while held, same as any
-        // other accelerator — that's what lets repeated Tab presses advance
-        // the cycle. Committing on Ctrl-release is handled separately, in
-        // wnd_proc's own WM_KEYUP/WM_SYSKEYUP (see below) — accelerators only
-        // ever fire on key-down.
-        accs[5].fVirt = FCONTROL | FVIRTKEY;
-        accs[5].key   = VK_TAB;
-        accs[5].cmd   = IDC_MRU_NEXT;
-        accs[6].fVirt = FCONTROL | FSHIFT | FVIRTKEY;
-        accs[6].key   = VK_TAB;
-        accs[6].cmd   = IDC_MRU_PREV;
-        accs[7].fVirt = FCONTROL | FVIRTKEY;
-        accs[7].key   = 'I';
-        accs[7].cmd   = IDC_ROOM_INFO;
-        accs[8].fVirt = FCONTROL | FVIRTKEY;
-        accs[8].key   = VK_OEM_COMMA;
-        accs[8].cmd   = IDC_SETTINGS;
-        accel_ = CreateAcceleratorTableW(accs, 9);
-    }
+    // Global-shortcut accelerator tables (see rebuild_accelerators_).
+    rebuild_accelerators_();
 
     Gdiplus::GdiplusStartupInput gsi;
     Gdiplus::GdiplusStartup(&gdiplus_token_, &gsi, nullptr);
@@ -4361,13 +4252,122 @@ void MainWindow::request_attention_()
     FlashWindowEx(&fwi);
 }
 
+bool MainWindow::accel_from_chord_(const tk::KeyChord& chord, ACCEL& out)
+{
+    BYTE virt = FVIRTKEY;
+    if (chord.mods & (tk::ModPrimary | tk::ModCtrl))
+        virt |= FCONTROL;
+    if (chord.mods & tk::ModShift)
+        virt |= FSHIFT;
+    if (chord.mods & tk::ModAlt)
+        virt |= FALT;
+    if (chord.mods & tk::ModMeta)
+        return false; // the Windows key isn't an accelerator modifier
+    WORD key = 0;
+    switch (chord.key)
+    {
+    case tk::Key::Character:
+    {
+        if (chord.text.size() != 1)
+            return false;
+        const char c = chord.text.front();
+        if (c >= 'a' && c <= 'z')
+        {
+            key = static_cast<WORD>(c - 'a' + 'A');
+            break;
+        }
+        // Punctuation: ask the active layout which key types it (`/` is
+        // VK_OEM_2 on US, Shift+7 on German).
+        const SHORT scan = VkKeyScanW(static_cast<WCHAR>(c));
+        if (scan == -1)
+            return false;
+        const BYTE layout_shift = HIBYTE(scan);
+        if (layout_shift & (2 | 4))
+            return false; // needs Ctrl/Alt (AltGr) — no clean accelerator
+        if (layout_shift & 1)
+        {
+            if (!((chord.mods | chord.optional) & tk::ModShift))
+                return false;
+            virt |= FSHIFT;
+        }
+        key = LOBYTE(scan);
+        break;
+    }
+    case tk::Key::Tab: key = VK_TAB; break;
+    case tk::Key::Left: key = VK_LEFT; break;
+    case tk::Key::Right: key = VK_RIGHT; break;
+    case tk::Key::F1: key = VK_F1; break;
+    default: return false;
+    }
+    out.fVirt = virt;
+    out.key = key;
+    return true;
+}
+
+void MainWindow::destroy_accelerators_()
+{
+    for (HACCEL* table : {&accel_, &accel_app_})
+    {
+        if (*table)
+        {
+            DestroyAcceleratorTable(*table);
+            *table = nullptr;
+        }
+    }
+    accel_events_.clear();
+}
+
+// Accelerator tables built from the shared shortcut registry (Ctrl+K,
+// Ctrl+F, Alt+Left, Ctrl+/, F1, ...): accelerators fire even when a native
+// edit control (compose / search) holds keyboard focus — those controls eat
+// WM_KEYDOWN before it reaches this window's wnd_proc, so a plain key
+// handler only fires when the canvas has focus. TranslateAccelerator
+// re-fires WM_COMMAND for every OS key-repeat while held, which is what lets
+// repeated Tab presses advance the Ctrl+Tab cycle; committing on
+// Ctrl-release is handled in wnd_proc's own WM_KEYUP/WM_SYSKEYUP —
+// accelerators only fire on key-down.
+//
+// accel_ holds every global shortcut, for keys pressed in this window;
+// accel_app_ only the Application-scoped ones, for keys pressed in a pop-out
+// room/call window (Window-scoped shortcuts act on this window's room). Both
+// map to the same WM_COMMAND ids. Punctuation keys depend on the keyboard
+// layout, so the tables are rebuilt whenever it changes.
+void MainWindow::rebuild_accelerators_()
+{
+    destroy_accelerators_();
+    accel_layout_ = GetKeyboardLayout(0);
+    std::vector<ACCEL> all;
+    std::vector<ACCEL> app;
+    for (const auto& def : tesseract::views::shortcuts())
+    {
+        if (def.scope == tesseract::views::ShortcutScope::Contextual)
+            continue;
+        for (const auto& chord : def.chords)
+        {
+            ACCEL a{};
+            if (!accel_from_chord_(chord, a) || accel_events_.size() >= kMaxShortcuts)
+                continue;
+            a.cmd = static_cast<WORD>(IDC_SHORTCUT_BASE + accel_events_.size());
+            all.push_back(a);
+            if (def.scope == tesseract::views::ShortcutScope::Application)
+                app.push_back(a);
+            accel_events_.push_back(tk::to_key_event(chord));
+        }
+    }
+    accel_ = CreateAcceleratorTableW(all.data(), static_cast<int>(all.size()));
+    if (!app.empty())
+        accel_app_ = CreateAcceleratorTableW(app.data(), static_cast<int>(app.size()));
+}
+
 bool MainWindow::pre_translate_message(MSG* msg)
 {
-    if (accel_ && hwnd_ && TranslateAcceleratorW(hwnd_, accel_, msg))
-    {
-        return true;
-    }
-    return false;
+    if (!hwnd_ || msg->message < WM_KEYFIRST || msg->message > WM_KEYLAST)
+        return false;
+    if (GetKeyboardLayout(0) != accel_layout_)
+        rebuild_accelerators_();
+    const bool in_main_window = msg->hwnd && GetAncestor(msg->hwnd, GA_ROOT) == hwnd_;
+    HACCEL table = in_main_window ? accel_ : accel_app_;
+    return table && TranslateAcceleratorW(hwnd_, table, msg);
 }
 
 void MainWindow::open_quick_switch_()

@@ -1,10 +1,10 @@
 #include "RoomView.h"
+#include "shortcut_registry.h"
 
 #include "icons.h"
 #include "tesseract/client.h"
 #include "tesseract/settings.h"
 #include "tk/i18n.h"
-#include "tk/key_shortcuts.h"
 
 #include <algorithm>
 #include <memory>
@@ -2593,8 +2593,7 @@ bool RoomView::copy_active_selection()
 
 bool RoomView::on_key_down(const tk::KeyEvent& event)
 {
-    if (tk::primary_shortcut(event) && !event.shift &&
-        tk::shortcut_char(event, 'c'))
+    if (matches(ShortcutId::CopyMessage, event))
     {
         if (copy_active_selection())
             return true;

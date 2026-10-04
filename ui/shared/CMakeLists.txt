@@ -125,6 +125,8 @@ set(_tk_sources
     tk/interval_timer.h
     tk/keyboard_target.h
     tk/keyboard_target.cpp
+    tk/key_chord.h
+    tk/key_chord.cpp
     tk/row_cursor.h
     tk/row_cursor.cpp
     tk/tooltip.h
@@ -297,6 +299,10 @@ set(_tk_sources
     views/AlertDialog.cpp
     views/ConfirmDialog.h
     views/ConfirmDialog.cpp
+    views/KeyboardShortcutsOverlay.h
+    views/KeyboardShortcutsOverlay.cpp
+    views/shortcut_registry.h
+    views/shortcut_registry.cpp
     views/ExportHistoryDialog.h
     views/ExportHistoryDialog.cpp
     views/MainAppWidget.h

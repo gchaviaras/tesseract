@@ -10,7 +10,6 @@
 #include "tk/animator.h"
 #include "tk/hash_combine.h"
 #include "tk/i18n.h"
-#include "tk/key_shortcuts.h"
 #include "tk/loading_spinner.h"
 #include "tk/pill.h"
 #include "tk/svg.h"

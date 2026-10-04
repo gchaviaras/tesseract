@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-04
 
+- feat(a11y): Keyboard Shortcuts overlay. Ctrl/⌘+/, F1 or the user menu (macOS: Help menu) lists every shortcut, grouped. Shortcuts now live in one registry (`views/shortcut_registry.h`) that the shells bind accelerators from and shared key handlers match against, so the list can't drift. Qt6 build + ctest 2180/2180
 - feat(a11y): keyboard access across the toolkit. Popups that hold fields keep Tab inside them, and an open dialog keeps Tab from reaching what's behind it. Menu / Shift+F10 opens the focused item's context menu, PageUp/PageDown/Home/End scroll, and Tab-focused icon buttons show their name. Qt6 build + ctest 2159/2159
 - feat(a11y): the date picker no longer closes on Tab; Tab cycles ‹, month, year, › and Today, and arrow keys move a day or week across months. Shift+PageUp/PageDown change the year and T jumps to today. Qt6 build + ctest 2159/2159
 - feat(a11y): the timeline is a Tab stop. Up/Down move between messages, Left/Right step through a message's links, media, reactions and actions, Enter or the Menu key opens More, and Escape returns to the composer. Qt6 build + ctest 2159/2159

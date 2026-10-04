@@ -21,6 +21,13 @@ namespace tk
 class ScrollableBase : public Widget
 {
 public:
+    // The overlay scrollbar's thumb width and its gap from the right edge.
+    // Content that must not sit under the thumb (right-aligned text, chips)
+    // keeps kScrollbarGutter clear on the right.
+    static constexpr float kScrollbarWidth = 6.0f;
+    static constexpr float kScrollbarInset = 2.0f;
+    static constexpr float kScrollbarGutter = kScrollbarWidth + 2 * kScrollbarInset;
+
     // Current vertical scroll offset (0 = top).
     float scroll_y() const
     {

@@ -1,6 +1,13 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-04**. 2159 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-04**. 2180 C++ + 765 Rust tests.
+
+> **Keyboard Shortcuts overlay (2026-10-04).**
+> Ctrl/⌘+/ or F1 (or the user menu; Help menu on macOS) opens a read-only,
+> grouped list of every shortcut. It reads `views/shortcut_registry.h`, the
+> one table the shells also bind their accelerators from and
+> `MainAppWidget` matches global keys against (`tk::KeyChord`).
+> Qt6 build + ctest 2180/2180.
 
 > **Keyboard operability (2026-10-04).**
 > Everything reachable by mouse is now reachable by keyboard: focus stays

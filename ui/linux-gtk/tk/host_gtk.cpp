@@ -3453,6 +3453,7 @@ Key key_from_gdk(guint keyval)
     case GDK_KEY_Delete: return Key::Delete;
     case GDK_KEY_Menu: return Key::Menu;
     case GDK_KEY_F10: return Key::F10;
+    case GDK_KEY_F1: return Key::F1;
     default: return Key::Unknown;
     }
 }

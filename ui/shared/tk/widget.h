@@ -198,6 +198,8 @@ enum class Key
     // Widget::on_context_menu_key().
     Menu,
     F10,
+    // Help key: opens the keyboard shortcuts overlay.
+    F1,
     Character
 };
 

@@ -1,4 +1,5 @@
 #include "VideoViewerOverlay.h"
+#include "shortcut_registry.h"
 #include "icons.h"
 #include "media_utils.h"
 
@@ -770,32 +771,19 @@ void VideoViewerOverlay::seek_from_scrub_x_(float world_x)
 
 bool VideoViewerOverlay::on_content_key_(const tk::KeyEvent& e)
 {
-    if (e.ctrl || e.alt || e.meta || !video_player_)
+    if (!video_player_)
         return false;
-    switch (e.key)
-    {
-    case tk::Key::Space:
+    if (matches(ShortcutId::VideoPlayPause, e))
         do_play_or_pause();
-        return true;
-    case tk::Key::Character:
-        if (e.text == "k" || e.text == "K")
-        {
-            do_play_or_pause();
-            return true;
-        }
-        return false;
-    case tk::Key::Left:
+    else if (matches(ShortcutId::VideoSeekBack, e))
         seek_by_ms_(-5000);
-        return true;
-    case tk::Key::Right:
+    else if (matches(ShortcutId::VideoSeekForward, e))
         seek_by_ms_(5000);
-        return true;
-    case tk::Key::Home:
+    else if (matches(ShortcutId::VideoRestart, e))
         seek_by_ms_(-static_cast<std::int64_t>(video_player_->position_ms()));
-        return true;
-    default:
+    else
         return false;
-    }
+    return true;
 }
 
 void VideoViewerOverlay::seek_by_ms_(std::int64_t delta_ms)

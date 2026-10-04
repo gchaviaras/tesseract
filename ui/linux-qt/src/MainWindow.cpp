@@ -7,6 +7,7 @@
 #include "LoginView.h"
 #include "views/BrandView.h"
 #include "views/media_drop.h"
+#include "views/shortcut_registry.h"
 #include "SettingsWidget.h"
 #include "LinuxAutostartQt.h"
 #include "LinuxPowerMonitorQt.h"
@@ -91,6 +92,7 @@
 #include <QDir>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -102,6 +104,44 @@ Q_DECLARE_METATYPE(tesseract::BackupProgress)
 
 namespace qt6
 {
+
+namespace
+{
+
+// A registry chord as a Qt key sequence; empty for keys Qt can't bind here.
+// ModPrimary is Ctrl: the Qt6 shell only ships on Linux.
+QKeySequence to_qt_sequence_(const tk::KeyChord& chord)
+{
+    int key = 0;
+    switch (chord.key)
+    {
+    case tk::Key::Character:
+        // Qt's key code for a printable ASCII character is the character
+        // itself, with letters in upper case (Qt::Key_K == 'K').
+        if (chord.text.size() == 1)
+            key = std::toupper(static_cast<unsigned char>(chord.text.front()));
+        break;
+    case tk::Key::Tab: key = Qt::Key_Tab; break;
+    case tk::Key::Left: key = Qt::Key_Left; break;
+    case tk::Key::Right: key = Qt::Key_Right; break;
+    case tk::Key::F1: key = Qt::Key_F1; break;
+    default: break;
+    }
+    if (key == 0)
+        return {};
+    int mods = 0;
+    if (chord.mods & (tk::ModPrimary | tk::ModCtrl))
+        mods |= Qt::CTRL;
+    if (chord.mods & tk::ModShift)
+        mods |= Qt::SHIFT;
+    if (chord.mods & tk::ModAlt)
+        mods |= Qt::ALT;
+    if (chord.mods & tk::ModMeta)
+        mods |= Qt::META;
+    return QKeySequence(mods | key);
+}
+
+} // namespace
 
 // EventBridge is now a thin QObject wrapper around EventHandlerBase.
 // All IEventHandler method bodies live in EventHandlerBase (shared/app/).
@@ -1401,150 +1441,36 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         bar->on_close = [this] { closeFindInRoom_(); };
     }
 
-    // Ctrl+K accelerator. An application-scoped QShortcut fires even when the
-    // native compose / search QLineEdit/QTextEdit holds focus — keyPressEvent
-    // on the window does not see keys consumed by a focused child widget.
+    // Global shortcuts (Ctrl+K, Ctrl+F, Ctrl+Tab, Alt+Left, Ctrl+/, ...),
+    // bound from the shared registry. A QShortcut fires even while the
+    // native compose / search QLineEdit/QTextEdit holds focus —
+    // keyPressEvent on the window does not see keys a focused child widget
+    // consumes. Each forwards the chord's KeyEvent into the widget tree, and
+    // MainAppWidget decides what it does. Application scope fires from any
+    // window; Window scope (room info, settings, shortcuts list) acts on this
+    // window's room, so a pop-out room window must not trigger it. Ctrl+Tab's
+    // commit-on-Ctrl-release is handled by host_qt.cpp's app-wide event
+    // filter instead — QShortcut only fires on key-down/repeat.
+    for (const auto& def : tesseract::views::shortcuts())
     {
-        auto* sc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_K), this);
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this]
-                {
-                    if (!mainApp_)
-                        return;
-                    tk::KeyEvent event{};
-                    event.key = tk::Key::Character;
-                    event.text = "k";
-                    event.ctrl = true;
-                    mainApp_->dispatch_key_down(event);
-                });
-    }
-    // Ctrl+Shift+F: open global message search (application-scoped so it fires
-    // while the compose box holds focus).
-    {
-        auto* sc = new QShortcut(
-            QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this);
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this]
-                {
-                    if (!mainApp_)
-                        return;
-                    tk::KeyEvent event{};
-                    event.key = tk::Key::Character;
-                    event.text = "f";
-                    event.ctrl = true;
-                    event.shift = true;
-                    mainApp_->dispatch_key_down(event);
-                });
-    }
-    // Ctrl+F: open per-room "find in conversation" (application-scoped so it
-    // fires while the compose box holds focus; no-op when no room is open).
-    {
-        auto* sc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), this);
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this]
-                {
-                    if (!mainApp_)
-                        return;
-                    tk::KeyEvent event{};
-                    event.key = tk::Key::Character;
-                    event.text = "f";
-                    event.ctrl = true;
-                    mainApp_->dispatch_key_down(event);
-                });
-    }
-    // Ctrl+I (room info) and Ctrl+, (Settings): window-scoped — unlike
-    // Ctrl+K they act on this window's room, so a pop-out room window must
-    // not trigger them here — but still fire while the composer's native
-    // text control has focus. MainAppWidget::handle_primary_shortcut_ owns
-    // what they do.
-    for (const auto& [seq, text] :
-         {std::pair{QKeySequence(Qt::CTRL | Qt::Key_I), "i"},
-          std::pair{QKeySequence(Qt::CTRL | Qt::Key_Comma), ","}})
-    {
-        auto* sc = new QShortcut(seq, this);
-        sc->setContext(Qt::WindowShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this, text = std::string(text)]
-                {
-                    if (!mainApp_)
-                        return;
-                    tk::KeyEvent event{};
-                    event.key = tk::Key::Character;
-                    event.text = text;
-                    event.ctrl = true;
-                    mainApp_->dispatch_key_down(event);
-                });
-    }
-    // Ctrl+Tab / Ctrl+Shift+Tab: MRU room switcher (Alt-Tab-style — see
-    // MruSwitcher.h). Application-scoped for the same reason as Ctrl+K
-    // above. Committing on Ctrl-release is handled separately, by the app-
-    // wide QObject event filter in host_qt.cpp's Host class (see its
-    // eventFilter() doc comment) — QShortcut has no release-triggered
-    // counterpart; it only ever fires on the key-down/repeat side.
-    {
-        auto* sc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Tab), this);
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this]
-                {
-                    if (!mainApp_)
-                        return;
-                    tk::KeyEvent event{};
-                    event.key = tk::Key::Tab;
-                    event.ctrl = true;
-                    mainApp_->dispatch_key_down(event);
-                });
-    }
-    {
-        auto* sc = new QShortcut(
-            QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), this);
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this]
-                {
-                    if (!mainApp_)
-                        return;
-                    tk::KeyEvent event{};
-                    event.key = tk::Key::Tab;
-                    event.ctrl = true;
-                    event.shift = true;
-                    mainApp_->dispatch_key_down(event);
-                });
-    }
-    // Alt+Left / Alt+Right: navigate room history back / forward.
-    // ApplicationShortcut so these fire while the compose box holds focus.
-    {
-        auto* sc = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Left), this);
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this]
-                {
-                    if (mainApp_)
+        if (def.scope == tesseract::views::ShortcutScope::Contextual)
+            continue;
+        for (const auto& chord : def.chords)
+        {
+            const QKeySequence seq = to_qt_sequence_(chord);
+            if (seq.isEmpty())
+                continue;
+            auto* sc = new QShortcut(seq, this);
+            sc->setContext(def.scope == tesseract::views::ShortcutScope::Application
+                               ? Qt::ApplicationShortcut
+                               : Qt::WindowShortcut);
+            connect(sc, &QShortcut::activated, this,
+                    [this, event = tk::to_key_event(chord)]
                     {
-                        tk::KeyEvent event{};
-                        event.key = tk::Key::Left;
-                        event.alt = true;
-                        mainApp_->dispatch_key_down(event);
-                    }
-                });
-    }
-    {
-        auto* sc = new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Right), this);
-        sc->setContext(Qt::ApplicationShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this]
-                {
-                    if (mainApp_)
-                    {
-                        tk::KeyEvent event{};
-                        event.key = tk::Key::Right;
-                        event.alt = true;
-                        mainApp_->dispatch_key_down(event);
-                    }
-                });
+                        if (mainApp_)
+                            mainApp_->dispatch_key_down(event);
+                    });
+        }
     }
 
     // roomTextArea_ self-positions via ComposeBar's own arrange() and is

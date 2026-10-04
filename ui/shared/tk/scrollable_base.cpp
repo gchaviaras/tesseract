@@ -11,10 +11,8 @@ namespace tk
 namespace
 {
 
-constexpr float kScrollbarWidth = 6.0f;
 constexpr float kScrollbarRadius = 3.0f;
 constexpr float kScrollbarMinLen = 24.0f;
-constexpr float kScrollbarInset = 2.0f;
 
 } // namespace
 

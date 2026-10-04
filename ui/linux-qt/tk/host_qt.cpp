@@ -2902,6 +2902,7 @@ Key key_from_qt(int key)
     case Qt::Key_Delete: return Key::Delete;
     case Qt::Key_Menu: return Key::Menu;
     case Qt::Key_F10: return Key::F10;
+    case Qt::Key_F1: return Key::F1;
     default: return Key::Unknown;
     }
 }

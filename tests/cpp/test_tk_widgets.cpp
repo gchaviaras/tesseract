@@ -9,6 +9,7 @@
 #include "views/ForwardRoomPicker.h"
 #include "views/LoginView.h"
 #include "views/MainAppWidget.h"
+#include "views/shortcut_registry.h"
 #include "views/MessageSearchView.h"
 #include "tk_test_host.h"
 #include "tk_test_surface.h"
@@ -474,30 +475,24 @@ TEST_CASE("MainAppWidget routes history navigation shortcuts",
     app.on_history_back_shortcut = [&] { ++back; };
     app.on_history_forward_shortcut = [&] { ++forward; };
 
-    KeyEvent alt_left{};
-    alt_left.key = Key::Left;
-    alt_left.alt = true;
-    CHECK(app.dispatch_key_down(alt_left) == true);
-
-    KeyEvent alt_right{};
-    alt_right.key = Key::Right;
-    alt_right.alt = true;
-    CHECK(app.dispatch_key_down(alt_right) == true);
-
+    // The platform's chords (Alt+Left/Right; ⌘[ / ⌘] on macOS), as the
+    // shell's native accelerator forwards them.
+    using tesseract::views::ShortcutId;
+    for (const auto& c : tesseract::views::shortcut(ShortcutId::HistoryBack).chords)
+        CHECK(app.dispatch_key_down(tk::to_key_event(c)) == true);
+    for (const auto& c : tesseract::views::shortcut(ShortcutId::HistoryForward).chords)
+        CHECK(app.dispatch_key_down(tk::to_key_event(c)) == true);
+#if !defined(__APPLE__)
+    // Only the platform's own chords: ⌘[ isn't "back" off macOS.
     KeyEvent cmd_bracket{};
     cmd_bracket.key = Key::Character;
     cmd_bracket.text = "[";
     cmd_bracket.meta = true;
-    CHECK(app.dispatch_key_down(cmd_bracket) == true);
+    CHECK(app.dispatch_key_down(cmd_bracket) == false);
+#endif
 
-    KeyEvent cmd_close_bracket{};
-    cmd_close_bracket.key = Key::Character;
-    cmd_close_bracket.text = "]";
-    cmd_close_bracket.meta = true;
-    CHECK(app.dispatch_key_down(cmd_close_bracket) == true);
-
-    CHECK(back == 2);
-    CHECK(forward == 2);
+    CHECK(back == 1);
+    CHECK(forward == 1);
 }
 
 TEST_CASE("MainAppWidget space nav routes header and back clicks",

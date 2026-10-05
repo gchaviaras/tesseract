@@ -207,6 +207,35 @@ TEST_CASE("EmojiPicker search filters + clears back to category",
     SUCCEED();
 }
 
+TEST_CASE("match_pack_emoticons filters by shortcode/body across packs",
+          "[tk][view][emoji]")
+{
+    auto img = [](std::string pack, std::string sc, std::string url,
+                  std::string body = {})
+    {
+        tesseract::ImagePackImage i;
+        i.pack_id = std::move(pack);
+        i.shortcode = std::move(sc);
+        i.url = std::move(url);
+        i.body = std::move(body);
+        return i;
+    };
+    std::vector<std::vector<tesseract::ImagePackImage>> packs{
+        {img("a", "partyCat", "mxc://h/1"), img("a", "dog", "mxc://h/2"),
+         img("a", "blob", "mxc://h/3", "Happy CAT")},
+        // Same image as pack a's partyCat — kept once, from pack a.
+        {img("b", "party_cat", "mxc://h/1"), img("b", "catjam", "mxc://h/4")},
+    };
+
+    auto out = tesseract::views::match_pack_emoticons(packs, "cat");
+    REQUIRE(out.size() == 3);
+    CHECK(out[0].shortcode == "partyCat"); // case-insensitive shortcode
+    CHECK(out[1].shortcode == "blob");     // matched on body
+    CHECK(out[2].shortcode == "catjam");   // later pack after earlier one
+
+    CHECK(tesseract::views::match_pack_emoticons(packs, "zzz").empty());
+}
+
 TEST_CASE("EmojiPicker grid click emits the glyph", "[tk][view][emoji]")
 {
     TkEmojiPickerStage st;

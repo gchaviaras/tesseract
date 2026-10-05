@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-05
 
+- fix(emoji): emoji picker search also finds custom emotes from image packs (by shortcode or description), listed after the Unicode matches. Qt6 build + ctest 2200/2200, user-verified Qt6
 - fix(qt): mention pills in reply quotes and message bodies render correctly. The quote line is cut to the card's width using each pill's real width instead of overflowing, pills keep their place after a double space, and a pill wrapped to the next line is no longer also drawn past the previous line's edge. Qt6 build + ctest 2199/2199, user-verified Qt6
 - fix(timeline): selecting text in a list, heading or quote message highlights only the selected lines instead of the same span in every line, copies just the selection instead of the whole message, and double/triple-click picks the right word or line past the first item. Qt6 build + ctest 2196/2196, user-verified Qt6
 

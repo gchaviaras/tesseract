@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-05**. 2184 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-05**. 2200 C++ + 765 Rust tests.
 
 > **Recent rooms persist across restarts (2026-10-04, v0.9.1).**
 > The Ctrl+Tab switcher's and the Ctrl+K "Recent" strip's room history is
@@ -2383,7 +2383,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 | Suite | Count |
 | ----- | ----- |
 | Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 765 |
-| C++ Catch2 tests via ctest | 2184 |
+| C++ Catch2 tests via ctest | 2200 |
 
 ## Platforms
 
@@ -2505,7 +2505,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 ## Pickers
 
-- **Emoji picker** — Unicode-category tabs + per-pack custom tabs; search; virtualised grid via `tk::GridView`. Hovering a cell shows an inline `:shortcode:` tooltip (centred above the cell, flipped below near the top edge). Emoji 18.0 data (renamed flags keep their old `:flag_…:` shortcodes); emoji newer than the system emoji font can draw are hidden from both the picker and `:shortcode:` autocomplete. **Skin tones** — long-press, right-click, or Shift+Enter on a tone-capable emoji opens `SkinTonePopover`; the picked tone becomes the default for the picker and autocomplete, synced across devices via `im.gnomos.tesseract` account data (a 15 s window distinguishes our own save echoing back from a genuinely newer value from another device).
+- **Emoji picker** — Unicode-category tabs + per-pack custom tabs; search covers Unicode emoji then custom pack emotes (shortcode/description); virtualised grid via `tk::GridView`. Hovering a cell shows an inline `:shortcode:` tooltip (centred above the cell, flipped below near the top edge). Emoji 18.0 data (renamed flags keep their old `:flag_…:` shortcodes); emoji newer than the system emoji font can draw are hidden from both the picker and `:shortcode:` autocomplete. **Skin tones** — long-press, right-click, or Shift+Enter on a tone-capable emoji opens `SkinTonePopover`; the picked tone becomes the default for the picker and autocomplete, synced across devices via `im.gnomos.tesseract` account data (a 15 s window distinguishes our own save echoing back from a genuinely newer value from another device).
 - **Sticker picker** — Favorites tab + per-pack tabs; search; virtualised grid. Floating panel on every platform (Qt6 `QFrame`, GTK4 `GtkPopover`, macOS `NSPanel`, Win32 `WS_POPUP` HWND). Same `:shortcode:` hover tooltip as emoji picker.
 - **GridView hover tracking** — `GridView::on_pointer_move` / `on_pointer_leave` update `hovered_index_` and expose `hovered_index()` + `rect_at()` accessors; cell highlight on hover now works correctly (was silently broken).
 - **Recent emoji (MSC4356)** — `m.recent_emoji` + `io.github.johennes.msc4356.recent_emoji` account-data, dual-written on every bump; reads stable → unstable → legacy `io.element.recent_emoji` so existing Element users keep their picker rank. 100-entry cap, move-to-front-and-increment semantics, count-desc top-N for the Frequents tab.

@@ -3,6 +3,7 @@
 #include "SkinTonePopover.h"
 #include "tk/emoji_support.h"
 #include "tk/i18n.h"
+#include "tk/text_util.h"
 #include "tk/theme.h"
 #include "views/image_pack_order.h"
 
@@ -44,6 +45,27 @@ std::string format_shortcode(std::string_view shortcodes)
 }
 
 } // namespace
+
+std::vector<tesseract::ImagePackImage> match_pack_emoticons(
+    const std::vector<std::vector<tesseract::ImagePackImage>>& pack_images,
+    const std::string& query)
+{
+    std::vector<tesseract::ImagePackImage> out;
+    std::unordered_set<std::string> seen_urls;
+    for (const auto& images : pack_images)
+    {
+        for (const auto& img : images)
+        {
+            if (!tk::ci_contains(img.shortcode, query) &&
+                !tk::ci_contains(img.body, query))
+                continue;
+            if (!img.url.empty() && !seen_urls.insert(img.url).second)
+                continue;
+            out.push_back(img);
+        }
+    }
+    return out;
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 //  EmojiPicker
@@ -203,8 +225,9 @@ void EmojiPicker::refresh_emoticon_packs()
     {
         switch_to_category(category_);
     }
-    else if (page_ == Page::CustomPack)
+    else if (page_ == Page::CustomPack || page_ == Page::Search)
     {
+        // Search results include pack emoticons too.
         rebuild_current_items();
     }
 }
@@ -215,17 +238,28 @@ void EmojiPicker::refresh_emoticon_packs()
 
 std::size_t EmojiPicker::item_count() const
 {
-    if (page_ == Page::CustomPack)
-    {
-        return current_emoticons_.size();
-    }
-    return current_glyphs_.size();
+    return current_glyphs_.size() + current_emoticons_.size();
+}
+
+const std::string* EmojiPicker::glyph_at_(std::size_t index) const
+{
+    return index < current_glyphs_.size() ? &current_glyphs_[index] : nullptr;
+}
+
+const tesseract::ImagePackImage* EmojiPicker::emoticon_at_(std::size_t index) const
+{
+    // Glyphs (if any) come first; current_glyphs_ is empty on CustomPack.
+    if (index < current_glyphs_.size())
+        return nullptr;
+    index -= current_glyphs_.size();
+    return index < current_emoticons_.size() ? &current_emoticons_[index]
+                                             : nullptr;
 }
 
 std::vector<tk::MediaPrefetchKey> EmojiPicker::collect_prefetchable_media_keys() const
 {
     std::vector<tk::MediaPrefetchKey> keys;
-    if (page_ != Page::CustomPack)
+    if (current_emoticons_.empty())
     {
         return keys; // Unicode/Frequents pages have no image cells at all.
     }
@@ -238,7 +272,7 @@ std::vector<tk::MediaPrefetchKey> EmojiPicker::collect_prefetchable_media_keys()
     // and rationale.
     constexpr int kPrefetchLookaheadCells = 8;
     const auto [lo, hi] = tk::grid_prefetch_range(
-        *grid_, current_emoticons_.size(), kPrefetchLookaheadCells);
+        *grid_, item_count(), kPrefetchLookaheadCells);
     if (hi < lo)
     {
         return keys;
@@ -246,10 +280,10 @@ std::vector<tk::MediaPrefetchKey> EmojiPicker::collect_prefetchable_media_keys()
     keys.reserve(static_cast<std::size_t>(hi - lo + 1));
     for (int i = lo; i <= hi; ++i)
     {
-        const auto& entry = current_emoticons_[static_cast<std::size_t>(i)];
-        if (!entry.url.empty())
+        const auto* entry = emoticon_at_(static_cast<std::size_t>(i));
+        if (entry && !entry->url.empty())
         {
-            keys.push_back({tk::CacheKey::media(entry.url), tk::MediaKind::MediaImage});
+            keys.push_back({tk::CacheKey::media(entry->url), tk::MediaKind::MediaImage});
         }
     }
     return keys;
@@ -258,20 +292,11 @@ std::vector<tk::MediaPrefetchKey> EmojiPicker::collect_prefetchable_media_keys()
 void EmojiPicker::paint_cell(std::size_t index, tk::PaintCtx& ctx,
                              tk::Rect bounds, bool selected, bool hovered)
 {
-    bool is_image_page = (page_ == Page::CustomPack);
-    if (is_image_page)
+    const std::string* glyph = glyph_at_(index);
+    const tesseract::ImagePackImage* emoticon = emoticon_at_(index);
+    if (!glyph && !emoticon)
     {
-        if (index >= current_emoticons_.size())
-        {
-            return;
-        }
-    }
-    else
-    {
-        if (index >= current_glyphs_.size())
-        {
-            return;
-        }
+        return;
     }
 
     if (selected)
@@ -285,9 +310,9 @@ void EmojiPicker::paint_cell(std::size_t index, tk::PaintCtx& ctx,
                                      ctx.theme.palette.subtle_hover);
     }
 
-    if (is_image_page)
+    if (emoticon)
     {
-        const auto& entry = current_emoticons_[index];
+        const auto& entry = *emoticon;
         const tk::Image* img = nullptr;
         if (image_provider())
         {
@@ -319,8 +344,6 @@ void EmojiPicker::paint_cell(std::size_t index, tk::PaintCtx& ctx,
         return;
     }
 
-    const std::string& glyph = current_glyphs_[index];
-
     tk::TextStyle st{};
     st.role = tk::FontRole::EmojiPickerCell;
     // build_glyph, not build_text: this cell's entire content is one glyph,
@@ -329,7 +352,7 @@ void EmojiPicker::paint_cell(std::size_t index, tk::PaintCtx& ctx,
     // segmentation (see CanvasFactory::build_glyph's doc comment) — that
     // mismatch was also why the hand-centering below still drifted on Qt6
     // even after the top-left-vs-centered fix.
-    auto layout = ctx.factory.build_glyph(glyph, st);
+    auto layout = ctx.factory.build_glyph(*glyph, st);
     if (!layout)
     {
         return;
@@ -347,23 +370,23 @@ void EmojiPicker::paint_cell(std::size_t index, tk::PaintCtx& ctx,
 
 void EmojiPicker::on_item_activated(int idx)
 {
-    if (page_ == Page::CustomPack)
+    if (idx < 0)
     {
-        if (static_cast<std::size_t>(idx) >= current_emoticons_.size())
-        {
-            return;
-        }
+        return;
+    }
+    const auto index = static_cast<std::size_t>(idx);
+    if (const auto* emoticon = emoticon_at_(index))
+    {
         if (on_emoticon_selected)
         {
-            on_emoticon_selected(current_emoticons_[idx]);
+            on_emoticon_selected(*emoticon);
         }
         return;
     }
-    if (static_cast<std::size_t>(idx) >= current_glyphs_.size())
+    if (const auto* glyph = glyph_at_(index))
     {
-        return;
+        activate_glyph_(*glyph);
     }
-    activate_glyph_(current_glyphs_[idx]);
 }
 
 void EmojiPicker::activate_glyph_(const std::string& glyph)
@@ -380,12 +403,13 @@ void EmojiPicker::activate_glyph_(const std::string& glyph)
 
 bool EmojiPicker::on_item_context_requested(int idx, tk::Rect cell)
 {
-    if (page_ == Page::CustomPack || !tone_popover_ || idx < 0 ||
-        static_cast<std::size_t>(idx) >= current_glyphs_.size())
+    const std::string* glyph_ptr =
+        idx < 0 ? nullptr : glyph_at_(static_cast<std::size_t>(idx));
+    if (!tone_popover_ || !glyph_ptr)
     {
         return false;
     }
-    const std::string& glyph = current_glyphs_[idx];
+    const std::string& glyph = *glyph_ptr;
     // Only when the font can draw every tone — a menu with a box in it
     // would let the user send something they can't see.
     if (!tesseract::emoji::supports_skin_tone(glyph) ||
@@ -708,8 +732,8 @@ void EmojiPicker::rebuild_current_items()
     }
     case Page::Search:
     {
-        // Unicode glyph search. Custom emoticon search would need its own tab;
-        // out of scope for this PR.
+        // Unicode matches first, then custom emoticons from every pack
+        // (in tab order) — same cells as the CustomPack page.
         auto entries = tesseract::emoji::filter(search_query());
         current_glyphs_.reserve(entries.size());
         current_shortcodes_.reserve(entries.size());
@@ -720,6 +744,21 @@ void EmojiPicker::rebuild_current_items()
                 continue;
             current_glyphs_.emplace_back(*shown);
             current_shortcodes_.push_back(format_shortcode(e->shortcodes));
+        }
+        if (client_ && !custom_packs_.empty())
+        {
+            std::vector<std::vector<tesseract::ImagePackImage>> pack_images;
+            pack_images.reserve(custom_packs_.size());
+            for (const auto& pack : custom_packs_)
+            {
+                pack_images.push_back(client_->list_pack_images(
+                    pack.id, tesseract::PackUsageFilter::Emoticon));
+            }
+            for (auto& img : match_pack_emoticons(pack_images, search_query()))
+            {
+                current_shortcodes_.push_back(":" + img.shortcode + ":");
+                current_emoticons_.push_back(std::move(img));
+            }
         }
         break;
     }

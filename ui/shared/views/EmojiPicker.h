@@ -1,7 +1,8 @@
 #pragma once
 
 // Shared emoji picker. A TabbedGridPicker whose grid paints Unicode glyphs
-// (and custom MSC2545 emoticon images on pack tabs) and whose tab strip is:
+// (and custom MSC2545 emoticon images on pack tabs and after the Unicode
+// matches in search results) and whose tab strip is:
 //   - a Frequents tab (when non-empty)
 //   - the 8 Unicode categories
 //   - one tab per custom emoticon pack
@@ -34,6 +35,14 @@ namespace tesseract::views
 {
 
 class SkinTonePopover;
+
+/// Emoticons from `pack_images` (one list per pack, in tab order) whose
+/// shortcode or body contains `query`, case-insensitively. An image that
+/// appears in more than one pack (same mxc URL) is kept once, from the
+/// first pack. Backs the custom half of EmojiPicker's search results.
+std::vector<tesseract::ImagePackImage> match_pack_emoticons(
+    const std::vector<std::vector<tesseract::ImagePackImage>>& pack_images,
+    const std::string& query);
 
 class EmojiPicker : public TabbedGridPicker
 {
@@ -213,6 +222,12 @@ private:
     std::uint16_t supported_emoji_version_() const;
     void activate_glyph_(const std::string& glyph);
     bool close_tone_popover_if_outside_(tk::Point world);
+    // Cell lookup across both item lists. The CustomPack page holds only
+    // emoticons; the Search page holds current_glyphs_ followed by
+    // current_emoticons_; the others hold only glyphs. Null when `index`
+    // is out of range or is the other kind of cell.
+    const std::string* glyph_at_(std::size_t index) const;
+    const tesseract::ImagePackImage* emoticon_at_(std::size_t index) const;
 
     // Tab layout. Visual indexes:
     //   0          → Frequents (only when has_frequents_tab())
@@ -237,12 +252,12 @@ private:
     int custom_pack_idx_ = -1;
 
     std::vector<std::string> frequents_glyphs_;
-    std::vector<std::string> current_glyphs_;        // unicode page items
+    std::vector<std::string> current_glyphs_;        // unicode cells
     std::vector<tesseract::ImagePack> custom_packs_; // emoticon-capable
     std::vector<tesseract::ImagePackImage>
-        current_emoticons_; // image-cell items
+        current_emoticons_; // image cells (after the glyphs on Search)
     std::vector<std::string>
-        current_shortcodes_; // parallel to current_glyphs_ / current_emoticons_
+        current_shortcodes_; // one per cell, glyphs then emoticons
 
     tesseract::emoji::SkinTone skin_tone_ = tesseract::emoji::SkinTone::None;
     SkinTonePopover* tone_popover_ = nullptr; // borrowed child

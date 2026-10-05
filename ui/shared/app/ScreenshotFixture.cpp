@@ -26,7 +26,11 @@ constexpr char kDesignRoomAvatar[] = "fixture://room/design";
 constexpr char kCommunityRoomAvatar[] = "fixture://room/matrix-community";
 constexpr char kReleaseBanner[] = "fixture://media/release-banner";
 constexpr char kStickerChip[] = "fixture://media/sticker-chip";
-// Never fetched: voice playback and file download need a user click.
+// Voice audio *is* fetched eagerly when its row paints (see
+// ShellBase::ensure_row_media_), even though playback needs a click - so
+// this URL must stay unresolvable outside a signed-in session, and media
+// fetching must tolerate having no client at all. File download needs a
+// user click and is never fetched.
 constexpr char kVoiceClip[] = "fixture://media/voice-clip";
 constexpr char kReleaseNotes[] = "fixture://media/release-notes";
 

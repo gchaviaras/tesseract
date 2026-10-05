@@ -7,6 +7,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- feat(timeline): the "New messages" divider stays for 10 s after you read past it instead of vanishing on the next sync; read receipts still go out at once, only `m.fully_read` is deferred. A "Jump to first unread" pill (Shift+PageUp in the timeline) shows while the divider is above the view, opening a focused timeline when it's older than what's loaded. macOS build + ctest 2187/2189, Qt6 build + ctest 2194/2194
+- fix(timeline): the jump-to-end pill draws a Lucide arrow instead of a text ↓. macOS build
 - feat(switcher): recently visited rooms (Ctrl+Tab switcher, Ctrl+K "Recent" strip) persist across restarts, per account, synced as `recent_rooms` in the `im.gnomos.tesseract` prefs. Clear all caches forgets them with the tab layout. Qt6 build + ctest 2184/2184, user-verified Qt6
 - build: smaller build directories. Linux objects and executables compress their debug info (`-gz=zlib`, `--compress-debug-sections=zlib`), and Cargo incremental compilation of the Rust SDK crate is off unless `-DTESSERACT_CARGO_INCREMENTAL=ON`. Linux Debug build + ctest 2180/2180
 - build: `windows-xwin-debug`/`-release` presets cross-compile the Win32 build from Linux (clang-cl + lld-link against an xwin-provided MSVC CRT/SDK; one-time `cmake/toolchains/xwin-setup.sh`). MSVC ABI rather than MinGW because LiveKit's prebuilt libwebrtc is MSVC-only. Linux cross build links `Tesseract.exe`

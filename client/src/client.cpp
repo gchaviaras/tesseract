@@ -1034,10 +1034,25 @@ Result Client::send_read_receipt(const std::string& room_id,
     return from_ffi(impl_->ffi->send_read_receipt(room_id, event_id));
 }
 
-Result Client::mark_room_as_read(const std::string& room_id)
+Result Client::mark_room_as_read(const std::string& room_id,
+                                 bool include_fully_read)
 {
     SH_FFI;
-    return from_ffi(impl_->ffi->mark_room_as_read(room_id));
+    return from_ffi(impl_->ffi->mark_room_as_read(room_id, include_fully_read));
+}
+
+Result Client::set_fully_read_marker(const std::string& room_id,
+                                     const std::string& event_id)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->set_fully_read_marker(room_id, event_id));
+}
+
+FullyReadMarker Client::fully_read_marker(const std::string& room_id)
+{
+    SH_FFI;
+    auto m = impl_->ffi->fully_read_marker(room_id);
+    return FullyReadMarker{std::string(m.event_id), m.ts_ms};
 }
 
 Result Client::send_thread_read_receipt(const std::string& room_id,

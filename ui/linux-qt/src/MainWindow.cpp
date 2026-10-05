@@ -1705,6 +1705,10 @@ MainWindow::~MainWindow()
     // remaining windows' tray menus after this window's C++ resources are freed.
     broadcast_rebuild_tray_();
 
+    // Send this window's deferred "New messages" moves before the clients
+    // stop (request_stop() would cancel them).
+    flush_pending_fully_read_now_();
+
     // Signal Rust's cancellation channel first so any worker thread
     // currently blocked inside a `block_on(tokio::select! { stop_rx })`
     // FFI call returns immediately.  drain() can then join all threads

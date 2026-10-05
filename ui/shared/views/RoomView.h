@@ -539,6 +539,9 @@ public:
     std::function<void()> on_return_to_live;
     std::function<void(std::uint64_t ts_ms)> on_date_jump;
     std::function<void(std::string original_event_id)> on_scroll_to_original;
+    // The timeline's "Jump to first unread" found the divider outside the
+    // loaded window; `fully_read_event_id` is the room's m.fully_read event.
+    std::function<void(std::string fully_read_event_id)> on_jump_to_unread;
 
     // Clipboard write — forward to the platform host. Wire to
     // Host::set_clipboard_text in the shell.

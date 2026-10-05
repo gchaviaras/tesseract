@@ -5213,6 +5213,12 @@ msgstr "Deine Nachrichten durchsuchen"
 msgid "Select the newest message"
 msgstr "Neueste Nachricht auswählen"
 
+msgid "Jump to the first unread message"
+msgstr "Zur ersten ungelesenen Nachricht springen"
+
+msgid "Jump to first unread"
+msgstr "Zur ersten ungelesenen Nachricht"
+
 msgid "Select the oldest loaded message"
 msgstr "Älteste geladene Nachricht auswählen"
 

@@ -533,6 +533,8 @@ set(_icon_svgs
     "${_lucide_dir}/lucide-user-round-minus.svg"
     "${_lucide_dir}/lucide-ban.svg"
     "${_lucide_dir}/lucide-chevron-right.svg"
+    "${_lucide_dir}/lucide-arrow-down.svg"
+    "${_lucide_dir}/lucide-arrow-up.svg"
 )
 
 add_custom_command(

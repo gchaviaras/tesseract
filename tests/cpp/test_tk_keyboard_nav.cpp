@@ -509,6 +509,26 @@ TEST_CASE("Timeline: focus lands on the newest visible message; Up/Down move",
     CHECK(v.selected_index() == 19);
 }
 
+TEST_CASE("Timeline: Shift+PageUp pages up when nothing is unread",
+          "[message_list][keyboard][unread]")
+{
+    TimelineStage st;
+    MessageListView v;
+    std::vector<MessageRowData> rows;
+    for (int i = 0; i < 20; ++i)
+        rows.push_back(kbd_text_row(i));
+    v.set_messages(std::move(rows), /*room_switch=*/true);
+    st.run(v, {0, 0, 320, 200});
+
+    TestHost host(&v);
+    host.request_focus(&v);
+    REQUIRE(v.selected_index() == 19);
+    KeyEvent e{Key::PageUp};
+    e.shift = true;
+    CHECK(v.on_key_down(e));
+    CHECK(v.selected_index() < 19);
+}
+
 TEST_CASE("Timeline: Left/Right reach a message's actions and Enter fires them",
           "[message_list][keyboard]")
 {

@@ -1006,6 +1006,10 @@ void RoomPane::wire_room_view_()
             sess->client->subscribe_room_at(rid, eid);
         });
     };
+    rv->on_jump_to_unread = [this](const std::string& fully_read_event_id)
+    {
+        jump_to_unread_(fully_read_event_id);
+    };
     rv->on_pin_requested = [this](const std::string& event_id)
     {
         pin_event_(event_id);
@@ -2132,9 +2136,15 @@ bool RoomPane::on_timeline_reset(std::vector<views::MessageRowData> rows)
 {
     // A genuine first display, OR a re-population of an emptied view (e.g.
     // logout -> login -> same room): both warrant the display gate.
-    const auto* ml = room_view_ ? room_view_->message_list() : nullptr;
+    auto* ml = room_view_ ? room_view_->message_list() : nullptr;
     const bool room_switch =
         !displayed_once_ || (ml && ml->messages().empty());
+    // retarget() clears displayed_once_, so this is a different room — not a
+    // focused jump or a refresh, which keep the unread pill's dismissal.
+    if (!displayed_once_ && ml)
+    {
+        ml->reset_unread_pill();
+    }
     displayed_once_ = true;
 
     // Never let a previous room's withheld tail leak into this one, switch
@@ -2186,9 +2196,83 @@ bool RoomPane::on_timeline_reset(std::vector<views::MessageRowData> rows)
                 pstate.returning_to_live = false;
                 list->scroll_to_bottom();
             }
+            if (!pstate.is_focused)
+            {
+                refresh_unread_marker_();
+            }
         }
     }
     return room_switch;
+}
+
+void RoomPane::on_fully_read_moved()
+{
+    if (room_view_)
+        if (auto* ml = room_view_->message_list())
+            ml->set_unread_marker_event_id({});
+}
+
+void RoomPane::refresh_unread_marker_()
+{
+    auto sess = session_();
+    if (room_id_.empty() || !sess || !sess->client)
+    {
+        return;
+    }
+    const std::string room_id = room_id_;
+    run_async_(
+        [this, sess, room_id, ui = ui_poster(shell_poster(shell_))]()
+        {
+            if (!ui.owner_alive()) // owner gone before the job started
+                return;
+            tesseract::FullyReadMarker m = sess->client->fully_read_marker(room_id);
+            ui(
+                [this, room_id, m = std::move(m)]() mutable
+                {
+                    if (!room_view_ || room_id_ != room_id)
+                        return;
+                    if (auto* ml = room_view_->message_list())
+                        ml->set_unread_marker_event_id(std::move(m.event_id), m.ts_ms);
+                });
+        });
+}
+
+void RoomPane::jump_to_unread_(const std::string& fully_read_event_id)
+{
+    auto* ml = room_view_ ? room_view_->message_list() : nullptr;
+    if (!ml)
+    {
+        return;
+    }
+    // The divider may only be held back by the room-switch display cap
+    // (see withheld_older_rows_): reveal the withheld rows from it onward
+    // instead of rebuilding the timeline around the event.
+    using Kind = views::MessageRowData::Kind;
+    const auto marker = std::find_if(
+        withheld_older_rows_.begin(), withheld_older_rows_.end(),
+        [](const views::MessageRowData& r) { return r.kind == Kind::ReadMarker; });
+    if (marker != withheld_older_rows_.end())
+    {
+        // Start one row earlier so the divider has its last-read message
+        // above it, as in the live timeline.
+        const auto start = static_cast<std::size_t>(
+            std::max<std::ptrdiff_t>(0, (marker - withheld_older_rows_.begin()) - 1));
+        const std::size_t count = withheld_older_rows_.size() - start;
+        for (std::size_t i = 0; i < count; ++i)
+            room_view_->insert_message(i, std::move(withheld_older_rows_[start + i]));
+        withheld_older_rows_.resize(start);
+        ml->reset_near_top_latch();
+        deps_.relayout();
+        ml->jump_to_first_unread();
+        return;
+    }
+    if (fully_read_event_id.empty() || room_view_->on_scroll_to_original == nullptr)
+    {
+        return;
+    }
+    // Same focused-timeline path as a reply-quote or pinned-message jump.
+    ml->set_highlighted_event(fully_read_event_id);
+    room_view_->on_scroll_to_original(fully_read_event_id);
 }
 
 void RoomPane::on_message_inserted(std::size_t idx,
@@ -2207,16 +2291,47 @@ void RoomPane::on_message_inserted(std::size_t idx,
     {
         feed_gallery_live_(room_id_, row, /*prepend=*/false);
     }
-    const std::size_t withheld = withheld_count();
-    if (idx < withheld)
+    if (withheld_insert(idx, row))
     {
         return;
     }
     if (room_view_)
     {
-        room_view_->insert_message(idx - withheld, std::move(row));
+        room_view_->insert_message(idx - withheld_count(), std::move(row));
     }
     deps_.relayout();
+}
+
+bool RoomPane::withheld_insert(std::size_t idx, views::MessageRowData& row)
+{
+    if (idx >= withheld_count())
+    {
+        return false;
+    }
+    withheld_older_rows_.insert(
+        withheld_older_rows_.begin() + static_cast<std::ptrdiff_t>(idx), std::move(row));
+    return true;
+}
+
+bool RoomPane::withheld_update(std::size_t idx, views::MessageRowData& row)
+{
+    if (idx >= withheld_count())
+    {
+        return false;
+    }
+    withheld_older_rows_[idx] = std::move(row);
+    return true;
+}
+
+bool RoomPane::withheld_remove(std::size_t idx)
+{
+    if (idx >= withheld_count())
+    {
+        return false;
+    }
+    withheld_older_rows_.erase(withheld_older_rows_.begin() +
+                               static_cast<std::ptrdiff_t>(idx));
+    return true;
 }
 
 void RoomPane::on_message_prepended(views::MessageRowData row)
@@ -2258,28 +2373,26 @@ void RoomPane::on_message_updated(std::size_t idx,
 {
     // See on_message_inserted: idx is relative to the SDK's full timeline
     // and must be translated past any withheld tail.
-    const std::size_t withheld = withheld_count();
-    if (idx < withheld)
+    if (withheld_update(idx, row))
     {
         return;
     }
     if (room_view_)
     {
-        room_view_->update_message(idx - withheld, std::move(row));
+        room_view_->update_message(idx - withheld_count(), std::move(row));
     }
     deps_.relayout();
 }
 
 void RoomPane::on_message_removed(std::size_t idx)
 {
-    const std::size_t withheld = withheld_count();
-    if (idx < withheld)
+    if (withheld_remove(idx))
     {
         return;
     }
     if (room_view_)
     {
-        room_view_->remove_message(idx - withheld);
+        room_view_->remove_message(idx - withheld_count());
     }
     deps_.relayout();
 }

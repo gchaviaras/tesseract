@@ -5351,6 +5351,12 @@ msgstr "Buscar en tus mensajes"
 msgid "Select the newest message"
 msgstr "Seleccionar el mensaje más reciente"
 
+msgid "Jump to the first unread message"
+msgstr "Ir al primer mensaje no leído"
+
+msgid "Jump to first unread"
+msgstr "Ir al primer no leído"
+
 msgid "Select the oldest loaded message"
 msgstr "Seleccionar el mensaje cargado más antiguo"
 

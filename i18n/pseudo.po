@@ -5756,6 +5756,12 @@ msgstr "[Séléçt thé öldést löàdéd méssàgéxxxxxx]"
 msgid "Select the newest message"
 msgstr "[Séléçt thé ñéwést méssàgéxxxxx]"
 
+msgid "Jump to the first unread message"
+msgstr "[Jùmp tö thé fïrst ùñréàd méssàgéxxxxxx]"
+
+msgid "Jump to first unread"
+msgstr "[Jùmp tö fïrst ùñréàdxxxx]"
+
 #: ui/shared/views/shortcut_registry.cpp:96
 msgid "Step through links and attachments in a message"
 msgstr "[Stép thröùgh lïñks àñd àttàçhméñts ïñ à méssàgéxxxxxxxxx]"

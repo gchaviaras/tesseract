@@ -5904,6 +5904,10 @@ private:
     // Without this, quitting mid-call skips the graceful MSC3401/MSC4143 leave.
     _shell->end_call();
 
+    // Send this window's deferred "New messages" moves before the clients
+    // stop.
+    _shell->flush_pending_fully_read_now_();
+
     // Signal Rust's cancellation channel first so any worker thread
     // currently blocked inside a `block_on(tokio::select! { stop_rx })`
     // FFI call returns immediately.  drain() can then join all threads

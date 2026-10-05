@@ -5856,6 +5856,12 @@ msgstr ""
 msgid "Select the newest message"
 msgstr ""
 
+msgid "Jump to the first unread message"
+msgstr ""
+
+msgid "Jump to first unread"
+msgstr ""
+
 #: ui/shared/views/shortcut_registry.cpp:96
 msgid "Step through links and attachments in a message"
 msgstr ""

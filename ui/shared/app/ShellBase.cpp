@@ -9013,6 +9013,10 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     out.logged_out     = true;
     out.logged_out_uid = uid;
 
+    // Deferred "New messages" moves go out first: request_stop() below
+    // would cancel them.
+    flush_pending_fully_read_now_(uid);
+
     // Signal any run_async_mut_ worker already queued or mid-flight against
     // this client (a cancellable block_on — poll_presence_now, subscribe_room,
     // send_message, ...) to give up immediately, rather than running its own
@@ -9602,6 +9606,107 @@ void ShellBase::maybe_send_read_receipt_(const std::string& room_id,
                 sess->client->send_read_receipt(room_id, event_id);
             }
         });
+
+    // Defer the m.fully_read move so the "New messages" divider lingers. Only
+    // the first receipt of a batch arms the timer; later ones advance the
+    // target without restarting it, so a busy room still clears on time.
+    const std::string key = (sess ? sess->user_id : std::string{}) + "\x1F" + room_id;
+    auto [it, inserted] = pending_fully_read_.try_emplace(key);
+    it->second.room_id  = room_id;
+    it->second.event_id = event_id;
+    it->second.sess     = sess;
+    if (inserted)
+    {
+        post_to_ui_after_(kFullyReadLingerMs,
+                          guarded([this, key] { flush_fully_read_(key); }));
+    }
+}
+
+void ShellBase::flush_fully_read_(const std::string& key)
+{
+    auto it = pending_fully_read_.find(key);
+    if (it == pending_fully_read_.end())
+    {
+        return;
+    }
+    PendingFullyRead p = std::move(it->second);
+    pending_fully_read_.erase(it);
+    run_async_mut_(
+        [this, p = std::move(p)]()
+        {
+            if (!p.sess || !p.sess->client)
+            {
+                return;
+            }
+            if (!p.sess->client->set_fully_read_marker(p.room_id, p.event_id).ok)
+            {
+                return;
+            }
+            post_to_ui_alive_(
+                [this, room_id = p.room_id, user_id = p.sess->user_id]()
+                {
+                    notify_fully_read_moved_(user_id, room_id);
+                });
+        });
+}
+
+void ShellBase::flush_pending_fully_read_now_(const std::string& user_id)
+{
+    for (auto it = pending_fully_read_.begin(); it != pending_fully_read_.end();)
+    {
+        const PendingFullyRead& p = it->second;
+        if (!user_id.empty() && (!p.sess || p.sess->user_id != user_id))
+        {
+            ++it;
+            continue;
+        }
+        // Best-effort and synchronous: the caller is about to stop this
+        // client, which would cancel a queued worker.
+        if (p.sess && p.sess->client)
+        {
+            (void) p.sess->client->set_fully_read_marker(p.room_id, p.event_id);
+        }
+        it = pending_fully_read_.erase(it); // the armed timer finds nothing
+    }
+}
+
+void ShellBase::notify_fully_read_moved_(const std::string& user_id,
+                                         const std::string& room_id)
+{
+    if (main_room_pane_ && active_account_ &&
+        active_account_->user_id == user_id && current_room_id_ == room_id)
+    {
+        main_room_pane_->on_fully_read_moved();
+    }
+    for (const auto& w : owned_secondary_windows_)
+    {
+        if (w->room_id() == room_id && w->owner_user_id() == user_id && w->pane())
+        {
+            w->pane()->on_fully_read_moved();
+        }
+    }
+}
+
+bool ShellBase::room_is_shown_(const std::string& user_id,
+                               const std::string& room_id) const
+{
+    if (room_id.empty())
+    {
+        return false;
+    }
+    if (room_id == current_room_id_ && active_account_ &&
+        active_account_->user_id == user_id)
+    {
+        return true;
+    }
+    for (const auto& w : owned_secondary_windows_)
+    {
+        if (w->room_id() == room_id && w->owner_user_id() == user_id)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void ShellBase::forget_thread_receipts_(const std::string& room_id)
@@ -9692,12 +9797,20 @@ void ShellBase::mark_room_read_(const std::string& room_id)
     on_rooms_updated_();
     notify_tray_unread_();
     auto sess = active_account_;
+    const bool include_fully_read =
+        sess && !room_is_shown_(sess->user_id, room_id);
+    if (include_fully_read && sess)
+    {
+        // The marker jumps to the latest event now; a pending deferred move
+        // would only drag it back.
+        pending_fully_read_.erase(sess->user_id + "\x1F" + room_id);
+    }
     run_async_mut_(
-        [sess, room_id]()
+        [sess, room_id, include_fully_read]()
         {
             if (sess && sess->client)
             {
-                sess->client->mark_room_as_read(room_id);
+                sess->client->mark_room_as_read(room_id, include_fully_read);
             }
         });
 }
@@ -10196,12 +10309,19 @@ void ShellBase::handle_message_inserted_ui_(std::string room_id,
     // ShellBase::kSwitchDisplayCap / RoomPane::withheld_older_rows_) without
     // the SDK ever finding out, so it must be translated into room_view_'s
     // own (shorter) index space before use — an index landing inside the
-    // withheld region itself isn't currently displayed at all, so there's
-    // nothing to insert into yet.
+    // withheld region goes into that buffer instead, keeping it (and
+    // withheld_count()) in step with the SDK.
+    bool into_withheld = false;
+    if (main_window_shows_(room_id) && !in_thread && main_room_pane_ &&
+        index < main_room_pane_->withheld_count())
+    {
+        auto row = tesseract::views::make_row_data(*ev, dispatch_account_());
+        into_withheld = main_room_pane_->withheld_insert(index, row);
+    }
     const std::size_t withheld =
         main_room_pane_ ? main_room_pane_->withheld_count() : 0;
     if (main_window_shows_(room_id) && !in_thread && room_view_ &&
-        index >= withheld)
+        !into_withheld)
     {
         prep_row_media_(*ev);
         if (!ev->in_reply_to_id.empty() && main_room_pane_)
@@ -10247,14 +10367,20 @@ void ShellBase::handle_message_updated_ui_(std::string room_id,
     const bool in_thread = !ev->thread_root_id.empty();
     // See handle_message_inserted_ui_: index is relative to the SDK's full
     // timeline and must be translated past any withheld (not-yet-displayed)
-    // rows. An index still inside the withheld region has nothing displayed
-    // to update yet, so it's dropped here — same as it would silently be by
-    // MessageListView::update_message()'s own out-of-range guard, just
-    // without paying for prep_row_media_/ensure_reply_details_ first.
+    // rows. An index still inside the withheld region updates that buffer
+    // instead (nothing displayed yet, so no prep_row_media_ /
+    // ensure_reply_details_ to pay for).
+    bool in_withheld = false;
+    if (main_window_shows_(room_id) && !in_thread && main_room_pane_ &&
+        index < main_room_pane_->withheld_count())
+    {
+        auto row = tesseract::views::make_row_data(*ev, dispatch_account_());
+        in_withheld = main_room_pane_->withheld_update(index, row);
+    }
     const std::size_t withheld =
         main_room_pane_ ? main_room_pane_->withheld_count() : 0;
     if (main_window_shows_(room_id) && !in_thread && room_view_ &&
-        index >= withheld)
+        !in_withheld)
     {
         // NOT delegated to main_room_pane_->on_message_updated() — that
         // calls deps_.relayout(), which for the main window is the
@@ -10305,9 +10431,11 @@ void ShellBase::handle_message_removed_ui_(std::string room_id,
     // handle_message_updated_ui_ above for why (relayout coalescing).
     // See handle_message_inserted_ui_ for the withheld-region index
     // translation this needs.
+    const bool in_withheld = main_window_shows_(room_id) && main_room_pane_ &&
+                             main_room_pane_->withheld_remove(index);
     const std::size_t withheld =
         main_room_pane_ ? main_room_pane_->withheld_count() : 0;
-    if (main_window_shows_(room_id) && room_view_ && index >= withheld)
+    if (main_window_shows_(room_id) && room_view_ && !in_withheld)
     {
         room_view_->remove_message(index - withheld);
         schedule_relayout_(); // coalesce bursts into one layout pass
@@ -10463,7 +10591,11 @@ void ShellBase::handle_messages_updated_batch_ui_(std::string room_id,
             if (!ev || ev->type == tesseract::EventType::Unhandled)
                 continue;
             if (indices[i] < withheld)
+            {
+                auto row = tesseract::views::make_row_data(*ev, dispatch_account_());
+                main_room_pane_->withheld_update(indices[i], row);
                 continue;
+            }
             // Batch updates can affect off-screen rows; suppress avatar fetches
             // so we don't bulk-request every sender across the entire history.
             prep_row_media_(*ev, /*fetch_avatars=*/false);
@@ -12456,6 +12588,10 @@ void ShellBase::restart_sdk_begin_(
     }
 
     // ── Phase A (UI thread): tear the account's UI state down ────────────────
+
+    // Deferred "New messages" moves go out first: request_stop() would
+    // cancel them.
+    flush_pending_fully_read_now_(my_user_id_);
 
     // Tell any in-flight run_async_mut_ task to give up before Phase B queues
     // behind it for the exclusive FFI lock.

@@ -1017,26 +1017,40 @@ pub(super) fn lock_or_recover<T>(m: &Mutex<T>) -> parking_lot::MutexGuard<'_, T>
     m.lock()
 }
 
-/// Send public (`m.read`), private (`m.read.private`), and fully-read
-/// (`m.fully_read`) markers for `event_id` in a single request.
+/// Send public (`m.read`) and private (`m.read.private`) receipts for
+/// `event_id` in a single request, plus the fully-read (`m.fully_read`)
+/// marker when `include_fully_read` is set.
 ///
 /// `m.read.private` advances the user's own read position across devices
 /// without broadcasting it to other room members (MSC2285). `m.fully_read`
 /// sets the account-data marker that matrix-sdk-ui uses to position the
 /// `VirtualTimelineItem::ReadMarker` ("New messages" divider) in the timeline.
+/// For an open room the shell defers `m.fully_read` (see `send_fully_read`)
+/// so the divider lingers a few seconds after the user has read past it.
 #[cfg(not(test))]
 async fn send_both_receipts(
     room: &matrix_sdk::Room,
     event_id: matrix_sdk::ruma::OwnedEventId,
+    include_fully_read: bool,
 ) -> matrix_sdk::Result<()> {
     use matrix_sdk::room::Receipts;
-    room.send_multiple_receipts(
-        Receipts::new()
-            .fully_read_marker(event_id.clone())
-            .public_read_receipt(event_id.clone())
-            .private_read_receipt(event_id),
-    )
-    .await
+    let mut receipts = Receipts::new()
+        .public_read_receipt(event_id.clone())
+        .private_read_receipt(event_id.clone());
+    if include_fully_read {
+        receipts = receipts.fully_read_marker(event_id);
+    }
+    room.send_multiple_receipts(receipts).await
+}
+
+/// Move only the `m.fully_read` marker to `event_id`.
+#[cfg(not(test))]
+async fn send_fully_read(
+    room: &matrix_sdk::Room,
+    event_id: matrix_sdk::ruma::OwnedEventId,
+) -> matrix_sdk::Result<()> {
+    use matrix_sdk::room::Receipts;
+    room.send_multiple_receipts(Receipts::new().fully_read_marker(event_id)).await
 }
 
 /// Encode raw 16-bit mono PCM samples (48 kHz) into an Ogg/Opus byte stream.

@@ -44,6 +44,7 @@ namespace tesseract::views
 {
 
 struct ScrollPillWidget;
+struct UnreadPillWidget;
 
 // One URL-preview card's data. Populated either from an MSC4095 bundled
 // preview on the event, or from the legacy homeserver `/preview_url` fetch.
@@ -931,6 +932,42 @@ public:
         return pill_rect_;
     }
 
+    // "Jump to first unread" pill — top-centre, visible while the "New
+    // messages" divider is above the viewport, or while the room's
+    // m.fully_read event (set_unread_marker_event_id) is older than the
+    // loaded window. World-coord rect, recomputed each paint.
+    bool unread_pill_visible() const
+    {
+        return unread_pill_visible_;
+    }
+    tk::Rect unread_pill_bounds() const
+    {
+        return unread_pill_rect_;
+    }
+
+    // The room's m.fully_read event id, supplied by the shell after a room
+    // opens. Lets the unread pill offer a jump when the divider row isn't in
+    // the loaded window. Pass "" once the marker has moved to the tail.
+    // `ts_ms` is that event's timestamp when known (0 if not): an event no
+    // older than the oldest loaded row is inside the window, just not
+    // rendered (a reaction, an edit), so it offers no jump.
+    void set_unread_marker_event_id(std::string event_id, std::uint64_t ts_ms = 0);
+
+    // Forget the unread pill's dismissal and m.fully_read id. Call when the
+    // view starts showing a different room (not on a refresh of the same
+    // one, which would bring back a pill the user already dismissed).
+    void reset_unread_pill();
+
+    // Scroll the "New messages" divider to the top of the viewport, or fire
+    // on_jump_to_unread when it isn't loaded. Hides the unread pill. Returns
+    // false (changing nothing) when there is nothing unread to jump to.
+    bool jump_to_first_unread();
+
+    // Fired by jump_to_first_unread() when the divider row isn't loaded,
+    // with the m.fully_read event id; the shell loads a timeline focused on
+    // it.
+    std::function<void(const std::string& fully_read_event_id)> on_jump_to_unread;
+
     // Floating date badge — visible only while browsing history, showing
     // which day the top-visible row belongs to. Recomputed each paint,
     // same trick as the scroll-to-bottom pill above.
@@ -1211,11 +1248,21 @@ private:
     mutable std::vector<ChipHit> chip_hit_rects_;
 
     std::vector<MessageRowData> messages_;
-    // True while waiting for the SDK to relocate the read marker after a
-    // new real message was appended. The adapter returns height 0 and skips
-    // painting the ReadMarker row; cleared when update_message receives a
-    // ReadMarker row (SDK confirmed the new position).
+    // True while the read marker sits directly above a message the user
+    // watched arrive at the live tail: the SDK inserts it there (m.fully_read
+    // is deferred) right after that message, and it must not show as a "New
+    // messages" line above something already seen. The adapter returns
+    // height 0 and skips painting the ReadMarker row; cleared when the
+    // ReadMarker row is removed (the SDK's move) or updated.
     bool suppress_read_marker_ = false;
+    // Event ids of rows that arrived at the live tail while the user was
+    // pinned there (newest last, capped). A ReadMarker inserted directly
+    // above one of them is suppressed (see suppress_read_marker_). Cleared
+    // with the rows on a timeline reset.
+    std::vector<std::string> watched_arrivals_;
+    void note_watched_arrival_(const std::string& event_id);
+    // True when the first real row at or after `index` is a watched arrival.
+    bool marker_above_watched_arrival_(std::size_t index) const;
 
     // Back-pagination spinner state. Set while a back-paginate is in flight;
     // a rotating-dots indicator is drawn at the top of the viewport.
@@ -1494,6 +1541,48 @@ private:
     bool historical_mode_ = false;
 
     bool should_show_pill() const;
+
+    // "Jump to first unread" pill state (see unread_pill_visible()). Same
+    // recompute-in-paint() trick as pill_rect_.
+    mutable tk::Rect unread_pill_rect_{}; // world coords
+    mutable bool unread_pill_visible_ = false;
+    UnreadPillWidget* unread_pill_ = nullptr; // borrowed from child
+    // The room's m.fully_read event id and its timestamp (0 when unknown),
+    // from set_unread_marker_event_id().
+    std::string unread_marker_event_id_;
+    std::uint64_t unread_marker_ts_ms_ = 0;
+    // Set by the pill's ×, a jump, or the divider coming on screen; cleared
+    // on room switch so the next visit offers the pill again.
+    // Mutable: paint() sets it once the divider has been on screen.
+    mutable bool unread_pill_dismissed_ = false;
+    // Decide read-marker handling for a real row about to be inserted at
+    // `index`, noting it as watched when it lands at the live tail while
+    // the user is pinned there. Returns true when the change needs a full
+    // invalidate_data().
+    bool suppress_read_marker_for_insert_(std::size_t index, bool at_bottom,
+                                          const std::string& event_id);
+    // Read-marker facts the pill checks on every paint, cached so a paint
+    // doesn't rescan messages_. Any change to messages_ or the m.fully_read
+    // id must call unread_scan_dirty_().
+    struct UnreadScan
+    {
+        int marker_row = -1;          // ReadMarker row, or -1
+        bool content_after = false;   // a real row follows marker_row
+        bool fully_read_unloaded = false;
+    };
+    mutable UnreadScan unread_scan_cache_{};
+    mutable bool unread_scan_valid_ = false;
+    void unread_scan_dirty_() { unread_scan_valid_ = false; }
+    const UnreadScan& unread_scan_() const;
+    // Index of the "New messages" divider when it is actually painted (not
+    // suppressed, with real content after it), else -1.
+    int shown_read_marker_index_() const;
+    // True when the m.fully_read event is older than the loaded window: no
+    // divider row exists, the event isn't in messages_, and it isn't known
+    // to be newer than the oldest loaded row (an event the timeline doesn't
+    // render, like a reaction, means the user is caught up).
+    bool unread_marker_unloaded_() const;
+    bool should_show_unread_pill() const;
 
     // Cached copy of the last date_badge_() result, refreshed in paint() —
     // same "recompute in paint(), expose via a const getter" trick as

@@ -1406,6 +1406,19 @@ protected:
     // (MSC3771) read receipt for. Dedups the per-viewport receipt-needed
     // callbacks fired by the open thread panel's message list.
     std::unordered_map<std::string, std::string> last_sent_thread_receipt_;
+    // Deferred m.fully_read marker (the timeline's "New messages" divider),
+    // keyed "user_id\x1Froom_id". Read receipts go out immediately, but the
+    // marker only moves kFullyReadLingerMs after the first receipt of a
+    // batch, so the divider stays visible briefly after the user has read
+    // past it. Later receipts within the window just advance the target.
+    struct PendingFullyRead
+    {
+        std::string room_id;
+        std::string event_id;
+        std::shared_ptr<AccountSession> sess;
+    };
+    std::unordered_map<std::string, PendingFullyRead> pending_fully_read_;
+    static constexpr int kFullyReadLingerMs = 10000;
     static constexpr std::uint16_t kPaginationBatch = 50;
     // Larger one-time batch for the initial fill on a room's first subscribe
     // this session (see start_room_subscription_ / PaginationState::
@@ -5671,11 +5684,30 @@ protected:
     static constexpr std::size_t kMaxConcurrentMediaFetches = 8;
 
     // Send public m.read and private m.read.private receipts for event_id in
-    // room_id if it differs from the last one sent this session. No-op when
+    // room_id if it differs from the last one sent this session, and schedule
+    // the deferred m.fully_read move (see pending_fully_read_). No-op when
     // either arg is empty.
     void maybe_send_read_receipt_(const std::string& room_id,
                                   const std::string& event_id,
     const std::shared_ptr<AccountSession>& on_behalf_of = nullptr);
+
+    // Send the pending m.fully_read for `key` (see pending_fully_read_) now.
+    void flush_fully_read_(const std::string& key);
+    // Tell every pane showing room_id that its m.fully_read has moved.
+    void notify_fully_read_moved_(const std::string& user_id,
+                                  const std::string& room_id);
+
+    // True when user_id's room_id is on screen (main window or a pop-out).
+    bool room_is_shown_(const std::string& user_id, const std::string& room_id) const;
+
+public:
+    // Send every pending m.fully_read (only user_id's, when given) now,
+    // synchronously. Call before a client stops — app quit, logout, cache
+    // wipe — so a divider the user has read past doesn't come back on the
+    // next launch or on other clients. UI-thread only.
+    void flush_pending_fully_read_now_(const std::string& user_id = {});
+
+protected:
 
     // Send MSC3771 threaded read receipts for the thread rooted at
     // `thread_root` in `room_id` (targeting the thread's latest reply),
@@ -5701,6 +5733,8 @@ protected:
     // Optimistically zero the unread count for room_id in the local room list
     // and dispatch mark_room_as_read asynchronously. Call on room open so the
     // unread badge clears immediately without waiting for a sync round-trip.
+    // A room that is on screen keeps its m.fully_read marker where it is —
+    // the deferred receipt path moves it once the user has seen the divider.
     void mark_room_read_(const std::string& room_id);
 
     // Update last_room_list_state_.  Shells call their own refresh_sync_status

@@ -506,6 +506,10 @@ void RoomView::wire_message_list_callbacks_(MessageListView* ml)
     {
         if (on_receipt_needed) on_receipt_needed(event_id);
     };
+    ml->on_jump_to_unread = [this](const std::string& event_id)
+    {
+        if (on_jump_to_unread) on_jump_to_unread(event_id);
+    };
     ml->on_member_pronoun_needed = [this](const std::string& user_id)
     {
         if (on_member_pronoun_needed) on_member_pronoun_needed(user_id);

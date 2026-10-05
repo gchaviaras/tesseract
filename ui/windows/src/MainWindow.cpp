@@ -3415,6 +3415,9 @@ void MainWindow::on_destroy()
     // without blocking.  The invariant "no worker is calling client_->*
     // when the client is destroyed" is still satisfied because drain()
     // runs before the client destructor.
+    // Send this window's deferred "New messages" moves before the clients
+    // stop.
+    flush_pending_fully_read_now_();
     // Multi-window: only the primary (non-pinned) window tears down the SHARED
     // accounts' background sync (its destruction == app shutdown). A secondary
     // (pinned) window closing must leave every account syncing for the survivors;

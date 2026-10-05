@@ -210,6 +210,14 @@ public:
     // timeline, so a caller forwarding one of those straight to room_view_
     // must first subtract this to land on the right row.
     std::size_t withheld_count() const { return withheld_older_rows_.size(); }
+    // Apply a live SDK diff at full-timeline index `idx` to the withheld
+    // rows when it lands among them, so the buffer (and withheld_count())
+    // stays in step with the SDK — e.g. the read marker moving inside it.
+    // Return false, changing nothing, when `idx` is past them: the caller
+    // then translates it into room_view_'s index space instead.
+    bool withheld_insert(std::size_t idx, views::MessageRowData& row);
+    bool withheld_update(std::size_t idx, views::MessageRowData& row);
+    bool withheld_remove(std::size_t idx);
 
     // A weak handle to this pane itself. .lock() returns the live RoomPane*,
     // or nullptr once this pane is gone.
@@ -234,6 +242,9 @@ public:
     // Called by the owner (ShellBase/RoomWindowBase) on the UI thread when
     // SDK events arrive for this pane's current room.
     void on_room_info_updated(const RoomInfo& r);
+    // The deferred m.fully_read for this pane's room has been sent, so the
+    // timeline's unread pill must stop pointing at the old position.
+    void on_fully_read_moved();
     // Returns true if this reset was treated as a room switch (first
     // display of this room, or a re-population of a previously-emptied
     // view — e.g. logout -> login into the same room). Callers that need
@@ -462,6 +473,11 @@ public:
     void toggle_reaction_(const std::string& event_id, const std::string& key,
                           const std::string& source_mxc);
     void send_receipt_(const std::string& event_id);
+    // Read the room's m.fully_read event id off the UI thread and hand it to
+    // the timeline's unread pill.
+    void refresh_unread_marker_();
+    // The unread pill's jump when the divider isn't in the timeline view.
+    void jump_to_unread_(const std::string& fully_read_event_id);
     void send_typing_notice_(bool typing);
     void retry_send_(const std::string& txn_id);
     void abort_send_(const std::string& txn_id);

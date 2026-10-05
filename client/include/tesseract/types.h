@@ -1004,6 +1004,15 @@ struct RoomOwnPowerLevel
     bool has_explicit_override = false;
 };
 
+/// A room's `m.fully_read` marker. `event_id` is empty when there is none;
+/// `ts_ms` is that event's timestamp when the local event cache holds it,
+/// else 0. Returned by `Client::fully_read_marker`.
+struct FullyReadMarker
+{
+    std::string event_id;
+    uint64_t ts_ms = 0;
+};
+
 /// Server-side key-backup state. Mirrors the encoding of the `u8`-typed
 /// `state` field carried over the FFI in `BackupProgress` (see
 /// `sdk/src/bridge.rs`).

@@ -47,6 +47,7 @@ enum class ShortcutId
     TimelinePage,
     TimelineOldest,
     TimelineNewest,
+    TimelineFirstUnread,
     TimelineParts,
     TimelineActivate,
     CopyMessage,

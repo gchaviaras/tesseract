@@ -472,6 +472,12 @@ pub mod ffi {
         pub has_explicit_override: bool,
     }
 
+    #[derive(Debug, PartialEq, Default, Clone)]
+    pub struct FullyReadMarkerFfi {
+        pub event_id: String,
+        pub ts_ms: u64,
+    }
+
     #[derive(Debug, PartialEq, Default)]
     pub struct RoomSecurityStateFfi {
         pub is_encrypted: bool,

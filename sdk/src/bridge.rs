@@ -1175,6 +1175,14 @@ pub mod ffi {
         updated_at_secs: i64,
     }
 
+    /// The room's `m.fully_read` marker, returned by `fully_read_marker`.
+    /// `event_id` is empty when there is none. `ts_ms` is the event's
+    /// origin_server_ts when the event cache holds it, else 0.
+    struct FullyReadMarkerFfi {
+        event_id: String,
+        ts_ms: u64,
+    }
+
     /// The current user's own effective power level in a room, via ruma's
     /// `RoomPowerLevels::for_user` (NOT a hand-rolled `users`/`users_default`
     /// lookup — room versions 12+ give creators an "infinite" power level
@@ -2845,9 +2853,18 @@ pub mod ffi {
         fn send_read_receipt(self: &ClientFfi, room_id: &str, event_id: &str) -> OpResult;
 
         /// Send public `m.read` and private `m.read.private` receipts for the
-        /// latest cached event in `room_id`. Used to clear the unread badge
-        /// when the user opens a room. Does not require a subscription.
-        fn mark_room_as_read(self: &ClientFfi, room_id: &str) -> OpResult;
+        /// latest cached event in `room_id`, plus `m.fully_read` when
+        /// `include_fully_read` is set. Used to clear the unread badge.
+        /// Does not require a subscription.
+        fn mark_room_as_read(self: &ClientFfi, room_id: &str, include_fully_read: bool) -> OpResult;
+
+        /// Move the `m.fully_read` marker ("New messages" divider) to
+        /// `event_id` in `room_id`. Does not require a subscription.
+        fn set_fully_read_marker(self: &ClientFfi, room_id: &str, event_id: &str) -> OpResult;
+
+        /// The room's `m.fully_read` marker: its event id (empty when none)
+        /// and, when the event cache holds that event, its timestamp.
+        fn fully_read_marker(self: &ClientFfi, room_id: &str) -> FullyReadMarkerFfi;
 
         /// Send public + private MSC3771 **threaded** read receipts for the
         /// thread rooted at `thread_root_id`. This is the only call that

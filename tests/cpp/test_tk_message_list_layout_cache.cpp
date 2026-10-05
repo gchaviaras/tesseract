@@ -205,13 +205,11 @@ TEST_CASE("MessageListView renders a literal @room in a plain m.text body "
     CHECK(st.cf.saw_image_span);
 }
 
-TEST_CASE("inserting a message collapses an existing read marker",
+TEST_CASE("inserting a message keeps an existing read marker",
           "[message_list][layout_cache]")
 {
-    // Appending a content message flips the global suppress_read_marker_ flag,
-    // which collapses any visible read marker to zero height. A targeted insert
-    // alone would leave the marker (elsewhere in the list) at its stale height,
-    // so this guards that the flag flip forces a full re-measure.
+    // m.fully_read is deferred, so a divider already on screen must stay put
+    // while new messages arrive below it rather than collapse.
     TkMessageListLayoutCacheStage st;
     MessageListView v;
     std::vector<MessageRowData> msgs;
@@ -225,12 +223,37 @@ TEST_CASE("inserting a message collapses an existing read marker",
     st.run(v, {0, 0, 600, 400});
 
     REQUIRE(v.messages().size() == 3);
-    REQUIRE(v.row_world_rect(1).h > 0.0f); // marker visible (content after it)
+    const float marker_h = v.row_world_rect(1).h;
+    REQUIRE(marker_h > 0.0f); // marker visible (content after it)
 
     v.insert_message(3, make_rich("$c", "again")); // append content row
     st.run(v, {0, 0, 600, 400});
 
-    CHECK(v.row_world_rect(1).h == 0.0f); // marker collapsed by suppress flip
+    CHECK(v.row_world_rect(1).h == marker_h);
+}
+
+TEST_CASE("a live-tail message keeps an empty read marker collapsed",
+          "[message_list][layout_cache]")
+{
+    // A divider with nothing after it is drawn as nothing. A message the user
+    // watches arrive at the tail must not grow it into a "New messages" line
+    // above that message.
+    TkMessageListLayoutCacheStage st;
+    MessageListView v;
+    std::vector<MessageRowData> msgs;
+    msgs.push_back(make_rich("$a", "hello"));
+    MessageRowData rm;
+    rm.kind = MessageRowData::Kind::ReadMarker;
+    rm.event_id = "$rm";
+    msgs.push_back(rm);
+    v.set_messages(std::move(msgs), false);
+    st.run(v, {0, 0, 600, 400});
+    REQUIRE(v.row_world_rect(1).h == 0.0f);
+
+    v.insert_message(2, make_rich("$b", "live")); // at the bottom: watched
+    st.run(v, {0, 0, 600, 400});
+
+    CHECK(v.row_world_rect(1).h == 0.0f);
 }
 
 TEST_CASE("MessageListView retains the body layout across a room switch and back",

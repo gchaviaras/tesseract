@@ -5,6 +5,7 @@
 #include "MessageRowGeometry.h"
 #include "map_tiles.h"
 #include "media_utils.h"
+#include "shortcut_registry.h"
 
 #include "icons.h"
 #include "tk/animator.h"
@@ -6881,19 +6882,156 @@ struct ScrollPillWidget : tk::Widget
         ctx.canvas.fill_rounded_rect(bounds_, kSz * 0.5f, bg);
         ctx.canvas.stroke_rounded_rect(bounds_, kSz * 0.5f,
                                        ctx.theme.palette.border, 1.0f);
-        tk::TextStyle gs{};
-        gs.role = tk::FontRole::UiSemibold;
-        gs.wrap = false;
-        auto glyph = ctx.factory.build_text("\xE2\x86\x93", gs); // U+2193 ↓
-        if (glyph)
-        {
-            tk::Size sz = glyph->measure();
-            ctx.canvas.draw_text(*glyph,
-                                 {bounds_.x + (kSz - sz.w) * 0.5f,
-                                  bounds_.y + (kSz - sz.h) * 0.5f},
-                                 ctx.theme.palette.text_primary);
-        }
+        ic_arrow_.draw(ctx.canvas, ctx.factory, kArrowDownSvg, bounds_, 18.0f,
+                       ctx.theme.palette.text_primary);
     }
+
+    tk::IconCache ic_arrow_;
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// "Jump to first unread" pill — floats top-centre while the "New messages"
+// divider is above the viewport. The label half jumps; the trailing × half
+// dismisses it for this room visit. A child widget for the same reason as
+// ScrollPillWidget: hover over it must not leak to the rows beneath.
+// ─────────────────────────────────────────────────────────────────────────
+
+constexpr float kUnreadPillH       = 28.0f;
+constexpr float kUnreadPillPadX    = 10.0f;
+constexpr float kUnreadPillIconPx  = 14.0f;
+constexpr float kUnreadPillGap     = 6.0f;
+constexpr float kUnreadPillCloseW  = 26.0f;
+
+struct UnreadPillWidget : tk::Widget
+{
+    enum class Part { None, Jump, Dismiss };
+    Part pressed_ = Part::None;
+    Part hovered_ = Part::None;
+    std::function<void()> on_jump;
+    std::function<void()> on_dismiss;
+
+    // Pill width for the label, measured with the same layout paint()
+    // draws (built once, dropped on a theme change).
+    float width_for(tk::CanvasFactory& factory)
+    {
+        float w = kUnreadPillPadX + kUnreadPillIconPx + kUnreadPillGap +
+                  kUnreadPillCloseW;
+        if (const tk::TextLayout* lo = label(factory))
+            w += lo->measure().w;
+        return w;
+    }
+
+    void set_bounds(tk::Rect b) { bounds_ = b; }
+
+    // `local` is relative to the pill's top-left, as pointer callbacks get it.
+    Part part_at(tk::Point local) const
+    {
+        if (local.x < 0 || local.x >= bounds_.w || local.y < 0 || local.y >= bounds_.h)
+            return Part::None;
+        return local.x >= bounds_.w - kUnreadPillCloseW ? Part::Dismiss : Part::Jump;
+    }
+
+    bool on_pointer_move(tk::Point p) override
+    {
+        if (const Part part = part_at(p); part != hovered_)
+        {
+            hovered_ = part;
+            if (auto* h = host())
+                h->request_repaint();
+        }
+        return true; // also swallows hover so it can't leak to rows below
+    }
+    bool on_pointer_down(tk::Point p) override
+    {
+        pressed_ = part_at(p);
+        if (auto* h = host())
+            h->request_repaint();
+        return true;
+    }
+    void on_pointer_up(tk::Point p, bool inside) override
+    {
+        const Part was = std::exchange(pressed_, Part::None);
+        if (auto* h = host())
+            h->request_repaint();
+        if (!inside || was == Part::None || part_at(p) != was)
+            return;
+        if (was == Part::Jump && on_jump)
+            on_jump();
+        else if (was == Part::Dismiss && on_dismiss)
+            on_dismiss();
+    }
+    void on_pointer_leave() override
+    {
+        pressed_ = Part::None;
+        hovered_ = Part::None;
+        if (auto* h = host())
+            h->request_repaint();
+    }
+    tk::Size measure(tk::LayoutCtx&, tk::Size s) override { return s; }
+    void arrange(tk::LayoutCtx&, tk::Rect b) override { bounds_ = b; }
+
+    void paint(tk::PaintCtx& ctx) override
+    {
+        const auto& pal = ctx.theme.palette;
+        const float r = kUnreadPillH * 0.5f;
+        ctx.canvas.fill_rounded_rect(bounds_, r, pal.chrome_bg);
+        // Pressed/hover tint per half, clipped to the pill's own shape by
+        // drawing the same rounded rect inside a half-width clip.
+        auto tint_part = [&](Part part, tk::Color c)
+        {
+            const float split = bounds_.x + bounds_.w - kUnreadPillCloseW;
+            tk::Rect clip = part == Part::Jump
+                                ? tk::Rect{bounds_.x, bounds_.y, split - bounds_.x, bounds_.h}
+                                : tk::Rect{split, bounds_.y, kUnreadPillCloseW, bounds_.h};
+            ctx.canvas.push_clip_rect(clip);
+            ctx.canvas.fill_rounded_rect(bounds_, r, c);
+            ctx.canvas.pop_clip();
+        };
+        if (pressed_ != Part::None)
+            tint_part(pressed_, pal.subtle_pressed);
+        else if (hovered_ != Part::None)
+            tint_part(hovered_, pal.subtle_hover);
+        ctx.canvas.stroke_rounded_rect(bounds_, r, pal.border, 1.0f);
+
+        float x = bounds_.x + kUnreadPillPadX;
+        ic_arrow_.draw(ctx.canvas, ctx.factory, kArrowUpSvg,
+                       {x, bounds_.y, kUnreadPillIconPx, bounds_.h},
+                       kUnreadPillIconPx, pal.text_primary);
+        x += kUnreadPillIconPx + kUnreadPillGap;
+        if (const tk::TextLayout* lo = label(ctx.factory))
+        {
+            const tk::Size sz = lo->measure();
+            ctx.canvas.draw_text(*lo, {x, bounds_.y + (bounds_.h - sz.h) * 0.5f},
+                                 pal.text_primary);
+        }
+        ic_close_.draw(ctx.canvas, ctx.factory, kCloseSvg,
+                       {bounds_.x + bounds_.w - kUnreadPillCloseW, bounds_.y,
+                        kUnreadPillCloseW - 4.0f, bounds_.h},
+                       kUnreadPillIconPx, pal.text_secondary);
+    }
+
+    void on_theme_changed(const tk::Theme&) override
+    {
+        label_.reset(); // font scale may have changed
+    }
+
+    tk::IconCache ic_arrow_;
+    tk::IconCache ic_close_;
+
+private:
+    const tk::TextLayout* label(tk::CanvasFactory& factory)
+    {
+        if (!label_)
+        {
+            tk::TextStyle st{};
+            st.role = tk::FontRole::Small;
+            st.wrap = false;
+            label_ = factory.build_text(tk::tr("Jump to first unread"), st);
+        }
+        return label_.get();
+    }
+
+    std::unique_ptr<tk::TextLayout> label_;
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -7011,6 +7149,18 @@ MessageListView::MessageListView() : adapter_(std::make_unique<Adapter>(*this))
             scroll_to_bottom();
     };
     add_child(std::move(pw));
+
+    auto uw = std::make_unique<UnreadPillWidget>();
+    unread_pill_ = uw.get();
+    unread_pill_->set_visible(false);
+    unread_pill_->on_jump = [this] { jump_to_first_unread(); };
+    unread_pill_->on_dismiss = [this]
+    {
+        unread_pill_dismissed_ = true;
+        if (request_repaint_)
+            request_repaint_();
+    };
+    add_child(std::move(uw));
 }
 
 std::optional<MessageListView::StickerHit>
@@ -7123,6 +7273,8 @@ void MessageListView::set_messages(std::vector<MessageRowData> msgs,
     // index-aligned to messages_, so it must still be cleared on a full replace.
     adapter_->clear_layout_cache();
     suppress_read_marker_ = false;
+    watched_arrivals_.clear();
+    unread_scan_dirty_();
     sel_.reset();
     sel_is_dragging_ = false;
     press_sel_ = false;
@@ -7255,20 +7407,29 @@ void MessageListView::insert_message(std::size_t index, MessageRowData msg)
     const bool animated = msg.kind == MessageRowData::Kind::Video &&
                           (msg.video_autoplay || msg.video_gif);
 
-    // Suppress the read marker while the SDK catches up to the new position.
-    // update_message() clears this flag when it delivers the updated marker.
+    unread_scan_dirty_();
+    const bool at_bottom = scroll_y() + bounds().h + 1.0f >= content_height();
     bool suppress_flipped = false;
     if (!is_virtual_event(msg.kind))
     {
-        suppress_flipped = !suppress_read_marker_;
+        suppress_flipped =
+            suppress_read_marker_for_insert_(index, at_bottom, msg.event_id);
+    }
+    else if (msg.kind == MessageRowData::Kind::ReadMarker &&
+             !suppress_read_marker_ && marker_above_watched_arrival_(index))
+    {
+        // The SDK places the marker (m.fully_read is deferred) right above
+        // a message the user watched arrive: don't show "New messages"
+        // over something already seen. The deferred m.fully_read moves it
+        // on, and remove_message() lifts this.
         suppress_read_marker_ = true;
+        suppress_flipped = true;
     }
 
     // Insertion at (or past) the end is an append: follow the live tail
     // when the user is already pinned there.
     if (index == messages_.size())
     {
-        bool at_bottom = scroll_y() + bounds().h + 1.0f >= content_height();
         if (animated)
         {
             start_inline_video(msg);
@@ -7277,9 +7438,10 @@ void MessageListView::insert_message(std::size_t index, MessageRowData msg)
         insert_row(messages_.size() - 1); // targeted: only the new tail row
         if (suppress_flipped)
         {
-            // Flipping suppress_read_marker_ changes every row's is_cont
-            // skip-over and any existing read marker's height — a global
-            // effect the targeted insert above cannot cover.
+            // Flipping suppress_read_marker_ (or giving an empty divider
+            // content to sit above) changes every row's is_cont skip-over
+            // and the read marker's height — a global effect the targeted
+            // insert above cannot cover.
             invalidate_data();
         }
         if (at_bottom)
@@ -7307,7 +7469,7 @@ void MessageListView::insert_message(std::size_t index, MessageRowData msg)
             insert_row(index); // targeted: re-measure only the inserted gap
             if (suppress_flipped)
             {
-                invalidate_data(); // global suppress_read_marker_ effect
+                invalidate_data(); // global read-marker effect
             }
         });
 }
@@ -7337,6 +7499,7 @@ void MessageListView::update_message(std::size_t index, MessageRowData msg)
     {
         suppress_read_marker_ = false;
     }
+    unread_scan_dirty_();
     // A resolved quote releases this row's room-switch-gate entry (keyed by
     // the reply row's own event_id). Done here rather than by each caller so
     // every list — main timeline, thread panel, pop-outs — gets it; the
@@ -7434,12 +7597,95 @@ void MessageListView::remove_message(std::size_t index)
     }
     video_playlist_.drop(messages_[index].event_id);
     adapter_->erase_layout_cache_at(index);
+    unread_scan_dirty_();
+    // The SDK moves the read marker by removing and re-inserting it, which
+    // only happens once m.fully_read has moved: whatever suppression was
+    // waiting on the catch-up is over.
+    const bool marker_removed =
+        messages_[index].kind == MessageRowData::Kind::ReadMarker &&
+        std::exchange(suppress_read_marker_, false);
     preserve_top_through(
         [&]
         {
             messages_.erase(messages_.begin() + index);
             erase_row(index); // targeted: re-measure only around the gap
+            if (marker_removed)
+            {
+                invalidate_data(); // global read-marker effect
+            }
         });
+}
+
+bool MessageListView::suppress_read_marker_for_insert_(std::size_t index,
+                                                       bool at_bottom,
+                                                       const std::string& event_id)
+{
+    // Arriving at the live tail while the user is pinned there: the SDK
+    // inserts the read marker right above this row next (m.fully_read is
+    // deferred), and insert_message() suppresses it.
+    const bool watched =
+        at_bottom && !historical_mode_ && index >= messages_.size();
+    if (watched)
+    {
+        note_watched_arrival_(event_id);
+    }
+    // An existing marker is affected only when this real row lands after one
+    // that currently has nothing real after it (drawn as nothing).
+    int marker = -1;
+    for (int i = static_cast<int>(messages_.size()) - 1; i >= 0; --i)
+    {
+        const auto kind = messages_[static_cast<std::size_t>(i)].kind;
+        if (kind == MessageRowData::Kind::ReadMarker)
+        {
+            marker = i;
+            break;
+        }
+        if (!is_virtual_event(kind))
+        {
+            return false; // no marker, or one already showing: keep it
+        }
+    }
+    if (marker < 0 || index <= static_cast<std::size_t>(marker) ||
+        suppress_read_marker_)
+    {
+        return false;
+    }
+    // The empty marker gains content: hidden above a watched row, otherwise
+    // re-measured to show.
+    suppress_read_marker_ = watched;
+    return true;
+}
+
+void MessageListView::note_watched_arrival_(const std::string& event_id)
+{
+    if (event_id.empty())
+    {
+        return;
+    }
+    // Only the newest few matter: the SDK places the marker above the
+    // first unread arrival right after it lands.
+    constexpr std::size_t kMaxWatched = 64;
+    if (watched_arrivals_.size() >= kMaxWatched)
+    {
+        watched_arrivals_.erase(watched_arrivals_.begin());
+    }
+    watched_arrivals_.push_back(event_id);
+}
+
+bool MessageListView::marker_above_watched_arrival_(std::size_t index) const
+{
+    for (std::size_t j = index; j < messages_.size(); ++j)
+    {
+        if (is_virtual_event(messages_[j].kind))
+        {
+            continue;
+        }
+        const std::string& eid = messages_[j].event_id;
+        return !eid.empty() &&
+               std::find(watched_arrivals_.begin(), watched_arrivals_.end(), eid) !=
+                   watched_arrivals_.end();
+    }
+    return false;
 }
 
 void MessageListView::append_message(MessageRowData msg)
@@ -8667,6 +8913,133 @@ bool MessageListView::should_show_pill() const
     return scroll_y() + bounds().h + 1.0f < content_height();
 }
 
+const MessageListView::UnreadScan& MessageListView::unread_scan_() const
+{
+    if (unread_scan_valid_)
+    {
+        return unread_scan_cache_;
+    }
+    UnreadScan scan{};
+    bool fully_read_loaded = unread_marker_event_id_.empty();
+    std::uint64_t oldest_ts = 0;
+    for (std::size_t i = 0; i < messages_.size(); ++i)
+    {
+        const auto& m = messages_[i];
+        if (m.kind == MessageRowData::Kind::ReadMarker)
+        {
+            // Same rule the row painter uses: a divider with no real content
+            // after it is drawn as nothing. The SDK keeps at most one.
+            scan.marker_row = static_cast<int>(i);
+            scan.content_after = false;
+            continue;
+        }
+        if (!is_virtual_event(m.kind))
+        {
+            scan.content_after = true;
+            if (oldest_ts == 0)
+                oldest_ts = m.timestamp_ms;
+        }
+        if (!fully_read_loaded && m.event_id == unread_marker_event_id_)
+            fully_read_loaded = true;
+    }
+    // An m.fully_read event no older than the oldest loaded row is inside
+    // the window, only not rendered (a reaction, an edit): caught up.
+    const bool inside_window = unread_marker_ts_ms_ != 0 && oldest_ts != 0 &&
+                               unread_marker_ts_ms_ >= oldest_ts;
+    scan.fully_read_unloaded = !messages_.empty() && scan.marker_row < 0 &&
+                               !fully_read_loaded && !inside_window;
+    unread_scan_cache_ = scan;
+    unread_scan_valid_ = true;
+    return unread_scan_cache_;
+}
+
+int MessageListView::shown_read_marker_index_() const
+{
+    if (suppress_read_marker_)
+    {
+        return -1;
+    }
+    const UnreadScan& scan = unread_scan_();
+    return scan.content_after ? scan.marker_row : -1;
+}
+
+bool MessageListView::unread_marker_unloaded_() const
+{
+    return unread_scan_().fully_read_unloaded;
+}
+
+bool MessageListView::should_show_unread_pill() const
+{
+    if (unread_pill_dismissed_ || historical_mode_ || switch_loading_)
+    {
+        return false;
+    }
+    if (const int marker = shown_read_marker_index_(); marker >= 0)
+    {
+        const auto [first, last] = visible_range();
+        if (marker < first)
+        {
+            return true;
+        }
+        if (marker <= last)
+        {
+            // The divider is on screen: the user has seen where the unread
+            // messages start, so don't offer it again this visit.
+            unread_pill_dismissed_ = true;
+        }
+        // Below the viewport (scrolled up past it): nothing to jump up to,
+        // but it hasn't been seen yet either.
+        return false;
+    }
+    return unread_marker_unloaded_() && on_jump_to_unread != nullptr;
+}
+
+void MessageListView::set_unread_marker_event_id(std::string event_id,
+                                                 std::uint64_t ts_ms)
+{
+    if (unread_marker_event_id_ == event_id && unread_marker_ts_ms_ == ts_ms)
+    {
+        return;
+    }
+    unread_marker_event_id_ = std::move(event_id);
+    unread_marker_ts_ms_ = ts_ms;
+    unread_scan_dirty_();
+    if (request_repaint_)
+        request_repaint_();
+}
+
+void MessageListView::reset_unread_pill()
+{
+    unread_marker_event_id_.clear();
+    unread_marker_ts_ms_ = 0;
+    unread_scan_dirty_();
+    unread_pill_dismissed_ = false;
+}
+
+bool MessageListView::jump_to_first_unread()
+{
+    if (const int marker = shown_read_marker_index_(); marker >= 0)
+    {
+        unread_pill_dismissed_ = true;
+        // Deferred: a caller may have just inserted rows (RoomPane revealing
+        // withheld history), leaving row offsets stale until the next pass.
+        scroll_to_index_deferred(marker, /*align_top=*/true);
+        clear_scroll_hit_geometry_();
+        if (request_repaint_)
+            request_repaint_();
+        return true;
+    }
+    if (unread_marker_unloaded_() && on_jump_to_unread)
+    {
+        unread_pill_dismissed_ = true;
+        if (request_repaint_)
+            request_repaint_();
+        on_jump_to_unread(unread_marker_event_id_);
+        return true;
+    }
+    return false;
+}
+
 MessageListView::DateBadge MessageListView::date_badge_() const
 {
     using Kind = MessageRowData::Kind;
@@ -8760,6 +9133,7 @@ void MessageListView::prepend_messages(std::vector<MessageRowData> rows)
     const std::size_t n = rows.size();
     for (std::size_t i = 0; i < n; ++i)
         adapter_->insert_layout_cache_at(0);
+    unread_scan_dirty_();
     preserve_top_through(
         [&]
         {
@@ -8788,10 +9162,15 @@ void MessageListView::append_messages(std::vector<MessageRowData> rows)
     // and yank the view to the new bottom instead of leaving it in place.
     const bool at_bottom = !historical_mode_ &&
                           scroll_y() + bounds().h + 1.0f >= content_height();
-    // New real messages require the read marker to be repositioned.
-    suppress_read_marker_ = true;
+    unread_scan_dirty_();
+    bool marker_changed = false;
     for (auto& row : rows)
     {
+        if (!is_virtual_event(row.kind))
+        {
+            marker_changed |= suppress_read_marker_for_insert_(
+                messages_.size(), at_bottom, row.event_id);
+        }
         const bool animated = row.kind == MessageRowData::Kind::Video &&
                               (row.video_autoplay || row.video_gif);
         if (animated)
@@ -8799,6 +9178,8 @@ void MessageListView::append_messages(std::vector<MessageRowData> rows)
         messages_.push_back(std::move(row));
         insert_row(messages_.size() - 1);
     }
+    if (marker_changed)
+        invalidate_data(); // global read-marker effect
     if (at_bottom)
         scroll_to_bottom();
 }
@@ -8850,6 +9231,8 @@ void MessageListView::begin_switch_loading()
     // geometry from the old room alive past a switch — clearing here ensures
     // no old entry survives to misdirect a click in the new room.
     messages_.clear();
+    watched_arrivals_.clear();
+    unread_scan_dirty_();
     clear_hit_geometry_();
     adapter_->clear_layout_cache();
     video_playlist_.clear();
@@ -10793,6 +11176,27 @@ void MessageListView::paint(tk::PaintCtx& ctx)
         pill_rect_ = {};
     }
 
+    // "Jump to first unread" pill — top-centre, below the date badge when
+    // that is showing too.
+    unread_pill_visible_ = should_show_unread_pill();
+    unread_pill_->set_visible(unread_pill_visible_);
+    if (unread_pill_visible_)
+    {
+        constexpr float kGap = 6.0f;
+        tk::Rect v = bounds();
+        const float w = std::min(unread_pill_->width_for(ctx.factory), v.w - 16.0f);
+        const float top = date_badge.show
+                              ? v.y + kDateBadgeTopInset + kDateBadgeH + kGap
+                              : v.y + kDateBadgeTopInset;
+        unread_pill_rect_ = {v.x + (v.w - w) * 0.5f, top, w, kUnreadPillH};
+        unread_pill_->set_bounds(unread_pill_rect_);
+        unread_pill_->paint(ctx);
+    }
+    else
+    {
+        unread_pill_rect_ = {};
+    }
+
     // Tooltip overlay: paint a small panel listing senders of the
     // hovered reaction chip, or the display name of the hovered read-receipt
     // disc. We paint after rows so the panel sits on top of subsequent rows.
@@ -11228,6 +11632,19 @@ bool MessageListView::on_key_down(const tk::KeyEvent& e)
     // via copy_keyboard_cursor_message().
     if (!plain)
         return false;
+
+    if (matches(ShortcutId::TimelineFirstUnread, e))
+    {
+        // Put the cursor on the first unread message, then pin the divider
+        // to the top (the cursor move alone only scrolls it into view).
+        const int marker = shown_read_marker_index_();
+        if (marker >= 0)
+            if (const int first = kbd_step_row_(marker, 1); first >= 0)
+                kbd_select_row_(first);
+        if (jump_to_first_unread())
+            return true;
+        // Nothing unread: fall through so Shift+PageUp still pages up.
+    }
 
     switch (e.key)
     {

@@ -2262,6 +2262,272 @@ TEST_CASE("MessageListView scroll-to-bottom pill: hidden at bottom, "
     CHECK_FALSE(view.pill_visible());
 }
 
+// ── "Jump to first unread" pill ────────────────────────────────────────────
+
+namespace
+{
+
+// `count` text rows with a "New messages" divider inserted before row
+// `marker_before` (or none when negative).
+std::vector<MessageRowData> unread_rows(int count, int marker_before)
+{
+    std::vector<MessageRowData> msgs;
+    for (int i = 0; i < count; ++i)
+    {
+        if (i == marker_before)
+        {
+            MessageRowData rm{};
+            rm.kind = MessageRowData::Kind::ReadMarker;
+            msgs.push_back(std::move(rm));
+        }
+        MessageRowData m{};
+        m.kind = MessageRowData::Kind::Text;
+        m.event_id = "$e" + std::to_string(i);
+        m.sender_name = "User";
+        m.body = "row " + std::to_string(i);
+        msgs.push_back(std::move(m));
+    }
+    return msgs;
+}
+
+MessageRowData unread_text_row(const std::string& id)
+{
+    MessageRowData m{};
+    m.kind = MessageRowData::Kind::Text;
+    m.event_id = id;
+    m.sender_name = "Other";
+    m.body = "new " + id;
+    return m;
+}
+
+// Click through the real dispatch path, as the pill tests above do.
+void click_world(MessageListView& view, tk::Point world)
+{
+    tk::Widget* hit = view.dispatch_pointer_down(world);
+    REQUIRE(hit != nullptr);
+    REQUIRE(hit != &view);
+    tk::Point ws = hit->world_to_local(world);
+    const bool inside = ws.x >= 0 && ws.y >= 0 && ws.x < hit->bounds().w &&
+                        ws.y < hit->bounds().h;
+    hit->on_pointer_up(ws, inside);
+}
+
+int index_of_marker(const MessageListView& view)
+{
+    const auto& m = view.messages();
+    for (std::size_t i = 0; i < m.size(); ++i)
+        if (m[i].kind == MessageRowData::Kind::ReadMarker)
+            return static_cast<int>(i);
+    return -1;
+}
+
+} // namespace
+
+TEST_CASE("MessageListView unread pill: shown while the divider is above "
+          "the viewport, click jumps to it",
+          "[tk][view][messagelist][unread]")
+{
+    TkListsStage st;
+    MessageListView view;
+    view.set_messages(unread_rows(80, 10), /*room_switch=*/true);
+    st.run(view, {0, 0, 320, 200});
+    REQUIRE(view.unread_pill_visible());
+
+    const tk::Rect r = view.unread_pill_bounds();
+    REQUIRE(r.w > 0.0f);
+    // Left part of the pill is the jump target (the right end is ×).
+    click_world(view, {r.x + 8.0f, r.y + r.h * 0.5f});
+    st.run(view, {0, 0, 320, 200});
+    CHECK_FALSE(view.unread_pill_visible());
+    const auto [first, last] = view.visible_range();
+    const int marker = index_of_marker(view);
+    CHECK(first <= marker);
+    CHECK(marker <= last);
+}
+
+TEST_CASE("MessageListView unread pill: × dismisses it",
+          "[tk][view][messagelist][unread]")
+{
+    TkListsStage st;
+    MessageListView view;
+    view.set_messages(unread_rows(80, 10), /*room_switch=*/true);
+    st.run(view, {0, 0, 320, 200});
+    REQUIRE(view.unread_pill_visible());
+
+    const tk::Rect r = view.unread_pill_bounds();
+    click_world(view, {r.x + r.w - 6.0f, r.y + r.h * 0.5f});
+    st.run(view, {0, 0, 320, 200});
+    CHECK_FALSE(view.unread_pill_visible());
+    CHECK(view.visible_range().first > index_of_marker(view)); // didn't scroll
+
+    // A different room brings it back.
+    view.reset_unread_pill();
+    st.run(view, {0, 0, 320, 200});
+    CHECK(view.unread_pill_visible());
+}
+
+TEST_CASE("MessageListView unread pill: stays hidden once the divider has "
+          "been on screen",
+          "[tk][view][messagelist][unread]")
+{
+    TkListsStage st;
+    MessageListView view;
+    view.set_messages(unread_rows(80, 78), /*room_switch=*/true);
+    st.run(view, {0, 0, 320, 200});
+    CHECK_FALSE(view.unread_pill_visible()); // divider in view at the tail
+
+    // Scrolling away so the divider is above the viewport doesn't offer it
+    // again: the user has already seen where the unread messages start.
+    view.scroll_to_index(40, /*align_top=*/true);
+    st.run(view, {0, 0, 320, 200});
+    CHECK_FALSE(view.unread_pill_visible());
+}
+
+TEST_CASE("MessageListView unread pill: fully-read event older than the "
+          "loaded window jumps through on_jump_to_unread",
+          "[tk][view][messagelist][unread]")
+{
+    TkListsStage st;
+    MessageListView view;
+    view.set_messages(unread_rows(80, -1), /*room_switch=*/true);
+    view.set_unread_marker_event_id("$older");
+    st.run(view, {0, 0, 320, 200});
+    CHECK_FALSE(view.unread_pill_visible()); // nobody can perform the jump
+
+    std::string jumped;
+    view.on_jump_to_unread = [&](const std::string& eid) { jumped = eid; };
+    st.run(view, {0, 0, 320, 200});
+    REQUIRE(view.unread_pill_visible());
+    const tk::Rect r = view.unread_pill_bounds();
+    click_world(view, {r.x + 8.0f, r.y + r.h * 0.5f});
+    CHECK(jumped == "$older");
+
+    // A loaded fully-read event means the user is caught up.
+    view.reset_unread_pill();
+    view.set_unread_marker_event_id("$e79");
+    st.run(view, {0, 0, 320, 200});
+    CHECK_FALSE(view.unread_pill_visible());
+}
+
+TEST_CASE("MessageListView read marker: the SDK's marker above a live-tail "
+          "message is hidden, above an unseen one it shows",
+          "[tk][view][messagelist][unread]")
+{
+    // Caught up, so no divider row. matrix-sdk-ui appends the new message,
+    // then (m.fully_read being deferred) inserts a ReadMarker right above it.
+    const auto rows = unread_rows(40, -1);
+    auto sdk_append = [](MessageListView& v)
+    {
+        v.append_message(unread_text_row("$live"));
+        MessageRowData rm{};
+        rm.kind = MessageRowData::Kind::ReadMarker;
+        v.insert_message(v.messages().size() - 1, rm);
+    };
+
+    TkListsStage st;
+    MessageListView watching;
+    watching.set_messages(rows, /*room_switch=*/true);
+    st.run(watching, {0, 0, 320, 200});
+    sdk_append(watching);
+    st.run(watching, {0, 0, 320, 200});
+    const int wm = index_of_marker(watching);
+    REQUIRE(wm >= 0);
+    CHECK(watching.row_world_rect(static_cast<std::size_t>(wm)).h == 0.0f);
+
+    MessageListView away;
+    away.set_messages(rows, /*room_switch=*/true);
+    st.run(away, {0, 0, 320, 200});
+    away.scroll_to_top();
+    st.run(away, {0, 0, 320, 200});
+    sdk_append(away);
+    st.run(away, {0, 0, 320, 200});
+    away.scroll_to_bottom();
+    st.run(away, {0, 0, 320, 200});
+    const int am = index_of_marker(away);
+    REQUIRE(am >= 0);
+    CHECK(away.row_world_rect(static_cast<std::size_t>(am)).h > 0.0f);
+
+    // The deferred m.fully_read moves the marker past the message (the SDK
+    // drops it); a later unseen message gets a visible divider again.
+    watching.remove_message(static_cast<std::size_t>(wm));
+    st.run(watching, {0, 0, 320, 200});
+    watching.scroll_to_top();
+    st.run(watching, {0, 0, 320, 200});
+    watching.append_message(unread_text_row("$unseen"));
+    MessageRowData rm{};
+    rm.kind = MessageRowData::Kind::ReadMarker;
+    watching.insert_message(watching.messages().size() - 1, rm);
+    watching.scroll_to_bottom();
+    st.run(watching, {0, 0, 320, 200});
+    const int wm2 = index_of_marker(watching);
+    REQUIRE(wm2 >= 0);
+    CHECK(watching.row_world_rect(static_cast<std::size_t>(wm2)).h > 0.0f);
+}
+
+TEST_CASE("MessageListView unread pill: a divider below the viewport isn't "
+          "dismissed",
+          "[tk][view][messagelist][unread]")
+{
+    TkListsStage st;
+    MessageListView view;
+    view.set_messages(unread_rows(80, 70), /*room_switch=*/true);
+    st.run(view, {0, 0, 320, 200});
+    // Scroll up past the divider before it was ever on screen.
+    view.scroll_to_index(5, /*align_top=*/true);
+    st.run(view, {0, 0, 320, 200});
+    REQUIRE(view.visible_range().second < index_of_marker(view));
+    CHECK_FALSE(view.unread_pill_visible());
+
+    // Coming back down past it still offers the jump.
+    view.scroll_to_bottom();
+    st.run(view, {0, 0, 320, 200});
+    REQUIRE(view.visible_range().first > index_of_marker(view));
+    CHECK(view.unread_pill_visible());
+}
+
+TEST_CASE("MessageListView unread pill: a fully-read event inside the loaded "
+          "window that the timeline doesn't render offers no jump",
+          "[tk][view][messagelist][unread]")
+{
+    auto rows = unread_rows(80, -1);
+    for (std::size_t i = 0; i < rows.size(); ++i)
+        rows[i].timestamp_ms = 1'000'000 + i * 1000;
+
+    TkListsStage st;
+    MessageListView view;
+    view.on_jump_to_unread = [](const std::string&) {};
+    view.set_messages(rows, /*room_switch=*/true);
+    // A reaction to a loaded message: newer than the oldest loaded row.
+    view.set_unread_marker_event_id("$reaction", 1'000'000 + 79 * 1000 + 5);
+    st.run(view, {0, 0, 320, 200});
+    CHECK_FALSE(view.unread_pill_visible());
+
+    // Older than everything loaded: the jump is offered.
+    view.set_unread_marker_event_id("$older", 999'000);
+    st.run(view, {0, 0, 320, 200});
+    CHECK(view.unread_pill_visible());
+}
+
+TEST_CASE("MessageListView read marker: an existing divider survives new "
+          "messages until the SDK moves it",
+          "[tk][view][messagelist][unread]")
+{
+    TkListsStage st;
+    MessageListView view;
+    view.set_messages(unread_rows(80, 10), /*room_switch=*/true);
+    st.run(view, {0, 0, 320, 200});
+    REQUIRE(view.unread_pill_visible());
+
+    view.append_message(unread_text_row("$live"));
+    st.run(view, {0, 0, 320, 200});
+    CHECK(view.unread_pill_visible()); // divider not suppressed
+
+    // The SDK moving the marker (remove + re-insert) clears it away.
+    view.remove_message(static_cast<std::size_t>(index_of_marker(view)));
+    st.run(view, {0, 0, 320, 200});
+    CHECK_FALSE(view.unread_pill_visible());
+}
+
 // ── Room-switch display gate ───────────────────────────────────────────────
 //
 // On a room switch the message list is held invisible (background only)

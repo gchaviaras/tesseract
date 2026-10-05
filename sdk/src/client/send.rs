@@ -6,7 +6,7 @@
 use crate::ffi::OpResult;
 
 #[cfg(not(test))]
-use super::{err, ok, send_both_receipts, try_op, ClientFfi};
+use super::{err, ok, send_both_receipts, send_fully_read, try_op, ClientFfi};
 
 #[cfg(test)]
 use super::{err, ok, ClientFfi};
@@ -2275,7 +2275,7 @@ impl ClientFfi {
             Ok(id) => id,
             Err(e) => return err(format!("invalid event id: {e}")),
         };
-        match self.block_on_cancellable(send_both_receipts(&room, event_id)) {
+        match self.block_on_cancellable(send_both_receipts(&room, event_id, false)) {
             Some(Ok(_)) => ok(""),
             Some(Err(e)) => err(e.to_string()),
             None => err("cancelled"),
@@ -2287,11 +2287,82 @@ impl ClientFfi {
         err("not logged in")
     }
 
+    /// Move the `m.fully_read` marker (the "New messages" divider) to
+    /// `event_id` in `room_id`.
+    #[cfg(not(test))]
+    pub fn set_fully_read_marker(&self, room_id: &str, event_id: &str) -> OpResult {
+        let _enter = self.rt.enter();
+        let Some(client) = self.client.as_ref() else {
+            return err("not logged in");
+        };
+        let (_, room) = try_op!(require_room(client, room_id));
+        let event_id: matrix_sdk::ruma::OwnedEventId = match event_id.parse() {
+            Ok(id) => id,
+            Err(e) => return err(format!("invalid event id: {e}")),
+        };
+        match self.block_on_cancellable(send_fully_read(&room, event_id)) {
+            Some(Ok(_)) => ok(""),
+            Some(Err(e)) => err(e.to_string()),
+            None => err("cancelled"),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn set_fully_read_marker(&self, _room_id: &str, _event_id: &str) -> OpResult {
+        err("not logged in")
+    }
+
+    /// The room's `m.fully_read` marker: the event id it points at (empty
+    /// when there is none, or the client is not logged in) and that event's
+    /// timestamp when the event cache holds it (0 otherwise). The timestamp
+    /// lets the UI tell an event older than its loaded window apart from one
+    /// inside it that the timeline doesn't render (a reaction, an edit).
+    #[cfg(not(test))]
+    pub fn fully_read_marker(&self, room_id: &str) -> crate::ffi::FullyReadMarkerFfi {
+        use matrix_sdk::ruma::events::fully_read::FullyReadEventContent;
+        let none = || crate::ffi::FullyReadMarkerFfi { event_id: String::new(), ts_ms: 0 };
+        let _enter = self.rt.enter();
+        let Some(client) = self.client.as_ref() else {
+            return none();
+        };
+        let Ok((_, room)) = require_room(client, room_id) else {
+            return none();
+        };
+        let fut = async {
+            let event_id = room
+                .account_data_static::<FullyReadEventContent>()
+                .await
+                .ok()
+                .flatten()
+                .and_then(|raw| raw.deserialize().ok())
+                .map(|ev| ev.content.event_id)?;
+            let ts_ms = match room.event_cache().await {
+                Ok((cache, _handles)) => cache
+                    .find_event(&event_id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|ev| ev.timestamp())
+                    .map(|ts| u64::from(ts.get()))
+                    .unwrap_or(0),
+                Err(_) => 0,
+            };
+            Some(crate::ffi::FullyReadMarkerFfi { event_id: event_id.to_string(), ts_ms })
+        };
+        self.block_on_cancellable(fut).flatten().unwrap_or_else(none)
+    }
+
+    #[cfg(test)]
+    pub fn fully_read_marker(&self, _room_id: &str) -> crate::ffi::FullyReadMarkerFfi {
+        crate::ffi::FullyReadMarkerFfi { event_id: String::new(), ts_ms: 0 }
+    }
+
     /// Send public `m.read` and private `m.read.private` receipts for the
-    /// latest cached event in `room_id`. Clears the unread count without
+    /// latest cached event in `room_id`, plus `m.fully_read` when
+    /// `include_fully_read` is set. Clears the unread count without
     /// requiring the room to be subscribed via `subscribe_room`.
     #[cfg(not(test))]
-    pub fn mark_room_as_read(&self, room_id: &str) -> OpResult {
+    pub fn mark_room_as_read(&self, room_id: &str, include_fully_read: bool) -> OpResult {
         let _enter = self.rt.enter();
         let Some(client) = self.client.as_ref() else {
             return err("not logged in");
@@ -2305,7 +2376,7 @@ impl ClientFfi {
             Some(id) => id.to_owned(),
             None => return ok(""),
         };
-        match self.block_on_cancellable(send_both_receipts(&room, event_id)) {
+        match self.block_on_cancellable(send_both_receipts(&room, event_id, include_fully_read)) {
             Some(Ok(_)) => ok(""),
             Some(Err(e)) => err(e.to_string()),
             None => err("cancelled"),
@@ -2313,7 +2384,7 @@ impl ClientFfi {
     }
 
     #[cfg(test)]
-    pub fn mark_room_as_read(&self, _room_id: &str) -> OpResult {
+    pub fn mark_room_as_read(&self, _room_id: &str, _include_fully_read: bool) -> OpResult {
         err("not logged in")
     }
 

@@ -825,9 +825,21 @@ public:
                              const std::string& event_id);
 
     /// Send public `m.read` and private `m.read.private` receipts for the
-    /// latest cached event in `room_id`. Clears the unread count. Does not
+    /// latest cached event in `room_id`, plus `m.fully_read` when
+    /// `include_fully_read` is set. Clears the unread count. Does not
     /// require `subscribe_room`.
-    Result mark_room_as_read(const std::string& room_id);
+    Result mark_room_as_read(const std::string& room_id,
+                             bool include_fully_read = true);
+
+    /// Move the `m.fully_read` marker (the timeline's "New messages"
+    /// divider) to `event_id`. Blocks until acknowledged.
+    Result set_fully_read_marker(const std::string& room_id,
+                                 const std::string& event_id);
+
+    /// The room's `m.fully_read` marker (event id, plus its timestamp when
+    /// the event cache holds the event). Reads the local store; does not
+    /// hit the network.
+    FullyReadMarker fully_read_marker(const std::string& room_id);
 
     /// Send public + private MSC3771 threaded read receipts for the thread
     /// rooted at `thread_root_id`. This is the only call that clears a

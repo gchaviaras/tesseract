@@ -93,6 +93,8 @@ std::vector<ShortcutDef> build(tk::Platform platform)
          tk::N_("Select the oldest loaded message"), {key(Key::Home)}},
         {ShortcutId::TimelineNewest, G::Timeline, S::Contextual,
          tk::N_("Select the newest message"), {key(Key::End)}},
+        {ShortcutId::TimelineFirstUnread, G::Timeline, S::Contextual,
+         tk::N_("Jump to the first unread message"), {key(Key::PageUp, Sh)}},
         {ShortcutId::TimelineParts, G::Timeline, S::Contextual,
          tk::N_("Step through links and attachments in a message"),
          {key(Key::Left), key(Key::Right)}},

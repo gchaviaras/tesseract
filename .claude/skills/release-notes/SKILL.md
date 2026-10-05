@@ -91,9 +91,30 @@ narrow the rewritten note to the surface(s) that predate this version.
   a `feat(...)` bullet keeps its MSC number even when it lands under
   Improvements or Fixes, and a `fix(...)`/`perf(...)`/`refactor(...)` bullet
   never gets one, even if its source text happens to mention one.
-- **Merge duplicates.** Several bullets about the same user-facing capability
-  (e.g. five separate image-pack commits) become one or two release-note
-  lines, not five.
+- **One item per feature.** Every bullet about the same user-facing feature
+  becomes a single release-note item, always — not one or two, one. This
+  covers repeated commits on one capability (five image-pack commits) and
+  broad efforts split across many Summary bullets (a dozen `feat(a11y)`
+  bullets for keyboard access and screen readers become one item). A follow-up
+  that only polishes or completes a feature in this same batch (a key binding,
+  a Backspace fix, a sync detail) folds into that feature's item as a clause,
+  or is dropped if it adds nothing a user would notice. Put the merged item in
+  the section its main change belongs to (step 4). Related-but-separate
+  features (emoji skin tones vs. a newer Emoji version) stay separate items.
+- **Write like a person, not a press release.** The notes should read as if
+  the developer typed them. Concretely:
+  - Plain, direct sentences. Say what changed and stop. Short is fine.
+  - No hype or filler: "big/major/significant improvements", "much
+    broader", "fully", "seamlessly", "enhanced", "robust", "comprehensive",
+    "now supports", "continued work on".
+  - Don't lead with a summary label and a colon followed by an exhaustive
+    list ("Much broader keyboard access: X, Y, Z, W..."). Name the few
+    things a user would look for, not every surface a commit touched.
+  - Don't stack the same sentence shape ("X can now..., Y can now...,
+    Z can now..."). Vary it, or cut it.
+  - "You" is fine ("you can now...", "tell you when..."); passive
+    constructions and "the user" are not.
+  - Avoid em-dash asides and triplets for rhythm's sake.
 - **Surface the platform.** If the original scope names a platform
   (`windows`/`macos`/`linux`), prefix the rewritten line with `Windows:`,
   `macOS:`, or `Linux:`. Drop toolkit-only scopes (`qt`/`gtk`) unless the
@@ -245,8 +266,7 @@ Release notes:
 - After changing the language, "Restart now" relaunches the app in the new language.
 
 ### Fixes
-- Fixed several settings dialogs not updating their colors when switching themes.
-- Fixed unreadable (black-on-dark) text in the quick switcher and other search fields.
+- Switching themes now recolors every dialog and text field. Some settings dialogs kept the old colors, and the quick switcher showed black text on a dark background.
 - Pop-out room windows keep working for the account that opened them after you switch accounts.
 ```
 
@@ -259,7 +279,9 @@ poll feature's own bullet already covers what actually shipped. The two
 trailing `feat` bullets are re-sectioned by the step 4 test: pop-outs already
 existed and broke on account switch, so that is a Fix; changing the language
 already worked and "Restart now" only saves a manual restart, so that is an
-Improvement. Only the poll flow is something users could not do before.)
+Improvement. Only the poll flow is something users could not do before. The
+two theme bullets — `refactor(tk)` and `fix(theme)` — are one feature, theme
+switching, so they become one Fixes item.)
 
 ## Common Mistakes
 
@@ -273,6 +295,11 @@ Improvement. Only the poll flow is something users could not do before.)
   nothing to announce as fixed. Check for a matching `feat`/`refactor` bullet
   in the same list before keeping any `fix(...)`.
 - Inventing an empty category header just to show all three sections.
+- Spreading one feature over several items (e.g. five keyboard/screen-reader
+  lines, or a skin-tone feature plus a separate line for its Backspace
+  follow-up) — group them into one item.
+- Marketing tone or label-colon-list items ("Much broader keyboard access:
+  ...", "Big improvements to ...") — rewrite in plain sentences.
 - Naming internal classes/files/protocols (`apply_theme()`, `ruma`) instead of describing the user-visible effect.
 - Filing a bullet under New Features only because its prefix is `feat` — apply the step 4 test; a `feat` that repairs, redesigns, or adds detail to something that already shipped belongs under Fixes or Improvements.
 - Dropping a `feat(...)` bullet's MSC number when the source names one — required whichever section the bullet lands in; it's the one exception to the no-protocol-jargon rule.

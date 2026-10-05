@@ -1457,6 +1457,26 @@ TEST_CASE("is_emoji_only: whitespace-only string is not emoji-only",
     CHECK_FALSE(is_emoji_only("   \t\n"));
 }
 
+TEST_CASE("is_emoji_cluster: toned, VS16, ZWJ and keycap clusters are emoji",
+          "[html_spans][emoji]")
+{
+    CHECK(tk::is_emoji_cluster("\xF0\x9F\x91\x8D\xF0\x9F\x8F\xBD")); // 👍🏽
+    CHECK(tk::is_emoji_cluster("\xE2\x9D\xA4\xEF\xB8\x8F"));         // ❤️
+    CHECK(tk::is_emoji_cluster("\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x92\xBB")); // 👩‍💻
+    CHECK(tk::is_emoji_cluster("1\xEF\xB8\x8F\xE2\x83\xA3"));        // 1️⃣
+}
+
+TEST_CASE("is_emoji_cluster: letters, combining marks and lone modifiers "
+          "are not emoji",
+          "[html_spans][emoji]")
+{
+    CHECK_FALSE(tk::is_emoji_cluster("e\xCC\x81"));       // e + U+0301
+    CHECK_FALSE(tk::is_emoji_cluster("1"));
+    CHECK_FALSE(tk::is_emoji_cluster("\xF0\x9F\x8F\xBD")); // lone 🏽
+    CHECK_FALSE(tk::is_emoji_cluster("\n"));
+    CHECK_FALSE(tk::is_emoji_cluster(""));
+}
+
 TEST_CASE("is_emoji_only_spans: custom-emoticon-only span list is emoji-only",
           "[html_spans][emoji]")
 {

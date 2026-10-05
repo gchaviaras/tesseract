@@ -143,6 +143,12 @@ bool is_emoji_only(const std::string& utf8)
     return r.all_emoji_or_whitespace && r.has_emoji;
 }
 
+bool is_emoji_cluster(std::string_view utf8)
+{
+    const auto r = classify_emoji_only_utf8(utf8);
+    return r.all_emoji_or_whitespace && r.has_emoji;
+}
+
 bool is_emoji_only_spans(const std::vector<TextSpan>& spans)
 {
     bool has_emoji = false;

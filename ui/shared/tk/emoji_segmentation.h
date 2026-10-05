@@ -32,6 +32,13 @@ bool is_emoji_codepoint(char32_t cp);
 // for emoji-only message bodies.
 bool is_emoji_only(const std::string& utf8);
 
+// True when `utf8`, a single grapheme cluster, is an emoji (a base plus any
+// skin-tone modifier, VS16, ZWJ continuation, tag or keycap). Native text
+// controls whose Backspace deletes one codepoint (Qt) use this to delete a
+// whole emoji instead of peeling its tone off; other clusters (a letter plus
+// combining accent, Indic conjuncts) keep per-codepoint Backspace.
+bool is_emoji_cluster(std::string_view utf8);
+
 // Same emoji-only classification as is_emoji_only(), but for a parsed span
 // list rather than a plain-text body. Handles MSC2545 custom emoticons
 // (TextSpan::is_image, PillKind::Generic) as emoji, since m.body's plain-text

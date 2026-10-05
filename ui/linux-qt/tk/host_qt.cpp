@@ -18,6 +18,7 @@
 #include <QtCore/QPointer>
 #include <QtCore/QSet>
 #include <QtCore/QString>
+#include <QtCore/QTextBoundaryFinder>
 #include <QtCore/QTimer>
 #include <QtGui/QContextMenuEvent>
 #include <QtGui/QMouseEvent>
@@ -97,6 +98,40 @@ public:
     }
 };
 
+// Qt's Backspace deletes one codepoint (QTextCursor::deletePreviousChar,
+// QWidgetLineControl::backspace), so on 👍🏽 it removes the skin tone and
+// leaves 👍, and on ❤️ it removes only the invisible VS16. GTK4/AppKit delete
+// the whole emoji. Returns the start of the grapheme cluster ending at `pos`
+// in `text` when that cluster is an emoji, else -1 (leave it to Qt).
+int emoji_cluster_start_before(const QString& text, int pos)
+{
+    if (pos <= 0 || pos > text.size())
+    {
+        return -1;
+    }
+    QTextBoundaryFinder finder(QTextBoundaryFinder::Grapheme, text);
+    finder.setPosition(pos);
+    const qsizetype start = finder.toPreviousBoundary();
+    if (start < 0 || start >= pos)
+    {
+        return -1;
+    }
+    const QByteArray cluster = text.mid(start, pos - start).toUtf8();
+    if (!is_emoji_cluster(std::string_view(cluster.constData(), cluster.size())))
+    {
+        return -1;
+    }
+    return int(start);
+}
+
+// Plain Backspace (Shift is ignored, as Qt does); Ctrl/Alt+Backspace delete
+// words and stay with Qt.
+bool is_plain_backspace(const QKeyEvent* e)
+{
+    return e->key() == Qt::Key_Backspace &&
+           !(e->modifiers() & ~(Qt::ShiftModifier | Qt::KeypadModifier));
+}
+
 class NavLineEdit : public QLineEdit
 {
 public:
@@ -166,6 +201,18 @@ protected:
             auto nav = popup_nav_;
             if (is_nav && nav && nav(nk))
             {
+                e->accept();
+                return;
+            }
+        }
+        if (is_plain_backspace(e) && !isReadOnly() && !hasSelectedText())
+        {
+            const int pos = cursorPosition();
+            const int start = emoji_cluster_start_before(text(), pos);
+            if (start >= 0)
+            {
+                setSelection(start, pos - start);
+                del();
                 e->accept();
                 return;
             }
@@ -823,6 +870,25 @@ protected:
             }
             e->accept();
             return;
+        }
+        if (is_plain_backspace(e) && !isReadOnly())
+        {
+            QTextCursor cursor = textCursor();
+            const QTextBlock block = cursor.block();
+            const int pos = cursor.positionInBlock();
+            const int start = cursor.hasSelection()
+                                  ? -1
+                                  : emoji_cluster_start_before(block.text(), pos);
+            if (start >= 0)
+            {
+                cursor.setPosition(block.position() + start,
+                                   QTextCursor::KeepAnchor);
+                cursor.removeSelectedText();
+                setTextCursor(cursor);
+                ensureCursorVisible();
+                e->accept();
+                return;
+            }
         }
         QTextEdit::keyPressEvent(e);
     }

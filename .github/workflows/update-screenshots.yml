@@ -240,6 +240,10 @@ jobs:
             -ArgumentList "--screenshot-dir=$out"
           try { $proc | Wait-Process -Timeout 60 -ErrorAction Stop }
           catch { $proc | Stop-Process -Force; throw 'Screenshot capture timed out' }
+          # TEMPORARY (debug branch): report the process exit code and what
+          # was actually produced before the file check throws.
+          if ($proc.HasExited) { "tesseract exit code: $($proc.ExitCode)" }
+          Get-ChildItem $out | ForEach-Object { "$($_.Name) $($_.Length)" }
           $names = foreach ($theme in 'light', 'dark') {
             "win-$theme.png"
             foreach ($scene in 'thread', 'room-info', 'emoji', 'settings') {

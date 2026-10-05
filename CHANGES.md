@@ -3,6 +3,12 @@
 Newest first. Unreleased work is listed per day, one bullet per change.
 Tagged releases summarize all changes since the previous tag.
 
+## Unreleased
+
+### 2026-10-05
+
+- fix(timeline): selecting text in a list, heading or quote message highlights only the selected lines instead of the same span in every line, copies just the selection instead of the whole message, and double/triple-click picks the right word or line past the first item. Qt6 build + ctest 2196/2196, user-verified Qt6
+
 ## v0.9.1 — 2026-10-05
 
 ### Summary

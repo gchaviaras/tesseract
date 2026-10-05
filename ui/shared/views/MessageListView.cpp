@@ -275,7 +275,9 @@ static int char_at_world(const LinkLayout& le, tk::Point world)
             tk::Point ll{world.x - sec.origin.x, world.y - sec.origin.y};
             if (ll.y < 0.0f || ll.y >= sec.height) continue;
             int idx = sec.layout->char_index_at(ll);
-            if (idx >= 0) return idx;
+            // Section-local → message-global (an offset into le.plain), so
+            // the selection knows which section it's in.
+            if (idx >= 0) return sec.plain_base + idx;
         }
         return -1;
     }
@@ -5476,6 +5478,7 @@ private:
                             default:
                                 break;
                             }
+                            sec.plain_base = static_cast<int>(plain_all.size());
                             plain_all += spans_to_plain(b.spans);
                             plain_all += '\n';
                             slot.sections.push_back(std::move(sec));
@@ -6058,16 +6061,21 @@ private:
 
         auto ord     = owner_.selection_ordered();
         int  msg_idx = owner_.message_index_of(m.event_id);
+        // `base` is where `lay`'s text starts within the message's selection
+        // byte space (SectionLayout::plain_base; 0 for the flat path) and
+        // `plain_len` its length; the selection is clipped to that window.
         auto draw_with_selection = [&](tk::TextLayout& lay, float ox, float oy,
-                                       int plain_len)
+                                       int plain_len, int base = 0)
         {
             if (ord && msg_idx >= 0 &&
                 msg_idx >= ord->lo_idx && msg_idx <= ord->hi_idx)
             {
-                int lo_b = (msg_idx == ord->lo_idx) ? ord->lo_byte : 0;
-                int hi_b =
-                    (msg_idx == ord->hi_idx) ? ord->hi_byte : plain_len;
-                if (lo_b != hi_b)
+                int lo_b = (msg_idx == ord->lo_idx) ? ord->lo_byte - base : 0;
+                int hi_b = (msg_idx == ord->hi_idx) ? ord->hi_byte - base
+                                                    : plain_len;
+                lo_b     = std::clamp(lo_b, 0, plain_len);
+                hi_b     = std::clamp(hi_b, 0, plain_len);
+                if (lo_b < hi_b)
                     for (const tk::Rect& r : lay.selection_rects(lo_b, hi_b))
                         ctx.canvas.fill_rect({r.x + ox, r.y + oy, r.w, r.h},
                                              ctx.theme.palette.selection);
@@ -6152,9 +6160,10 @@ private:
                     break;
                 }
 
-                draw_with_selection(*sec.layout, ox, oy,
-                                    static_cast<int>(spans_to_plain(sec.spans).size()));
-                ctx.canvas.draw_text(*sec.layout, {ox, oy}, color);
+                draw_with_selection(
+                    *sec.layout, ox, oy,
+                    static_cast<int>(spans_to_plain(sec.spans).size()),
+                    sec.plain_base);
                 paint_span_images(sec.spans, *sec.layout, ctx, ox, oy);
 
                 // Post-text decoration: horizontal rule below h1/h2.
@@ -9442,12 +9451,19 @@ void MessageListView::copy_selection()
                        ? ord->hi_byte
                        : static_cast<int>(le->plain.size());
         // Block-structure bodies (headings, lists, blockquotes, tables) keep
-        // their text in `plain` and leave `layout` null; the drag byte
-        // offsets are section-local and don't map into `plain`, so copy the
-        // whole message rather than dereferencing null or slicing at the
-        // wrong place.
-        std::string seg = le->layout ? le->layout->text_range(lo_b, hi_b)
-                                     : le->plain;
+        // their text in `plain` and leave `layout` null; their selection
+        // offsets index `plain` directly (see SectionLayout::plain_base).
+        std::string seg;
+        if (le->layout)
+            seg = le->layout->text_range(lo_b, hi_b);
+        else
+        {
+            const int n = static_cast<int>(le->plain.size());
+            lo_b        = std::clamp(lo_b, 0, n);
+            hi_b        = std::clamp(hi_b, lo_b, n);
+            seg = le->plain.substr(static_cast<std::size_t>(lo_b),
+                                   static_cast<std::size_t>(hi_b - lo_b));
+        }
         if (!result.empty() && result.back() != '\n')
             result += '\n';
         result += std::move(seg);

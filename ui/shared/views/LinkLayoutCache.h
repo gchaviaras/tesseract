@@ -54,6 +54,9 @@ struct SectionLayout
     float y_offset = 0.0f;  // cumulative y from body top (build time)
     float height   = 0.0f;
     tk::Point origin{};     // world-space draw origin (paint time)
+    // Byte offset of this section's text within LinkLayout::plain (past any
+    // "• " / "1. " / "> " prefix), so selection offsets are message-global.
+    int plain_base = 0;
 
     // Table sections only (kind == BodyBlock::Kind::Table). col_x/col_w and
     // row_y/row_h are the outer cell rectangles relative to `origin`; the

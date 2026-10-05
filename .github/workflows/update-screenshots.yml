@@ -34,6 +34,7 @@ jobs:
       - name: Install build and display dependencies
         run: |
           sudo apt-get update -q
+          # gdb is for a temporary crash backtrace (debug branch only).
           sudo apt-get install -y \
             qt6-base-dev qt6-base-private-dev qt6-multimedia-dev \
             qt6-image-formats-plugins \
@@ -42,7 +43,7 @@ jobs:
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libxtst-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            xvfb xauth \
+            xvfb xauth gdb \
             fonts-noto-color-emoji
 
       - name: Expose opus to the Rust SDK build
@@ -62,6 +63,7 @@ jobs:
       - name: Configure screenshot-only build
         run: >-
           cmake --preset linux-release
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
           -DTESSERACT_UI=linux
           -DTESSERACT_BUILD_TESTS=OFF
           -DTESSERACT_ENABLE_SCREENSHOT_MODE=ON
@@ -79,9 +81,12 @@ jobs:
           QT_SCALE_FACTOR: '1'
         run: |
           mkdir -p generated-screenshots
-          timeout 60s xvfb-run -a -s '-screen 0 1440x1000x24' \
+          # TEMPORARY (debug branch): run the Qt binary under gdb so a crash
+          # prints a backtrace instead of just "Segmentation fault".
+          timeout 120s xvfb-run -a -s '-screen 0 1440x1000x24' \
+            gdb -batch -ex run -ex bt -ex 'info registers rip rsp rbp rdi rsi' --args \
             build/linux-release/ui/linux-qt/tesseract \
-            "--screenshot-dir=$PWD/generated-screenshots"
+            "--screenshot-dir=$PWD/generated-screenshots" || true
           timeout 60s dbus-run-session -- xvfb-run -a -s '-screen 0 1440x1000x24' \
             build/linux-release/ui/linux-gtk/tesseract \
             "--screenshot-dir=$PWD/generated-screenshots"

@@ -3,6 +3,7 @@
 #include "app/ShellBase.h"
 
 #include <tesseract/client.h>
+#include <tesseract/media_source.h>
 
 #include <functional>
 #include <string>
@@ -75,6 +76,7 @@ struct PriorityShell : ShellMediaPriorityWithAccountManager, ShellBase
     using ShellBase::begin_media_req_;
     using ShellBase::cancel_media_group_;
     using ShellBase::client_;
+    using ShellBase::ensure_row_media_;
     using ShellBase::handle_media_ready_ui_;
     using ShellBase::media_key_to_req_;
     using ShellBase::resolve_visible_request_ids_;
@@ -147,4 +149,24 @@ TEST_CASE("resolve_visible_request_ids_ keeps found keys and skips misses",
     // Middle key was never requested (e.g. already cached) → skipped.
     auto ids = s.resolve_visible_request_ids_({"mxc://k1", "mxc://k2", "mxc://k3"});
     CHECK(ids == std::vector<std::uint64_t>{id1, id3});
+}
+
+TEST_CASE("ensure_row_media_ with no signed-in client starts no fetch",
+          "[shell][media-priority]")
+{
+    // Screenshot mode never logs in, so client_ stays null. Painting the
+    // fixture's voice row then dereferenced it - voice audio is fetched
+    // eagerly rather than on click - and segfaulted CI's screenshot
+    // capture in Client::fetch_media_async.
+    PriorityShell s;
+    REQUIRE(s.client_ == nullptr);
+
+    tesseract::views::MessageRowData row;
+    row.kind         = tesseract::views::MessageRowData::Kind::Voice;
+    row.event_id     = "$voice";
+    row.audio_source = tesseract::MediaSource::plain("fixture://voice");
+    // Empty waveform exercises the waveform arm as well as the audio arm.
+    s.ensure_row_media_(row, /*fetch_avatars=*/true);
+
+    CHECK(s.media_key_to_req_.empty());
 }

@@ -2619,6 +2619,13 @@ void ShellBase::ensure_blurhash_image_(const std::string& event_id,
 
 void ShellBase::ensure_row_media_(const Event& ev, bool fetch_avatars)
 {
+    // No signed-in client, nothing to fetch from: screenshot mode never
+    // logs in, and a logged-out window can briefly keep rows on screen.
+    // Every path below ends in client_->fetch_media_async, so without this
+    // the first paint of a row with uncached media (a voice clip, whose
+    // audio is fetched eagerly rather than on click) dereferences null.
+    if (!client_)
+        return;
     if (!media_disk_cache_pruned_)
     {
         media_disk_cache_pruned_ = true;
@@ -2886,6 +2893,13 @@ void ShellBase::ensure_row_media_(const views::MessageRowData& row,
                                    bool fetch_avatars)
 {
     using Kind = views::MessageRowData::Kind;
+
+    // Same no-client guard as the Event overload above: without a signed-in
+    // client no fetch can run. The paint-driven caller
+    // (on_visible_rows_changed_) already guards its prioritize block this
+    // way; the lazy loop below it needs the same protection.
+    if (!client_)
+        return;
 
     const std::uint64_t media_group = media_group_for_room_(current_room_id_);
 

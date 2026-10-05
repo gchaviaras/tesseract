@@ -3730,8 +3730,25 @@ void MainWindow::start_screenshot_mode_()
     start_screenshot_director_(*screenshot_host_, "win", 500);
 }
 
+#ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
+namespace
+{
+// TEMPORARY (debug branch): crash-locating trace for the settings-scene
+// access violation. Each line is flushed immediately so the log survives
+// the crash; the file lands next to the screenshots for artifact upload.
+void shot_trace(const std::filesystem::path& dir, const char* msg)
+{
+    if (dir.empty())
+        return;
+    std::ofstream f(dir / "trace.log", std::ios::app);
+    if (f)
+        f << msg << '\n' << std::flush;
+}
+} // namespace
+
 bool MainWindow::save_screenshot_(const wchar_t* filename)
 {
+    shot_trace(screenshot_dir_, "save_screenshot_ enter");
     RECT rect{};
     if (!GetWindowRect(hwnd_, &rect))
         return false;
@@ -3973,6 +3990,7 @@ void MainWindow::teardown_login_view_()
 
 void MainWindow::ensure_settings_view_()
 {
+    shot_trace(screenshot_dir_, "ensure_settings_view_ enter");
     if (settings_view_)
         return;
 
@@ -3982,6 +4000,7 @@ void MainWindow::ensure_settings_view_()
         &settings_surface_->host());
     settings_view_ = view.get();
     stats_settings_view_ = settings_view_;
+    shot_trace(screenshot_dir_, "ensure: surface+view created");
     settings_view_->set_low_power_available(low_power_available());
     wire_settings_view_(settings_view_);
     settings_view_->on_close = [this]
@@ -4007,6 +4026,7 @@ void MainWindow::ensure_settings_view_()
     {
         ShowWindow(settings_surface_->hwnd(), SW_HIDE);
     }
+    shot_trace(screenshot_dir_, "ensure: root set");
 
     // Populate capture-device combos in the Media section.
     {
@@ -4023,6 +4043,7 @@ void MainWindow::ensure_settings_view_()
         settings_view_->set_selected_camera(
             tesseract::Settings::instance().camera_device_id);
     }
+    shot_trace(screenshot_dir_, "ensure: devices enumerated");
 
     // ensure_settings_controller_() already ran at login time, before this
     // view existed — its wiring into settings_view_ was a silent no-op
@@ -4034,6 +4055,7 @@ void MainWindow::ensure_settings_view_()
     // created — apply it now so capability gating (e.g. the Server tab) is
     // correct on first open.
     settings_view_->set_server_info(server_info_);
+    shot_trace(screenshot_dir_, "ensure_settings_view_ exit");
 }
 
 void MainWindow::teardown_settings_view_()
@@ -4051,6 +4073,7 @@ void MainWindow::teardown_settings_view_()
 
 void MainWindow::open_settings_()
 {
+    shot_trace(screenshot_dir_, "open_settings_ enter");
     ensure_settings_view_();
     settings_view_->set_account_info(my_display_name_, my_user_id_,
                                      my_avatar_url_);
@@ -4066,6 +4089,7 @@ void MainWindow::open_settings_()
     // that option would hide the window with no way to bring it back.
     push_tray_available_ui_();
     settings_surface_->relayout();
+    shot_trace(screenshot_dir_, "open: relayout done");
 
     // own_extended_profile_ may have been fetched (or changed) while
     // settings_view_ didn't exist yet, or since the last time this view was
@@ -4096,10 +4120,12 @@ void MainWindow::open_settings_()
         ShowWindow(settings_surface_->hwnd(), SW_SHOW);
     }
     start_search_index_stats_poll_();
+    shot_trace(screenshot_dir_, "open: windows shown");
 
     RECT rc;
     GetClientRect(hwnd_, &rc);
     on_size(rc.right, rc.bottom);
+    shot_trace(screenshot_dir_, "open_settings_ exit");
 }
 
 void MainWindow::close_settings_()

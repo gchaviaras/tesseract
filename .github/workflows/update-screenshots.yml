@@ -258,9 +258,14 @@ jobs:
           }
 
       - name: Upload refreshed screenshots
+        # TEMPORARY (debug branch): always upload, so the trace.log from a
+        # crashed run is retrievable.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tesseract-windows-screenshots
-          path: generated-screenshots/*.png
-          if-no-files-found: error
+          path: |
+            generated-screenshots/*.png
+            generated-screenshots/trace.log
+          if-no-files-found: warn
           retention-days: 14

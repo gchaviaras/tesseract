@@ -3,9 +3,9 @@
 Newest first. Unreleased work is listed per day, one bullet per change.
 Tagged releases summarize all changes since the previous tag.
 
-## Unreleased
+## v0.9.1 — 2026-10-05
 
-### 2026-10-04
+### Summary
 
 - feat(switcher): recently visited rooms (Ctrl+Tab switcher, Ctrl+K "Recent" strip) persist across restarts, per account, synced as `recent_rooms` in the `im.gnomos.tesseract` prefs. Clear all caches forgets them with the tab layout. Qt6 build + ctest 2184/2184, user-verified Qt6
 - build: smaller build directories. Linux objects and executables compress their debug info (`-gz=zlib`, `--compress-debug-sections=zlib`), and Cargo incremental compilation of the Rust SDK crate is off unless `-DTESSERACT_CARGO_INCREMENTAL=ON`. Linux Debug build + ctest 2180/2180
@@ -16,36 +16,20 @@ Tagged releases summarize all changes since the previous tag.
 - feat(a11y): the timeline is a Tab stop. Up/Down move between messages, Left/Right step through a message's links, media, reactions and actions, Enter or the Menu key opens More, and Escape returns to the composer. Qt6 build + ctest 2159/2159
 - feat(a11y): new keyboard routes: Ctrl/⌘+I opens room info, Ctrl+, opens Settings, the room-header title, user strip, space header and sidebar grip are Tab stops, and topic links cycle with Left/Right. Qt6 build + ctest 2159/2159
 - feat(a11y): room-info rows, media-gallery thumbnails, image-pack editors, avatar change/remove, the room ID, call pin and screen-share tiles, quick-switcher recents and account-picker rows work from the keyboard; the video viewer takes Space/←/→ and the image viewer +/−/0/arrows. Qt6 build + ctest 2159/2159
-
-### 2026-10-03
-
 - feat(a11y): accessibility framework: canvas popups and grids are reachable, an open dialog hides what's behind it, and `Host::announce()` speaks status (toasts, status line, send failures, call join/leave). The four bridges push name/state changes while a screen reader is attached. Qt6 build + ctest 2135/2135
 - feat(a11y): the encryption, invite and forward dialogs work with a screen reader and the keyboard; their links, option cards and footer buttons are real buttons. Qt6 build + ctest 2135/2135
 - feat(a11y): previously silent lists and painted views are exposed, from the room directory and space views to the date picker, pinned banner and room header. Qt6 build + ctest 2135/2135
 - feat(a11y): messages read sender and body, then reply, edited, time, thread and reactions, and their links and media controls are actionable. Context menus take arrow keys, Enter and Escape. Qt6 build + ctest 2135/2135
 - fix(a11y): password fields no longer expose the typed text, and per-message actions no longer share one identity in the bridges. Qt6 build + ctest 2135/2135
-
 - fix(windows): JPEGs with an EXIF orientation other than 1 (e.g. phone portrait photos) now display rotated instead of as an empty box; the image is decoded before it is rotated, and a failed rotation falls back to the unrotated image. Compressed sends of such photos use the same decode-then-rotate order. Windows build; user-verified live (receive + compressed send)
-
-### 2026-10-02
-
 - ci(screenshots): screenshot mode now also captures thread, room-info, emoji-picker and settings scenes, and the main view shows more (media, code, voice, file, mentions, calls, typing). One shared `ScreenshotDirector` drives all four shells; README gains a Feature tour. Qt6 build + ctest 2098/2098
 - fix(timeline): Ctrl+C/⌘C copies a timeline selection reliably. It is now handled once in shared code (`RoomView`) instead of per-shell window handlers, covers the thread panel, and ignores selections that are hidden or under a modal overlay. Ctrl/⌘ shortcuts (copy, Ctrl+K, Ctrl+F) now also work on non-Latin keyboard layouts. Qt6 build + ctest 2086/2086
-
-### 2026-10-01
-
 - feat(tray): Settings → General now controls what closing the window does (quit, hide to tray by default, or minimize) and adds an opt-in "start minimized to tray". A login item no longer silently hides the app, and a user-started launch always raises the running window. All platforms build; `ctest` unrun
-
-### 2026-09-30
-
 - feat(emoji): skin tones in the emoji picker. Long-press, right-click or Shift+Enter opens a tone menu; the picked tone becomes the default for the picker and `:shortcode:` autocomplete, synced across devices. Qt6 build + ctest 2066/2066
 - feat(emoji): Emoji 18.0; renamed flags keep their old `:flag_…:` shortcodes. Qt6 build + ctest 2066/2066
 - feat(emoji): the picker and autocomplete hide emoji newer than the system emoji font can draw. Qt6 build + ctest 2066/2066
 - fix(rooms): manual "not bridged" overrides are now saved to account data instead of being lost on restart. Qt6 build + ctest 2066/2066
 - fix(windows): the vendored Noto Color Emoji is now a dependency of the resource compile, so replacing the font re-embeds it (Ninja kept a stale 2.051 in incremental builds, drawing Emoji 18.0 as tofu). User-verified on Win32
-
-### 2026-09-29
-
 - fix(i18n): `i18n-extract` now writes repo-relative `#:` references instead of the developer's absolute checkout path, and `tesseract.pot` is regenerated (428 → 1189 msgids). The emoji picker's category names in `client/src/emoji.cpp` are now extracted too; 45 dead entries are dropped from `de.po`/`es.po`/`fr.po` and `pseudo.po` is regenerated. Qt6 build + ctest 2038/2038
 - fix(tk): avatar initials skip punctuation and brackets and keep whole emoji; `@room` pills, the mention popup and the call banner's "+N" draw their glyph as-is. Qt6 build + ctest 2038/2038
 

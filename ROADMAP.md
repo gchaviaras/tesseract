@@ -27,9 +27,9 @@ and in-progress work, as a single backlog ordered by priority/urgency.
 - **Accessibility — screen-reader verification, then Phase 5.** Every
   view audited on 2026-10-03 is now mapped (see `docs/ACCESSIBILITY-PLAN.md`);
   nothing has been driven with a real screen reader yet (Orca on Qt6 first,
-  then GTK4, Narrator/NVDA, VoiceOver). Phase 5 — high-contrast theme,
-  reduce-motion, a keyboard-only audit (incl. opening context menus from the
-  keyboard) — still needs its own plan.
+  then GTK4, Narrator/NVDA, VoiceOver). Phase 5's keyboard-only audit is
+  done (2026-10-04) bar a live keyboard-only walkthrough per platform; the
+  high-contrast theme and reduce-motion still need their own plan.
 - Cmd/Ctrl+K refinements, room mentions as pills (vs. just user mentions),
   self-mention emphasis, device rename, new-device warnings, edit history
   viewer, GIF picker.

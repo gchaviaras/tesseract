@@ -1,15 +1,22 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-04**. 2180 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-05**. 2184 C++ + 765 Rust tests.
 
-> **Keyboard Shortcuts overlay (2026-10-04).**
+> **Recent rooms persist across restarts (2026-10-04, v0.9.1).**
+> The Ctrl+Tab switcher's and the Ctrl+K "Recent" strip's room history is
+> kept per account and synced as `recent_rooms` in the
+> `im.gnomos.tesseract` prefs, so it survives a restart and follows the
+> account to other devices. Clear all caches forgets it along with the tab
+> layout. Qt6 build + ctest 2184/2184; user-verified Qt6.
+
+> **Keyboard Shortcuts overlay (2026-10-04, v0.9.1).**
 > Ctrl/⌘+/ or F1 (or the user menu; Help menu on macOS) opens a read-only,
 > grouped list of every shortcut. It reads `views/shortcut_registry.h`, the
 > one table the shells also bind their accelerators from and
 > `MainAppWidget` matches global keys against (`tk::KeyChord`).
 > Qt6 build + ctest 2180/2180.
 
-> **Keyboard operability (2026-10-04).**
+> **Keyboard operability (2026-10-04, v0.9.1).**
 > Everything reachable by mouse is now reachable by keyboard: focus stays
 > inside open popups and dialogs, Menu/Shift+F10 opens context menus,
 > PageUp/PageDown/Home/End scroll, and Tab-focused icon buttons show their
@@ -19,7 +26,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-10-04**
 > views. Painted click areas use `tk::KeyboardTarget` or
 > `tk::RowKeyboardCursor`. Qt6 build + ctest 2159/2159.
 
-> **Accessibility gap pass (2026-10-03).**
+> **Accessibility gap pass (2026-10-03, v0.9.1).**
 > The access tree now reaches canvas-drawn popups
 > (`Widget::access_detached_children`), prunes to an open modal
 > (`access_modal`), and carries descriptions, values, a disabled state and
@@ -32,8 +39,16 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-10-04**
 > with links, previews and media controls actionable; context menus take
 > the keyboard. Qt6 build + ctest 2135/2135.
 
+> **Close behaviour and start minimized to tray (2026-10-01, v0.9.1).**
+> Settings → General chooses what closing the main window does (quit, hide
+> to tray — the default — or minimize; `Settings::CloseAction`) and adds an
+> opt-in "start minimized to tray" (`start_minimized`). A login-item launch
+> no longer implies a hidden window; only that preference or `--hidden`
+> starts tray-only, and a user-started launch always raises the running
+> window.
+
 > **Emoji picker: skin tones, Emoji 18.0, font-coverage filtering; "not
-> bridged" override persists (2026-09-30).**
+> bridged" override persists (2026-09-30, v0.9.1).**
 > Long-press, right-click or Shift+Enter on a tone-capable emoji opens a
 > `SkinTonePopover`; the picked tone becomes the default for both the
 > picker and `:shortcode:` autocomplete, synced across devices via
@@ -49,7 +64,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-10-04**
 <!-- -->
 
 > **i18n-extract: repo-relative references, regenerated template, emoji
-> category extraction (2026-09-29).**
+> category extraction (2026-09-29, v0.9.1).**
 > `i18n-extract` wrote absolute checkout paths into every catalog's `#:`
 > source reference, churning the whole file on every regeneration; it now
 > runs from a repo-relative file list. `tesseract.pot` was stale (428 vs
@@ -2368,7 +2383,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 | Suite | Count |
 | ----- | ----- |
 | Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 765 |
-| C++ Catch2 tests via ctest | 2066 |
+| C++ Catch2 tests via ctest | 2184 |
 
 ## Platforms
 
@@ -2543,7 +2558,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 ## System tray
 
-- **All four platforms** — system-tray icon with **Show App** / **Quit** popup menu. Closing the main window hides it (the SDK keeps running, sync stays warm); Quit on the tray menu does the real exit.
+- **All four platforms** — system-tray icon with **Show App** / **Quit** popup menu. By default closing the main window hides it (the SDK keeps running, sync stays warm); Settings → General can make close quit or minimize instead (`Settings::CloseAction`). Quit on the tray menu does the real exit.
 - Cross-platform `tesseract::ITrayIcon` abstraction; per-platform impls created after login (mirrors `INotifier`).
 - **Qt6** — `QSystemTrayIcon`; `is_available()` from `QSystemTrayIcon::isSystemTrayAvailable`. Falls back to plain quit when no system tray is present.
 - **GTK4** — pure `org.kde.StatusNotifierItem` + `com.canonical.dbusmenu` implementation over GDBus (`GtkSniTrayIcon`; icon rendered with gdk-pixbuf + cairo). Replaces the former `libayatana-appindicator3` tray, which pulled libgtk-3 into the GTK4 process and aborted `gtk_init()` with "GTK 2/3 symbols detected" — there is no longer any appindicator (GTK3) dependency.
@@ -2555,7 +2570,7 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 ## Autostart
 
 - **Launch at login** — Settings → General toggle, default off, backed by a new cross-platform `tesseract::IAutostart` abstraction (mirrors `INotifier`/`IScreenLock`): registry `Run` key on Windows, `SMAppService` on macOS 13+, XDG autostart `.desktop` files on Linux. `is_enabled()` always queries the OS directly so the checkbox self-heals if registration is removed outside the app.
-- **Autostart launch behavior** — a launch via the OS autostart mechanism starts hidden to the tray only when a saved session restores silently; otherwise the window force-shows so the user can log in. macOS detects a login-item launch via a best-effort `kAEOpenApplication`/`keyAEPropData` Apple Event check.
+- **Autostart launch behavior** — a launch starts hidden to the tray only when the opt-in "start minimized to tray" setting (or `--hidden`) asks for it and a saved session restores silently; otherwise the window force-shows so the user can log in. A login-item launch alone no longer hides the window. macOS detects a login-item launch via a best-effort `kAEOpenApplication`/`keyAEPropData` Apple Event check.
 - **Shared `parse_launch_args()`** (`client/src/launch_args.cpp`, unit-tested) — replaces each shell's previous ad hoc single-argument `argv` scanning, so `--autostart` and a `matrix:` URI can coexist on the command line.
 
 ## Notifications (foreground toasts)

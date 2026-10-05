@@ -931,6 +931,11 @@ public:
                     continue;
                 int clamped_start = std::max(sel_start, line_start);
                 int clamped_end   = std::min(sel_end,   line_end);
+                // A range starting exactly at this line's end belongs to the
+                // next line; an empty rect here would make callers that
+                // paint per rect (paint_span_images) draw a second copy.
+                if (clamped_start >= clamped_end)
+                    continue;
                 qreal x1 = line.cursorToX(clamped_start, QTextLine::Leading);
                 qreal x2 = line.cursorToX(clamped_end,   QTextLine::Leading);
                 if (x1 > x2)
@@ -1323,6 +1328,35 @@ public:
         // metrics and cut the first run that overruns the budget. The
         // QTextDocument is also set NoWrap below, so a few px of residual
         // error clips at max_width rather than wrapping to a second line.
+        // Ascent/descent of this layout's own role — needed to size a pill
+        // span's reserved box to exactly what tk::measure_pill() computes
+        // (so the placeholder here and the bitmap paint_span_images later
+        // draws into it agree on width), computed once since every span in
+        // one build_rich_text call shares the same paragraph role.
+        const tk::LineMetrics role_lm = tk::role_line_metrics(*this, s.role);
+        const float role_ascent = role_lm.ascent;
+        const float role_descent = role_lm.descent;
+        // Width of a pill span's reserved box — shared by the truncation
+        // pass below and the inline-object reservation after it, so the cut
+        // point accounts for the pill's real width, not an emoji square.
+        const auto pill_width = [&](const TextSpan& sp) -> qreal {
+            tk::PillSpec pspec;
+            pspec.text = sp.image_alt;
+            pspec.kind = sp.pill_kind;
+            // A Room-kind pill with no url is the @room self-mention
+            // (html_spans.cpp clears url for both its plain-text and link
+            // spellings) and shows the current room's own avatar, same
+            // slot-reservation treatment as a User pill; a Room-kind pill
+            // WITH a url is a permalink to some other room and has no avatar.
+            pspec.reserve_leading_visual =
+                (sp.pill_kind == PillKind::User) ||
+                (sp.pill_kind == PillKind::Room && sp.url.empty());
+            pspec.text_role = s.role;
+            return static_cast<qreal>(
+                tk::measure_pill(*this, pspec, role_ascent, role_descent)
+                    .width);
+        };
+
         std::vector<TextSpan> truncated_storage;
         std::span<const TextSpan> use_spans = spans;
         if (!s.wrap && s.trim == TextTrim::Ellipsis && s.max_width > 0)
@@ -1342,7 +1376,8 @@ public:
             const auto run_width = [&](const TextSpan& sp,
                                       const QString& q) -> qreal {
                 if (sp.is_image)
-                    return img_w;
+                    return sp.pill_kind != PillKind::Generic ? pill_width(sp)
+                                                             : img_w;
                 return (sp.is_emoji_run ? emoji_fm : base_fm)
                     .horizontalAdvance(q);
             };
@@ -1407,15 +1442,6 @@ public:
             }
         }
 
-        // Ascent/descent of this layout's own role — needed to size a pill
-        // span's reserved box to exactly what tk::measure_pill() computes
-        // (so the placeholder here and the bitmap paint_span_images later
-        // draws into it agree on width), computed once since every span in
-        // one build_rich_text call shares the same paragraph role.
-        const tk::LineMetrics role_lm = tk::role_line_metrics(*this, s.role);
-        const float role_ascent = role_lm.ascent;
-        const float role_descent = role_lm.descent;
-
         QString html;
         html.reserve(256);
         // Width (device-independent px) to reserve for each is_image
@@ -1433,21 +1459,6 @@ public:
             {
                 if (sp.pill_kind != PillKind::Generic)
                 {
-                    tk::PillSpec pspec;
-                    pspec.text = sp.image_alt;
-                    pspec.kind = sp.pill_kind;
-                    // A Room-kind pill with no url is the @room self-
-                    // mention (html_spans.cpp clears url for both its
-                    // plain-text and link spellings) and shows the current
-                    // room's own avatar, same slot-reservation treatment as
-                    // a User pill; a Room-kind pill WITH a url is a
-                    // permalink to some other room and has no avatar.
-                    pspec.reserve_leading_visual =
-                        (sp.pill_kind == PillKind::User) ||
-                        (sp.pill_kind == PillKind::Room && sp.url.empty());
-                    pspec.text_role = s.role;
-                    const tk::PillMetrics m = tk::measure_pill(
-                        *this, pspec, role_ascent, role_descent);
                     QString t = QString(QChar(0xFFFC));
                     if (!sp.url.empty())
                     {
@@ -1467,7 +1478,7 @@ public:
                             t + QLatin1String("</a>");
                     }
                     html += t;
-                    image_span_widths.push_back(static_cast<qreal>(m.width));
+                    image_span_widths.push_back(pill_width(sp));
                 }
                 else
                 {
@@ -1558,7 +1569,14 @@ public:
             to.setWrapMode(QTextOption::NoWrap);
             doc->setDefaultTextOption(to);
         }
-        doc->setHtml(QLatin1String("<body>") + html + QLatin1String("</body>"));
+        // pre-wrap: the spans are already whitespace-normalized text, not
+        // HTML source — collapsing a run of spaces here would shift every
+        // later QTextDocument position against the caller's span byte
+        // offsets, so selection_rects() for a pill (paint_span_images) lands
+        // on the wrong character. Wrapping is still governed by the
+        // QTextOption wrap mode above.
+        doc->setHtml(QLatin1String("<body style=\"white-space:pre-wrap;\">") +
+                     html + QLatin1String("</body>"));
         if (!image_span_widths.empty())
         {
             doc->documentLayout()->registerHandler(

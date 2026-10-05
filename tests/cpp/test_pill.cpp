@@ -154,6 +154,85 @@ TEST_CASE("a mention pill span reserves width proportional to its label, "
     CHECK(long_layout->measure().w > short_layout->measure().w * 2.0f);
 }
 
+TEST_CASE("a single-line ellipsis layout with a wide mention pill stays "
+          "within max_width",
+          "[tk][pill][canvas]")
+{
+    // The reply-quote card builds its snippet as one elided line. A pill is
+    // far wider than an emoji square, so if the backend's truncation
+    // under-measures it, the line overruns the card.
+    auto surface = TestSurface::create(400, 60);
+    tk::TextSpan lead;
+    lead.text = "hey ";
+    tk::TextSpan pill =
+        make_pill_placeholder_span("Alexandria The Magnificent Third");
+    tk::TextSpan tail;
+    tail.text = " did you see the thing I posted yesterday about the release";
+    const tk::TextSpan spans[] = {lead, pill, tail};
+
+    tk::TextStyle st{.role = tk::FontRole::Body};
+    st.trim = tk::TextTrim::Ellipsis;
+    st.max_width = 200.0f;
+    auto layout = surface->factory().build_rich_text(spans, st);
+    REQUIRE(layout != nullptr);
+    CHECK(layout->measure().w <= st.max_width + 1.0f);
+}
+
+TEST_CASE("a mention pill's byte range still hit-tests to its box after a "
+          "double space",
+          "[tk][pill][canvas]")
+{
+    // The reply-quote card flattens "foo <br>" to "foo  " (two spaces); a
+    // backend that collapses whitespace shifts every later byte offset, so
+    // paint_span_images' selection_rects(boff, …) misses the pill's box.
+    auto surface = TestSurface::create(400, 60);
+    tk::TextSpan lead;
+    lead.text = "foo  ";
+    tk::TextSpan pill = make_pill_placeholder_span("Alexandria");
+    tk::TextSpan tail;
+    tail.text = " bar";
+    const tk::TextSpan spans[] = {lead, pill, tail};
+
+    tk::TextStyle st{.role = tk::FontRole::Body};
+    st.trim = tk::TextTrim::Ellipsis;
+    st.max_width = 390.0f;
+    auto layout = surface->factory().build_rich_text(spans, st);
+    REQUIRE(layout != nullptr);
+    const int start = static_cast<int>(lead.text.size());
+    auto rects = layout->selection_rects(
+        start, start + static_cast<int>(pill.text.size()));
+    REQUIRE(rects.size() == 1);
+    CHECK(rects[0].w > 40.0f); // the pill's reserved box, not a space glyph
+}
+
+TEST_CASE("a mention pill wrapped to the next line reports exactly one box",
+          "[tk][pill][canvas]")
+{
+    // paint_span_images draws one pill bitmap per selection rect; a stray
+    // zero-width rect at the end of the previous line paints a second copy
+    // overflowing the right edge.
+    auto surface = TestSurface::create(400, 200);
+    tk::TextSpan lead;
+    lead.text = "some words that fill most of the line ";
+    tk::TextSpan pill =
+        make_pill_placeholder_span("Alexandria The Magnificent");
+    tk::TextSpan tail;
+    tail.text = " end";
+    const tk::TextSpan spans[] = {lead, pill, tail};
+
+    tk::TextStyle st{.role = tk::FontRole::Body};
+    st.wrap = true;
+    st.max_width = 260.0f;
+    auto layout = surface->factory().build_rich_text(spans, st);
+    REQUIRE(layout != nullptr);
+    REQUIRE(layout->line_count() >= 2);
+    const int start = static_cast<int>(lead.text.size());
+    auto rects = layout->selection_rects(
+        start, start + static_cast<int>(pill.text.size()));
+    REQUIRE(rects.size() == 1);
+    CHECK(rects[0].w > 40.0f);
+}
+
 TEST_CASE("a mention pill span does not inflate the surrounding line's height",
           "[tk][pill][canvas]")
 {

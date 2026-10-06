@@ -59,6 +59,7 @@ constexpr float kThumbGap = 4.0f;
 // Section header row dimensions.
 constexpr float kRoomListHeaderH = 28.0f;
 constexpr float kHeaderPadX = 10.0f;
+constexpr float kHeaderChevronPx = 14.0f; // Lucide chevron-up / chevron-down
 
 // Search header dimensions. Matches LoginView's homeserver-field height.
 constexpr float kSearchBarH = 36.0f;
@@ -464,7 +465,7 @@ private:
         bool          valid           = false; // false forces rebuild on first use
         // cached layouts
         std::unique_ptr<tk::TextLayout> title_layout;
-        std::unique_ptr<tk::TextLayout> chevron_layout;
+        tk::IconCache                   chevron_icon; // reset on rebuild: keyed on tint/size, not SVG
         std::unique_ptr<tk::TextLayout> badge_layout; // nullptr when unread == 0
     };
 
@@ -540,10 +541,7 @@ private:
             ts.role            = tk::FontRole::Caption;
             cache.title_layout = ctx.factory.build_text(title, ts);
 
-            const char*   chevron = collapsed ? "\xE2\x96\xB8" : "\xE2\x96\xBE";
-            tk::TextStyle cs{};
-            cs.role              = tk::FontRole::UiSemibold;
-            cache.chevron_layout = ctx.factory.build_text(chevron, cs);
+            cache.chevron_icon = tk::IconCache{};
 
             if (collapsed && section_unread > 0)
             {
@@ -568,14 +566,15 @@ private:
                                  {bounds.x + kHeaderPadX, ty},
                                  ctx.theme.palette.text_primary);
         }
-        if (cache.chevron_layout)
-        {
-            tk::Size csz = cache.chevron_layout->measure();
-            float    cy  = bounds.y + (bounds.h - csz.h) * 0.5f;
-            chevron_x   -= csz.w;
-            ctx.canvas.draw_text(*cache.chevron_layout, {chevron_x, cy},
-                                 ctx.theme.palette.text_muted);
-        }
+        // Accordion convention (chevron sits at the trailing edge): down =
+        // collapsed, up = expanded.
+        chevron_x -= kHeaderChevronPx;
+        cache.chevron_icon.draw(
+            ctx.canvas, ctx.factory,
+            collapsed ? std::span<const std::uint8_t>(kChevronDownSvg)
+                      : std::span<const std::uint8_t>(kChevronUpSvg),
+            {chevron_x, bounds.y, kHeaderChevronPx, bounds.h}, kHeaderChevronPx,
+            ctx.theme.palette.text_muted);
         if (collapsed && section_unread > 0 && cache.badge_layout)
         {
             tk::Size ts2    = cache.badge_layout->measure();

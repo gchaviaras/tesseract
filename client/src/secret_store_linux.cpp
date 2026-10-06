@@ -16,16 +16,18 @@ const SecretSchema kSchema = {
 namespace tesseract
 {
 
-std::optional<std::string> SecretStore::load(const std::string& user_id)
+std::optional<std::string> SecretStore::load_entry_(const std::string& storage_key,
+                                                    bool* failed)
 {
     GError* err = nullptr;
     gchar* secret = secret_password_lookup_sync(
         &kSchema, nullptr, &err,
-        "user-id", SecretStore::key_for(user_id).c_str(),
+        "user-id", storage_key.c_str(),
         nullptr);
     if (err)
     {
         g_error_free(err);
+        if (failed) *failed = true;
         return std::nullopt;
     }
     if (!secret)
@@ -36,16 +38,17 @@ std::optional<std::string> SecretStore::load(const std::string& user_id)
     return result;
 }
 
-bool SecretStore::save(const std::string& user_id, const std::string& json)
+bool SecretStore::save_entry_(const std::string& storage_key, const std::string& value,
+                              const char* label)
 {
     GError* err = nullptr;
     gboolean ok = secret_password_store_sync(
         &kSchema,
         SECRET_COLLECTION_DEFAULT,
-        "Tesseract session",
-        json.c_str(),
+        label,
+        value.c_str(),
         nullptr, &err,
-        "user-id", SecretStore::key_for(user_id).c_str(),
+        "user-id", storage_key.c_str(),
         nullptr);
     if (err)
     {
@@ -55,12 +58,12 @@ bool SecretStore::save(const std::string& user_id, const std::string& json)
     return static_cast<bool>(ok);
 }
 
-void SecretStore::remove(const std::string& user_id)
+void SecretStore::remove_entry_(const std::string& storage_key)
 {
     GError* err = nullptr;
     secret_password_clear_sync(
         &kSchema, nullptr, &err,
-        "user-id", SecretStore::key_for(user_id).c_str(),
+        "user-id", storage_key.c_str(),
         nullptr);
     if (err)
         g_error_free(err);

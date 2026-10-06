@@ -1,7 +1,10 @@
 #include "tesseract/maintenance.h"
 
 #include "tesseract/client.h"
+#include "tesseract/paths.h"
+#include "tesseract/secret_store.h"
 #include "tesseract/session_store.h"
+#include "tesseract/settings.h"
 
 namespace tesseract
 {
@@ -20,6 +23,12 @@ LogoutAllReport logout_all_accounts()
         report.index_corrupt = true;
         return report;
     }
+
+    // Recovery keys Tesseract made and the user hasn't saved yet are the only
+    // copy: like a sign-out from the app, keep those (and their reminders).
+    auto& settings = Settings::instance();
+    settings.load_from_disk(config_dir());
+    bool settings_changed = false;
 
     for (const auto& uid : index.user_ids)
     {
@@ -58,8 +67,16 @@ LogoutAllReport logout_all_accounts()
         // Wipe locally regardless: the user asked for these accounts to be
         // gone from this machine even if the homeserver is unreachable.
         SessionStore::clear_account(uid);
+        if (!settings.recovery_key_unsaved.count(uid))
+        {
+            SecretStore::remove_recovery_key(uid);
+            settings_changed |= settings.save_key_reminder_dismissals.erase(uid) > 0;
+            settings_changed |= settings.save_key_reminder_snoozed_until.erase(uid) > 0;
+        }
         report.accounts.push_back(std::move(outcome));
     }
+    if (settings_changed)
+        settings.save_to_disk(config_dir());
 
     SessionStore::save_index({});
     return report;

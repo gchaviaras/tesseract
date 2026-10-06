@@ -192,7 +192,12 @@ impl ClientFfi {
         );
         match self
             .rt
-            .block_on(async move { client.encryption().recovery().recover(&key).await })
+            .block_on(async move {
+                // Same as enable_recovery: don't race matrix-sdk's login-time
+                // cross-signing / backup setup.
+                client.encryption().wait_for_e2ee_initialization_tasks().await;
+                client.encryption().recovery().recover(&key).await
+            })
         {
             Ok(()) => {
                 // Unlike enable_recovery(), recover() has no progress stream, so
@@ -248,6 +253,13 @@ impl ClientFfi {
         );
 
         self.rt.block_on(async move {
+            // matrix-sdk's own login-time setup (bootstrap cross-signing, then
+            // backups and recovery) runs as a background task. Bootstrapping
+            // alongside it makes both create an identity: the server keeps one,
+            // this device the other, and recovery then stores the wrong one in
+            // secret storage. Let it finish first.
+            client.encryption().wait_for_e2ee_initialization_tasks().await;
+
             // Make the Fresh path self-contained. The login-time auto-bootstrap
             // of cross-signing can be cancelled (e.g. the session is invalidated
             // server-side while the SQLite write is in flight, surfacing as

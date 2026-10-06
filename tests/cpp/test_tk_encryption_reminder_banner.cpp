@@ -87,3 +87,14 @@ TEST_CASE("EncryptionReminderBanner dismiss fires on_dismiss", "[tk][view][encry
     b->click();
     CHECK(dismissed);
 }
+
+TEST_CASE("EncryptionReminderBanner SaveKey offers Show me", "[tk][view][encryption]")
+{
+    ReminderBannerStage st;
+    EncryptionReminderBanner banner;
+    banner.set_kind(EncryptionReminderBanner::Kind::SaveKey);
+    st.run(banner, {0, 0, 640, 48});
+    CHECK(banner.label_text().find("recovery key") != std::string::npos);
+    CHECK(find_button(banner, "Show me") != nullptr);
+    CHECK(find_button(banner, "Unlock") == nullptr);
+}

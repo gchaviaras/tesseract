@@ -6147,6 +6147,11 @@ void MainWindow::begin_add_account()
 
 void MainWindow::logout_active_account()
 {
+    // An unsaved recovery key is offered for saving first (ShellBase); this
+    // re-enters once the user has saved it or chosen to sign out anyway.
+    if (intercept_sign_out_for_unsaved_key_([this] { logout_active_account(); }))
+        return;
+
     // Platform-agnostic teardown (unsubscribe the room, up_connector/presence
     // logout, client_->logout() + failure surface, stop_sync, clear account
     // state, tray refresh, index update, and — when other accounts remain — the

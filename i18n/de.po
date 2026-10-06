@@ -5266,3 +5266,55 @@ msgstr "Vergrößern"
 
 msgid "Zoom out"
 msgstr "Verkleinern"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Keep your messages safe"
+msgstr "Halte deine Nachrichten sicher"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract made a recovery key for your account. If you lose this device or sign out, it's the only way to read your old messages again. Keep a copy somewhere safe, like a password manager, or print it out."
+msgstr "Tesseract hat einen Wiederherstellungsschlüssel für dein Konto erstellt. Wenn du dieses Gerät verlierst oder dich abmeldest, ist er die einzige Möglichkeit, deine alten Nachrichten wieder zu lesen. Bewahre eine Kopie an einem sicheren Ort auf, etwa in einem Passwort-Manager, oder drucke ihn aus."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Show my recovery key"
+msgstr "Meinen Wiederherstellungsschlüssel anzeigen"
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Save your recovery key so you never lose your messages."
+msgstr "Speichere deinen Wiederherstellungsschlüssel, damit du deine Nachrichten nie verlierst."
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Show me"
+msgstr "Anzeigen"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Also keep it on this device"
+msgstr "Auch auf diesem Gerät behalten"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract keeps it in this computer's secure storage, so it can unlock your messages by itself if you reinstall. Anyone who can open that storage could read your messages too."
+msgstr "Tesseract bewahrt ihn im sicheren Speicher dieses Computers auf, damit es deine Nachrichten nach einer Neuinstallation selbst entsperren kann. Wer diesen Speicher öffnen kann, könnte deine Nachrichten ebenfalls lesen."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Save your recovery key before you sign out"
+msgstr "Speichere deinen Wiederherstellungsschlüssel, bevor du dich abmeldest"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. Save it now, somewhere safe like a password manager."
+msgstr "Dein Wiederherstellungsschlüssel ist bisher nur auf diesem Gerät gespeichert. Ohne ihn kannst du deine alten Nachrichten nach der nächsten Anmeldung nicht mehr lesen. Speichere ihn jetzt an einem sicheren Ort, etwa in einem Passwort-Manager."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Sign out without saving"
+msgstr "Ohne Speichern abmelden"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your messages are now backed up"
+msgstr "Deine Nachrichten werden jetzt gesichert"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract turned on secure backup for your encrypted messages and made a recovery key for your account. You'll need that key to read your messages if you sign in on a new device or lose this one, so a reminder at the top of the window will help you save it."
+msgstr "Tesseract hat die sichere Sicherung deiner verschlüsselten Nachrichten eingeschaltet und einen Wiederherstellungsschlüssel für dein Konto erstellt. Du brauchst diesen Schlüssel, um deine Nachrichten zu lesen, wenn du dich auf einem neuen Gerät anmeldest oder dieses verlierst. Eine Erinnerung oben im Fenster hilft dir, ihn zu speichern."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Couldn't read your recovery key from this computer's secure storage."
+msgstr "Dein Wiederherstellungsschlüssel konnte nicht aus dem sicheren Speicher dieses Computers gelesen werden."

@@ -65,12 +65,21 @@ public:
         None,
         SetupNeeded, // no recovery for the account yet
         Locked,      // this device can't read encrypted messages yet
+        SaveKey,     // Tesseract set up recovery itself; the user hasn't saved the key
     };
     // `recovery_state`: 0=Unknown, 1=Disabled, 2=Enabled, 3=Incomplete.
+    // `key_unsaved`: Tesseract is holding an auto-created recovery key the
+    // user hasn't saved yet (Settings::recovery_key_unsaved). It only
+    // matters once nothing more urgent is wrong.
     static Reminder reminder_for(std::uint8_t recovery_state, bool device_verified,
-                                 bool foreign_identity);
+                                 bool foreign_identity, bool key_unsaved = false);
 
     static constexpr std::int64_t kSnoozeSeconds = 3 * 24 * 60 * 60;
+    static constexpr std::int64_t kDaySeconds    = 24 * 60 * 60;
+    // How long the SaveKey reminder stays away after its `dismissals`-th ✕
+    // (1-based): 1, 3, 7, then 14 days from then on. It never stops while
+    // the key is unsaved.
+    static std::int64_t save_key_snooze_seconds(int dismissals);
     static bool snoozed(std::int64_t snoozed_until_s, std::int64_t now_s)
     {
         return now_s < snoozed_until_s;

@@ -359,6 +359,7 @@ public:
 
     // Account / crypto
     void begin_crypto_identity_reset();
+    bool intercept_sign_out_for_unsaved_key(std::function<void()> proceed);
     void on_account_picker_select(const std::string& uid);
 
     // Room list / space
@@ -1850,7 +1851,9 @@ void MacShell::request_relogin_(const std::string& user_id)
     if (is_active)
     {
         // ShellBase already showed "Session expired…" and cleared/stopped the
-        // account; drop to the login flow.
+        // account; drop to the login flow. Not the user's sign-out, so no
+        // offer to save an unsaved recovery key first (it's kept).
+        skip_unsaved_key_check_for_next_sign_out_();
         if (ctrl_)
             [ctrl_ _logoutActiveAccount];
         return;
@@ -2379,6 +2382,8 @@ void MacShell::wire_settings_controller_common(
     std::function<void()> relayout)
     { wire_settings_controller_common_(view, ctrl, std::move(relayout)); }
 void MacShell::begin_crypto_identity_reset() { begin_crypto_identity_reset_(); }
+bool MacShell::intercept_sign_out_for_unsaved_key(std::function<void()> proceed)
+    { return intercept_sign_out_for_unsaved_key_(std::move(proceed)); }
 void MacShell::on_account_picker_select(const std::string& uid)
     { on_account_picker_select_(uid); }
 void MacShell::join_room_command(const std::string& room_id)
@@ -7501,6 +7506,15 @@ private:
 
 - (void)_logoutActiveAccount
 {
+    // An unsaved recovery key is offered for saving first (ShellBase); this
+    // re-enters once the user has saved it or chosen to sign out anyway.
+    __weak MainWindowController* ws = self;
+    if (_shell->intercept_sign_out_for_unsaved_key([ws] {
+            MainWindowController* s = ws;
+            if (s) [s _logoutActiveAccount];
+        }))
+        return;
+
     // Platform-agnostic teardown (unsubscribe the room, up_connector/presence
     // logout, client_->logout() + failure surface, stop_sync, clear account
     // state, tray refresh, index update, and — when other accounts remain — the

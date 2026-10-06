@@ -6052,3 +6052,55 @@ msgstr ""
 #: client/src/emoji.cpp:191
 msgid "Flags"
 msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Keep your messages safe"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract made a recovery key for your account. If you lose this device or sign out, it's the only way to read your old messages again. Keep a copy somewhere safe, like a password manager, or print it out."
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Show my recovery key"
+msgstr ""
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Save your recovery key so you never lose your messages."
+msgstr ""
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Show me"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Also keep it on this device"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract keeps it in this computer's secure storage, so it can unlock your messages by itself if you reinstall. Anyone who can open that storage could read your messages too."
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Save your recovery key before you sign out"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. Save it now, somewhere safe like a password manager."
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Sign out without saving"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your messages are now backed up"
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract turned on secure backup for your encrypted messages and made a recovery key for your account. You'll need that key to read your messages if you sign in on a new device or lose this one, so a reminder at the top of the window will help you save it."
+msgstr ""
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Couldn't read your recovery key from this computer's secure storage."
+msgstr ""

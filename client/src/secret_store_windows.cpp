@@ -9,12 +9,13 @@ namespace
 {
 
 // Build the Credential Manager target name: "Tesseract:<key>", where key is
-// SecretStore::key_for(user_id) (the bare MXID in the default profile).
-// Matrix IDs and profile names are ASCII-compatible; widen one byte at a time.
-std::wstring make_target(const std::string& user_id)
+// the backend key (SecretStore::key_for(user_id), the bare MXID in the default
+// profile, or SecretStore::recovery_key_for(user_id)). Matrix IDs and profile
+// names are ASCII-compatible; widen one byte at a time.
+std::wstring make_target(const std::string& storage_key)
 {
     std::wstring target = L"Tesseract:";
-    for (unsigned char c : tesseract::SecretStore::key_for(user_id))
+    for (unsigned char c : storage_key)
         target.push_back(static_cast<wchar_t>(c));
     return target;
 }
@@ -24,12 +25,16 @@ std::wstring make_target(const std::string& user_id)
 namespace tesseract
 {
 
-std::optional<std::string> SecretStore::load(const std::string& user_id)
+std::optional<std::string> SecretStore::load_entry_(const std::string& storage_key,
+                                                    bool* failed)
 {
-    auto target = make_target(user_id);
+    auto target = make_target(storage_key);
     PCREDENTIALW cred = nullptr;
     if (!CredReadW(target.c_str(), CRED_TYPE_GENERIC, 0, &cred))
+    {
+        if (failed && GetLastError() != ERROR_NOT_FOUND) *failed = true;
         return std::nullopt;
+    }
 
     std::string result(
         reinterpret_cast<const char*>(cred->CredentialBlob),
@@ -38,9 +43,10 @@ std::optional<std::string> SecretStore::load(const std::string& user_id)
     return result;
 }
 
-bool SecretStore::save(const std::string& user_id, const std::string& json)
+bool SecretStore::save_entry_(const std::string& storage_key, const std::string& json,
+                              const char* /*label*/)
 {
-    auto target = make_target(user_id);
+    auto target = make_target(storage_key);
     CREDENTIALW cred        = {};
     cred.Type               = CRED_TYPE_GENERIC;
     cred.TargetName         = const_cast<LPWSTR>(target.c_str());
@@ -60,9 +66,9 @@ bool SecretStore::save(const std::string& user_id, const std::string& json)
     return CredWriteW(&cred, 0) == TRUE;
 }
 
-void SecretStore::remove(const std::string& user_id)
+void SecretStore::remove_entry_(const std::string& storage_key)
 {
-    auto target = make_target(user_id);
+    auto target = make_target(storage_key);
     CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0);
 }
 

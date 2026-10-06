@@ -1,8 +1,9 @@
 #pragma once
 
 // Slim reminder strip shown above the message list while this device's
-// encryption isn't sorted out (recovery never set up, or this device can't
-// read encrypted history yet) and the user has closed the encryption dialog.
+// encryption isn't sorted out (recovery never set up, this device can't
+// read encrypted history yet, or the recovery key Tesseract made hasn't been
+// saved by the user) and the user has closed the encryption dialog.
 // It has no flow of its own: its one button reopens EncryptionSetupOverlay,
 // which is the single place every encryption interaction happens.
 
@@ -23,6 +24,7 @@ public:
     {
         SetupNeeded, // no recovery set up for the account yet
         Locked,      // this device can't read encrypted messages yet
+        SaveKey,     // Tesseract holds a recovery key the user hasn't saved yet
     };
 
     EncryptionReminderBanner();

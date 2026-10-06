@@ -8,6 +8,7 @@
 #include <tesseract/paths.h>
 #include <tesseract/power_monitor.h>
 #include <tesseract/screen_lock.h>
+#include <tesseract/secret_store.h>
 #include <tesseract/settings.h>
 #include <tesseract/types.h>
 #include <tesseract/visual.h>
@@ -5751,6 +5752,105 @@ protected:
     // dialog deliberately (verify_session_menu_callback_ above) rather than
     // waiting for it to reappear on its own.
     void reopen_encryption_setup_();
+
+    // ── Silent encryption setup (new accounts) ────────────────────────────
+    // A brand-new account (recovery Disabled, no identity made elsewhere)
+    // never sees the setup dialog: Tesseract enables recovery itself, keeps
+    // the generated key in the OS keychain and flags it in
+    // Settings::recovery_key_unsaved until the user saves it from the
+    // SaveKey reminder. Returns false when setup should fall back to the
+    // dialog (no session, or silent attempts keep failing); true when it
+    // started or is waiting out its retry backoff.
+    bool begin_silent_recovery_setup_(const std::shared_ptr<AccountSession>& sess);
+    // Progress of a silent enable_recovery for `uid` (step 4 = done with
+    // the key, 5 = failed).
+    void handle_silent_recovery_progress_(const std::string& uid, uint8_t step,
+                                          const std::string& key_or_error);
+    void silent_recovery_failed_(const std::string& uid);
+    // A device whose account has recovery but this device lacks its secrets:
+    // when the keychain still holds the key Tesseract made (e.g. after the
+    // app's data was wiped), unlock with it without asking. Returns true when
+    // an attempt started (looking up the key included); `on_failed` runs on
+    // the UI thread when there's no stored key or it doesn't unlock.
+    bool try_silent_unlock_(const std::shared_ptr<AccountSession>& sess,
+                            std::function<void()> on_failed);
+    // True while a silent setup for `uid` is in flight or waiting out its
+    // retry backoff: nothing should offer (or start) another setup meanwhile.
+    bool silent_recovery_pending_(const std::string& uid) const;
+    // True once silent setup for `uid` has failed kSilentRecoveryMaxFailures
+    // times: only then is the user asked to set recovery up themselves.
+    bool silent_recovery_exhausted_(const std::string& uid) const;
+    // The Recover dialog for `sess`, unless the key Tesseract keeps for it
+    // unlocks the device silently first. Shared by the first-login gate and
+    // check_encryption_setup_.
+    void show_recover_or_silent_unlock_(const std::shared_ptr<AccountSession>& sess);
+    // Reminder strip / SaveKey dialog: show the key Tesseract is holding.
+    // `before_sign_out`: the user asked to sign out with the key unsaved.
+    void open_save_key_dialog_(bool before_sign_out = false);
+    // Forget that `uid` has an unsaved key Tesseract made: the flag, its
+    // reminder snooze and dismissal count, and any in-memory copy (not the
+    // secure-storage entry — callers decide that).
+    void clear_unsaved_recovery_key_state_(const std::string& uid);
+    // The SaveKey reminder's own snooze (1, 3, 7, then 14 days).
+    void snooze_save_key_reminder_(const std::string& uid);
+    // The user confirmed they saved the recovery key: stop reminding, and
+    // delete Tesseract's copy unless they opted to keep it on this device.
+    void mark_recovery_key_saved_(const std::string& uid, bool keep_on_device);
+
+    // ── Sign-out with an unsaved recovery key ─────────────────────────────
+    // Every shell's sign-out entry point calls this first. While the active
+    // account's recovery key is unsaved it opens the SaveKey dialog instead
+    // and returns true; `proceed` (the shell's own sign-out, re-entered) runs
+    // once the user has saved the key or chosen to sign out without saving.
+    bool intercept_sign_out_for_unsaved_key_(std::function<void()> proceed);
+    void proceed_sign_out_();
+    void cancel_sign_out_();
+    // The next sign-out isn't the user's choice (an expired session dropping
+    // to the login screen): don't offer to save the key first. It's kept for
+    // the next sign-in anyway (settle_recovery_key_on_sign_out_).
+    void skip_unsaved_key_check_for_next_sign_out_();
+    // logout_active_account_impl_: drop the account's stored recovery key and
+    // reminder state — unless it's unsaved, when the stored copy is the only
+    // one and stays for the next sign-in.
+    void settle_recovery_key_on_sign_out_(const std::string& uid);
+    std::function<void()> pending_sign_out_;
+    std::string           pending_sign_out_uid_;
+    std::string           sign_out_confirmed_uid_;
+    // The account the SaveKey dialog was opened for: its buttons act on it.
+    std::string           save_key_dialog_uid_;
+
+    // The SDK calls behind the silent paths, and the secure-storage entry
+    // (on a worker: the OS keyring can block; results come back on the UI
+    // thread). Virtual so tests can run them without a client or keyring.
+    virtual void run_silent_enable_recovery_(std::shared_ptr<AccountSession> sess);
+    virtual void run_silent_recover_(std::shared_ptr<AccountSession> sess, std::string key,
+                                     std::function<void(bool ok)> done);
+    virtual void load_stored_recovery_key_(
+        const std::string& uid,
+        std::function<void(tesseract::SecretStore::RecoveryKeyLookup)> done);
+    virtual void store_recovery_key_(const std::string& uid, const std::string& key,
+                                     std::function<void(bool stored)> done);
+    virtual void forget_stored_recovery_key_(const std::string& uid);
+
+    // Accounts with a silent enable_recovery in flight.
+    std::set<std::string> silent_recovery_in_flight_;
+    // Accounts whose silent setup started at their first sign-in here (just
+    // registered); any other silently set-up account gets the
+    // AutoSetupNotice explaining what happened.
+    std::set<std::string> silent_recovery_new_account_;
+    // Per account: failed silent attempts, and when the next may start.
+    std::map<std::string, int>          silent_recovery_failures_;
+    std::map<std::string, std::int64_t> silent_recovery_retry_after_;
+    // Accounts a silent unlock was already tried for this session.
+    std::set<std::string> silent_unlock_tried_;
+    // Accounts whose recovery the dialog is setting up (enable_recovery from
+    // the dialog, until its step 4/5): their "done" replaces the account's
+    // recovery, unlike recover()'s.
+    std::set<std::string> dialog_recovery_setup_users_;
+    // A generated key the keychain refused, held for this session only.
+    std::map<std::string, std::string> unstored_recovery_keys_;
+    static constexpr int          kSilentRecoveryMaxFailures = 3;
+    static constexpr std::int64_t kSilentRecoveryRetrySeconds = 10 * 60;
 
 private:
     // intentionally empty — all other state is protected so shells can reset it

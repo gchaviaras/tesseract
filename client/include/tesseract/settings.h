@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <filesystem>
 #include <string_view>
 
@@ -256,6 +257,18 @@ public:
     // device" reminder strip (and the automatic encryption dialog) stay
     // hidden. Device-local on purpose: it's this device that's locked.
     std::map<std::string, std::int64_t> encryption_reminder_snoozed_until;
+    // Accounts whose recovery key Tesseract created by itself and is holding
+    // in the OS keychain (SecretStore::load_recovery_key) until the user has
+    // saved it; the reminder strip asks them to until then.
+    std::set<std::string> recovery_key_unsaved;
+    // user_id → how many times the "save your recovery key" reminder was
+    // dismissed; picks the next, longer snooze
+    // (EncryptionFlowController::save_key_snooze_seconds).
+    std::map<std::string, int> save_key_reminder_dismissals;
+    // user_id → unix seconds until which the "save your recovery key" strip
+    // stays hidden. Separate from encryption_reminder_snoozed_until so
+    // dismissing it never hides a more urgent reminder.
+    std::map<std::string, std::int64_t> save_key_reminder_snoozed_until;
 
     // ── Room list ─────────────────────────────────────────────────────
     // Group rooms with no activity for `inactive_room_threshold_days` into a

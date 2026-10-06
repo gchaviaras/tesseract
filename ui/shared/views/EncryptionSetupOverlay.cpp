@@ -160,7 +160,7 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
         raw->set_visible(false);
         return raw;
     };
-    skip_link_ = make_link(tk::tr("Skip for now"), [this] { if (on_close) on_close(); });
+    skip_link_ = make_link(tk::tr("Skip for now"), [this] { skip_(); });
     passphrase_link_ = make_link(tk::tr("Use a passphrase instead"),
                                  [this] { use_passphrase_(); });
     back_link_ = make_link(tk::tr("Back"), [this] { go_back_(); });
@@ -182,6 +182,16 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
     key_saved_cb_->on_change = [this](bool checked)
     {
         key_saved_checked_ = checked;
+        if (host()) host()->request_repaint();
+    };
+
+    auto keep = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Also keep it on this device"));
+    keep_on_device_cb_ = add_child(std::move(keep));
+    keep_on_device_cb_->set_visible(false);
+    keep_on_device_cb_->on_change = [this](bool checked)
+    {
+        keep_on_device_checked_ = checked;
         if (host()) host()->request_repaint();
     };
 
@@ -355,6 +365,16 @@ void EncryptionSetupOverlay::fire_primary_()
     switch (step_)
     {
         case Step::Intro:
+            if (mode_ == Mode::AutoSetupNotice)
+            {
+                if (on_close) on_close(); // "OK"
+                break;
+            }
+            if (mode_ == Mode::SaveKey)
+            {
+                advance_step_(Step::ShowKey);
+                break;
+            }
             if (mode_ != Mode::Fresh)
             {
                 advance_step_(Step::Choose);
@@ -392,10 +412,13 @@ void EncryptionSetupOverlay::fire_primary_()
         case Step::ShowKey:
             if (!key_saved_checked_) return;
             advance_step_(Step::Done);
+            if (on_key_saved)
+                on_key_saved(mode_ == Mode::SaveKey && keep_on_device_checked_);
             break;
 
         case Step::Done:
-            if (on_close) on_close();
+            if (before_sign_out_ && on_sign_out) on_sign_out();
+            else if (on_close) on_close();
             break;
 
         case Step::ResetApproving:
@@ -545,7 +568,7 @@ void EncryptionSetupOverlay::return_to_start()
     }
     if (mode_ == Mode::Recover)
         advance_step_(Step::Choose);
-    else if (mode_ == Mode::Fresh)
+    else if (mode_ == Mode::Fresh || mode_ == Mode::SaveKey)
         advance_step_(Step::Intro);
     else if (on_close)
         on_close();
@@ -554,7 +577,13 @@ void EncryptionSetupOverlay::return_to_start()
 // ── Simulation helpers ────────────────────────────────────────────────────────
 
 void EncryptionSetupOverlay::simulate_primary_action()         { fire_primary_(); }
-void EncryptionSetupOverlay::simulate_skip()                    { if (on_close) on_close(); }
+void EncryptionSetupOverlay::simulate_skip()                    { skip_(); }
+
+void EncryptionSetupOverlay::skip_()
+{
+    if (before_sign_out_ && on_sign_out) on_sign_out(); // "Sign out without saving"
+    else if (on_close) on_close();
+}
 void EncryptionSetupOverlay::simulate_select_passphrase_mode() { use_passphrase_(); }
 void EncryptionSetupOverlay::simulate_back()                    { go_back_(); }
 void EncryptionSetupOverlay::simulate_backdrop_click()
@@ -592,7 +621,8 @@ void EncryptionSetupOverlay::go_back_()
     if (step_ == Step::VerifyFailed)
         return_to_start(); // honours where an incoming request interrupted
     else
-        advance_step_(mode_ == Mode::Fresh ? Step::Intro : Step::Choose);
+        advance_step_(mode_ == Mode::Fresh || mode_ == Mode::SaveKey ? Step::Intro
+                                                                     : Step::Choose);
 }
 
 void EncryptionSetupOverlay::use_passphrase_()
@@ -678,6 +708,10 @@ bool EncryptionSetupOverlay::backdrop_closes_() const
     // Only steps with nothing to lose close on a stray backdrop click. ShowKey
     // in particular must not: dismissing it before the key is saved throws
     // the only copy of the key away.
+    // SaveKey's ShowKey is just a look at a key Tesseract keeps in secure
+    // storage, unless that's the only copy.
+    if (step_ == Step::ShowKey)
+        return mode_ == Mode::SaveKey && !key_only_in_memory_;
     return step_ == Step::Intro || step_ == Step::Choose || step_ == Step::EnterKey ||
            step_ == Step::Done || step_ == Step::VerifyFailed;
 }
@@ -700,11 +734,14 @@ float EncryptionSetupOverlay::step_card_height_() const
 {
     switch (step_)
     {
-        case Step::Intro:        return mode_ == Mode::Fresh ? 290.0f : 250.0f;
+        case Step::Intro:        return mode_ == Mode::Fresh     ? 290.0f
+                                      : mode_ == Mode::SaveKey ? 310.0f
+                                      : mode_ == Mode::AutoSetupNotice ? 310.0f
+                                                               : 250.0f;
         case Step::PassphraseEntry: return 400.0f;
         case Step::EnterKey:     return 300.0f;
         case Step::Progress:     return 220.0f;
-        case Step::ShowKey:      return 410.0f;
+        case Step::ShowKey:      return mode_ == Mode::SaveKey ? 520.0f : 410.0f;
         case Step::Done:         return 240.0f;
         case Step::ResetApproving: return 340.0f;
         case Step::Choose:       return has_other_device_ ? 398.0f : 324.0f;
@@ -767,6 +804,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
     if (copy_button_) copy_button_->set_visible(false);
     if (save_button_) save_button_->set_visible(false);
     if (key_saved_cb_) key_saved_cb_->set_visible(false);
+    if (keep_on_device_cb_) keep_on_device_cb_->set_visible(false);
     // Unlike the buttons above (stateless canvas widgets — redundant
     // set_visible() is harmless), the text fields wrap a real native OS
     // control. Hiding one that's about to stay the active field for this
@@ -1068,14 +1106,38 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         // ── Intro ────────────────────────────────────────────────────────────
         case Step::Intro:
         {
-            const bool fresh = mode_ == Mode::Fresh;
-            draw_title(fresh ? tk::tr("Protect your messages")
-                             : tk::tr("Confirm it's you"));
+            const bool fresh    = mode_ == Mode::Fresh;
+            const bool save_key = mode_ == Mode::SaveKey;
+            const bool sign_out = save_key && before_sign_out_;
+            const bool notice   = mode_ == Mode::AutoSetupNotice;
+            draw_title(notice     ? tk::tr("Your messages are now backed up")
+                       : fresh    ? tk::tr("Protect your messages")
+                       : sign_out ? tk::tr("Save your recovery key before you sign out")
+                       : save_key ? tk::tr("Keep your messages safe")
+                                  : tk::tr("Confirm it's you"));
             const std::string body =
-                fresh
+                notice
+                    ? tk::tr("Tesseract turned on secure backup for your "
+                             "encrypted messages and made a recovery key for your "
+                             "account. You'll need that key to read your messages "
+                             "if you sign in on a new device or lose this one, so "
+                             "a reminder at the top of the window will help you "
+                             "save it.")
+                : fresh
                     ? tk::tr("Your messages are end-to-end encrypted. A recovery "
                              "key lets you read them again if you sign in on a "
                              "new device or lose this one.")
+                : sign_out
+                    ? tk::tr("Your recovery key isn't saved anywhere but this "
+                             "device yet. Without it, you won't be able to read "
+                             "your old messages after you sign in again. Save it "
+                             "now, somewhere safe like a password manager.")
+                : save_key
+                    ? tk::tr("Tesseract made a recovery key for your account. If "
+                             "you lose this device or sign out, it's the only way "
+                             "to read your old messages again. Keep a copy "
+                             "somewhere safe, like a password manager, or print "
+                             "it out.")
                     : tk::tr("To read your encrypted messages on this device, "
                              "confirm it's you with your recovery key or with "
                              "another device where you're signed in.");
@@ -1099,13 +1161,19 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                 left_link(passphrase_link_, by - kEncryptionSetupBtnH - 6.0f,
                           tk::tr("Use a passphrase instead"));
 
-            const std::string prim =
-                fresh ? tk::tr("Create recovery key") : tk::tr("Continue");
+            const std::string prim = notice     ? tk::tr("OK")
+                                     : fresh    ? tk::tr("Create recovery key")
+                                     : save_key ? tk::tr("Show my recovery key")
+                                                : tk::tr("Continue");
             float pw = button_width(ctx, prim);
             place_primary({card.x + card.w - kCardPad - pw, by, pw, kEncryptionSetupBtnH},
                           prim, true);
 
-            left_link(skip_link_, by, tk::tr("Skip for now"));
+            if (!notice)
+                left_link(skip_link_, by,
+                          sign_out   ? tk::tr("Sign out without saving")
+                          : save_key ? tk::tr("Remind me later")
+                                     : tk::tr("Skip for now"));
             break;
         }
 
@@ -1311,6 +1379,30 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                 key_saved_cb_->paint(ctx);
             }
 
+            // SaveKey: opt in to keeping the key in the OS secure storage
+            // (off by default — Tesseract otherwise deletes its copy).
+            if (mode_ == Mode::SaveKey && keep_on_device_cb_)
+            {
+                const float ky = row_y + kEncryptionSetupBtnH + 12.0f + 24.0f + 12.0f;
+                keep_on_device_cb_->set_checked(keep_on_device_checked_);
+                keep_on_device_cb_->set_visible(true);
+                keep_on_device_cb_->arrange(lc, {cx, ky, cw, 24.0f});
+                keep_on_device_cb_->paint(ctx);
+                const std::string why =
+                    tk::tr("Tesseract keeps it in this computer's secure storage, so "
+                           "it can unlock your messages by itself if you reinstall. "
+                           "Anyone who can open that storage could read your "
+                           "messages too.");
+                const tk::Rect wr{cx + 28.0f, ky + 28.0f, cw - 28.0f, 0};
+                const float wh = paint_paragraph(ctx, wr, why, tk::FontRole::Small,
+                                                 pal.text_muted);
+                note(why, {wr.x, wr.y, wr.w, wh});
+            }
+
+            // A look at a key kept in secure storage can be left unsaved.
+            if (mode_ == Mode::SaveKey && !key_only_in_memory_)
+                left_link(back_link_, by, tk::tr("Back"));
+
             primary_enabled_ = key_saved_checked_;
             const std::string cont = tk::tr("Continue");
             float cwid = button_width(ctx, cont);
@@ -1347,7 +1439,8 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                                 pal.text_secondary);
                 }
             }
-            const std::string close = tk::tr("Close");
+            const std::string close = before_sign_out_ ? tk::tr("Sign out")
+                                                       : tk::tr("Close");
             float clw = button_width(ctx, close);
             place_primary({card.x + (card.w - clw) * 0.5f, by, clw, kEncryptionSetupBtnH},
                           close, true);

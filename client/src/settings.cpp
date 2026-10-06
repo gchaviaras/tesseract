@@ -125,6 +125,32 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
                 encryption_reminder_snoozed_until[uid] = until.get<std::int64_t>();
     }
 
+    recovery_key_unsaved.clear();
+    if (j.contains("recovery_key_unsaved") && j["recovery_key_unsaved"].is_array())
+    {
+        for (const auto& uid : j["recovery_key_unsaved"])
+            if (uid.is_string())
+                recovery_key_unsaved.insert(uid.get<std::string>());
+    }
+
+    save_key_reminder_dismissals.clear();
+    if (j.contains("save_key_reminder_dismissals") &&
+        j["save_key_reminder_dismissals"].is_object())
+    {
+        for (const auto& [uid, n] : j["save_key_reminder_dismissals"].items())
+            if (n.is_number_integer())
+                save_key_reminder_dismissals[uid] = n.get<int>();
+    }
+
+    save_key_reminder_snoozed_until.clear();
+    if (j.contains("save_key_reminder_snoozed_until") &&
+        j["save_key_reminder_snoozed_until"].is_object())
+    {
+        for (const auto& [uid, until] : j["save_key_reminder_snoozed_until"].items())
+            if (until.is_number_integer())
+                save_key_reminder_snoozed_until[uid] = until.get<std::int64_t>();
+    }
+
     popout_windows.clear();
     if (j.contains("popout_windows") && j["popout_windows"].is_array())
     {
@@ -307,6 +333,22 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         for (const auto& [uid, until] : encryption_reminder_snoozed_until)
             snoozes[uid] = until;
         j["encryption_reminder_snoozed_until"] = std::move(snoozes);
+    }
+    if (!recovery_key_unsaved.empty())
+        j["recovery_key_unsaved"] = recovery_key_unsaved;
+    if (!save_key_reminder_dismissals.empty())
+    {
+        nlohmann::json counts = nlohmann::json::object();
+        for (const auto& [uid, n] : save_key_reminder_dismissals)
+            counts[uid] = n;
+        j["save_key_reminder_dismissals"] = std::move(counts);
+    }
+    if (!save_key_reminder_snoozed_until.empty())
+    {
+        nlohmann::json snoozes = nlohmann::json::object();
+        for (const auto& [uid, until] : save_key_reminder_snoozed_until)
+            snoozes[uid] = until;
+        j["save_key_reminder_snoozed_until"] = std::move(snoozes);
     }
 
     auto path = config_dir / "app_settings.json";

@@ -5404,3 +5404,55 @@ msgstr "Ampliar"
 
 msgid "Zoom out"
 msgstr "Reducir"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Keep your messages safe"
+msgstr "Mantén tus mensajes a salvo"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract made a recovery key for your account. If you lose this device or sign out, it's the only way to read your old messages again. Keep a copy somewhere safe, like a password manager, or print it out."
+msgstr "Tesseract ha creado una clave de recuperación para tu cuenta. Si pierdes este dispositivo o cierras sesión, es la única forma de volver a leer tus mensajes antiguos. Guarda una copia en un lugar seguro, como un gestor de contraseñas, o imprímela."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Show my recovery key"
+msgstr "Mostrar mi clave de recuperación"
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Save your recovery key so you never lose your messages."
+msgstr "Guarda tu clave de recuperación para no perder nunca tus mensajes."
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Show me"
+msgstr "Mostrar"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Also keep it on this device"
+msgstr "Guardarla también en este dispositivo"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract keeps it in this computer's secure storage, so it can unlock your messages by itself if you reinstall. Anyone who can open that storage could read your messages too."
+msgstr "Tesseract la guarda en el almacenamiento seguro de este ordenador para poder desbloquear tus mensajes por sí solo si lo reinstalas. Cualquiera que pueda abrir ese almacenamiento también podría leer tus mensajes."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Save your recovery key before you sign out"
+msgstr "Guarda tu clave de recuperación antes de cerrar sesión"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. Save it now, somewhere safe like a password manager."
+msgstr "Tu clave de recuperación todavía solo está guardada en este dispositivo. Sin ella, no podrás leer tus mensajes antiguos cuando vuelvas a iniciar sesión. Guárdala ahora en un lugar seguro, como un gestor de contraseñas."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Sign out without saving"
+msgstr "Cerrar sesión sin guardar"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your messages are now backed up"
+msgstr "Tus mensajes ahora tienen copia de seguridad"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract turned on secure backup for your encrypted messages and made a recovery key for your account. You'll need that key to read your messages if you sign in on a new device or lose this one, so a reminder at the top of the window will help you save it."
+msgstr "Tesseract ha activado la copia de seguridad segura de tus mensajes cifrados y ha creado una clave de recuperación para tu cuenta. Necesitarás esa clave para leer tus mensajes si inicias sesión en un dispositivo nuevo o pierdes este, así que un recordatorio en la parte superior de la ventana te ayudará a guardarla."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Couldn't read your recovery key from this computer's secure storage."
+msgstr "No se pudo leer tu clave de recuperación del almacenamiento seguro de este ordenador."

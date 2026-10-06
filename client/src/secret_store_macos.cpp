@@ -49,6 +49,10 @@ static std::mutex g_lock;
 // refreshes that happen at runtime.
 static std::optional<nlohmann::json> g_map;
 
+// Set when the consolidated item couldn't be read (an error other than "not
+// found"), so a missing entry can be reported as unreadable rather than absent.
+static bool g_map_unreadable = false;
+
 // ---------------------------------------------------------------------------
 // Raw Keychain helpers
 //
@@ -65,7 +69,9 @@ static std::optional<nlohmann::json> g_map;
 // ---------------------------------------------------------------------------
 
 // Query only the data-protection keychain.  Never triggers a user dialog.
-std::optional<std::string> keychain_load_dp(const std::string& account_key)
+// `status_out` (optional) receives the SecItemCopyMatching status.
+std::optional<std::string> keychain_load_dp(const std::string& account_key,
+                                            OSStatus* status_out = nullptr)
 {
     auto account = cf_string(account_key);
     const void* keys[] = {
@@ -85,6 +91,7 @@ std::optional<std::string> keychain_load_dp(const std::string& account_key)
 
     CFTypeRef raw = nullptr;
     OSStatus status = SecItemCopyMatching(query, &raw);
+    if (status_out) *status_out = status;
     if (status != errSecSuccess || !raw)
         return std::nullopt;
 
@@ -251,7 +258,8 @@ void ensure_map_loaded()
         return;
 
     // Fast path: data-protection keychain — no authorization dialog.
-    if (auto blob = keychain_load_dp(std::string(kConsAcct)))
+    OSStatus dp_status = errSecSuccess;
+    if (auto blob = keychain_load_dp(std::string(kConsAcct), &dp_status))
     {
         try
         {
@@ -305,6 +313,7 @@ void ensure_map_loaded()
         catch (const nlohmann::json::exception&) {}
     }
 
+    g_map_unreadable = dp_status != errSecSuccess && dp_status != errSecItemNotFound;
     g_map = nlohmann::json::object(); // consolidated item absent or unreadable
 }
 
@@ -313,17 +322,18 @@ void ensure_map_loaded()
 namespace tesseract
 {
 
-// Every entry point keys by SecretStore::key_for(user_id) — the bare MXID in
-// the default profile, profile-scoped otherwise — for both the consolidated
-// map and the legacy per-user items.
+// Every entry point receives the final backend key — SecretStore::key_for(
+// user_id) (the bare MXID in the default profile, profile-scoped otherwise) or
+// SecretStore::recovery_key_for(user_id) — for both the consolidated map and
+// the legacy per-user items.
 
 // load() populates g_map from the Keychain on the first call (one
 // SecItemCopyMatching at most), then serves subsequent callers from the cache.
 // If the user is not in the consolidated item, falls back to the old
 // per-user format so sessions survive the first post-upgrade launch.
-std::optional<std::string> SecretStore::load(const std::string& user_id_in)
+std::optional<std::string> SecretStore::load_entry_(const std::string& user_id,
+                                                    bool* failed)
 {
-    const std::string user_id = key_for(user_id_in);
     std::lock_guard<std::mutex> lock(g_lock);
 
     ensure_map_loaded();
@@ -344,15 +354,16 @@ std::optional<std::string> SecretStore::load(const std::string& user_id_in)
         if (flush_map())
             keychain_remove(user_id);
     }
+    if (!blob && failed && g_map_unreadable) *failed = true;
     return blob;
 }
 
 // save() updates the in-memory map and flushes to the Keychain with
 // SecItemUpdate/SecItemAdd — never SecItemCopyMatching — so token-refresh
 // calls that arrive at runtime cannot trigger Keychain access dialogs.
-bool SecretStore::save(const std::string& user_id_in, const std::string& json)
+bool SecretStore::save_entry_(const std::string& user_id, const std::string& json,
+                              const char* /*label*/)
 {
-    const std::string user_id = key_for(user_id_in);
     std::lock_guard<std::mutex> lock(g_lock);
 
     // Defensive: if save() somehow races ahead of the first load() (not
@@ -369,9 +380,8 @@ bool SecretStore::save(const std::string& user_id_in, const std::string& json)
     return true;
 }
 
-void SecretStore::remove(const std::string& user_id_in)
+void SecretStore::remove_entry_(const std::string& user_id)
 {
-    const std::string user_id = key_for(user_id_in);
     std::lock_guard<std::mutex> lock(g_lock);
 
     ensure_map_loaded();

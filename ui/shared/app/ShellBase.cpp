@@ -37,6 +37,7 @@
 #include <tesseract/paths.h>
 #include <tesseract/session_store.h>
 #include <tesseract/prefs.h>
+#include <tesseract/secret_store.h>
 #include <tesseract/settings.h>
 #include <tesseract/visual.h>
 #include <algorithm>
@@ -8578,7 +8579,7 @@ void ShellBase::finalize_login_async_(std::function<void(FinalizeLoginResult)> d
 
 void ShellBase::begin_gated_encryption_setup_if_needed_(const FinalizeLoginResult& fin)
 {
-    if (!fin.needs_encryption_setup || !main_app_)
+    if (!fin.needs_encryption_setup)
         return;
 
     auto sess = account_manager_.find(fin.user_id);
@@ -8588,10 +8589,28 @@ void ShellBase::begin_gated_encryption_setup_if_needed_(const FinalizeLoginResul
     pending_sync_session_       = sess;
     encryption_setup_dismissed_ = false;
     encryption_setup_shown_     = true;
-    show_encryption_setup_overlay_(
-        fin.encryption_setup_recover_mode
-            ? tesseract::views::EncryptionSetupOverlay::Mode::Recover
-            : tesseract::views::EncryptionSetupOverlay::Mode::Fresh);
+    using Mode = tesseract::views::EncryptionSetupOverlay::Mode;
+    if (!fin.encryption_setup_recover_mode)
+    {
+        // A brand-new account: set recovery up quietly. It's quick on an
+        // account with no history, so the gate needn't hold sync for it.
+        silent_recovery_new_account_.insert(sess->user_id);
+        if (begin_silent_recovery_setup_(sess))
+        {
+            release_pending_sync_gate_();
+            return;
+        }
+    }
+    if (!main_app_)
+        return;
+    if (fin.encryption_setup_recover_mode)
+    {
+        // The gate is released by a successful silent unlock, or by closing
+        // the Recover dialog it falls back to.
+        show_recover_or_silent_unlock_(sess);
+        return;
+    }
+    show_encryption_setup_overlay_(Mode::Fresh);
     request_relayout_();
 }
 
@@ -8712,12 +8731,16 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
     // its events stop routing here. Cancel it on that client (still active at
     // this point) and take down the dialog if it's showing it, or its buttons
     // would act on the wrong account.
+    // The same goes for a dialog about the outgoing account's recovery key.
     if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr;
         o && o->visible() &&
         (o->in_verification_step() ||
          o->step() == views::EncryptionSetupOverlay::Step::VerifyFailed ||
-         o->mode() == views::EncryptionSetupOverlay::Mode::Verify))
+         o->mode() == views::EncryptionSetupOverlay::Mode::Verify ||
+         o->mode() == views::EncryptionSetupOverlay::Mode::SaveKey ||
+         o->mode() == views::EncryptionSetupOverlay::Mode::AutoSetupNotice))
         main_app_->show_encryption_setup(false);
+    cancel_sign_out_();
     cancel_active_verification_();
     foreign_identity_known_true_ = false;
     last_device_verified_.reset();
@@ -9012,6 +9035,8 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     auto& sess = *active_account_;
     out.logged_out     = true;
     out.logged_out_uid = uid;
+
+    settle_recovery_key_on_sign_out_(uid);
 
     // Deferred "New messages" moves go out first: request_stop() below
     // would cancel them.
@@ -13907,6 +13932,24 @@ void ShellBase::handle_enable_recovery_progress_ui_(uint8_t  step,
                                                     uint32_t backed_up,
                                                     uint32_t total)
 {
+    const std::string uid = event_account_.empty() ? my_user_id_ : event_account_;
+    if (silent_recovery_in_flight_.count(uid))
+    {
+        handle_silent_recovery_progress_(uid, step, recovery_key);
+        return;
+    }
+    // Only the dialog's own setup (with a key it shows, or a passphrase)
+    // replaces the account's recovery; recover() reports its success as the
+    // same step 4 and must leave Tesseract's key alone.
+    const bool dialog_setup = dialog_recovery_setup_users_.count(uid) > 0;
+    if (step == 4 || step == 5) dialog_recovery_setup_users_.erase(uid);
+    if (step == 4 && dialog_setup)
+    {
+        // Any key Tesseract was holding for this account no longer unlocks
+        // anything.
+        forget_stored_recovery_key_(uid);
+        clear_unsaved_recovery_key_state_(uid);
+    }
     if (auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr)
         ov->advance_progress(step, recovery_key, backed_up, total);
 }
@@ -13981,9 +14024,16 @@ void ShellBase::wire_encryption_setup_callbacks_(
 
     ov.on_enable_recovery = [this](std::string passphrase) {
         auto sess = active_account_;
-        run_async_mut_([sess, passphrase]() {
-            if (!sess || !sess->client) return;
-            sess->client->enable_recovery(passphrase);
+        if (!sess) return;
+        dialog_recovery_setup_users_.insert(sess->user_id);
+        run_async_mut_([this, sess, passphrase]() {
+            if (sess->client) sess->client->enable_recovery(passphrase);
+            // Its progress events (a final step 4 or 5 included) were posted
+            // before it returned; an early error posts none, so clear the
+            // mark here rather than relying on them.
+            post_to_ui_alive_([this, uid = sess->user_id]() {
+                dialog_recovery_setup_users_.erase(uid);
+            });
         });
     };
 
@@ -14074,6 +14124,14 @@ void ShellBase::wire_encryption_setup_callbacks_(
 
     ov.on_reset_encryption = [this]() { begin_crypto_identity_reset_(); };
 
+    ov.on_key_saved = [this](bool keep_on_device) {
+        mark_recovery_key_saved_(save_key_dialog_uid_, keep_on_device);
+    };
+    ov.on_sign_out = [this]() {
+        proceed_sign_out_();
+        request_relayout_();
+    };
+
     ov.on_close = [this]() {
         auto* o = main_app_ ? main_app_->encryption_setup() : nullptr;
         // Closing mid-verification abandons it on both sides.
@@ -14082,6 +14140,13 @@ void ShellBase::wire_encryption_setup_callbacks_(
         // (the reminder strip takes over); answering a request isn't setup.
         if (!o || o->mode() != views::EncryptionSetupOverlay::Mode::Verify)
             encryption_setup_dismissed_ = true;
+        if (o && o->mode() == views::EncryptionSetupOverlay::Mode::SaveKey)
+        {
+            if (o->before_sign_out())
+                cancel_sign_out_(); // closing it cancels the sign-out
+            else if (o->step() != views::EncryptionSetupOverlay::Step::Done)
+                snooze_save_key_reminder_(save_key_dialog_uid_); // "Remind me later"
+        }
         if (main_app_) main_app_->show_encryption_setup(false);
         release_pending_sync_gate_();
         refresh_encryption_reminder_();
@@ -14151,6 +14216,10 @@ void ShellBase::check_encryption_setup_()
             return;
     }
 
+    // A silent setup is running or waiting to retry: nothing to look up.
+    if (active_account_ && silent_recovery_pending_(active_account_->user_id))
+        return;
+
     using Mode      = tesseract::views::EncryptionSetupOverlay::Mode;
     const uint8_t state = read_recovery_state_();
 
@@ -14172,14 +14241,23 @@ void ShellBase::check_encryption_setup_()
         // keys locally immediately, whereas verification_state() may not have
         // flipped to Verified yet at this point.
         const bool foreign_identity = foreign_cross_signing_identity_();
+        // A brand-new account: no dialog, Tesseract sets recovery up itself
+        // and later reminds the user to save the key.
+        if (!foreign_identity && begin_silent_recovery_setup_(active_account_))
+            return;
+        if (foreign_identity)
+        {
+            encryption_setup_shown_ = true;
+            show_recover_or_silent_unlock_(active_account_);
+            return;
+        }
         encryption_setup_shown_ = true;
-        show_encryption_setup_overlay_(foreign_identity ? Mode::Recover
-                                                        : Mode::Fresh);
+        show_encryption_setup_overlay_(Mode::Fresh);
     }
     else if (state == 3) // Incomplete → existing encryption, device needs secrets
     {
         encryption_setup_shown_ = true;
-        show_encryption_setup_overlay_(Mode::Recover);
+        show_recover_or_silent_unlock_(active_account_);
     }
     else if (state == 2 && !read_device_verified_() && foreign_identity_cached_())
     {
@@ -14187,7 +14265,7 @@ void ShellBase::check_encryption_setup_()
         // against the identity (what the old "verify this device" banner
         // used to prompt for) — same unlock choices.
         encryption_setup_shown_ = true;
-        show_encryption_setup_overlay_(Mode::Recover);
+        show_recover_or_silent_unlock_(active_account_);
     }
     // Unknown (0), or Enabled (2) on a confirmed device: nothing to do;
     // re-checked on the next tick.
@@ -14197,20 +14275,353 @@ void ShellBase::reopen_encryption_setup_()
 {
     encryption_setup_dismissed_ = false;
     encryption_setup_shown_     = false;
+    // Tesseract is setting recovery up by itself right now.
+    if (silent_recovery_pending_(my_user_id_))
+        return;
     // User-initiated: bypass the snooze check_encryption_setup_ honours.
     using Reminder = EncryptionFlowController::Reminder;
     const Reminder kind = EncryptionFlowController::reminder_for(
         read_recovery_state_(), read_device_verified_(),
-        foreign_cross_signing_identity_());
+        foreign_cross_signing_identity_(),
+        Settings::instance().recovery_key_unsaved.count(my_user_id_) > 0);
     if (kind == Reminder::None)
     {
         check_encryption_setup_();
+        return;
+    }
+    if (kind == Reminder::SaveKey)
+    {
+        open_save_key_dialog_();
         return;
     }
     encryption_setup_shown_ = true;
     show_encryption_setup_overlay_(kind == Reminder::SetupNeeded
                                        ? views::EncryptionSetupOverlay::Mode::Fresh
                                        : views::EncryptionSetupOverlay::Mode::Recover);
+}
+
+// ── Silent encryption setup (new accounts) ────────────────────────────────────
+
+bool ShellBase::silent_recovery_exhausted_(const std::string& uid) const
+{
+    auto f = silent_recovery_failures_.find(uid);
+    return f != silent_recovery_failures_.end() && f->second >= kSilentRecoveryMaxFailures;
+}
+
+bool ShellBase::silent_recovery_pending_(const std::string& uid) const
+{
+    if (silent_recovery_in_flight_.count(uid)) return true;
+    if (silent_recovery_exhausted_(uid)) return false; // the dialog takes over
+    auto r = silent_recovery_retry_after_.find(uid);
+    return r != silent_recovery_retry_after_.end() && wall_clock_s_() < r->second;
+}
+
+bool ShellBase::begin_silent_recovery_setup_(const std::shared_ptr<AccountSession>& sess)
+{
+    if (!sess || !sess->client) return false;
+    const std::string& uid = sess->user_id;
+    if (silent_recovery_exhausted_(uid))
+        return false; // keeps failing: let the user drive it from the dialog
+    encryption_setup_shown_ = true;
+    if (silent_recovery_pending_(uid))
+        return true; // in flight, or a later sync tick retries
+    silent_recovery_in_flight_.insert(uid);
+    run_silent_enable_recovery_(sess);
+    return true;
+}
+
+void ShellBase::run_silent_enable_recovery_(std::shared_ptr<AccountSession> sess)
+{
+    // Progress (and the key) arrive through handle_enable_recovery_progress_ui_.
+    run_async_mut_("silent-recovery-setup", [this, sess]() {
+        if (!sess || !sess->client) return;
+        const auto res = sess->client->enable_recovery(std::string());
+        if (res.ok) return;
+        post_to_ui_alive_([this, uid = sess->user_id]() { silent_recovery_failed_(uid); });
+    });
+}
+
+void ShellBase::handle_silent_recovery_progress_(const std::string& uid, uint8_t step,
+                                                 const std::string& key_or_error)
+{
+    if (step == 5)
+    {
+        std::fprintf(stderr, "[encryption] silent recovery setup failed: %s\n",
+                     key_or_error.c_str());
+        silent_recovery_failed_(uid);
+        return;
+    }
+    if (step != 4 || !silent_recovery_in_flight_.count(uid))
+        return;
+    silent_recovery_failures_.erase(uid);
+    silent_recovery_retry_after_.erase(uid);
+    if (key_or_error.empty())
+    {
+        silent_recovery_in_flight_.erase(uid);
+        silent_recovery_new_account_.erase(uid);
+        return; // recovery is on, but there's no key to hand the user
+    }
+
+    // Still "in flight" until the key is stored: in between, the account can
+    // still read as having no recovery, and the strip mustn't offer setup.
+    store_recovery_key_(uid, key_or_error, [this, uid, key = key_or_error](bool stored) {
+        silent_recovery_in_flight_.erase(uid);
+        // An existing account (not one just registered) is told what happened.
+        const bool tell_user = silent_recovery_new_account_.erase(uid) == 0;
+        auto& s = Settings::instance();
+        s.recovery_key_unsaved.insert(uid);
+        s.save_key_reminder_dismissals.erase(uid);
+        // The "save your recovery key" strip shows right away and stays
+        // until the user dismisses it.
+        s.save_key_reminder_snoozed_until.erase(uid);
+        s.save_to_disk(tesseract::config_dir());
+        if (!stored)
+        {
+            // No secure storage to hold it: this is the only copy, so show it
+            // right away.
+            unstored_recovery_keys_[uid] = key;
+            if (my_user_id_ == uid)
+                open_save_key_dialog_();
+            return;
+        }
+        refresh_encryption_reminder_();
+        if (tell_user && my_user_id_ == uid)
+        {
+            encryption_setup_shown_ = true;
+            show_encryption_setup_overlay_(views::EncryptionSetupOverlay::Mode::AutoSetupNotice);
+        }
+    });
+}
+
+void ShellBase::silent_recovery_failed_(const std::string& uid)
+{
+    if (!silent_recovery_in_flight_.erase(uid))
+        return; // already handled (the progress event and the result both report it)
+    ++silent_recovery_failures_[uid];
+    silent_recovery_retry_after_[uid] =
+        wall_clock_s_() + kSilentRecoveryRetrySeconds;
+    // Let check_encryption_setup_ try again once the backoff is over — or,
+    // once the attempts run out, fall back to the dialog.
+    if (active_account_ && active_account_->user_id == uid)
+        encryption_setup_shown_ = false;
+}
+
+bool ShellBase::try_silent_unlock_(const std::shared_ptr<AccountSession>& sess,
+                                   std::function<void()> on_failed)
+{
+    if (!sess || !sess->client) return false;
+    const std::string uid = sess->user_id;
+    if (!silent_unlock_tried_.insert(uid).second) return false;
+
+    using Lookup = tesseract::SecretStore::RecoveryKeyLookup;
+    load_stored_recovery_key_(uid, [this, sess, on_failed = std::move(on_failed)](
+                                       Lookup found) mutable {
+        if (found.status != Lookup::Status::Found || found.key.empty())
+        {
+            if (on_failed) on_failed();
+            return;
+        }
+        run_silent_recover_(sess, found.key, [this, sess, on_failed](bool ok) {
+            if (!ok)
+            {
+                if (on_failed) on_failed();
+                return;
+            }
+            // A gated first login waits on this; nothing else is left to
+            // set up.
+            if (pending_sync_session_ == sess)
+                release_pending_sync_gate_();
+            refresh_encryption_reminder_();
+        });
+    });
+    return true;
+}
+
+void ShellBase::show_recover_or_silent_unlock_(const std::shared_ptr<AccountSession>& sess)
+{
+    auto show_recover = [this, sess] {
+        if (active_account_ != sess)
+        {
+            // Switched away meanwhile: don't leave that account unsynced
+            // behind a dialog it can no longer show; its own sync ticks offer
+            // unlocking once it's active again.
+            if (pending_sync_session_ == sess) release_pending_sync_gate_();
+            return;
+        }
+        show_encryption_setup_overlay_(views::EncryptionSetupOverlay::Mode::Recover);
+        request_relayout_();
+    };
+    if (!try_silent_unlock_(sess, show_recover))
+        show_recover();
+}
+
+void ShellBase::run_silent_recover_(std::shared_ptr<AccountSession> sess, std::string key,
+                                    std::function<void(bool ok)> done)
+{
+    run_async_mut_("silent-unlock", [this, sess, key = std::move(key),
+                                     done = std::move(done)]() mutable {
+        const bool ok = sess && sess->client && sess->client->recover(key).ok;
+        post_to_ui_alive_([ok, done = std::move(done)]() { done(ok); });
+    });
+}
+
+void ShellBase::open_save_key_dialog_(bool before_sign_out)
+{
+    const std::string uid = my_user_id_;
+    auto show = [this, uid, before_sign_out](const std::string& key, bool only_in_memory) {
+        if (my_user_id_ != uid) return; // switched accounts meanwhile
+        encryption_setup_shown_ = true;
+        show_encryption_setup_overlay_(views::EncryptionSetupOverlay::Mode::SaveKey);
+        save_key_dialog_uid_ = uid;
+        if (auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr)
+        {
+            ov->set_recovery_key(key);
+            ov->set_before_sign_out(before_sign_out);
+            // Not in secure storage: it mustn't be dismissed before it's saved.
+            if (only_in_memory) ov->show_key_now();
+        }
+        request_relayout_();
+    };
+    if (auto it = unstored_recovery_keys_.find(uid); it != unstored_recovery_keys_.end())
+    {
+        show(it->second, true);
+        return;
+    }
+    using Lookup = tesseract::SecretStore::RecoveryKeyLookup;
+    load_stored_recovery_key_(uid, [this, uid, show, before_sign_out](Lookup found) {
+        switch (found.status)
+        {
+            case Lookup::Status::Found:
+                show(found.key, false);
+                return;
+            case Lookup::Status::Missing:
+                // The entry is gone (cleared outside Tesseract): there's no
+                // key left to show, so stop asking for it.
+                std::fprintf(stderr, "[encryption] stored recovery key missing for %s\n",
+                             uid.c_str());
+                clear_unsaved_recovery_key_state_(uid);
+                refresh_encryption_reminder_();
+                break;
+            case Lookup::Status::Unreadable:
+                // Locked keyring, dismissed unlock prompt, …: the key may well
+                // still be there, so keep everything as it is.
+                show_status_message_(
+                    tk::tr("Couldn't read your recovery key from this computer's "
+                           "secure storage."));
+                break;
+        }
+        // Signing out still goes ahead: an unsaved key is kept for the next
+        // sign-in (settle_recovery_key_on_sign_out_).
+        if (before_sign_out) proceed_sign_out_();
+    });
+}
+
+void ShellBase::clear_unsaved_recovery_key_state_(const std::string& uid)
+{
+    unstored_recovery_keys_.erase(uid);
+    auto& s = Settings::instance();
+    bool changed = s.recovery_key_unsaved.erase(uid) > 0;
+    changed |= s.save_key_reminder_dismissals.erase(uid) > 0;
+    changed |= s.save_key_reminder_snoozed_until.erase(uid) > 0;
+    if (changed) s.save_to_disk(tesseract::config_dir());
+}
+
+void ShellBase::mark_recovery_key_saved_(const std::string& uid, bool keep_on_device)
+{
+    if (uid.empty()) return;
+    // The user has their own copy now; Tesseract's goes unless they asked
+    // to keep it.
+    if (!keep_on_device) forget_stored_recovery_key_(uid);
+    clear_unsaved_recovery_key_state_(uid);
+    refresh_encryption_reminder_();
+}
+
+bool ShellBase::intercept_sign_out_for_unsaved_key_(std::function<void()> proceed)
+{
+    if (!active_account_) return false;
+    const std::string uid = active_account_->user_id;
+    if (sign_out_confirmed_uid_ == uid)
+    {
+        sign_out_confirmed_uid_.clear();
+        return false; // proceed_sign_out_ re-entering, or an expired session
+    }
+    if (!Settings::instance().recovery_key_unsaved.count(uid)) return false;
+    pending_sign_out_     = std::move(proceed);
+    pending_sign_out_uid_ = uid;
+    open_save_key_dialog_(/*before_sign_out=*/true);
+    return true;
+}
+
+void ShellBase::skip_unsaved_key_check_for_next_sign_out_()
+{
+    if (active_account_) sign_out_confirmed_uid_ = active_account_->user_id;
+}
+
+void ShellBase::proceed_sign_out_()
+{
+    auto proceed      = std::move(pending_sign_out_);
+    pending_sign_out_ = nullptr;
+    const std::string uid = std::move(pending_sign_out_uid_);
+    pending_sign_out_uid_.clear();
+    if (main_app_) main_app_->show_encryption_setup(false);
+    // Only the account the user asked to sign out of.
+    if (!proceed || !active_account_ || active_account_->user_id != uid) return;
+    sign_out_confirmed_uid_ = uid;
+    proceed();
+    sign_out_confirmed_uid_.clear(); // in case it never reached the guard
+}
+
+void ShellBase::cancel_sign_out_()
+{
+    pending_sign_out_ = nullptr;
+    pending_sign_out_uid_.clear();
+}
+
+void ShellBase::settle_recovery_key_on_sign_out_(const std::string& uid)
+{
+    silent_recovery_in_flight_.erase(uid);
+    silent_recovery_failures_.erase(uid);
+    silent_recovery_retry_after_.erase(uid);
+    silent_recovery_new_account_.erase(uid);
+    silent_unlock_tried_.erase(uid);
+    const bool only_in_memory = unstored_recovery_keys_.count(uid) > 0;
+
+    // Signed out without saving it: the secure-storage copy is the only one
+    // left. It stays, with its reminder, for the next sign-in (which can
+    // also unlock with it silently).
+    if (Settings::instance().recovery_key_unsaved.count(uid) > 0 && !only_in_memory)
+        return;
+
+    forget_stored_recovery_key_(uid);
+    clear_unsaved_recovery_key_state_(uid);
+}
+
+void ShellBase::load_stored_recovery_key_(
+    const std::string& uid,
+    std::function<void(tesseract::SecretStore::RecoveryKeyLookup)> done)
+{
+    // The OS keyring can block (D-Bus, an unlock prompt): never on the UI thread.
+    run_async_mut_("recovery-key-load", [this, uid, done = std::move(done)]() mutable {
+        auto found = tesseract::SecretStore::load_recovery_key(uid);
+        post_to_ui_alive_([found = std::move(found), done = std::move(done)]() mutable {
+            done(std::move(found));
+        });
+    });
+}
+
+void ShellBase::store_recovery_key_(const std::string& uid, const std::string& key,
+                                    std::function<void(bool)> done)
+{
+    run_async_mut_("recovery-key-store", [this, uid, key, done = std::move(done)]() mutable {
+        const bool ok = tesseract::SecretStore::save_recovery_key(uid, key);
+        post_to_ui_alive_([ok, done = std::move(done)]() { done(ok); });
+    });
+}
+
+void ShellBase::forget_stored_recovery_key_(const std::string& uid)
+{
+    run_async_mut_("recovery-key-forget",
+                   [uid]() { tesseract::SecretStore::remove_recovery_key(uid); });
 }
 
 // ── Encryption flow ───────────────────────────────────────────────────────────
@@ -14267,21 +14678,35 @@ void ShellBase::refresh_encryption_reminder_(std::optional<bool> device_verified
         const bool    verified = device_verified.value_or(read_device_verified_());
         const uint8_t state    = read_recovery_state_();
         const bool    foreign  = (!verified || state == 1) && foreign_identity_cached_();
-        kind = EncryptionFlowController::reminder_for(state, verified, foreign);
+        const bool    unsaved  =
+            Settings::instance().recovery_key_unsaved.count(my_user_id_) > 0;
+        kind = EncryptionFlowController::reminder_for(state, verified, foreign, unsaved);
+        // Recovery is being set up silently: "set it up" would start a
+        // second, competing setup.
+        if (silent_recovery_pending_(my_user_id_)) kind = Reminder::None;
+        // Tesseract sets recovery up by itself; asking the user to do it only
+        // makes sense once that has given up.
+        if (kind == Reminder::SetupNeeded && !silent_recovery_exhausted_(my_user_id_))
+            kind = Reminder::None;
     }
 
     bool show = kind != Reminder::None;
     if (show)
     {
-        const auto& snoozes = Settings::instance().encryption_reminder_snoozed_until;
+        // "Save your recovery key" has its own snooze, so dismissing it never
+        // hides a more urgent reminder.
+        const auto& s       = Settings::instance();
+        const auto& snoozes = kind == Reminder::SaveKey ? s.save_key_reminder_snoozed_until
+                                                        : s.encryption_reminder_snoozed_until;
         auto it = snoozes.find(my_user_id_);
         if (it != snoozes.end() &&
             EncryptionFlowController::snoozed(it->second, wall_clock_s_()))
             show = false;
     }
-    const auto new_kind = kind == Reminder::SetupNeeded
-                              ? views::EncryptionReminderBanner::Kind::SetupNeeded
-                              : views::EncryptionReminderBanner::Kind::Locked;
+    using BannerKind    = views::EncryptionReminderBanner::Kind;
+    const auto new_kind = kind == Reminder::SetupNeeded ? BannerKind::SetupNeeded
+                        : kind == Reminder::SaveKey     ? BannerKind::SaveKey
+                                                        : BannerKind::Locked;
     if (show == main_app_->encryption_reminder_requested() &&
         (!show || banner->kind() == new_kind))
         return; // unchanged — the common case on a sync tick
@@ -14293,9 +14718,29 @@ void ShellBase::refresh_encryption_reminder_(std::optional<bool> device_verified
 void ShellBase::snooze_encryption_reminder_()
 {
     if (my_user_id_.empty()) return;
+    if (main_app_ && main_app_->encryption_reminder() &&
+        main_app_->encryption_reminder()->kind() ==
+            views::EncryptionReminderBanner::Kind::SaveKey)
+    {
+        snooze_save_key_reminder_(my_user_id_);
+        return;
+    }
     auto& s = Settings::instance();
     s.encryption_reminder_snoozed_until[my_user_id_] =
         wall_clock_s_() + EncryptionFlowController::kSnoozeSeconds;
+    s.save_to_disk(tesseract::config_dir());
+    refresh_encryption_reminder_();
+}
+
+void ShellBase::snooze_save_key_reminder_(const std::string& uid)
+{
+    if (uid.empty()) return;
+    // Comes back sooner at first, then less often, but never stops while the
+    // key is unsaved.
+    auto& s     = Settings::instance();
+    const int n = ++s.save_key_reminder_dismissals[uid];
+    s.save_key_reminder_snoozed_until[uid] =
+        wall_clock_s_() + EncryptionFlowController::save_key_snooze_seconds(n);
     s.save_to_disk(tesseract::config_dir());
     refresh_encryption_reminder_();
 }

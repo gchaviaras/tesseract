@@ -47,9 +47,15 @@ void EncryptionReminderBanner::set_kind(Kind k)
 
 std::string EncryptionReminderBanner::label_text() const
 {
-    return kind_ == Kind::SetupNeeded
-               ? tk::tr("Your messages aren't backed up yet.")
-               : tk::tr("Your encrypted messages are locked on this device.");
+    switch (kind_)
+    {
+        case Kind::SetupNeeded: return tk::tr("Your messages aren't backed up yet.");
+        case Kind::Locked:
+            return tk::tr("Your encrypted messages are locked on this device.");
+        case Kind::SaveKey:
+            return tk::tr("Save your recovery key so you never lose your messages.");
+    }
+    return {};
 }
 
 void EncryptionReminderBanner::apply_kind_()
@@ -57,6 +63,7 @@ void EncryptionReminderBanner::apply_kind_()
     if (label_) label_->set_text(label_text());
     if (action_)
         action_->set_label(kind_ == Kind::SetupNeeded ? tk::tr("Set up recovery")
+                           : kind_ == Kind::SaveKey   ? tk::tr("Show me")
                                                       : tk::tr("Unlock"));
 }
 

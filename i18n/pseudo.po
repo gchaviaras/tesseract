@@ -5952,3 +5952,55 @@ msgstr "[Symbölsx]"
 #: client/src/emoji.cpp:191
 msgid "Flags"
 msgstr "[Flàgsx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Keep your messages safe"
+msgstr "[Kéép yöùr méssàgés sàféxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract made a recovery key for your account. If you lose this device or sign out, it's the only way to read your old messages again. Keep a copy somewhere safe, like a password manager, or print it out."
+msgstr "[Tésséràçt màdé à réçövéry kéy för yöùr àççöùñt. Ïf yöù lösé thïs dévïçé ör sïgñ öùt, ït's thé öñly wày tö réàd yöùr öld méssàgés àgàïñ. Kéép à çöpy söméwhéré sàfé, lïké à pàsswörd màñàgér, ör prïñt ït öùt.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Show my recovery key"
+msgstr "[Shöw my réçövéry kéyxxxx]"
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Save your recovery key so you never lose your messages."
+msgstr "[Sàvé yöùr réçövéry kéy sö yöù ñévér lösé yöùr méssàgés.xxxxxxxxxxx]"
+
+#: ui/shared/views/EncryptionReminderBanner.cpp
+msgid "Show me"
+msgstr "[Shöw méx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Also keep it on this device"
+msgstr "[Àlsö kéép ït öñ thïs dévïçéxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract keeps it in this computer's secure storage, so it can unlock your messages by itself if you reinstall. Anyone who can open that storage could read your messages too."
+msgstr "[Tésséràçt kééps ït ïñ thïs çömpùtér's séçùré störàgé, sö ït çàñ ùñlöçk yöùr méssàgés by ïtsélf ïf yöù réïñstàll. Àñyöñé whö çàñ öpéñ thàt störàgé çöùld réàd yöùr méssàgés töö.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Save your recovery key before you sign out"
+msgstr "[Sàvé yöùr réçövéry kéy béföré yöù sïgñ öùtxxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. Save it now, somewhere safe like a password manager."
+msgstr "[Yöùr réçövéry kéy ïsñ't sàvéd àñywhéré bùt thïs dévïçé yét. Wïthöùt ït, yöù wöñ't bé àblé tö réàd yöùr öld méssàgés àftér yöù sïgñ ïñ àgàïñ. Sàvé ït ñöw, söméwhéré sàfé lïké à pàsswörd màñàgér.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Sign out without saving"
+msgstr "[Sïgñ öùt wïthöùt sàvïñgxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Your messages are now backed up"
+msgstr "[Yöùr méssàgés àré ñöw bàçkéd ùpxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Tesseract turned on secure backup for your encrypted messages and made a recovery key for your account. You'll need that key to read your messages if you sign in on a new device or lose this one, so a reminder at the top of the window will help you save it."
+msgstr "[Tésséràçt tùrñéd öñ séçùré bàçkùp för yöùr éñçryptéd méssàgés àñd màdé à réçövéry kéy för yöùr àççöùñt. Yöù'll ñééd thàt kéy tö réàd yöùr méssàgés ïf yöù sïgñ ïñ öñ à ñéw dévïçé ör lösé thïs öñé, sö à rémïñdér àt thé töp öf thé wïñdöw wïll hélp yöù sàvé ït.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Couldn't read your recovery key from this computer's secure storage."
+msgstr "[Çöùldñ't réàd yöùr réçövéry kéy fröm thïs çömpùtér's séçùré störàgé.xxxxxxxxxxxxx]"

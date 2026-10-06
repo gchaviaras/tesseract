@@ -1,6 +1,11 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-05**. 2200 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-06**. 2238 C++ + 765 Rust tests.
+
+> **Recovery set up without asking (2026-10-06).**
+> Accounts without recovery get it set up silently; the key stays in the OS
+> secure storage until the user saves it from a reminder strip or a prompt
+> before sign-out. Qt6 build + ctest 2238/2238; user-verified Qt6.
 
 > **Recent rooms persist across restarts (2026-10-04, v0.9.1).**
 > The Ctrl+Tab switcher's and the Ctrl+K "Recent" strip's room history is

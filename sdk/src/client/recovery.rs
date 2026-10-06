@@ -368,6 +368,37 @@ impl ClientFfi {
         })
     }
 
+    /// Turn recovery off (matrix-sdk `Recovery::disable`): stop and delete the
+    /// key backup, clear secret storage, and mark backup as not to be
+    /// re-enabled automatically.
+    #[cfg(not(test))]
+    pub fn disable_recovery(&self) -> OpResult {
+        let Some(client) = self.client.clone() else {
+            return err("not logged in");
+        };
+        let _guard = super::InFlightGuard::new(
+            &self.in_flight,
+            &self.handler,
+            #[cfg(debug_assertions)]
+            &self.in_flight_urls,
+            #[cfg(debug_assertions)]
+            "recovery/disable".to_string(),
+        );
+        match self.rt.block_on(async move {
+            // Same as enable_recovery: don't race matrix-sdk's login-time setup.
+            client.encryption().wait_for_e2ee_initialization_tasks().await;
+            client.encryption().recovery().disable().await
+        }) {
+            Ok(()) => ok(""),
+            Err(e) => err(e.to_string()),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn disable_recovery(&self) -> OpResult {
+        err("not logged in")
+    }
+
     #[cfg(test)]
     pub fn enable_recovery(&self, _passphrase: &str) -> OpResult {
         err("not logged in")

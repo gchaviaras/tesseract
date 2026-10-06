@@ -2107,6 +2107,11 @@ public:
     /// IEventHandler::on_enable_recovery_progress before this call returns.
     Result enable_recovery(const std::string& passphrase);
 
+    /// Turn recovery off: delete the server-side key backup and secret
+    /// storage, and mark backup as not to be re-enabled automatically.
+    /// Blocks on the network — worker thread only.
+    Result disable_recovery();
+
     /// Export all Megolm room keys to a passphrase-encrypted file at `path`
     /// (standard Matrix key-export format). Blocks — call from a worker thread.
     Result export_room_keys(const std::string& path,

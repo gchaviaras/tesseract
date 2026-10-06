@@ -3007,6 +3007,16 @@ Result Client::enable_recovery(const std::string& passphrase)
     return from_ffi(impl_->ffi->enable_recovery(passphrase));
 }
 
+Result Client::disable_recovery()
+{
+    if (!impl_)
+    {
+        return {false, "not logged in"};
+    }
+    SH_FFI;
+    return from_ffi(impl_->ffi->disable_recovery());
+}
+
 Result Client::export_room_keys(const std::string& path,
                                 const std::string& passphrase)
 {

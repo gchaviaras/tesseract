@@ -66,6 +66,7 @@ public:
         Unlocked,             // this device can now read encrypted messages
         OtherDeviceConfirmed, // we confirmed another of the user's devices
         UserVerified,         // we verified (or were verified by) another user
+        BackupOff,            // AutoSetupNotice › Turn off backup finished
     };
 
 protected:
@@ -96,8 +97,12 @@ public:
     // (always false in other modes).
     std::function<void(bool keep_on_device)> on_key_saved;
     // SaveKey before signing out (set_before_sign_out): "Sign out without
-    // saving", or Done's "Sign out". on_close then means "cancel sign-out".
-    std::function<void()>              on_sign_out;
+    // saving" / Done's "Sign out" (remove_key false), or "Sign out and delete
+    // the key" (true). on_close then means "cancel sign-out".
+    std::function<void(bool remove_key)> on_sign_out;
+    // AutoSetupNotice › "Turn off backup". The dialog shows its progress;
+    // answer with backup_turned_off() or advance_progress(5, error).
+    std::function<void()>              on_turn_off_backup;
 
     // ── Interactive verification ──────────────────────────────────────────
     std::function<void()>              on_accept_request;      // IncomingRequest › Continue
@@ -136,6 +141,12 @@ public:
     void set_before_sign_out(bool v) { before_sign_out_ = v; }
     bool before_sign_out() const { return before_sign_out_; }
     bool keep_on_device_checked() const { return keep_on_device_checked_; }
+    // AutoSetupNotice: recovery was turned off.
+    void backup_turned_off()
+    {
+        done_kind_ = DoneKind::BackupOff;
+        advance_step_(Step::Done);
+    }
 
     // ── Cross-signing reset flow (driven by ShellBase) ───────────────────
     // Enter the "approve in your browser…" wait step. The caller should have
@@ -291,6 +302,7 @@ public:
         on_reset_encryption  = {};
         on_key_saved         = {};
         on_sign_out          = {};
+        on_turn_off_backup   = {};
         before_sign_out_        = false;
         keep_on_device_checked_ = false;
         key_only_in_memory_     = false;
@@ -316,6 +328,10 @@ public:
     void simulate_backdrop_click();
     void simulate_check_key_saved();
     void simulate_check_keep_on_device() { keep_on_device_checked_ = true; }
+    // SaveKey before sign-out: "Sign out and delete the key".
+    void simulate_sign_out_and_remove_key() { sign_out_removing_key_(); }
+    // AutoSetupNotice: "Turn off backup".
+    void simulate_turn_off_backup() { turn_off_backup_(); }
     // Recover › Choose › "Use another device".
     void simulate_sas_link();
     void simulate_choose_recovery_key();
@@ -355,6 +371,8 @@ private:
     // The Intro's bottom-left link: Skip for now / Remind me later, or
     // "Sign out without saving" before a sign-out.
     void     skip_();
+    void     sign_out_removing_key_();
+    void     turn_off_backup_();
     // The Done step's sentence for done_kind_.
     std::string done_text_() const;
     void     announce_(const std::string& text, bool assertive = false);
@@ -411,6 +429,8 @@ private:
     tk::Button* back_link_       = nullptr;
     tk::Button* lost_link_       = nullptr; // Choose › I've lost…
     tk::Button* reject_link_     = nullptr;
+    tk::Button* remove_key_link_ = nullptr; // SaveKey before sign-out
+    tk::Button* turn_off_link_   = nullptr; // AutoSetupNotice
     // Choose-step option cards (title + hint + chevron).
     OptionCardButton* device_card_ = nullptr; // Use another device
     OptionCardButton* key_card_    = nullptr; // Enter recovery key

@@ -883,7 +883,7 @@ TEST_CASE("SaveKey before sign-out: skip signs out, Done signs out, closing canc
     ov->set_recovery_key("KEY");
     ov->set_before_sign_out(true);
     int sign_outs = 0, closes = 0;
-    ov->on_sign_out = [&] { ++sign_outs; };
+    ov->on_sign_out = [&](bool) { ++sign_outs; };
     ov->on_close    = [&] { ++closes; };
     st.run(*ov, {0, 0, 800, 600});
 
@@ -974,4 +974,52 @@ TEST_CASE("AutoSetupNotice: OK closes it", "[encryption][overlay]")
     CHECK(ov->step() == EncryptionSetupOverlay::Step::Intro);
     ov->simulate_primary_action();
     CHECK(closed);
+}
+
+TEST_CASE("SaveKey before sign-out: 'Sign out and delete the key' asks to delete it",
+          "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(
+        nullptr, EncryptionSetupOverlay::Mode::SaveKey);
+    ov->set_recovery_key("KEY");
+    ov->set_before_sign_out(true);
+    std::vector<bool> removes;
+    ov->on_sign_out = [&](bool remove) { removes.push_back(remove); };
+    st.run(*ov, {0, 0, 800, 600});
+    ov->simulate_skip();                    // keep it
+    ov->simulate_sign_out_and_remove_key(); // delete it
+    REQUIRE(removes.size() == 2);
+    CHECK_FALSE(removes[0]);
+    CHECK(removes[1]);
+}
+
+TEST_CASE("AutoSetupNotice: Turn off backup shows progress, then Done",
+          "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(
+        nullptr, EncryptionSetupOverlay::Mode::AutoSetupNotice);
+    bool asked = false;
+    ov->on_turn_off_backup = [&] { asked = true; };
+    st.run(*ov, {0, 0, 800, 600});
+    ov->simulate_turn_off_backup();
+    CHECK(asked);
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::Progress);
+    ov->backup_turned_off();
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::Done);
+    CHECK(ov->done_kind() == EncryptionSetupOverlay::DoneKind::BackupOff);
+}
+
+TEST_CASE("AutoSetupNotice: a failed turn-off returns to the notice with the error",
+          "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(
+        nullptr, EncryptionSetupOverlay::Mode::AutoSetupNotice);
+    st.run(*ov, {0, 0, 800, 600});
+    ov->simulate_turn_off_backup();
+    ov->advance_progress(5, "boom", 0, 0);
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::Intro);
+    CHECK(ov->error_msg() == "boom");
 }

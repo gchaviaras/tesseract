@@ -3944,6 +3944,11 @@ pub mod ffi {
         /// Progress events fire via `on_enable_recovery_progress` before return.
         fn enable_recovery(self: &ClientFfi, passphrase: &str) -> OpResult;
 
+        /// Turn recovery off: delete the server-side key backup, clear secret
+        /// storage and mark backup as not to be re-enabled automatically.
+        /// Blocks — worker thread.
+        fn disable_recovery(self: &ClientFfi) -> OpResult;
+
         /// Current snapshot of the backup state and import counters.
         fn backup_state(self: &ClientFfi) -> BackupProgress;
 

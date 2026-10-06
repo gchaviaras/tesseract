@@ -5812,8 +5812,13 @@ protected:
     // and returns true; `proceed` (the shell's own sign-out, re-entered) runs
     // once the user has saved the key or chosen to sign out without saving.
     bool intercept_sign_out_for_unsaved_key_(std::function<void()> proceed);
-    void proceed_sign_out_();
+    // `remove_key`: "Sign out and delete the key" — don't keep an unsaved key
+    // on this computer.
+    void proceed_sign_out_(bool remove_key = false);
     void cancel_sign_out_();
+    // AutoSetupNotice › "Turn off backup": disable recovery (async), forget
+    // the held key and remember not to set it up silently again.
+    void turn_off_silent_recovery_();
     // The next sign-out isn't the user's choice (an expired session dropping
     // to the login screen): don't offer to save the key first. It's kept for
     // the next sign-in anyway (settle_recovery_key_on_sign_out_).
@@ -5825,6 +5830,8 @@ protected:
     std::function<void()> pending_sign_out_;
     std::string           pending_sign_out_uid_;
     std::string           sign_out_confirmed_uid_;
+    // The account being signed out with "Sign out and delete the key".
+    std::string           sign_out_remove_key_uid_;
     // The account the SaveKey dialog was opened for: its buttons act on it.
     std::string           save_key_dialog_uid_;
 

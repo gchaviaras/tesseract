@@ -5302,8 +5302,8 @@ msgid "Save your recovery key before you sign out"
 msgstr "Enregistrez votre clé de récupération avant de vous déconnecter"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. Save it now, somewhere safe like a password manager."
-msgstr "Votre clé de récupération n'est encore enregistrée que sur cet appareil. Sans elle, vous ne pourrez plus lire vos anciens messages après vous être reconnecté. Enregistrez-la maintenant en lieu sûr, par exemple dans un gestionnaire de mots de passe."
+msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. If you sign out without saving it, it stays on this computer so you can sign back in; on a shared computer, delete it instead."
+msgstr "Votre clé de récupération n'est encore enregistrée que sur cet appareil. Sans elle, vous ne pourrez plus lire vos anciens messages après vous être reconnecté. Si vous vous déconnectez sans l'enregistrer, elle reste sur cet ordinateur pour que vous puissiez vous reconnecter ; sur un ordinateur partagé, supprimez-la plutôt."
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Sign out without saving"
@@ -5324,3 +5324,19 @@ msgstr "Impossible de lire votre clé de récupération depuis le stockage sécu
 #: ui/shared/views/LoginView.cpp
 msgid "Checking how you can sign in to this server…"
 msgstr "Vérification des moyens de connexion à ce serveur…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Sign out and delete the key"
+msgstr "Se déconnecter et supprimer la clé"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Turn off backup"
+msgstr "Désactiver la sauvegarde"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Turning off backup…"
+msgstr "Désactivation de la sauvegarde…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Backup is off. Your encrypted messages are kept only on your devices."
+msgstr "La sauvegarde est désactivée. Vos messages chiffrés ne sont conservés que sur vos appareils."

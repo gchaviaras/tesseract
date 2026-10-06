@@ -459,6 +459,7 @@ struct SettingsScrub
         s.save_key_reminder_dismissals.erase(uid);
         s.encryption_reminder_snoozed_until.erase(uid);
         s.save_key_reminder_snoozed_until.erase(uid);
+        s.silent_recovery_declined.erase(uid);
     }
 };
 
@@ -903,4 +904,43 @@ TEST_CASE("Silent setup off: no silent unlock and no sign-out offer", "[shell][e
     CHECK(shell.last_mode_ == EncryptionSetupOverlay::Mode::Recover);
 
     CHECK_FALSE(shell.intercept_sign_out_for_unsaved_key_([] {}));
+}
+
+TEST_CASE("'Sign out and delete the key' drops an unsaved key", "[shell][encryption]")
+{
+    ShellEncryptionSetupTestShell shell;
+    SettingsScrub scrub{"@new17:example.org"};
+    silent_account(shell, scrub.uid);
+    tesseract::Settings::instance().recovery_key_unsaved.insert(scrub.uid);
+    shell.keychain_[scrub.uid] = "KEY";
+    REQUIRE(shell.intercept_sign_out_for_unsaved_key_(
+        [&] { shell.settle_recovery_key_on_sign_out_(scrub.uid); }));
+    shell.proceed_sign_out_(/*remove_key=*/true);
+    CHECK(shell.keychain_.count(scrub.uid) == 0);
+    CHECK(tesseract::Settings::instance().recovery_key_unsaved.count(scrub.uid) == 0);
+}
+
+TEST_CASE("An account whose user turned backup off isn't set up silently again",
+          "[shell][encryption]")
+{
+    ShellEncryptionSetupTestShell shell;
+    SettingsScrub scrub{"@new18:example.org"};
+    silent_account(shell, scrub.uid);
+    tesseract::Settings::instance().silent_recovery_declined.insert(scrub.uid);
+    shell.recovery_state_stub_ = 1;
+    shell.check_encryption_setup_();
+    CHECK(shell.silent_enables_ == 0);
+    CHECK_FALSE(shell.overlay_shown_); // the reminder strip offers it instead
+}
+
+TEST_CASE("Setting recovery up from the dialog clears 'backup turned off'",
+          "[shell][encryption]")
+{
+    ShellEncryptionSetupTestShell shell;
+    SettingsScrub scrub{"@new19:example.org"};
+    silent_account(shell, scrub.uid);
+    tesseract::Settings::instance().silent_recovery_declined.insert(scrub.uid);
+    shell.dialog_recovery_setup_users_.insert(scrub.uid);
+    shell.handle_enable_recovery_progress_ui_(4, "KEY", 0, 0);
+    CHECK(tesseract::Settings::instance().silent_recovery_declined.count(scrub.uid) == 0);
 }

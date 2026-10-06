@@ -5986,8 +5986,8 @@ msgid "Save your recovery key before you sign out"
 msgstr "[Sàvé yöùr réçövéry kéy béföré yöù sïgñ öùtxxxxxxxx]"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. Save it now, somewhere safe like a password manager."
-msgstr "[Yöùr réçövéry kéy ïsñ't sàvéd àñywhéré bùt thïs dévïçé yét. Wïthöùt ït, yöù wöñ't bé àblé tö réàd yöùr öld méssàgés àftér yöù sïgñ ïñ àgàïñ. Sàvé ït ñöw, söméwhéré sàfé lïké à pàsswörd màñàgér.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
+msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. If you sign out without saving it, it stays on this computer so you can sign back in; on a shared computer, delete it instead."
+msgstr "[Yöùr réçövéry kéy ïsñ't sàvéd àñywhéré bùt thïs dévïçé yét. Wïthöùt ït, yöù wöñ't bé àblé tö réàd yöùr öld méssàgés àftér yöù sïgñ ïñ àgàïñ. Ïf yöù sïgñ öùt wïthöùt sàvïñg ït, ït stàys öñ thïs çömpùtér sö yöù çàñ sïgñ bàçk ïñ; öñ à shàréd çömpùtér, délété ït ïñstéàd.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Sign out without saving"
@@ -6008,3 +6008,19 @@ msgstr "[Çöùldñ't réàd yöùr réçövéry kéy fröm thïs çömpùtér's
 #: ui/shared/views/LoginView.cpp
 msgid "Checking how you can sign in to this server…"
 msgstr "[Çhéçkïñg höw yöù çàñ sïgñ ïñ tö thïs sérvér…xxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Sign out and delete the key"
+msgstr "[Sïgñ öùt àñd délété thé kéyxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Turn off backup"
+msgstr "[Tùrñ öff bàçkùpxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Turning off backup…"
+msgstr "[Tùrñïñg öff bàçkùp…xxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Backup is off. Your encrypted messages are kept only on your devices."
+msgstr "[Bàçkùp ïs öff. Yöùr éñçryptéd méssàgés àré képt öñly öñ yöùr dévïçés.xxxxxxxxxxxxx]"

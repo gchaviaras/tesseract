@@ -13949,6 +13949,9 @@ void ShellBase::handle_enable_recovery_progress_ui_(uint8_t  step,
         // anything.
         forget_stored_recovery_key_(uid);
         clear_unsaved_recovery_key_state_(uid);
+        // Set up by the user: backup is wanted again.
+        auto& s = Settings::instance();
+        if (s.silent_recovery_declined.erase(uid) > 0) s.save_to_disk(tesseract::config_dir());
     }
     if (auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr)
         ov->advance_progress(step, recovery_key, backed_up, total);
@@ -14127,10 +14130,11 @@ void ShellBase::wire_encryption_setup_callbacks_(
     ov.on_key_saved = [this](bool keep_on_device) {
         mark_recovery_key_saved_(save_key_dialog_uid_, keep_on_device);
     };
-    ov.on_sign_out = [this]() {
-        proceed_sign_out_();
+    ov.on_sign_out = [this](bool remove_key) {
+        proceed_sign_out_(remove_key);
         request_relayout_();
     };
+    ov.on_turn_off_backup = [this]() { turn_off_silent_recovery_(); };
 
     ov.on_close = [this]() {
         auto* o = main_app_ ? main_app_->encryption_setup() : nullptr;
@@ -14245,6 +14249,14 @@ void ShellBase::check_encryption_setup_()
         // and later reminds the user to save the key.
         if (!foreign_identity && begin_silent_recovery_setup_(active_account_))
             return;
+        // The user turned backup off after a silent setup: only the
+        // reminder strip offers it again, no dialog.
+        if (!foreign_identity && silent_recovery_setup_enabled_ &&
+            Settings::instance().silent_recovery_declined.count(my_user_id_))
+        {
+            encryption_setup_shown_ = true;
+            return;
+        }
         if (foreign_identity)
         {
             encryption_setup_shown_ = true;
@@ -14323,6 +14335,8 @@ bool ShellBase::begin_silent_recovery_setup_(const std::shared_ptr<AccountSessio
     const std::string& uid = sess->user_id;
     if (silent_recovery_exhausted_(uid))
         return false; // keeps failing: let the user drive it from the dialog
+    if (Settings::instance().silent_recovery_declined.count(uid))
+        return false; // the user turned backup off
     encryption_setup_shown_ = true;
     if (silent_recovery_pending_(uid))
         return true; // in flight, or a later sync tick retries
@@ -14560,7 +14574,7 @@ void ShellBase::skip_unsaved_key_check_for_next_sign_out_()
     if (active_account_) sign_out_confirmed_uid_ = active_account_->user_id;
 }
 
-void ShellBase::proceed_sign_out_()
+void ShellBase::proceed_sign_out_(bool remove_key)
 {
     auto proceed      = std::move(pending_sign_out_);
     pending_sign_out_ = nullptr;
@@ -14569,9 +14583,39 @@ void ShellBase::proceed_sign_out_()
     if (main_app_) main_app_->show_encryption_setup(false);
     // Only the account the user asked to sign out of.
     if (!proceed || !active_account_ || active_account_->user_id != uid) return;
-    sign_out_confirmed_uid_ = uid;
+    sign_out_confirmed_uid_  = uid;
+    sign_out_remove_key_uid_ = remove_key ? uid : std::string();
     proceed();
     sign_out_confirmed_uid_.clear(); // in case it never reached the guard
+    sign_out_remove_key_uid_.clear();
+}
+
+void ShellBase::turn_off_silent_recovery_()
+{
+    auto sess = active_account_;
+    if (!sess) return;
+    run_async_mut_("recovery-disable", [this, sess]() {
+        const auto res = sess->client ? sess->client->disable_recovery()
+                                      : tesseract::Result{false, "not logged in"};
+        post_to_ui_alive_([this, sess, ok = res.ok, msg = std::string(res.message)]() {
+            auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr;
+            if (!ok)
+            {
+                if (ov && sess == active_account_) ov->advance_progress(5, msg, 0, 0);
+                request_relayout_();
+                return;
+            }
+            const std::string& uid = sess->user_id;
+            forget_stored_recovery_key_(uid);
+            clear_unsaved_recovery_key_state_(uid);
+            auto& s = Settings::instance();
+            s.silent_recovery_declined.insert(uid);
+            s.save_to_disk(tesseract::config_dir());
+            if (ov && sess == active_account_) ov->backup_turned_off();
+            refresh_encryption_reminder_();
+            request_relayout_();
+        });
+    });
 }
 
 void ShellBase::cancel_sign_out_()
@@ -14591,8 +14635,11 @@ void ShellBase::settle_recovery_key_on_sign_out_(const std::string& uid)
 
     // Signed out without saving it: the secure-storage copy is the only one
     // left. It stays, with its reminder, for the next sign-in (which can
-    // also unlock with it silently).
-    if (Settings::instance().recovery_key_unsaved.count(uid) > 0 && !only_in_memory)
+    // also unlock with it silently) — unless the user chose to delete it
+    // (a shared computer).
+    const bool delete_anyway = sign_out_remove_key_uid_ == uid;
+    if (Settings::instance().recovery_key_unsaved.count(uid) > 0 && !only_in_memory &&
+        !delete_anyway)
         return;
 
     forget_stored_recovery_key_(uid);
@@ -14690,7 +14737,8 @@ void ShellBase::refresh_encryption_reminder_(std::optional<bool> device_verified
         // Tesseract sets recovery up by itself; asking the user to do it only
         // makes sense once that has given up.
         if (kind == Reminder::SetupNeeded && silent_recovery_setup_enabled_ &&
-            !silent_recovery_exhausted_(my_user_id_))
+            !silent_recovery_exhausted_(my_user_id_) &&
+            !Settings::instance().silent_recovery_declined.count(my_user_id_))
             kind = Reminder::None;
     }
 

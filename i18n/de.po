@@ -5300,8 +5300,8 @@ msgid "Save your recovery key before you sign out"
 msgstr "Speichere deinen Wiederherstellungsschlüssel, bevor du dich abmeldest"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. Save it now, somewhere safe like a password manager."
-msgstr "Dein Wiederherstellungsschlüssel ist bisher nur auf diesem Gerät gespeichert. Ohne ihn kannst du deine alten Nachrichten nach der nächsten Anmeldung nicht mehr lesen. Speichere ihn jetzt an einem sicheren Ort, etwa in einem Passwort-Manager."
+msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. If you sign out without saving it, it stays on this computer so you can sign back in; on a shared computer, delete it instead."
+msgstr "Dein Wiederherstellungsschlüssel ist bisher nur auf diesem Gerät gespeichert. Ohne ihn kannst du deine alten Nachrichten nach der nächsten Anmeldung nicht mehr lesen. Wenn du dich abmeldest, ohne ihn zu speichern, bleibt er auf diesem Computer, damit du dich wieder anmelden kannst; auf einem gemeinsam genutzten Computer lösche ihn stattdessen."
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Sign out without saving"
@@ -5322,3 +5322,19 @@ msgstr "Dein Wiederherstellungsschlüssel konnte nicht aus dem sicheren Speicher
 #: ui/shared/views/LoginView.cpp
 msgid "Checking how you can sign in to this server…"
 msgstr "Anmeldemöglichkeiten dieses Servers werden geprüft…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Sign out and delete the key"
+msgstr "Abmelden und Schlüssel löschen"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Turn off backup"
+msgstr "Sicherung ausschalten"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Turning off backup…"
+msgstr "Sicherung wird ausgeschaltet…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Backup is off. Your encrypted messages are kept only on your devices."
+msgstr "Die Sicherung ist aus. Deine verschlüsselten Nachrichten liegen nur noch auf deinen Geräten."

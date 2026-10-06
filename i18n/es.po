@@ -5438,8 +5438,8 @@ msgid "Save your recovery key before you sign out"
 msgstr "Guarda tu clave de recuperación antes de cerrar sesión"
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. Save it now, somewhere safe like a password manager."
-msgstr "Tu clave de recuperación todavía solo está guardada en este dispositivo. Sin ella, no podrás leer tus mensajes antiguos cuando vuelvas a iniciar sesión. Guárdala ahora en un lugar seguro, como un gestor de contraseñas."
+msgid "Your recovery key isn't saved anywhere but this device yet. Without it, you won't be able to read your old messages after you sign in again. If you sign out without saving it, it stays on this computer so you can sign back in; on a shared computer, delete it instead."
+msgstr "Tu clave de recuperación todavía solo está guardada en este dispositivo. Sin ella, no podrás leer tus mensajes antiguos cuando vuelvas a iniciar sesión. Si cierras sesión sin guardarla, se queda en este ordenador para que puedas volver a entrar; en un ordenador compartido, bórrala."
 
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Sign out without saving"
@@ -5460,3 +5460,19 @@ msgstr "No se pudo leer tu clave de recuperación del almacenamiento seguro de e
 #: ui/shared/views/LoginView.cpp
 msgid "Checking how you can sign in to this server…"
 msgstr "Comprobando cómo puedes iniciar sesión en este servidor…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Sign out and delete the key"
+msgstr "Cerrar sesión y borrar la clave"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Turn off backup"
+msgstr "Desactivar la copia de seguridad"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Turning off backup…"
+msgstr "Desactivando la copia de seguridad…"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Backup is off. Your encrypted messages are kept only on your devices."
+msgstr "La copia de seguridad está desactivada. Tus mensajes cifrados solo se guardan en tus dispositivos."

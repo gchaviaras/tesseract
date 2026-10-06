@@ -167,6 +167,9 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
     lost_link_ = make_link(tk::tr("I've lost my recovery key and other devices"),
                            [this] { advance_step_(Step::LostAccess); });
     reject_link_ = make_link(tk::tr("Not me"), [this] { reject_(); });
+    remove_key_link_ = make_link(tk::tr("Sign out and delete the key"),
+                                 [this] { sign_out_removing_key_(); });
+    turn_off_link_ = make_link(tk::tr("Turn off backup"), [this] { turn_off_backup_(); });
 
     device_card_ = add_child(tk::create_widget<OptionCardButton>(this));
     device_card_->set_visible(false);
@@ -417,7 +420,7 @@ void EncryptionSetupOverlay::fire_primary_()
             break;
 
         case Step::Done:
-            if (before_sign_out_ && on_sign_out) on_sign_out();
+            if (before_sign_out_ && on_sign_out) on_sign_out(false);
             else if (on_close) on_close();
             break;
 
@@ -581,8 +584,22 @@ void EncryptionSetupOverlay::simulate_skip()                    { skip_(); }
 
 void EncryptionSetupOverlay::skip_()
 {
-    if (before_sign_out_ && on_sign_out) on_sign_out(); // "Sign out without saving"
+    if (before_sign_out_ && on_sign_out) on_sign_out(false); // "Sign out without saving"
     else if (on_close) on_close();
+}
+
+void EncryptionSetupOverlay::sign_out_removing_key_()
+{
+    if (before_sign_out_ && on_sign_out) on_sign_out(true);
+}
+
+void EncryptionSetupOverlay::turn_off_backup_()
+{
+    if (mode_ != Mode::AutoSetupNotice) return;
+    progress_label_    = tk::tr("Turning off backup\xe2\x80\xa6");
+    progress_fraction_ = -1.0f;
+    advance_step_(Step::Progress);
+    if (on_turn_off_backup) on_turn_off_backup();
 }
 void EncryptionSetupOverlay::simulate_select_passphrase_mode() { use_passphrase_(); }
 void EncryptionSetupOverlay::simulate_back()                    { go_back_(); }
@@ -646,6 +663,9 @@ std::string EncryptionSetupOverlay::done_text_() const
         case DoneKind::UserVerified:
             return tk::tr("Verified. You can trust you're talking to the "
                           "right person.");
+        case DoneKind::BackupOff:
+            return tk::tr("Backup is off. Your encrypted messages are kept only "
+                          "on your devices.");
     }
     return {};
 }
@@ -735,7 +755,8 @@ float EncryptionSetupOverlay::step_card_height_() const
     switch (step_)
     {
         case Step::Intro:        return mode_ == Mode::Fresh     ? 290.0f
-                                      : mode_ == Mode::SaveKey ? 310.0f
+                                      : mode_ == Mode::SaveKey
+                                          ? (before_sign_out_ ? 380.0f : 310.0f)
                                       : mode_ == Mode::AutoSetupNotice ? 310.0f
                                                                : 250.0f;
         case Step::PassphraseEntry: return 400.0f;
@@ -1130,8 +1151,10 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                 : sign_out
                     ? tk::tr("Your recovery key isn't saved anywhere but this "
                              "device yet. Without it, you won't be able to read "
-                             "your old messages after you sign in again. Save it "
-                             "now, somewhere safe like a password manager.")
+                             "your old messages after you sign in again. If you "
+                             "sign out without saving it, it stays on this "
+                             "computer so you can sign back in; on a shared "
+                             "computer, delete it instead.")
                 : save_key
                     ? tk::tr("Tesseract made a recovery key for your account. If "
                              "you lose this device or sign out, it's the only way "
@@ -1169,6 +1192,11 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             place_primary({card.x + card.w - kCardPad - pw, by, pw, kEncryptionSetupBtnH},
                           prim, true);
 
+            if (sign_out)
+                left_link(remove_key_link_, by - kEncryptionSetupBtnH - 6.0f,
+                          tk::tr("Sign out and delete the key"));
+            if (notice)
+                left_link(turn_off_link_, by, tk::tr("Turn off backup"));
             if (!notice)
                 left_link(skip_link_, by,
                           sign_out   ? tk::tr("Sign out without saving")
@@ -1522,6 +1550,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
     }
 
     for (tk::Button* b : {skip_link_, passphrase_link_, back_link_, lost_link_, reject_link_,
+                          remove_key_link_, turn_off_link_,
                           static_cast<tk::Button*>(device_card_),
                           static_cast<tk::Button*>(key_card_)})
         if (b && std::find(placed.begin(), placed.end(), b) == placed.end())

@@ -142,6 +142,14 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
                 save_key_reminder_dismissals[uid] = n.get<int>();
     }
 
+    silent_recovery_declined.clear();
+    if (j.contains("silent_recovery_declined") && j["silent_recovery_declined"].is_array())
+    {
+        for (const auto& uid : j["silent_recovery_declined"])
+            if (uid.is_string())
+                silent_recovery_declined.insert(uid.get<std::string>());
+    }
+
     save_key_reminder_snoozed_until.clear();
     if (j.contains("save_key_reminder_snoozed_until") &&
         j["save_key_reminder_snoozed_until"].is_object())
@@ -343,6 +351,8 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
             counts[uid] = n;
         j["save_key_reminder_dismissals"] = std::move(counts);
     }
+    if (!silent_recovery_declined.empty())
+        j["silent_recovery_declined"] = silent_recovery_declined;
     if (!save_key_reminder_snoozed_until.empty())
     {
         nlohmann::json snoozes = nlohmann::json::object();

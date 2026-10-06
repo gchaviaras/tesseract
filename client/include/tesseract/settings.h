@@ -269,6 +269,10 @@ public:
     // stays hidden. Separate from encryption_reminder_snoozed_until so
     // dismissing it never hides a more urgent reminder.
     std::map<std::string, std::int64_t> save_key_reminder_snoozed_until;
+    // Accounts whose user turned backup off after Tesseract set it up
+    // silently: never set it up silently again (the user can still do it
+    // from the "set up recovery" reminder).
+    std::set<std::string> silent_recovery_declined;
 
     // ── Room list ─────────────────────────────────────────────────────
     // Group rooms with no activity for `inactive_room_threshold_days` into a

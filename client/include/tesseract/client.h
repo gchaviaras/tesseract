@@ -2112,6 +2112,11 @@ public:
     /// Blocks on the network — worker thread only.
     Result disable_recovery();
 
+    /// Whether the user turned key backup off for the account, from any
+    /// client (read from the server). nullopt when it couldn't be found out.
+    /// Blocks on the network — worker thread only.
+    std::optional<bool> backup_disabled_by_user();
+
     /// Export all Megolm room keys to a passphrase-encrypted file at `path`
     /// (standard Matrix key-export format). Blocks — call from a worker thread.
     Result export_room_keys(const std::string& path,

@@ -153,6 +153,7 @@ struct ShellEncryptionSetupTestShell : ShellEncryptionSetupWithAccountManager, S
     using ShellBase::save_key_dialog_uid_;
     using ShellBase::snooze_save_key_reminder_;
     using ShellBase::silent_recovery_setup_enabled_;
+    using ShellBase::silent_recovery_declined_;
 };
 
 } // namespace
@@ -943,4 +944,25 @@ TEST_CASE("Setting recovery up from the dialog clears 'backup turned off'",
     shell.dialog_recovery_setup_users_.insert(scrub.uid);
     shell.handle_enable_recovery_progress_ui_(4, "KEY", 0, 0);
     CHECK(tesseract::Settings::instance().silent_recovery_declined.count(scrub.uid) == 0);
+}
+
+TEST_CASE("Backup turned off in another client stops silent setup for good",
+          "[shell][encryption]")
+{
+    // The server reported the user's "backup off" marker before setup ran.
+    ShellEncryptionSetupTestShell shell;
+    SettingsScrub scrub{"@new20:example.org"};
+    silent_account(shell, scrub.uid);
+    shell.recovery_state_stub_ = 1;
+    shell.check_encryption_setup_();
+    REQUIRE(shell.silent_enables_ == 1);
+    shell.silent_recovery_declined_(scrub.uid);
+    CHECK_FALSE(shell.silent_recovery_pending_(scrub.uid));
+    CHECK(tesseract::Settings::instance().silent_recovery_declined.count(scrub.uid) == 1);
+
+    // Later checks, this session or the next, don't try again.
+    shell.encryption_setup_shown_ = false;
+    shell.check_encryption_setup_();
+    CHECK(shell.silent_enables_ == 1);
+    CHECK_FALSE(shell.overlay_shown_);
 }

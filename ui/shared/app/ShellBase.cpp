@@ -14350,6 +14350,20 @@ void ShellBase::run_silent_enable_recovery_(std::shared_ptr<AccountSession> sess
     // Progress (and the key) arrive through handle_enable_recovery_progress_ui_.
     run_async_mut_("silent-recovery-setup", [this, sess]() {
         if (!sess || !sess->client) return;
+        // Respect a "turn backup off" made in any client: enable() would
+        // overwrite that marker on the server. If it can't be read, don't
+        // risk it now; a later sync tick tries again.
+        const auto opted_out = sess->client->backup_disabled_by_user();
+        if (!opted_out || *opted_out)
+        {
+            post_to_ui_alive_([this, uid = sess->user_id, declined = opted_out.has_value()]() {
+                if (declined)
+                    silent_recovery_declined_(uid);
+                else
+                    silent_recovery_failed_(uid);
+            });
+            return;
+        }
         const auto res = sess->client->enable_recovery(std::string());
         if (res.ok) return;
         post_to_ui_alive_([this, uid = sess->user_id]() { silent_recovery_failed_(uid); });
@@ -14406,6 +14420,18 @@ void ShellBase::handle_silent_recovery_progress_(const std::string& uid, uint8_t
             show_encryption_setup_overlay_(views::EncryptionSetupOverlay::Mode::AutoSetupNotice);
         }
     });
+}
+
+void ShellBase::silent_recovery_declined_(const std::string& uid)
+{
+    if (!silent_recovery_in_flight_.erase(uid)) return;
+    silent_recovery_new_account_.erase(uid);
+    // The user turned backup off (in some client): never set it up silently;
+    // the "set up recovery" strip still offers it.
+    auto& s = Settings::instance();
+    if (s.silent_recovery_declined.insert(uid).second)
+        s.save_to_disk(tesseract::config_dir());
+    refresh_encryption_reminder_();
 }
 
 void ShellBase::silent_recovery_failed_(const std::string& uid)
@@ -14594,6 +14620,11 @@ void ShellBase::turn_off_silent_recovery_()
 {
     auto sess = active_account_;
     if (!sess) return;
+    // Record the choice first: if turning off fails partway (backup deleted,
+    // markers not written), silent setup must still not turn it back on.
+    auto& s = Settings::instance();
+    if (s.silent_recovery_declined.insert(sess->user_id).second)
+        s.save_to_disk(tesseract::config_dir());
     run_async_mut_("recovery-disable", [this, sess]() {
         const auto res = sess->client ? sess->client->disable_recovery()
                                       : tesseract::Result{false, "not logged in"};
@@ -14601,6 +14632,8 @@ void ShellBase::turn_off_silent_recovery_()
             auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr;
             if (!ok)
             {
+                // The backup may still be there, so the key and its reminder
+                // stay; "Turn off backup" again finishes the job.
                 if (ov && sess == active_account_) ov->advance_progress(5, msg, 0, 0);
                 request_relayout_();
                 return;
@@ -14608,9 +14641,6 @@ void ShellBase::turn_off_silent_recovery_()
             const std::string& uid = sess->user_id;
             forget_stored_recovery_key_(uid);
             clear_unsaved_recovery_key_state_(uid);
-            auto& s = Settings::instance();
-            s.silent_recovery_declined.insert(uid);
-            s.save_to_disk(tesseract::config_dir());
             if (ov && sess == active_account_) ov->backup_turned_off();
             refresh_encryption_reminder_();
             request_relayout_();

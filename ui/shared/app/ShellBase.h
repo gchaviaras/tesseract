@@ -5767,6 +5767,9 @@ protected:
     void handle_silent_recovery_progress_(const std::string& uid, uint8_t step,
                                           const std::string& key_or_error);
     void silent_recovery_failed_(const std::string& uid);
+    // The account's backup was turned off by the user (seen on the server
+    // before a silent setup): record it and don't set it up silently.
+    void silent_recovery_declined_(const std::string& uid);
     // A device whose account has recovery but this device lacks its secrets:
     // when the keychain still holds the key Tesseract made (e.g. after the
     // app's data was wiped), unlock with it without asking. Returns true when

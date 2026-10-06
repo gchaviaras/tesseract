@@ -3017,6 +3017,21 @@ Result Client::disable_recovery()
     return from_ffi(impl_->ffi->disable_recovery());
 }
 
+std::optional<bool> Client::backup_disabled_by_user()
+{
+    if (!impl_)
+    {
+        return std::nullopt;
+    }
+    SH_FFI;
+    switch (impl_->ffi->backup_disabled_by_user())
+    {
+        case 0: return false;
+        case 1: return true;
+        default: return std::nullopt;
+    }
+}
+
 Result Client::export_room_keys(const std::string& path,
                                 const std::string& passphrase)
 {

@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-06
 
+- fix(encryption): silent recovery setup no longer turns key backup back on for users who turned it off, in Tesseract or another client, including when turning it off failed partway. Qt6 build + ctest 2247/2247, cargo tests for the new check
 - feat(encryption): signing out with an unsaved recovery key can also delete it from the computer, and the notice for existing accounts can turn the new backup off. Qt6 build + ctest 2246/2246
 - build: `-DTESSERACT_ENABLE_SILENT_RECOVERY_SETUP=OFF` (default `ON`) restores the encryption setup dialog instead of silent recovery setup. Qt6 build + ctest 2240/2240
 - feat(encryption): recovery is set up silently for accounts without one; the key is held in secure storage and a "Save your recovery key" strip (and a prompt before sign-out) asks the user to save it. Qt6 build + ctest 2238/2238, user-verified Qt6

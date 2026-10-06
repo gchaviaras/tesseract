@@ -3949,6 +3949,12 @@ pub mod ffi {
         /// Blocks — worker thread.
         fn disable_recovery(self: &ClientFfi) -> OpResult;
 
+        /// Whether the user turned key backup off for the account from any
+        /// client (`m.key_backup` / `m.org.matrix.custom.backup_disabled`,
+        /// read from the server): 0 = no, 1 = yes, 2 = couldn't tell.
+        /// Blocks — worker thread.
+        fn backup_disabled_by_user(self: &ClientFfi) -> u8;
+
         /// Current snapshot of the backup state and import counters.
         fn backup_state(self: &ClientFfi) -> BackupProgress;
 

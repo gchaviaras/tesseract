@@ -399,6 +399,50 @@ impl ClientFfi {
         err("not logged in")
     }
 
+    /// Whether the user turned key backup off for the account, from any
+    /// client: 0 = no, 1 = yes, 2 = couldn't tell (network error, not logged
+    /// in). Reads the account data from the server, not the sync cache.
+    #[cfg(not(test))]
+    pub fn backup_disabled_by_user(&self) -> u8 {
+        use matrix_sdk::ruma::events::GlobalAccountDataEventType;
+        use serde_json::Value;
+
+        let Some(client) = self.client.clone() else {
+            return 2;
+        };
+        self.rt.block_on(async move {
+            let fetch = |ty: &'static str| {
+                let client = client.clone();
+                async move {
+                    let raw = client
+                        .account()
+                        .fetch_account_data(GlobalAccountDataEventType::from(ty))
+                        .await?;
+                    Ok::<_, matrix_sdk::Error>(
+                        raw.and_then(|r| serde_json::from_str::<Value>(r.json().get()).ok()),
+                    )
+                }
+            };
+            let Ok(key_backup) = fetch("m.key_backup").await else {
+                return 2;
+            };
+            let legacy = if key_backup.is_none() {
+                match fetch("m.org.matrix.custom.backup_disabled").await {
+                    Ok(v) => v,
+                    Err(_) => return 2,
+                }
+            } else {
+                None
+            };
+            u8::from(backup_marked_disabled(key_backup.as_ref(), legacy.as_ref()))
+        })
+    }
+
+    #[cfg(test)]
+    pub fn backup_disabled_by_user(&self) -> u8 {
+        2
+    }
+
     #[cfg(test)]
     pub fn enable_recovery(&self, _passphrase: &str) -> OpResult {
         err("not logged in")
@@ -505,6 +549,54 @@ pub(super) fn recovery_state_code(
         RecoveryState::Disabled => 1,
         RecoveryState::Enabled => 2,
         RecoveryState::Incomplete => 3,
+    }
+}
+
+/// matrix-sdk's rule for "backup turned off at the account level"
+/// (`Recovery::are_backups_marked_as_disabled`): `m.key_backup`'s `enabled`
+/// when that event exists, else the unstable
+/// `m.org.matrix.custom.backup_disabled`'s `disabled`. Unreadable content
+/// counts as not disabled, as there.
+pub(crate) fn backup_marked_disabled(
+    key_backup: Option<&serde_json::Value>,
+    legacy: Option<&serde_json::Value>,
+) -> bool {
+    if let Some(v) = key_backup {
+        return v.get("enabled").and_then(serde_json::Value::as_bool).map(|e| !e).unwrap_or(false);
+    }
+    legacy
+        .and_then(|v| v.get("disabled"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod backup_marked_disabled_tests {
+    use super::backup_marked_disabled;
+    use serde_json::json;
+
+    #[test]
+    fn stable_event_decides_when_present() {
+        assert!(backup_marked_disabled(Some(&json!({"enabled": false})), None));
+        assert!(!backup_marked_disabled(Some(&json!({"enabled": true})), None));
+        // The stable event wins over the unstable one.
+        assert!(!backup_marked_disabled(
+            Some(&json!({"enabled": true})),
+            Some(&json!({"disabled": true}))
+        ));
+    }
+
+    #[test]
+    fn unstable_event_is_the_fallback() {
+        assert!(backup_marked_disabled(None, Some(&json!({"disabled": true}))));
+        assert!(!backup_marked_disabled(None, Some(&json!({"disabled": false}))));
+        assert!(!backup_marked_disabled(None, None));
+    }
+
+    #[test]
+    fn unreadable_content_is_not_disabled() {
+        assert!(!backup_marked_disabled(Some(&json!({})), None));
+        assert!(!backup_marked_disabled(Some(&json!({"enabled": "no"})), None));
     }
 }
 

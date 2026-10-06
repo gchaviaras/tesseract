@@ -5774,6 +5774,15 @@ protected:
     // the UI thread when there's no stored key or it doesn't unlock.
     bool try_silent_unlock_(const std::shared_ptr<AccountSession>& sess,
                             std::function<void()> on_failed);
+    // Silent recovery setup and everything built on it (the key held in
+    // secure storage, the SaveKey reminder, the sign-out offer, silent
+    // unlock). Defaults to the TESSERACT_ENABLE_SILENT_RECOVERY_SETUP build
+    // option; off restores the setup dialog. A member so tests can cover both.
+#ifdef TESSERACT_SILENT_RECOVERY_SETUP_ENABLED
+    bool silent_recovery_setup_enabled_ = true;
+#else
+    bool silent_recovery_setup_enabled_ = false;
+#endif
     // True while a silent setup for `uid` is in flight or waiting out its
     // retry backoff: nothing should offer (or start) another setup meanwhile.
     bool silent_recovery_pending_(const std::string& uid) const;

@@ -14283,7 +14283,8 @@ void ShellBase::reopen_encryption_setup_()
     const Reminder kind = EncryptionFlowController::reminder_for(
         read_recovery_state_(), read_device_verified_(),
         foreign_cross_signing_identity_(),
-        Settings::instance().recovery_key_unsaved.count(my_user_id_) > 0);
+        silent_recovery_setup_enabled_ &&
+            Settings::instance().recovery_key_unsaved.count(my_user_id_) > 0);
     if (kind == Reminder::None)
     {
         check_encryption_setup_();
@@ -14318,7 +14319,7 @@ bool ShellBase::silent_recovery_pending_(const std::string& uid) const
 
 bool ShellBase::begin_silent_recovery_setup_(const std::shared_ptr<AccountSession>& sess)
 {
-    if (!sess || !sess->client) return false;
+    if (!silent_recovery_setup_enabled_ || !sess || !sess->client) return false;
     const std::string& uid = sess->user_id;
     if (silent_recovery_exhausted_(uid))
         return false; // keeps failing: let the user drive it from the dialog
@@ -14409,7 +14410,7 @@ void ShellBase::silent_recovery_failed_(const std::string& uid)
 bool ShellBase::try_silent_unlock_(const std::shared_ptr<AccountSession>& sess,
                                    std::function<void()> on_failed)
 {
-    if (!sess || !sess->client) return false;
+    if (!silent_recovery_setup_enabled_ || !sess || !sess->client) return false;
     const std::string uid = sess->user_id;
     if (!silent_unlock_tried_.insert(uid).second) return false;
 
@@ -14545,7 +14546,9 @@ bool ShellBase::intercept_sign_out_for_unsaved_key_(std::function<void()> procee
         sign_out_confirmed_uid_.clear();
         return false; // proceed_sign_out_ re-entering, or an expired session
     }
-    if (!Settings::instance().recovery_key_unsaved.count(uid)) return false;
+    if (!silent_recovery_setup_enabled_ ||
+        !Settings::instance().recovery_key_unsaved.count(uid))
+        return false;
     pending_sign_out_     = std::move(proceed);
     pending_sign_out_uid_ = uid;
     open_save_key_dialog_(/*before_sign_out=*/true);
@@ -14678,7 +14681,7 @@ void ShellBase::refresh_encryption_reminder_(std::optional<bool> device_verified
         const bool    verified = device_verified.value_or(read_device_verified_());
         const uint8_t state    = read_recovery_state_();
         const bool    foreign  = (!verified || state == 1) && foreign_identity_cached_();
-        const bool    unsaved  =
+        const bool    unsaved  = silent_recovery_setup_enabled_ &&
             Settings::instance().recovery_key_unsaved.count(my_user_id_) > 0;
         kind = EncryptionFlowController::reminder_for(state, verified, foreign, unsaved);
         // Recovery is being set up silently: "set it up" would start a
@@ -14686,7 +14689,8 @@ void ShellBase::refresh_encryption_reminder_(std::optional<bool> device_verified
         if (silent_recovery_pending_(my_user_id_)) kind = Reminder::None;
         // Tesseract sets recovery up by itself; asking the user to do it only
         // makes sense once that has given up.
-        if (kind == Reminder::SetupNeeded && !silent_recovery_exhausted_(my_user_id_))
+        if (kind == Reminder::SetupNeeded && silent_recovery_setup_enabled_ &&
+            !silent_recovery_exhausted_(my_user_id_))
             kind = Reminder::None;
     }
 

@@ -115,6 +115,12 @@ option(TESSERACT_ENABLE_LEGACY_LOGIN
     "Enable legacy username/password (m.login.password) login as a fallback for homeservers without OIDC/MAS"
     ON)
 
+# Accounts without recovery get it set up without a dialog; the key is held in
+# the OS secure storage until the user saves it. OFF restores the setup dialog.
+option(TESSERACT_ENABLE_SILENT_RECOVERY_SETUP
+    "Set up encryption recovery automatically and remind the user to save the key, instead of asking up front"
+    ON)
+
 # Experimental — off by default while the feature is staged. See the usage
 # site below (near TESSERACT_ENABLE_LEGACY_LOGIN's corrosion_set_features
 # call) for what turning it on actually wires up.
@@ -696,6 +702,13 @@ if(TESSERACT_ENABLE_LEGACY_LOGIN)
     # Propagate the flag to all C++ targets so #ifdef TESSERACT_LEGACY_LOGIN_ENABLED
     # guards compile their password-login-related code.
     add_compile_definitions(TESSERACT_LEGACY_LOGIN_ENABLED)
+endif()
+
+if(TESSERACT_ENABLE_SILENT_RECOVERY_SETUP)
+    message(STATUS "tesseract: silent recovery setup enabled")
+    # C++ only: ShellBase reads it as the default of
+    # silent_recovery_setup_enabled_.
+    add_compile_definitions(TESSERACT_SILENT_RECOVERY_SETUP_ENABLED)
 endif()
 
 if(TESSERACT_ENABLE_CRASH_HANDLER)

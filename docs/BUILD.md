@@ -200,6 +200,14 @@ link order.
   copies (~2 GB each in Debug). Delete all but the newest, or use
   `cargo sweep`.
 
+### Feature options
+
+`-DTESSERACT_ENABLE_SILENT_RECOVERY_SETUP=OFF` (default `ON`) brings back the
+encryption setup dialog for accounts without recovery. With it on, Tesseract
+sets recovery up by itself, keeps the key in the OS secure storage until the
+user saves it, reminds them to save it, and unlocks a re-signed-in device with
+the stored key.
+
 ### Unity builds and precompiled headers
 
 `-DTESSERACT_UNITY_BUILD=OFF` (default `ON`) disables CMake's unity build

@@ -152,6 +152,7 @@ struct ShellEncryptionSetupTestShell : ShellEncryptionSetupWithAccountManager, S
     using ShellBase::skip_unsaved_key_check_for_next_sign_out_;
     using ShellBase::save_key_dialog_uid_;
     using ShellBase::snooze_save_key_reminder_;
+    using ShellBase::silent_recovery_setup_enabled_;
 };
 
 } // namespace
@@ -468,6 +469,8 @@ std::shared_ptr<tesseract::AccountSession> silent_account(ShellEncryptionSetupTe
     shell.am_.add_account(sess);
     shell.active_account_ = sess;
     shell.my_user_id_     = uid;
+    // Independent of the build's TESSERACT_ENABLE_SILENT_RECOVERY_SETUP.
+    shell.silent_recovery_setup_enabled_ = true;
     return sess;
 }
 } // namespace
@@ -867,4 +870,37 @@ TEST_CASE("Dismissing the SaveKey reminder doesn't snooze the other reminders",
     CHECK(s.save_key_reminder_snoozed_until.count(scrub.uid) == 1);
     CHECK(s.encryption_reminder_snoozed_until.count(scrub.uid) == 0);
     CHECK(s.save_key_reminder_dismissals[scrub.uid] == 1);
+}
+
+// ── TESSERACT_ENABLE_SILENT_RECOVERY_SETUP=OFF ───────────────────────────────
+
+TEST_CASE("Silent setup off: a new account gets the setup dialog", "[shell][encryption]")
+{
+    ShellEncryptionSetupTestShell shell;
+    SettingsScrub scrub{"@off1:example.org"};
+    silent_account(shell, scrub.uid);
+    shell.silent_recovery_setup_enabled_ = false;
+    shell.recovery_state_stub_           = 1;
+    shell.check_encryption_setup_();
+    CHECK(shell.silent_enables_ == 0);
+    REQUIRE(shell.overlay_shown_);
+    CHECK(shell.last_mode_ == EncryptionSetupOverlay::Mode::Fresh);
+}
+
+TEST_CASE("Silent setup off: no silent unlock and no sign-out offer", "[shell][encryption]")
+{
+    ShellEncryptionSetupTestShell shell;
+    SettingsScrub scrub{"@off2:example.org"};
+    silent_account(shell, scrub.uid);
+    shell.silent_recovery_setup_enabled_ = false;
+    shell.keychain_[scrub.uid]           = "KEY";
+    tesseract::Settings::instance().recovery_key_unsaved.insert(scrub.uid);
+
+    shell.recovery_state_stub_ = 3; // Incomplete
+    shell.check_encryption_setup_();
+    CHECK(shell.silent_recovers_.empty());
+    REQUIRE(shell.overlay_shown_);
+    CHECK(shell.last_mode_ == EncryptionSetupOverlay::Mode::Recover);
+
+    CHECK_FALSE(shell.intercept_sign_out_for_unsaved_key_([] {}));
 }

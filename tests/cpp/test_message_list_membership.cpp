@@ -203,6 +203,13 @@ TEST_CASE("make_row_data keeps a sender status only when its emoji is pure emoji
         CHECK(r.sender_status_emoji == ok);
         CHECK(r.sender_status_text == "On holiday");
     }
+    // MSC4426 limits the emoji to 32 bytes: 8 x 4-byte emoji fit, 9 don't.
+    const std::string at_limit = "🌴🌴🌴🌴🌴🌴🌴🌴";
+    const std::string too_long = at_limit + "🌴";
+    CHECK(row_for(at_limit).sender_status_emoji == at_limit);
+    CHECK(row_for(too_long).sender_status_emoji.empty());
+    CHECK(row_for(too_long).sender_status_text.empty());
+
     for (const char* bad : {"(admin)", "✔ mod", "🌴a", "", "1"})
     {
         const auto r = row_for(bad);

@@ -267,5 +267,11 @@ TEST_CASE("a row's accessible name includes the sender status only when the sett
     CHECK(row_name(false) == "Alice: hello");
     CHECK(row_name(true) == "Alice (🌴 On holiday): hello");
 
+    // IRC layout never draws the status, so it isn't announced either.
+    const auto prev_layout = settings.message_layout;
+    settings.message_layout = tesseract::Settings::MessageLayout::Irc;
+    CHECK(row_name(true) == "Alice: hello");
+    settings.message_layout = prev_layout;
+
     settings.show_sender_status_in_timeline = prev;
 }

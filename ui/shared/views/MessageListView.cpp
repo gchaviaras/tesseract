@@ -340,6 +340,8 @@ static int64_t steady_ms_now()
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+constexpr std::size_t kMaxStatusEmojiBytes = 32;
+
 MessageRowData make_row_data(const tesseract::Event& ev,
                              const std::string& my_user_id)
 {
@@ -352,7 +354,9 @@ MessageRowData make_row_data(const tesseract::Event& ev,
     // The status emoji is a free string drawn right after the name, so only
     // accept pure emoji — otherwise "(admin)" could pass for part of the name.
     // A rejected status is dropped whole (no tooltip, not announced).
-    if (tk::is_emoji_only(ev.sender_status_emoji))
+    // MSC4426 caps the emoji at 32 bytes; a longer run would squeeze the name.
+    if (ev.sender_status_emoji.size() <= kMaxStatusEmojiBytes &&
+        tk::is_emoji_only(ev.sender_status_emoji))
     {
         row.sender_status_emoji = ev.sender_status_emoji;
         row.sender_status_text = ev.sender_status_text;
@@ -1961,7 +1965,7 @@ public:
                 tesseract::Settings::instance().show_sender_status_in_timeline
                     ? m.sender_status_emoji
                     : std::string{};
-            if (rc.status_key != status_key || (!status_key.empty() && !rc.status))
+            if (rc.status_key != status_key)
             {
                 rc.status.reset();
                 rc.status_key = status_key;
@@ -3275,6 +3279,8 @@ public:
         // Opt-in sender status (emoji is only drawn, so announce it too).
         if (!m.sender_name.empty() &&
             tesseract::Settings::instance().show_sender_status_in_timeline &&
+            tesseract::Settings::instance().message_layout !=
+                tesseract::Settings::MessageLayout::Irc && // IRC doesn't draw it
             (!m.sender_status_emoji.empty() || !m.sender_status_text.empty()))
         {
             const std::string status =
@@ -8879,7 +8885,7 @@ bool MessageListView::on_pointer_move(tk::Point local)
         }
         else if (hover_emoji_tooltip_)
         {
-            if (host_)
+            if (host_ && next == ActionTooltip::None)
                 host_->hide_tooltip(this);
             hover_emoji_tooltip_ = false;
         }
@@ -8907,7 +8913,7 @@ bool MessageListView::on_pointer_move(tk::Point local)
         }
         else if (hover_link_tooltip_)
         {
-            if (host_)
+            if (host_ && next == ActionTooltip::None)
                 host_->hide_tooltip(this);
             hover_link_tooltip_ = false;
         }
@@ -8930,7 +8936,8 @@ bool MessageListView::on_pointer_move(tk::Point local)
         }
         else if (hover_status_tooltip_)
         {
-            if (host_)
+            // An action-pill tooltip shown above replaced this one already.
+            if (host_ && next == ActionTooltip::None)
                 host_->hide_tooltip(this);
             hover_status_tooltip_ = false;
         }

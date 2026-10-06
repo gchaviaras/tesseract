@@ -154,3 +154,84 @@ TEST_CASE("LoginView toggling Mode flips Cancel visibility on its own",
     lv.set_mode(LoginView::Mode::Initial);
     CHECK_FALSE(lv.cancel_visible());
 }
+
+// ── Enter in the homeserver field ───────────────────────────────────────────
+
+TEST_CASE("LoginView remembers Enter pressed while the server is being checked",
+          "[tk][view][login][discovery]")
+{
+    StubHost host;
+    auto lv_owner = tk::create_root_widget<LoginView>(&host);
+    LoginView& lv = *lv_owner;
+    lv.set_relayout([] {});
+    lv.finish_init(); // discovery starts (Discovering)
+
+    CHECK(lv.homeserver_submit_action() == LoginView::SubmitAction::Wait);
+    lv.simulate_homeserver_enter();
+    CHECK(lv.homeserver_submit_pending());
+
+    // The lookup answers (no client here, so there's no OAuth probe to wait
+    // for): the remembered Enter is acted on.
+    lv.simulate_discovery_result(true, "https://example.org", false);
+    CHECK_FALSE(lv.homeserver_submit_pending());
+}
+
+TEST_CASE("LoginView keeps waiting until the server's sign-in methods are known",
+          "[tk][view][login][discovery]")
+{
+    StubHost host;
+    auto lv_owner = tk::create_root_widget<LoginView>(&host);
+    LoginView& lv = *lv_owner;
+    lv.set_relayout([] {});
+    lv.finish_init();
+    lv.simulate_homeserver_enter();
+    // Resolved alone (before the lookup's password answer) isn't enough.
+    lv.set_discovery_state(LoginView::DiscoveryState::Resolved, "https://example.org");
+    CHECK(lv.homeserver_submit_action() == LoginView::SubmitAction::Wait);
+    CHECK(lv.homeserver_submit_pending());
+}
+
+TEST_CASE("LoginView typing a different server drops a remembered Enter",
+          "[tk][view][login][discovery]")
+{
+    StubHost host;
+    auto lv_owner = tk::create_root_widget<LoginView>(&host);
+    LoginView& lv = *lv_owner;
+    lv.set_relayout([] {});
+    lv.finish_init();
+    lv.simulate_homeserver_enter();
+    REQUIRE(lv.homeserver_submit_pending());
+    lv.reset(); // re-runs discovery for a fresh server, like typing
+    CHECK_FALSE(lv.homeserver_submit_pending());
+}
+
+TEST_CASE("LoginView Enter opens password login on a password-only server",
+          "[tk][view][login][discovery]")
+{
+    StubHost host;
+    auto lv_owner = tk::create_root_widget<LoginView>(&host);
+    LoginView& lv = *lv_owner;
+    lv.set_relayout([] {});
+    lv.finish_init();
+    lv.simulate_discovery_result(true, "https://example.org", /*supports_password=*/true);
+    lv.simulate_oauth_probe_result(false);
+    CHECK_FALSE(lv.sign_in_visible());
+#ifdef TESSERACT_LEGACY_LOGIN_ENABLED
+    CHECK(lv.homeserver_submit_action() == LoginView::SubmitAction::Password);
+#else
+    CHECK(lv.homeserver_submit_action() == LoginView::SubmitAction::Nothing);
+#endif
+}
+
+TEST_CASE("LoginView Enter does nothing when the server offers neither",
+          "[tk][view][login][discovery]")
+{
+    StubHost host;
+    auto lv_owner = tk::create_root_widget<LoginView>(&host);
+    LoginView& lv = *lv_owner;
+    lv.set_relayout([] {});
+    lv.finish_init();
+    lv.simulate_discovery_result(true, "https://example.org", false);
+    lv.simulate_oauth_probe_result(false);
+    CHECK(lv.homeserver_submit_action() == LoginView::SubmitAction::Nothing);
+}

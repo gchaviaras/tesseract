@@ -6004,3 +6004,7 @@ msgstr "[Tésséràçt tùrñéd öñ séçùré bàçkùp för yöùr éñçryp
 #: ui/shared/app/ShellBase.cpp
 msgid "Couldn't read your recovery key from this computer's secure storage."
 msgstr "[Çöùldñ't réàd yöùr réçövéry kéy fröm thïs çömpùtér's séçùré störàgé.xxxxxxxxxxxxx]"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Checking how you can sign in to this server…"
+msgstr "[Çhéçkïñg höw yöù çàñ sïgñ ïñ tö thïs sérvér…xxxxxxxx]"

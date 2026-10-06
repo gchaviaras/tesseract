@@ -9,6 +9,7 @@ Tagged releases summarize all changes since the previous tag.
 
 - feat(encryption): recovery is set up silently for accounts without one; the key is held in secure storage and a "Save your recovery key" strip (and a prompt before sign-out) asks the user to save it. Qt6 build + ctest 2238/2238, user-verified Qt6
 - fix(encryption): recovery setup and unlock wait for matrix-sdk's login-time encryption setup, which otherwise created a second cross-signing identity. Qt6 build + ctest 2238/2238, user-verified Qt6
+- fix(login): Enter in the homeserver field opens password login on password-only servers instead of always trying OAuth. Qt6 build + ctest 2238/2238, user-verified Qt6
 - test: tests run with config, data and cache directories in a temporary folder, so they can't overwrite the developer's settings. ctest 2238/2238
 - build(macos): the app icon is rendered with resvg (Homebrew `resvg` or `cargo install resvg`) instead of librsvg's dependency-heavy `rsvg-convert`, which remains a fallback; CI installs resvg. macOS x86_64 Release build, user-verified; CI unrun
 - fix(cmake): macOS configure no longer fails with a dependency cycle on `cargo-build_tesseract_sdk_ffi`; the protoc-object strip step reads the archive path via `TARGET_PROPERTY` instead of `TARGET_FILE`. macOS x86_64 Release build, user-verified

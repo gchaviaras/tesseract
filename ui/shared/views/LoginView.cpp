@@ -246,6 +246,7 @@ void LoginView::set_discovery_state(DiscoveryState s, std::string detail)
     discovery_state_ = s;
     ++registration_gen_;
     ++oauth_gen_;
+    oauth_probe_done_ = false; // a new answer is coming (or none, if not Resolved)
     if (s != DiscoveryState::Resolved)
     {
         registration_supported_ = false;
@@ -309,7 +310,7 @@ void LoginView::set_discovery_state(DiscoveryState s, std::string detail)
 void LoginView::finish_init()
 {
     hs_field_->set_placeholder(tk::tr("matrix.org"));
-    hs_field_->set_on_submit([this] { sign_in_(); });
+    hs_field_->set_on_submit([this] { submit_homeserver_(); });
     hs_field_->set_on_changed(
         [this](const std::string& text) { hs_changed_(text); });
     hs_changed_("");
@@ -458,6 +459,93 @@ void LoginView::sign_in_()
     start_oauth_(false);
 }
 
+LoginView::SubmitAction LoginView::homeserver_submit_action() const
+{
+    // Still checking what the server offers (its sign-in methods and OAuth
+    // support): the OAuth default isn't an answer yet, and a password-only
+    // server would get an OAuth attempt.
+    if (!discovery_settled_ ||
+        (discovery_state_ == DiscoveryState::Resolved && !oauth_probe_done_))
+        return SubmitAction::Wait;
+    // Otherwise the same as the button the form shows.
+    if (oauth_available_)
+        return SubmitAction::OAuth;
+#ifdef TESSERACT_LEGACY_LOGIN_ENABLED
+    if (password_available_)
+        return SubmitAction::Password;
+#endif
+    return SubmitAction::Nothing;
+}
+
+void LoginView::submit_homeserver_()
+{
+    submit_pending_ = false;
+    if (submit_status_shown_)
+    {
+        set_status("");
+        submit_status_shown_ = false;
+    }
+    if (state_ != State::Form)
+        return;
+    switch (homeserver_submit_action())
+    {
+        case SubmitAction::Wait:
+            // Say the Enter was taken; it goes ahead once the check is done.
+            submit_pending_      = true;
+            submit_status_shown_ = true;
+            set_status(tk::tr("Checking how you can sign in to this server\xe2\x80\xa6"));
+            if (relayout_) relayout_();
+            break;
+        case SubmitAction::OAuth:
+            start_oauth_(false);
+            break;
+        case SubmitAction::Password:
+#ifdef TESSERACT_LEGACY_LOGIN_ENABLED
+            switch_to_password_form_();
+#endif
+            break;
+        case SubmitAction::Nothing:
+            break;
+    }
+}
+
+void LoginView::run_pending_submit_()
+{
+    if (submit_pending_ && homeserver_submit_action() != SubmitAction::Wait)
+        submit_homeserver_();
+}
+
+void LoginView::apply_discovery_result_(bool ok, const std::string& base_url_or_error,
+                                        bool supports_password)
+{
+    if (ok)
+        set_discovery_state(DiscoveryState::Resolved, base_url_or_error);
+    else
+        set_discovery_state(DiscoveryState::Failed, base_url_or_error);
+#ifdef TESSERACT_LEGACY_LOGIN_ENABLED
+    // Strict: the toggle button only ever appears once discovery positively
+    // confirms (Resolved) the server supports m.login.password. Any other
+    // outcome keeps it hidden.
+    update_password_availability_(ok && supports_password);
+#else
+    (void)supports_password;
+#endif
+    discovery_settled_ = true;
+    relayout_();
+    // A Failed check settles it; a Resolved one still waits for the OAuth
+    // probe (which runs it when it answers).
+    run_pending_submit_();
+}
+
+void LoginView::oauth_probe_done_result_(bool supported)
+{
+    oauth_probe_done_ = true;
+    update_oauth_availability_(supported);
+    if (relayout_)
+        relayout_();
+    run_pending_submit_();
+}
+
 void LoginView::probe_registration_support_(const std::string& base_url)
 {
     auto* snap = client_;
@@ -498,7 +586,12 @@ void LoginView::probe_oauth_support_(const std::string& base_url)
 {
     auto* snap = client_;
     if (!snap || base_url.empty())
+    {
+        // Nothing to ask: keep the permissive default, but count the check
+        // as done so a remembered Enter isn't stuck waiting.
+        oauth_probe_done_result_(oauth_available_);
         return;
+    }
     uint32_t gen = oauth_gen_.load();
     auto body = [this, gen, snap, base_url]
     {
@@ -512,9 +605,7 @@ void LoginView::probe_oauth_support_(const std::string& base_url)
             {
                 if (gen != oauth_gen_.load())
                     return;
-                update_oauth_availability_(supported);
-                if (relayout_)
-                    relayout_();
+                oauth_probe_done_result_(supported);
             });
     };
     if (run_async_)
@@ -531,6 +622,15 @@ void LoginView::hs_changed_(const std::string& text)
     const std::string effective = text.empty() ? kDefaultHomeserver : text;
 
     uint32_t gen = ++discovery_gen_;
+    // A different server: an Enter pressed for the old one no longer applies.
+    submit_pending_    = false;
+    oauth_probe_done_  = false;
+    discovery_settled_ = false;
+    if (submit_status_shown_)
+    {
+        set_status("");
+        submit_status_shown_ = false;
+    }
     set_discovery_state(DiscoveryState::Discovering);
     update_oauth_availability_(true); // fresh cycle: reset to permissive default
 #ifdef TESSERACT_LEGACY_LOGIN_ENABLED
@@ -563,19 +663,9 @@ void LoginView::hs_changed_(const std::string& text)
             {
                 if (gen != discovery_gen_.load())
                     return;
-                if (result)
-                    set_discovery_state(DiscoveryState::Resolved,
-                                        result.base_url);
-                else
-                    set_discovery_state(DiscoveryState::Failed,
-                                        result.error);
-#ifdef TESSERACT_LEGACY_LOGIN_ENABLED
-                // Strict: the toggle button only ever appears once discovery
-                // positively confirms (Resolved) the server supports
-                // m.login.password. Any other outcome keeps it hidden.
-                update_password_availability_(result && result.supports_password);
-#endif
-                relayout_();
+                apply_discovery_result_(static_cast<bool>(result),
+                                        result ? result.base_url : result.error,
+                                        result && result.supports_password);
             });
     };
 

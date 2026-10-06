@@ -5318,3 +5318,7 @@ msgstr "Tesseract hat die sichere Sicherung deiner verschlüsselten Nachrichten 
 #: ui/shared/app/ShellBase.cpp
 msgid "Couldn't read your recovery key from this computer's secure storage."
 msgstr "Dein Wiederherstellungsschlüssel konnte nicht aus dem sicheren Speicher dieses Computers gelesen werden."
+
+#: ui/shared/views/LoginView.cpp
+msgid "Checking how you can sign in to this server…"
+msgstr "Anmeldemöglichkeiten dieses Servers werden geprüft…"

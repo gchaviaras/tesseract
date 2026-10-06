@@ -98,6 +98,40 @@ public:
         return resolved_base_url_;
     }
 
+    /// What Enter in the homeserver field does right now: the form's main
+    /// action for this server. `Wait` while the server is still being
+    /// checked (the Enter is remembered and acted on once it's known).
+    enum class SubmitAction
+    {
+        Wait,
+        OAuth,
+        Password,
+        Nothing
+    };
+    SubmitAction homeserver_submit_action() const;
+    bool homeserver_submit_pending() const
+    {
+        return submit_pending_;
+    }
+
+    // Test helpers: press Enter in the homeserver field; report the OAuth
+    // metadata probe's answer (as probe_oauth_support_ would).
+    void simulate_homeserver_enter()
+    {
+        submit_homeserver_();
+    }
+    void simulate_oauth_probe_result(bool supported)
+    {
+        oauth_probe_done_result_(supported);
+    }
+    // Test helper: the homeserver lookup's answer (as hs_changed_'s worker
+    // reports it).
+    void simulate_discovery_result(bool ok, const std::string& base_url_or_error,
+                                   bool supports_password)
+    {
+        apply_discovery_result_(ok, base_url_or_error, supports_password);
+    }
+
     // -----------------------------------------------------------------------
     // Controller wiring — call before finish_init()
     // -----------------------------------------------------------------------
@@ -230,6 +264,17 @@ private:
 
     // Controller implementations
     void sign_in_();
+    // Enter in the homeserver field (see homeserver_submit_action()).
+    void submit_homeserver_();
+    // Acts on a remembered Enter once the server check has settled.
+    void run_pending_submit_();
+    // probe_oauth_support_'s outcome (or its absence): records it, updates
+    // the form and runs a remembered Enter.
+    void oauth_probe_done_result_(bool supported);
+    // The homeserver lookup finished: record what the server offers and run
+    // a remembered Enter if nothing else is outstanding.
+    void apply_discovery_result_(bool ok, const std::string& base_url_or_error,
+                                 bool supports_password);
     void start_oauth_(bool register_account);
     void probe_registration_support_(const std::string& base_url);
     void probe_oauth_support_(const std::string& base_url);
@@ -305,6 +350,16 @@ private:
     // because sign_in_btn_ exists in every build configuration.
     bool                     oauth_available_ = true;
     std::atomic<uint32_t>    oauth_gen_{0};
+    // Whether this discovery cycle's OAuth probe has answered: until then,
+    // oauth_available_ is only the permissive default.
+    bool                     oauth_probe_done_ = false;
+    // Enter was pressed in the homeserver field while the server was still
+    // being checked.
+    bool                     submit_pending_ = false;
+    // The status line shows submit_homeserver_'s "Checking…" message.
+    bool                     submit_status_shown_ = false;
+    // This cycle's homeserver lookup has answered (with its sign-in methods).
+    bool                     discovery_settled_ = false;
 
 #ifdef TESSERACT_LEGACY_LOGIN_ENABLED
     /// `OAuthOnly` — the main form (homeserver field, OAuth button, and the

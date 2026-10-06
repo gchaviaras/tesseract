@@ -263,11 +263,12 @@ MessageRowData make_row_data(const tesseract::Event& ev,
 // Membership-group boundary helpers, factored out as pure functions (over
 // `msgs`/an index) so they're unit-testable without a live MessageListView.
 // MessageListView::Adapter's row-height/paint/click logic delegates to
-// these. A "group" is a maximal run of consecutive Kind::Membership rows
-// sharing the same membership_action; any other kind (including a virtual
-// day-separator row) or a different action starts a new group. No
-// time-based splitting — arbitrarily distant same-action rows still group
-// as long as nothing else is interleaved.
+// these. A "group" is a maximal run of consecutive Kind::Membership rows,
+// whatever their membership_action; any other kind (including a virtual
+// day-separator row) starts a new group. No time-based splitting —
+// arbitrarily distant rows still group as long as nothing else is
+// interleaved. Collapsed, a group shows one summary line per distinct
+// action (see membership_group_actions).
 bool is_membership_group_start(const std::vector<MessageRowData>& msgs,
                                std::size_t index);
 // Exclusive end index of the group starting at `start` (which must satisfy
@@ -277,6 +278,22 @@ std::size_t membership_group_end(const std::vector<MessageRowData>& msgs,
 // Walk backward from any Membership row to the start of its group.
 std::size_t membership_group_start_of(const std::vector<MessageRowData>& msgs,
                                       std::size_t index);
+// One collapsed-summary line: an action and the rows (indices into msgs)
+// that carry it.
+struct MembershipActionRun
+{
+    tesseract::MembershipAction action{};
+    std::vector<std::size_t> rows;
+};
+// The distinct actions of rows [start, end), in first-appearance order.
+std::vector<MembershipActionRun>
+membership_group_actions(const std::vector<MessageRowData>& msgs,
+                         std::size_t start, std::size_t end);
+// Whether the group starting at `start` can be expanded: only when some
+// action has more than one row. If every action has a single row, the
+// collapsed summary already shows each event on its own line.
+bool membership_group_expandable(const std::vector<MessageRowData>& msgs,
+                                 std::size_t start);
 // Appends the state event's free-text reason to a removal phrase (kick /
 // ban / kick-and-ban), e.g. "Bob was removed by Alice. Reason: spam". Other
 // actions, and rows without a reason, pass through unchanged.

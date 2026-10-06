@@ -2967,6 +2967,11 @@ msgstr "[{0} çhàñgéd thé rööm ñàmé tö {1}xxxxxx]"
 msgid "{0} and {1}"
 msgstr "[{0} àñd {1}xx]"
 
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0}; {1}"
+msgstr "[{0}; {1}x]"
+
 #: ui/shared/views/MessageListView.cpp:1075
 #, c++-format
 msgid "{0}, {1} and {2} other"

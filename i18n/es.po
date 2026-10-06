@@ -1174,6 +1174,10 @@ msgid "{0} and {1}"
 msgstr "{0} y {1}"
 
 #: ui/shared/views/MessageListView.cpp
+msgid "{0}; {1}"
+msgstr "{0}; {1}"
+
+#: ui/shared/views/MessageListView.cpp
 #, c++-format
 msgid "{0}, {1} and {2} other"
 msgid_plural "{0}, {1} and {2} others"

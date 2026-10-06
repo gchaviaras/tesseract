@@ -606,22 +606,45 @@ bool is_membership_group_start(const std::vector<MessageRowData>& msgs,
         return false;
     if (index == 0)
         return true;
-    const auto& prev = msgs[index - 1];
-    return prev.kind != MessageRowData::Kind::Membership ||
-           prev.membership_action != msgs[index].membership_action;
+    return msgs[index - 1].kind != MessageRowData::Kind::Membership;
 }
 
 std::size_t membership_group_end(const std::vector<MessageRowData>& msgs,
                                  std::size_t start)
 {
     std::size_t j = start + 1;
-    while (j < msgs.size() &&
-           msgs[j].kind == MessageRowData::Kind::Membership &&
-           msgs[j].membership_action == msgs[start].membership_action)
+    while (j < msgs.size() && msgs[j].kind == MessageRowData::Kind::Membership)
     {
         ++j;
     }
     return j;
+}
+
+std::vector<MembershipActionRun>
+membership_group_actions(const std::vector<MessageRowData>& msgs,
+                         std::size_t start, std::size_t end)
+{
+    std::vector<MembershipActionRun> runs;
+    for (std::size_t i = start; i < end; ++i)
+    {
+        auto it = std::find_if(runs.begin(), runs.end(), [&](const auto& r) {
+            return r.action == msgs[i].membership_action;
+        });
+        if (it == runs.end())
+        {
+            runs.push_back({msgs[i].membership_action, {}});
+            it = std::prev(runs.end());
+        }
+        it->rows.push_back(i);
+    }
+    return runs;
+}
+
+bool membership_group_expandable(const std::vector<MessageRowData>& msgs,
+                                 std::size_t start)
+{
+    const std::size_t end = membership_group_end(msgs, start);
+    return end - start > membership_group_actions(msgs, start, end).size();
 }
 
 std::size_t membership_group_start_of(const std::vector<MessageRowData>& msgs,
@@ -1158,6 +1181,28 @@ std::string membership_summary_phrase(tesseract::MembershipAction action,
     return label;
 }
 
+std::string membership_target_label(const MessageRowData& m)
+{
+    return m.membership_target_name.empty() ? m.membership_target_user_id
+                                            : m.membership_target_name;
+}
+
+// One collapsed-summary line: the phrase for every row of `run`. A
+// single-member line keeps the target's pronoun and the event's reason.
+std::string membership_run_phrase(const std::vector<MessageRowData>& msgs,
+                                  const MembershipActionRun& run)
+{
+    std::vector<std::string> names;
+    names.reserve(run.rows.size());
+    for (std::size_t i : run.rows)
+        names.push_back(membership_target_label(msgs[i]));
+    if (run.rows.size() != 1)
+        return membership_summary_phrase(run.action, names, "their");
+    const MessageRowData& only = msgs[run.rows.front()];
+    return with_membership_reason(
+        membership_summary_phrase(run.action, names, only.target_pronoun), only);
+}
+
 } // namespace
 
 static bool is_virtual_event(MessageRowData::Kind k)
@@ -1439,6 +1484,25 @@ public:
         return tesseract::views::membership_group_start_of(owner_.messages_,
                                                             index);
     }
+    std::vector<MembershipActionRun> membership_group_actions(std::size_t start,
+                                                              std::size_t end) const
+    {
+        return tesseract::views::membership_group_actions(owner_.messages_,
+                                                           start, end);
+    }
+    bool membership_group_expandable(std::size_t start) const
+    {
+        return tesseract::views::membership_group_expandable(owner_.messages_,
+                                                              start);
+    }
+    // A group start row shows its collapsed summary (one line per action)
+    // when it can't be expanded or isn't expanded right now.
+    bool membership_group_collapsed(std::size_t start) const
+    {
+        return !membership_group_expandable(start) ||
+               !owner_.membership_groups_.is_expanded(
+                   owner_.messages_[start].event_id);
+    }
 
     std::size_t count() const override
     {
@@ -1630,14 +1694,19 @@ public:
         }
         if (m.kind == Kind::Membership)
         {
-            // Group-start rows are always one line tall (either the
-            // collapsed summary or the first member's own expanded line).
+            // A collapsed group-start row is one line per distinct action
+            // (the summary); expanded, it's the first member's own line.
             // Non-start rows are 0 height while their group is collapsed
             // (absorbed into the start row's summary) and one line tall
             // once expanded.
             if (is_membership_group_start(index))
             {
-                return kPinnedEventH;
+                if (!membership_group_collapsed(index))
+                    return kPinnedEventH;
+                const std::size_t lines =
+                    membership_group_actions(index, membership_group_end(index))
+                        .size();
+                return kPinnedEventH * static_cast<float>(lines);
             }
             std::size_t start = membership_group_start_of(index);
             return owner_.membership_groups_.is_expanded(
@@ -1759,11 +1828,10 @@ public:
         {
             if (is_membership_group_start(index))
             {
-                std::size_t end = membership_group_end(index);
-                bool single = (end - index) == 1;
-                if (single || !owner_.membership_groups_.is_expanded(m.event_id))
+                if (membership_group_collapsed(index))
                 {
-                    paint_membership_summary(index, end, ctx, bounds);
+                    paint_membership_summary(index, membership_group_end(index),
+                                             ctx, bounds);
                 }
                 else
                 {
@@ -3236,23 +3304,21 @@ public:
         {
             if (is_membership_group_start(index))
             {
-                std::size_t end = membership_group_end(index);
-                bool single = (end - index) == 1;
-                if (single || !owner_.membership_groups_.is_expanded(m.event_id))
+                if (membership_group_collapsed(index))
                 {
-                    std::vector<std::string> names;
-                    for (std::size_t i = index; i < end; ++i)
+                    // Every per-action summary line, read as one sentence
+                    // list.
+                    std::string text;
+                    for (const auto& run : membership_group_actions(
+                             index, membership_group_end(index)))
                     {
-                        const auto& mm = owner_.messages_[i];
-                        names.push_back(mm.membership_target_name.empty()
-                                            ? mm.membership_target_user_id
-                                            : mm.membership_target_name);
+                        std::string phrase =
+                            membership_run_phrase(owner_.messages_, run);
+                        text = text.empty()
+                                   ? std::move(phrase)
+                                   : tk::trf(tk::tr("{0}; {1}"), {text, phrase});
                     }
-                    std::string phrase = membership_summary_phrase(
-                        m.membership_action, names,
-                        names.size() == 1 ? m.target_pronoun : "their");
-                    return names.size() == 1 ? with_membership_reason(std::move(phrase), m)
-                                             : phrase;
+                    return text;
                 }
                 return membership_expanded_phrase(m);
             }
@@ -4238,47 +4304,49 @@ private:
         }
     }
 
-    // Collapsed membership-group summary: up to 3 stacked target avatars
-    // followed by a pluralised summary phrase built from every member's
-    // name (e.g. "Alice, Bob and 3 others joined the room"). Covers rows
-    // [start, end) of messages_, all sharing the same membership_action.
+    // Collapsed membership-group summary covering rows [start, end) of
+    // messages_: one line per distinct action, in first-appearance order,
+    // each with up to 3 stacked target avatars and a pluralised phrase
+    // (e.g. "Alice, Bob and 3 others joined the room").
     void paint_membership_summary(std::size_t start, std::size_t end,
                                   tk::PaintCtx& ctx, tk::Rect bounds) const
     {
-        const auto& msgs = owner_.messages_;
-
         if (row_renderer_->paint_membership_summary(start, end, ctx, bounds,
                                                     *this))
             return;
 
+        float y = bounds.y;
+        for (const auto& run : membership_group_actions(start, end))
+        {
+            paint_membership_summary_line_(run, ctx,
+                                           {bounds.x, y, bounds.w, kPinnedEventH});
+            y += kPinnedEventH;
+        }
+    }
+
+    void paint_membership_summary_line_(const MembershipActionRun& run,
+                                        tk::PaintCtx& ctx, tk::Rect bounds) const
+    {
+        const auto& msgs = owner_.messages_;
         constexpr float kAvatarD = 18.0f;
         constexpr float kStride = 12.0f;
         constexpr std::size_t kCap = 3;
-        const std::size_t total = end - start;
+        const std::size_t total = run.rows.size();
         const std::size_t visible = std::min(total, kCap);
         const float cy = bounds.y + kPinnedEventH * 0.5f;
-
-        std::vector<std::string> names;
-        names.reserve(total);
-        for (std::size_t i = start; i < end; ++i)
-        {
-            const auto& mm = msgs[i];
-            names.push_back(mm.membership_target_name.empty()
-                                 ? mm.membership_target_user_id
-                                 : mm.membership_target_name);
-        }
 
         float cx = bounds.x + kMsgListPadX + kAvatarD * 0.5f;
         for (std::size_t i = 0; i < visible; ++i)
         {
-            const auto& mm = msgs[start + i];
+            const auto& mm = msgs[run.rows[i]];
             const tk::Image* img = nullptr;
             if (owner_.avatar_provider_ &&
                 !mm.membership_target_avatar_url.empty())
             {
                 img = owner_.avatar_provider_(mm.membership_target_avatar_url);
             }
-            draw_avatar(ctx.canvas, img, {cx, cy}, kAvatarD, names[i],
+            draw_avatar(ctx.canvas, img, {cx, cy}, kAvatarD,
+                        membership_target_label(mm),
                         ctx.theme.palette.avatar_initials_bg,
                         ctx.theme.palette.avatar_initials_text);
             cx += kStride;
@@ -4294,28 +4362,23 @@ private:
         st.wrap = false;
         st.trim = tk::TextTrim::Ellipsis;
         st.max_width = std::max(0.0f, bounds.x + bounds.w - kMsgListPadX - text_x);
-        // Lazily resolve the pronoun only for a singleton "group" (a single
-        // named person) whose template actually uses one — a genuine
-        // multi-person group has no single gender to reflect, so it's never
-        // gated here. Same visible-row-only, cache/inflight-deduped fetch
-        // as the expanded-phrase case above.
+        // Lazily resolve the pronoun only for a single-member line (one
+        // named person) whose template actually uses one — a multi-person
+        // line has no single gender to reflect, so it's never gated here.
+        // Same visible-row-only, cache/inflight-deduped fetch as the
+        // expanded-phrase case above.
         using A = tesseract::MembershipAction;
+        const auto& first = msgs[run.rows.front()];
         const bool singleton_uses_pronoun =
-            total == 1 && (msgs[start].membership_action == A::InvitationRevoked ||
-                          msgs[start].membership_action == A::KnockRetracted);
-        if (singleton_uses_pronoun && !msgs[start].pronoun_resolved &&
-            !msgs[start].membership_target_user_id.empty() &&
+            total == 1 && (run.action == A::InvitationRevoked ||
+                           run.action == A::KnockRetracted);
+        if (singleton_uses_pronoun && !first.pronoun_resolved &&
+            !first.membership_target_user_id.empty() &&
             owner_.on_member_pronoun_needed)
         {
-            owner_.on_member_pronoun_needed(msgs[start].membership_target_user_id);
+            owner_.on_member_pronoun_needed(first.membership_target_user_id);
         }
-        std::string phrase =
-            membership_summary_phrase(msgs[start].membership_action, names,
-                                      total == 1 ? msgs[start].target_pronoun
-                                                 : "their");
-        if (total == 1)
-            phrase = with_membership_reason(std::move(phrase), msgs[start]);
-        auto lo = ctx.factory.build_text(phrase, st);
+        auto lo = ctx.factory.build_text(membership_run_phrase(msgs, run), st);
         if (lo)
         {
             tk::Size sz = lo->measure();
@@ -6856,25 +6919,20 @@ public:
                                   tk::PaintCtx& ctx, tk::Rect bounds,
                                   const Adapter& ad) const override
     {
+        // One "* …" line per distinct action, stamped with the time of
+        // that action's first event.
         const auto& msgs = ad.owner_.messages();
-        std::vector<std::string> names;
-        names.reserve(end - start);
-        for (std::size_t i = start; i < end; ++i)
-            names.push_back(msgs[i].membership_target_name.empty()
-                                ? msgs[i].membership_target_user_id
-                                : msgs[i].membership_target_name);
-        ad.paint_irc_system_line_(
-            ctx, bounds, kPinnedEventH,
-            msgirc::timestamp_part(format_hhmm(msgs[start].timestamp_ms)) +
-                "* " +
-                ((end - start) == 1
-                     ? with_membership_reason(
-                           membership_summary_phrase(msgs[start].membership_action,
-                                                     names, msgs[start].target_pronoun),
-                           msgs[start])
-                     : membership_summary_phrase(msgs[start].membership_action,
-                                                 names, "their")),
-            ctx.theme.palette.text_muted, /*rule=*/false);
+        float y = bounds.y;
+        for (const auto& run : membership_group_actions(msgs, start, end))
+        {
+            ad.paint_irc_system_line_(
+                ctx, {bounds.x, y, bounds.w, kPinnedEventH}, kPinnedEventH,
+                msgirc::timestamp_part(
+                    format_hhmm(msgs[run.rows.front()].timestamp_ms)) +
+                    "* " + membership_run_phrase(msgs, run),
+                ctx.theme.palette.text_muted, /*rule=*/false);
+            y += kPinnedEventH;
+        }
         return true;
     }
 
@@ -8209,11 +8267,17 @@ void MessageListView::update_member_pronoun(const std::string& user_id,
         return;
     // Re-measure only the rows whose pronoun just resolved — mirrors the
     // sender-avatar re-pin scan above (targeted invalidate_row, no blanket
-    // invalidate_data()).
+    // invalidate_data()). A collapsed group draws every member's phrase on
+    // its start row, so that row is re-measured too.
     preserve_top_through([&]
     {
         for (std::size_t i : matched_indices)
+        {
             invalidate_row(i);
+            const std::size_t start = adapter_->membership_group_start_of(i);
+            if (start != i)
+                invalidate_row(start);
+        }
     });
 }
 
@@ -10021,10 +10085,10 @@ bool MessageListView::on_pointer_down(tk::Point local)
             if (m.kind == MessageRowData::Kind::Membership)
             {
                 std::size_t start = adapter_->membership_group_start_of(row);
-                std::size_t end = adapter_->membership_group_end(start);
-                // Single-member "groups" have nothing to expand; leave the
-                // click unconsumed (falls through, same as other system rows).
-                if (end - start > 1)
+                // Groups whose collapsed summary already shows every event
+                // (one per action) have nothing to expand; leave the click
+                // unconsumed (falls through, same as other system rows).
+                if (adapter_->membership_group_expandable(start))
                 {
                     press_membership_group_ = true;
                     press_membership_group_key_ = messages_[start].event_id;
@@ -11577,7 +11641,7 @@ bool MessageListView::kbd_row_navigable_(int idx) const
     if (!is_virtual_event(messages_[i].kind))
         return true;
     return adapter_->is_membership_group_start(i) &&
-           adapter_->membership_group_end(i) - i > 1;
+           adapter_->membership_group_expandable(i);
 }
 
 int MessageListView::kbd_step_row_(int from, int dir) const

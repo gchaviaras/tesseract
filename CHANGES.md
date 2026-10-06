@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-06
 
+- feat(timeline): consecutive membership events of different kinds (join, leave, invite, accept, …) form one group; collapsed, it shows one line per kind instead of a separate group each time the kind changes. Win32 Release build + ctest 2254/2255 (emoji backend probe failing)
 - build: matrix-rust-sdk updated to 0.19.1 (fork pin `b18166c6`; ruma now from crates.io 0.17, Rust ≥ 1.96 needed). The SDK now provides our status writes, `m.call` mirroring, URL previews, call transport discovery, DM member filtering and presence updates. Qt6 build + ctest 2256/2256, cargo 769
 - feat(timeline): Appearance › Timeline option (off by default) shows each sender's status emoji after their name in Classic and Bubbles; hovering it shows the status text. Statuses come from sync (MSC4262), so servers without the profiles extension show none. Profile-card status now reads through matrix-sdk's typed MSC4426 API, which ignores the stable `m.status` key and drops a status missing its text or emoji. Qt6 build + ctest 2255/2255, cargo 765
 - fix(tk): a popup drawn over a native text field (e.g. the reaction emoji picker overlapping the composer) now gets the clicks, hover and scrolling in the overlap instead of the field. Qt masks the field, macOS declines `hitTest:`, GTK4 stacks an input shield above it. Qt6 build + ctest 2248/2248, user-verified Qt6

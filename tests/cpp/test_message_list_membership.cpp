@@ -7,7 +7,9 @@
 using tesseract::MembershipAction;
 using tesseract::views::is_membership_group_start;
 using tesseract::views::MembershipGroupExpander;
+using tesseract::views::membership_group_actions;
 using tesseract::views::membership_group_end;
+using tesseract::views::membership_group_expandable;
 using tesseract::views::membership_group_start_of;
 using tesseract::views::MessageRowData;
 using tesseract::views::make_row_data;
@@ -58,7 +60,7 @@ TEST_CASE("consecutive same-action membership rows form one group",
     CHECK(membership_group_start_of(msgs, 2) == 0);
 }
 
-TEST_CASE("a change in membership action starts a new group",
+TEST_CASE("mixed membership actions stay in one group",
           "[message_list][membership]")
 {
     std::vector<MessageRowData> msgs = {
@@ -69,12 +71,52 @@ TEST_CASE("a change in membership action starts a new group",
     };
     CHECK(is_membership_group_start(msgs, 0));
     CHECK_FALSE(is_membership_group_start(msgs, 1));
-    CHECK(is_membership_group_start(msgs, 2)); // Left starts a new group
-    CHECK(is_membership_group_start(msgs, 3)); // back to Joined: new group again
+    CHECK_FALSE(is_membership_group_start(msgs, 2));
+    CHECK_FALSE(is_membership_group_start(msgs, 3));
+    CHECK(membership_group_end(msgs, 0) == 4);
+    CHECK(membership_group_start_of(msgs, 3) == 0);
+}
 
-    CHECK(membership_group_end(msgs, 0) == 2); // {a, b}
-    CHECK(membership_group_end(msgs, 2) == 3); // {c}
-    CHECK(membership_group_end(msgs, 3) == 4); // {d}
+TEST_CASE("membership_group_actions lists actions in first-appearance order",
+          "[message_list][membership]")
+{
+    std::vector<MessageRowData> msgs = {
+        membership_row("$a", MembershipAction::Joined),
+        membership_row("$b", MembershipAction::Left),
+        membership_row("$c", MembershipAction::Joined),
+        membership_row("$d", MembershipAction::Invited),
+    };
+    const auto runs = membership_group_actions(msgs, 0, 4);
+    REQUIRE(runs.size() == 3);
+    CHECK(runs[0].action == MembershipAction::Joined);
+    CHECK(runs[0].rows == std::vector<std::size_t>{0, 2});
+    CHECK(runs[1].action == MembershipAction::Left);
+    CHECK(runs[1].rows == std::vector<std::size_t>{1});
+    CHECK(runs[2].action == MembershipAction::Invited);
+    CHECK(runs[2].rows == std::vector<std::size_t>{3});
+}
+
+TEST_CASE("a group is expandable only when an action repeats",
+          "[message_list][membership]")
+{
+    std::vector<MessageRowData> distinct = {
+        membership_row("$a", MembershipAction::Joined),
+        membership_row("$b", MembershipAction::Left),
+        membership_row("$c", MembershipAction::Invited),
+    };
+    CHECK_FALSE(membership_group_expandable(distinct, 0));
+
+    std::vector<MessageRowData> repeated = {
+        membership_row("$a", MembershipAction::Joined),
+        membership_row("$b", MembershipAction::Left),
+        membership_row("$c", MembershipAction::Joined),
+    };
+    CHECK(membership_group_expandable(repeated, 0));
+
+    std::vector<MessageRowData> single = {
+        membership_row("$a", MembershipAction::Joined),
+    };
+    CHECK_FALSE(membership_group_expandable(single, 0));
 }
 
 TEST_CASE("a non-membership row breaks a group", "[message_list][membership]")

@@ -29,6 +29,50 @@ use std::sync::Arc;
 // Free helpers
 // ---------------------------------------------------------------------------
 
+/// Sender display name, avatar and MSC4426 status flattened for the FFI.
+/// All empty while the profile is still pending.
+#[cfg(not(test))]
+struct SenderProfileFfi {
+    sender_name: String,
+    sender_avatar_url: String,
+    sender_status_emoji: String,
+    sender_status_text: String,
+}
+
+#[cfg(not(test))]
+fn sender_profile_ffi(
+    details: &TimelineDetails<matrix_sdk_ui::timeline::Profile>,
+) -> SenderProfileFfi {
+    let TimelineDetails::Ready(p) = details else {
+        return SenderProfileFfi {
+            sender_name: String::new(),
+            sender_avatar_url: String::new(),
+            sender_status_emoji: String::new(),
+            sender_status_text: String::new(),
+        };
+    };
+    let (sender_status_emoji, sender_status_text) = status_ffi(p.status.as_ref());
+    SenderProfileFfi {
+        sender_name: p.display_name.clone().unwrap_or_default(),
+        sender_avatar_url: p
+            .avatar_url
+            .as_ref()
+            .map(|u| u.to_string())
+            .unwrap_or_default(),
+        sender_status_emoji,
+        sender_status_text,
+    }
+}
+
+/// `(emoji, text)` of an MSC4426 status; both empty when unset.
+pub(super) fn status_ffi(
+    status: Option<&matrix_sdk::ruma::profile::StatusProfileField>,
+) -> (String, String) {
+    status
+        .map(|s| (s.emoji.clone(), s.text.clone()))
+        .unwrap_or_default()
+}
+
 /// Zero-valued `TimelineEvent` used as the base for struct update syntax.
 /// Every construction site only needs to list the fields that differ from zero.
 #[cfg(not(test))]
@@ -39,6 +83,8 @@ pub(super) fn ffi_event_defaults() -> TimelineEvent {
         sender: String::new(),
         sender_name: String::new(),
         sender_avatar_url: String::new(),
+        sender_status_emoji: String::new(),
+        sender_status_text: String::new(),
         body: String::new(),
         timestamp: 0,
         msg_type: String::new(),
@@ -658,18 +704,12 @@ pub(super) async fn timeline_item_to_ffi(
                     .map(|ids| ids.iter().map(|id| id.to_string()).collect())
                     .unwrap_or_default();
                 let body = pinned_events_action(&new_ids, &old_ids);
-                let (sender_name, sender_avatar_url) =
-                    if let TimelineDetails::Ready(p) = event_item.sender_profile() {
-                        (
-                            p.display_name.clone().unwrap_or_default(),
-                            p.avatar_url
-                                .as_ref()
-                                .map(|u| u.to_string())
-                                .unwrap_or_default(),
-                        )
-                    } else {
-                        (String::new(), String::new())
-                    };
+                let SenderProfileFfi {
+        sender_name,
+        sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
+    } = sender_profile_ffi(event_item.sender_profile());
                 return Some(TimelineEvent {
                     room_id: room_id.to_owned(),
                     msg_type: "m.room.pinned_events".to_owned(),
@@ -680,6 +720,8 @@ pub(super) async fn timeline_item_to_ffi(
                     sender: event_item.sender().to_string(),
                     sender_name,
                     sender_avatar_url,
+                    sender_status_emoji,
+                    sender_status_text,
                     body,
                     timestamp: event_item.timestamp().get().into(),
                     ..ffi_event_defaults()
@@ -697,18 +739,12 @@ pub(super) async fn timeline_item_to_ffi(
                     .as_ref()
                     .and_then(|pc| pc.name.clone())
                     .unwrap_or_default();
-                let (sender_name, sender_avatar_url) =
-                    if let TimelineDetails::Ready(p) = event_item.sender_profile() {
-                        (
-                            p.display_name.clone().unwrap_or_default(),
-                            p.avatar_url
-                                .as_ref()
-                                .map(|u| u.to_string())
-                                .unwrap_or_default(),
-                        )
-                    } else {
-                        (String::new(), String::new())
-                    };
+                let SenderProfileFfi {
+        sender_name,
+        sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
+    } = sender_profile_ffi(event_item.sender_profile());
                 return Some(TimelineEvent {
                     room_id: room_id.to_owned(),
                     msg_type: "m.room.name".to_owned(),
@@ -719,6 +755,8 @@ pub(super) async fn timeline_item_to_ffi(
                     sender: event_item.sender().to_string(),
                     sender_name,
                     sender_avatar_url,
+                    sender_status_emoji,
+                    sender_status_text,
                     room_name_new,
                     room_name_old,
                     timestamp: event_item.timestamp().get().into(),
@@ -744,18 +782,12 @@ pub(super) async fn timeline_item_to_ffi(
             // `.change()` cannot be computed — not a real transition, drop.
             return None;
         };
-        let (sender_name, sender_avatar_url) =
-            if let TimelineDetails::Ready(p) = event_item.sender_profile() {
-                (
-                    p.display_name.clone().unwrap_or_default(),
-                    p.avatar_url
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                )
-            } else {
-                (String::new(), String::new())
-            };
+        let SenderProfileFfi {
+        sender_name,
+        sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
+    } = sender_profile_ffi(event_item.sender_profile());
         return Some(TimelineEvent {
             room_id: room_id.to_owned(),
             msg_type: "m.room.member".to_owned(),
@@ -766,6 +798,8 @@ pub(super) async fn timeline_item_to_ffi(
             sender: event_item.sender().to_string(),
             sender_name,
             sender_avatar_url,
+            sender_status_emoji,
+            sender_status_text,
             membership_action: action.to_owned(),
             membership_target_user_id: change.user_id().to_string(),
             membership_target_name: change.display_name().unwrap_or_default(),
@@ -827,18 +861,12 @@ pub(super) async fn timeline_item_to_ffi(
             _ => UtdCause::Unknown,
         };
         let body = utd_message_for_cause(cause).to_owned();
-        let (sender_name, sender_avatar_url) =
-            if let TimelineDetails::Ready(p) = event_item.sender_profile() {
-                (
-                    p.display_name.clone().unwrap_or_default(),
-                    p.avatar_url
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                )
-            } else {
-                (String::new(), String::new())
-            };
+        let SenderProfileFfi {
+        sender_name,
+        sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
+    } = sender_profile_ffi(event_item.sender_profile());
         return Some(TimelineEvent {
             event_id: event_item
                 .event_id()
@@ -848,6 +876,8 @@ pub(super) async fn timeline_item_to_ffi(
             sender: event_item.sender().to_string(),
             sender_name,
             sender_avatar_url,
+            sender_status_emoji,
+            sender_status_text,
             body,
             timestamp: event_item.timestamp().get().into(),
             msg_type: "m.utd".to_owned(),
@@ -864,18 +894,12 @@ pub(super) async fn timeline_item_to_ffi(
         ..
     }) = event_item.content()
     {
-        let (sender_name, sender_avatar_url) =
-            if let TimelineDetails::Ready(p) = event_item.sender_profile() {
-                (
-                    p.display_name.clone().unwrap_or_default(),
-                    p.avatar_url
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                )
-            } else {
-                (String::new(), String::new())
-            };
+        let SenderProfileFfi {
+        sender_name,
+        sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
+    } = sender_profile_ffi(event_item.sender_profile());
         // Receipts on a tombstone are meaningless — the original event
         // is gone; the redacted placeholder doesn't carry a reading
         // audience worth surfacing.
@@ -888,6 +912,8 @@ pub(super) async fn timeline_item_to_ffi(
             sender: event_item.sender().to_string(),
             sender_name,
             sender_avatar_url,
+            sender_status_emoji,
+            sender_status_text,
             timestamp: event_item.timestamp().get().into(),
             msg_type: "m.redacted".to_owned(),
             ..ffi_event_defaults()
@@ -919,18 +945,12 @@ pub(super) async fn timeline_item_to_ffi(
             split_source_opt(c.info.thumbnail_source.as_ref());
         let w = c.info.width.map(u64::from).unwrap_or(0);
         let h = c.info.height.map(u64::from).unwrap_or(0);
-        let (sender_name, sender_avatar_url) =
-            if let TimelineDetails::Ready(p) = event_item.sender_profile() {
-                (
-                    p.display_name.clone().unwrap_or_default(),
-                    p.avatar_url
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                )
-            } else {
-                (String::new(), String::new())
-            };
+        let SenderProfileFfi {
+        sender_name,
+        sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
+    } = sender_profile_ffi(event_item.sender_profile());
         let reactions = collect_reactions(event_item, room, me).await;
         let read_receipts = collect_read_receipts(event_item, room, me).await;
         let (
@@ -976,6 +996,8 @@ pub(super) async fn timeline_item_to_ffi(
             sender: event_item.sender().to_string(),
             sender_name,
             sender_avatar_url,
+            sender_status_emoji,
+            sender_status_text,
             body: c.body.clone(),
             timestamp: event_item.timestamp().get().into(),
             msg_type: "m.sticker".to_owned(),
@@ -1020,18 +1042,12 @@ pub(super) async fn timeline_item_to_ffi(
             Some(CallIntent::Video) => "video",
             _ => "",
         };
-        let (sender_name, sender_avatar_url) =
-            if let TimelineDetails::Ready(p) = event_item.sender_profile() {
-                (
-                    p.display_name.clone().unwrap_or_default(),
-                    p.avatar_url
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                )
-            } else {
-                (String::new(), String::new())
-            };
+        let SenderProfileFfi {
+        sender_name,
+        sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
+    } = sender_profile_ffi(event_item.sender_profile());
         return Some(TimelineEvent {
             room_id: room_id.to_owned(),
             msg_type: "org.matrix.msc4075.rtc.notification".to_owned(),
@@ -1042,6 +1058,8 @@ pub(super) async fn timeline_item_to_ffi(
             sender: event_item.sender().to_string(),
             sender_name,
             sender_avatar_url,
+            sender_status_emoji,
+            sender_status_text,
             body: intent_str.to_owned(), // "audio" | "video" | ""
             timestamp: event_item.timestamp().get().into(),
             ..ffi_event_defaults()
@@ -1337,18 +1355,12 @@ pub(super) async fn timeline_item_to_ffi(
         _ => false,
     };
 
-    let (sender_name, sender_avatar_url) =
-        if let TimelineDetails::Ready(p) = event_item.sender_profile() {
-            (
-                p.display_name.clone().unwrap_or_default(),
-                p.avatar_url
-                    .as_ref()
-                    .map(|u| u.to_string())
-                    .unwrap_or_default(),
-            )
-        } else {
-            (String::new(), String::new())
-        };
+    let SenderProfileFfi {
+        sender_name,
+        sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
+    } = sender_profile_ffi(event_item.sender_profile());
 
     // m.in_reply_to — extract the event_id and, when the replied-to item is
     // present in the local timeline cache, its sender display name, a brief
@@ -1412,6 +1424,8 @@ pub(super) async fn timeline_item_to_ffi(
         sender: event_item.sender().to_string(),
         sender_name,
         sender_avatar_url,
+        sender_status_emoji,
+        sender_status_text,
         timestamp: event_item.timestamp().get().into(),
         image_thumbnail_url,
         image_thumbnail_encrypted_json,
@@ -1763,5 +1777,25 @@ mod bundled_url_preview_tests {
             "m.url_previews": []
         }));
         assert!(map_bundled_url_previews(&previews, "https://matrix.org").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod status_ffi_tests {
+    use super::status_ffi;
+    use matrix_sdk::ruma::profile::StatusProfileField;
+
+    #[test]
+    fn maps_emoji_and_text() {
+        let s = StatusProfileField::new("On holiday".to_owned(), "🌴".to_owned());
+        assert_eq!(
+            status_ffi(Some(&s)),
+            ("🌴".to_owned(), "On holiday".to_owned())
+        );
+    }
+
+    #[test]
+    fn unset_is_empty() {
+        assert_eq!(status_ffi(None), (String::new(), String::new()));
     }
 }

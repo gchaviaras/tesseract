@@ -5235,6 +5235,10 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     {
         handle_show_membership_events_toggle_(enabled);
     };
+    view->on_show_sender_status_changed = [this](bool enabled)
+    {
+        handle_show_sender_status_toggle_(enabled);
+    };
     view->on_launch_at_login_changed = [this](bool enabled)
     {
         handle_launch_at_login_toggle_(enabled);
@@ -11553,15 +11557,8 @@ void ShellBase::handle_developer_mode_toggle_(bool enabled)
     s.save_to_disk(tesseract::config_dir());
 }
 
-void ShellBase::handle_message_layout_changed_(
-    tesseract::Settings::MessageLayout layout)
+void ShellBase::refresh_all_message_lists_display_prefs_()
 {
-    auto& s = tesseract::Settings::instance();
-    if (s.message_layout == layout)
-        return;
-    s.message_layout = layout;
-    s.save_to_disk(tesseract::config_dir());
-
     auto refresh = [](views::MessageListView* ml)
     {
         if (ml)
@@ -11582,6 +11579,29 @@ void ShellBase::handle_message_layout_changed_(
                 refresh(tv->message_list());
         }
     }
+}
+
+void ShellBase::handle_show_sender_status_toggle_(bool enabled)
+{
+    auto& s = tesseract::Settings::instance();
+    if (s.show_sender_status_in_timeline == enabled)
+        return;
+    s.show_sender_status_in_timeline = enabled;
+    s.save_to_disk(tesseract::config_dir());
+    refresh_all_message_lists_display_prefs_();
+    request_relayout_();
+}
+
+void ShellBase::handle_message_layout_changed_(
+    tesseract::Settings::MessageLayout layout)
+{
+    auto& s = tesseract::Settings::instance();
+    if (s.message_layout == layout)
+        return;
+    s.message_layout = layout;
+    s.save_to_disk(tesseract::config_dir());
+
+    refresh_all_message_lists_display_prefs_();
     request_relayout_();
 }
 

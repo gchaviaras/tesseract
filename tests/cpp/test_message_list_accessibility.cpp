@@ -6,6 +6,8 @@
 #include "tk_test_surface.h"
 #include "access_test_util.h"
 
+#include <tesseract/settings.h>
+
 using tesseract::views::MessageListView;
 using tesseract::views::MessageRowData;
 using namespace tk;
@@ -235,4 +237,35 @@ TEST_CASE("visible messages expose their links and the reply jump as actions",
     const AccessNode* jump = access_test::find_named(tree, "Jump to replied message");
     REQUIRE(jump != nullptr);
     CHECK(invoke_default_action(*jump)); // original is loaded: scrolls to it
+}
+
+TEST_CASE("a row's accessible name includes the sender status only when the setting is on",
+         "[message_list][accessibility]")
+{
+    auto& settings = tesseract::Settings::instance();
+    const bool prev = settings.show_sender_status_in_timeline;
+
+    auto row_name = [](bool on)
+    {
+        tesseract::Settings::instance().show_sender_status_in_timeline = on;
+        MessageListView v;
+        auto r = text_row("$a", "Alice", "hello");
+        r.sender_status_emoji = "🌴";
+        r.sender_status_text = "On holiday";
+        std::vector<MessageRowData> msgs;
+        msgs.push_back(std::move(r));
+        v.set_messages(std::move(msgs), false);
+        AccessNode tree = build_access_tree(&v);
+        const AccessNode* list = find_role_msg(tree, Role::List);
+        REQUIRE(list != nullptr);
+        for (const auto& ch : list->children)
+            if (ch.role == Role::ListItem)
+                return ch.name;
+        return std::string{};
+    };
+
+    CHECK(row_name(false) == "Alice: hello");
+    CHECK(row_name(true) == "Alice (🌴 On holiday): hello");
+
+    settings.show_sender_status_in_timeline = prev;
 }

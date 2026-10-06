@@ -440,6 +440,9 @@ pub mod ffi {
         sender: String,
         sender_name: String,
         sender_avatar_url: String,
+        /// MSC4426 status emoji / text of the sender; empty when unset.
+        sender_status_emoji: String,
+        sender_status_text: String,
         body: String,
         /// Unix timestamp in milliseconds.
         timestamp: u64,

@@ -56,6 +56,12 @@ public:
     // Fired when the user toggles the "show join/leave events" checkbox.
     std::function<void(bool)> on_show_membership_events_changed;
 
+    // Silently update the control without firing on_show_sender_status_changed.
+    void set_show_sender_status(bool enabled);
+
+    // Fired when the user toggles the "show status emoji next to names" checkbox.
+    std::function<void(bool)> on_show_sender_status_changed;
+
     // ----- Layout group -----
     // Silently update the message-layout combobox.
     void set_message_layout(tesseract::Settings::MessageLayout layout);
@@ -72,6 +78,7 @@ private:
     tk::ComboBox*    period_combo_       = nullptr;
     tk::CheckButton* autoscroll_cb_      = nullptr;
     tk::CheckButton* show_membership_events_cb_ = nullptr;
+    tk::CheckButton* show_sender_status_cb_     = nullptr;
     tk::ComboBox*    message_layout_combo_      = nullptr;
     tk::Label*       message_layout_desc_       = nullptr;
     MessageLayoutPreview* message_layout_preview_ = nullptr;

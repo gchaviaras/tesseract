@@ -109,52 +109,29 @@ fn parse_biography(j: &serde_json::Value) -> String {
     String::new()
 }
 
-/// One `m.status` (MSC4426) value: a short free-text status and/or a status
-/// emoji. Either part may be an empty string; `parse_status` returns `None`
-/// only when neither is present.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct UserStatus {
-    pub text: String,
-    pub emoji: String,
+/// The user's MSC4426 `status` via the typed ruma accessor. `None` when the
+/// field is absent, malformed, or has neither text nor emoji. Only the
+/// unstable `org.matrix.msc4426.status` key is read.
+fn extract_status(
+    profile: &matrix_sdk::ruma::profile::UserProfile,
+) -> Option<matrix_sdk::ruma::profile::StatusProfileField> {
+    use matrix_sdk::ruma::profile::Status;
+    profile
+        .get_static::<Status>()
+        .ok()
+        .flatten()
+        .filter(|s| !(s.text.is_empty() && s.emoji.is_empty()))
 }
 
-/// Parse `m.status` from either the stable `m.status` key or the unstable
-/// `org.matrix.msc4426.status` key (stable wins). Value shape:
-/// `{ "text": string, "emoji": string }`, both optional. Returns `None` when
-/// the key is absent, not an object, or an object with neither field.
-fn parse_status(j: &serde_json::Value) -> Option<UserStatus> {
-    for key in &["m.status", "org.matrix.msc4426.status"] {
-        let v = &j[*key];
-        if v.is_null() {
-            continue;
-        }
-        let obj = v.as_object()?;
-        let text = obj.get("text").and_then(|t| t.as_str()).unwrap_or("");
-        let emoji = obj.get("emoji").and_then(|e| e.as_str()).unwrap_or("");
-        if text.is_empty() && emoji.is_empty() {
-            return None;
-        }
-        return Some(UserStatus {
-            text: text.to_owned(),
-            emoji: emoji.to_owned(),
-        });
-    }
-    None
-}
-
-/// Parse `call_joined_ts` (unix seconds) from either the stable `m.call` key
-/// or the unstable `org.matrix.msc4426.call` key (stable wins). Returns `None`
-/// when the key is absent, not an object, or `call_joined_ts` is missing/not a
-/// non-negative integer.
-fn parse_call_joined_ts(j: &serde_json::Value) -> Option<u64> {
-    for key in &["m.call", "org.matrix.msc4426.call"] {
-        let v = &j[*key];
-        if v.is_null() {
-            continue;
-        }
-        return v.get("call_joined_ts").and_then(|t| t.as_u64());
-    }
-    None
+/// `call_joined_ts` (unix seconds) from the typed MSC4426 `call` field.
+fn extract_call_joined_ts(profile: &matrix_sdk::ruma::profile::UserProfile) -> Option<u64> {
+    use matrix_sdk::ruma::profile::Call;
+    profile
+        .get_static::<Call>()
+        .ok()
+        .flatten()
+        .and_then(|c| c.call_joined_ts)
+        .map(|t| u64::from(t.get()))
 }
 
 // ---------------------------------------------------------------------------
@@ -223,8 +200,8 @@ impl ClientFfi {
                 let pronouns = parse_pronouns(&j);
                 let tz = parse_tz(&j);
                 let biography = parse_biography(&j);
-                let status = parse_status(&j);
-                let call_joined_ts = parse_call_joined_ts(&j).unwrap_or(0);
+                let status = extract_status(&resp.data);
+                let call_joined_ts = extract_call_joined_ts(&resp.data).unwrap_or(0);
 
                 Some(
                     serde_json::json!({
@@ -430,7 +407,8 @@ impl ClientFfi {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_biography, parse_call_joined_ts, parse_pronouns, parse_status, parse_tz, PronounEntry,
+        extract_call_joined_ts, extract_status, parse_biography, parse_pronouns, parse_tz,
+        PronounEntry,
     };
 
     fn entry(language: &str, summary: &str, grammatical_gender: &str) -> PronounEntry {
@@ -637,108 +615,87 @@ mod tests {
         assert_eq!(parse_biography(&profile), "");
     }
 
-    // --- parse_status (MSC4426) ---
+    // --- extract_status / extract_call_joined_ts (MSC4426, typed) ---
 
-    #[test]
-    fn parse_status_stable_key() {
-        let profile = serde_json::json!({
-            "m.status": {"text": "On holiday", "emoji": "🌴"}
-        });
-        let s = parse_status(&profile).unwrap();
-        assert_eq!(s.text, "On holiday");
-        assert_eq!(s.emoji, "🌴");
+    fn profile_with(key: &str, value: serde_json::Value) -> matrix_sdk::ruma::profile::UserProfile {
+        let mut p = matrix_sdk::ruma::profile::UserProfile::new();
+        p.set(key.to_owned(), value);
+        p
     }
 
     #[test]
-    fn parse_status_unstable_key() {
-        let profile = serde_json::json!({
-            "org.matrix.msc4426.status": {"text": "AFK", "emoji": "🏃"}
-        });
-        let s = parse_status(&profile).unwrap();
+    fn extract_status_unstable_key() {
+        let p = profile_with(
+            "org.matrix.msc4426.status",
+            serde_json::json!({"text": "AFK", "emoji": "🏃"}),
+        );
+        let s = extract_status(&p).unwrap();
         assert_eq!(s.text, "AFK");
         assert_eq!(s.emoji, "🏃");
     }
 
     #[test]
-    fn parse_status_stable_takes_priority() {
-        let profile = serde_json::json!({
-            "m.status": {"text": "stable", "emoji": "✅"},
-            "org.matrix.msc4426.status": {"text": "unstable", "emoji": "❌"}
-        });
-        let s = parse_status(&profile).unwrap();
-        assert_eq!(s.text, "stable");
-        assert_eq!(s.emoji, "✅");
+    fn extract_status_missing_key_is_none() {
+        assert!(extract_status(&matrix_sdk::ruma::profile::UserProfile::new()).is_none());
     }
 
     #[test]
-    fn parse_status_text_only() {
-        let profile = serde_json::json!({ "m.status": {"text": "just text"} });
-        let s = parse_status(&profile).unwrap();
-        assert_eq!(s.text, "just text");
-        assert_eq!(s.emoji, "");
+    fn extract_status_wrong_type_is_none() {
+        let p = profile_with("org.matrix.msc4426.status", serde_json::json!("a bare string"));
+        assert!(extract_status(&p).is_none());
     }
 
     #[test]
-    fn parse_status_emoji_only() {
-        let profile = serde_json::json!({ "m.status": {"emoji": "🎯"} });
-        let s = parse_status(&profile).unwrap();
-        assert_eq!(s.text, "");
-        assert_eq!(s.emoji, "🎯");
+    fn extract_status_empty_text_and_emoji_is_none() {
+        let p = profile_with(
+            "org.matrix.msc4426.status",
+            serde_json::json!({"text": "", "emoji": ""}),
+        );
+        assert!(extract_status(&p).is_none());
     }
 
     #[test]
-    fn parse_status_empty_object_is_none() {
-        let profile = serde_json::json!({ "m.status": {} });
-        assert!(parse_status(&profile).is_none());
+    fn extract_status_partial_object_is_dropped() {
+        // The typed field requires both `text` and `emoji`.
+        let p = profile_with("org.matrix.msc4426.status", serde_json::json!({"emoji": "🎯"}));
+        assert!(extract_status(&p).is_none());
     }
 
     #[test]
-    fn parse_status_wrong_type_is_none() {
-        let profile = serde_json::json!({ "m.status": "a bare string" });
-        assert!(parse_status(&profile).is_none());
+    fn extract_status_stable_key_is_ignored() {
+        let p = profile_with("m.status", serde_json::json!({"text": "x", "emoji": "y"}));
+        assert!(extract_status(&p).is_none());
     }
 
     #[test]
-    fn parse_status_missing_key_is_none() {
-        assert!(parse_status(&serde_json::json!({})).is_none());
-    }
-
-    // --- parse_call_joined_ts (MSC4426) ---
-
-    #[test]
-    fn parse_call_joined_ts_stable_key() {
-        let profile = serde_json::json!({ "m.call": {"call_joined_ts": 1_770_140_640_u64} });
-        assert_eq!(parse_call_joined_ts(&profile), Some(1_770_140_640));
+    fn extract_call_joined_ts_unstable_key() {
+        let p = profile_with(
+            "org.matrix.msc4426.call",
+            serde_json::json!({"call_joined_ts": 1_770_140_640_u64}),
+        );
+        assert_eq!(extract_call_joined_ts(&p), Some(1_770_140_640));
     }
 
     #[test]
-    fn parse_call_joined_ts_unstable_key() {
-        let profile = serde_json::json!({ "org.matrix.msc4426.call": {"call_joined_ts": 42} });
-        assert_eq!(parse_call_joined_ts(&profile), Some(42));
+    fn extract_call_joined_ts_missing_key_is_none() {
+        assert_eq!(
+            extract_call_joined_ts(&matrix_sdk::ruma::profile::UserProfile::new()),
+            None
+        );
     }
 
     #[test]
-    fn parse_call_joined_ts_stable_takes_priority() {
-        let profile = serde_json::json!({
-            "m.call": {"call_joined_ts": 1},
-            "org.matrix.msc4426.call": {"call_joined_ts": 2}
-        });
-        assert_eq!(parse_call_joined_ts(&profile), Some(1));
+    fn extract_call_joined_ts_malformed_is_none() {
+        let p = profile_with(
+            "org.matrix.msc4426.call",
+            serde_json::json!({"call_joined_ts": "not a number"}),
+        );
+        assert_eq!(extract_call_joined_ts(&p), None);
     }
 
     #[test]
-    fn parse_call_joined_ts_missing_key_is_none() {
-        assert_eq!(parse_call_joined_ts(&serde_json::json!({})), None);
-    }
-
-    #[test]
-    fn parse_call_joined_ts_malformed_is_none() {
-        let profile = serde_json::json!({ "m.call": {"call_joined_ts": "not a number"} });
-        assert_eq!(parse_call_joined_ts(&profile), None);
-    }
-
-    #[test]
-    fn parse_call_joined_ts_empty_object_is_none() {
-        assert_eq!(parse_call_joined_ts(&serde_json::json!({ "m.call": {} })), None);
+    fn extract_call_joined_ts_empty_object_is_none() {
+        let p = profile_with("org.matrix.msc4426.call", serde_json::json!({}));
+        assert_eq!(extract_call_joined_ts(&p), None);
     }
 }

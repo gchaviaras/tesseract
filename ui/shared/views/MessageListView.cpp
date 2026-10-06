@@ -349,6 +349,14 @@ MessageRowData make_row_data(const tesseract::Event& ev,
     row.sender = ev.sender;
     row.sender_name = ev.sender_name;
     row.sender_avatar_url = ev.sender_avatar_url;
+    // The status emoji is a free string drawn right after the name, so only
+    // accept pure emoji — otherwise "(admin)" could pass for part of the name.
+    // A rejected status is dropped whole (no tooltip, not announced).
+    if (tk::is_emoji_only(ev.sender_status_emoji))
+    {
+        row.sender_status_emoji = ev.sender_status_emoji;
+        row.sender_status_text = ev.sender_status_text;
+    }
     row.body = ev.body;
     row.formatted_body = ev.formatted_body;
     row.timestamp_ms = ev.timestamp;
@@ -1907,6 +1915,7 @@ public:
             owner_.hovered_row_geom_.retry_button = tk::Rect{};
             owner_.hovered_row_geom_.abort_button = tk::Rect{};
             owner_.hovered_row_geom_.receipt_overflow = tk::Rect{};
+            owner_.hovered_row_geom_.status_emoji = tk::Rect{};
             owner_.hovered_row_geom_.action_pill_bounds = tk::Rect{};
         }
     }
@@ -1944,21 +1953,57 @@ public:
             auto& rc = cache_for(index);
             const std::string skey =
                 m.sender_name.empty() ? m.sender : m.sender_name;
+
+            // Opt-in MSC4426 status emoji after the name. Built first so the
+            // name can be ellipsised to leave room for it.
+            constexpr float kStatusGap = 4.0f;
+            const std::string status_key =
+                tesseract::Settings::instance().show_sender_status_in_timeline
+                    ? m.sender_status_emoji
+                    : std::string{};
+            if (rc.status_key != status_key || (!status_key.empty() && !rc.status))
+            {
+                rc.status.reset();
+                rc.status_key = status_key;
+                if (!status_key.empty())
+                {
+                    tk::TextStyle ts{};
+                    ts.role = tk::FontRole::SenderName;
+                    rc.status = ctx.factory.build_text(status_key, ts);
+                }
+                rc.sender_col_w = -1; // name width depends on the emoji width
+            }
+            const float status_w =
+                rc.status ? rc.status->measure().w + kStatusGap : 0.0f;
+            const float name_max_w = std::max(0.0f, sender_max_w - status_w);
+
             if (!rc.sender || rc.sender_key != skey ||
-                rc.sender_col_w != sender_max_w)
+                rc.sender_col_w != name_max_w)
             {
                 tk::TextStyle s{};
                 s.role = tk::FontRole::SenderName;
                 s.trim = tk::TextTrim::Ellipsis;
-                s.max_width = sender_max_w;
+                s.max_width = name_max_w;
                 rc.sender = ctx.factory.build_text(skey, s);
                 rc.sender_key = skey;
-                rc.sender_col_w = sender_max_w;
+                rc.sender_col_w = name_max_w;
             }
             if (rc.sender)
             {
                 ctx.canvas.draw_text(*rc.sender, {sender_x, sender_y},
                                      sender_color(m.sender, ctx.theme.mode));
+            }
+            if (rc.sender && rc.status)
+            {
+                const tk::Size nsz = rc.sender->measure();
+                const tk::Size esz = rc.status->measure();
+                const float ex = sender_x + nsz.w + kStatusGap;
+                const float ey = sender_y + (kSenderH - esz.h) * 0.5f;
+                ctx.canvas.draw_text(*rc.status, {ex, ey},
+                                     sender_color(m.sender, ctx.theme.mode));
+                if (rp.hovered)
+                    owner_.hovered_row_geom_.status_emoji =
+                        tk::Rect{ex, sender_y, esz.w, kSenderH};
             }
         }
     }
@@ -3227,6 +3272,18 @@ public:
         std::string name = m.sender_name.empty()
                                ? body
                                : tk::trf(tk::tr("{0}: {1}"), {m.sender_name, body});
+        // Opt-in sender status (emoji is only drawn, so announce it too).
+        if (!m.sender_name.empty() &&
+            tesseract::Settings::instance().show_sender_status_in_timeline &&
+            (!m.sender_status_emoji.empty() || !m.sender_status_text.empty()))
+        {
+            const std::string status =
+                m.sender_status_text.empty()  ? m.sender_status_emoji
+                : m.sender_status_emoji.empty() ? m.sender_status_text
+                : tk::trf(tk::tr("{0} {1}"),
+                          {m.sender_status_emoji, m.sender_status_text});
+            name = tk::trf(tk::tr("{0} ({1}): {2}"), {m.sender_name, status, body});
+        }
         std::vector<std::string> extras;
         if (m.pending_state == MessageRowData::PendingState::Failed)
             extras.push_back(tk::tr("not sent"));
@@ -6570,6 +6627,9 @@ private:
         std::string sender_key;
         float sender_col_w = -1;
         std::unique_ptr<tk::TextLayout> sender;
+        // Status emoji after the name (opt-in); empty key == none.
+        std::string status_key;
+        std::unique_ptr<tk::TextLayout> status;
 
         // One glyph run: either an emoji grapheme cluster (drawn at the
         // reference FontRole::ReactionEmoji size) or a plain-text run (drawn
@@ -6593,6 +6653,8 @@ private:
             sender_key.clear();
             sender_col_w = -1;
             sender.reset();
+            status_key.clear();
+            status.reset();
             reactions.clear();
         }
     };
@@ -8849,6 +8911,29 @@ bool MessageListView::on_pointer_move(tk::Point local)
                 host_->hide_tooltip(this);
             hover_link_tooltip_ = false;
         }
+
+        // Sender status emoji tooltip (the status text).
+        std::string status_tip;
+        if (next == ActionTooltip::None &&
+            hovered_row_geom_.status_emoji.w > 0.0f &&
+            rect_contains(hovered_row_geom_.status_emoji, world))
+        {
+            const int srow = hovered_row_index();
+            if (srow >= 0 && static_cast<std::size_t>(srow) < messages_.size())
+                status_tip = messages_[static_cast<std::size_t>(srow)].sender_status_text;
+        }
+        if (!status_tip.empty())
+        {
+            if (host_)
+                host_->show_tooltip(this, status_tip, hovered_row_geom_.status_emoji);
+            hover_status_tooltip_ = true;
+        }
+        else if (hover_status_tooltip_)
+        {
+            if (host_)
+                host_->hide_tooltip(this);
+            hover_status_tooltip_ = false;
+        }
     }
     return true;
 }
@@ -8885,6 +8970,7 @@ void MessageListView::on_pointer_leave()
     hovered_row_geom_.retry_button = tk::Rect{};
     hovered_row_geom_.abort_button = tk::Rect{};
     hovered_row_geom_.receipt_overflow = tk::Rect{};
+    hovered_row_geom_.status_emoji = tk::Rect{};
     hover_target_ = HoverTarget::None;
     hover_chip_idx_ = -1;
     hovered_media_event_id_.clear();
@@ -8906,6 +8992,12 @@ void MessageListView::on_pointer_leave()
         if (host_)
             host_->hide_tooltip(this);
         hover_link_tooltip_ = false;
+    }
+    if (hover_status_tooltip_)
+    {
+        if (host_)
+            host_->hide_tooltip(this);
+        hover_status_tooltip_ = false;
     }
 }
 

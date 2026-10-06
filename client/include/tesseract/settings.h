@@ -61,6 +61,10 @@ public:
     // Default off.
     bool show_room_join_leave_events = false;
 
+    // Draw each sender's MSC4426 status emoji after their name in the
+    // timeline (hover shows the status text). Default off.
+    bool show_sender_status_in_timeline = false;
+
     // ── Message layout ──────────────────────────────────────────────
     // How the timeline arranges message rows. Live-applied.
     //   Classic → avatar in the left gutter, one left-aligned column (default).

@@ -100,6 +100,10 @@ struct MessageRowData
     std::string sender; // canonical Matrix ID
     std::string sender_name;
     std::string sender_avatar_url; // mxc
+    // MSC4426 status of the sender; emoji drawn after the name (opt-in
+    // setting), text shown as a tooltip.
+    std::string sender_status_emoji;
+    std::string sender_status_text;
     std::string body;
     std::string formatted_body; // HTML; empty when plain text only
     std::uint64_t timestamp_ms = 0;
@@ -887,6 +891,7 @@ public:
         tk::Rect retry_button{};  // 0-area when not painted
         tk::Rect abort_button{};  // 0-area when not painted
         tk::Rect receipt_overflow{}; // 0-area when not painted — the "+N" pill
+        tk::Rect status_emoji{};     // 0-area when not painted — sender status emoji
         // Full bounds of the hover action pill (react/reply/…), world coords,
         // 0-area when not painted. Always sits above the row's own bounds
         // (never inflated to make room for it); on_pointer_move keeps the
@@ -1423,6 +1428,9 @@ private:
     // span — including a normalized markdown [text](url) link — whose
     // display text differs from its target URL) is showing.
     bool hover_link_tooltip_ = false;
+
+    // True while the sender-status-emoji tooltip (status text) is showing.
+    bool hover_status_tooltip_ = false;
 
     // Cached from paint() so on_pointer_move/on_pointer_leave (which don't
     // receive a PaintCtx) can reach Host::show_tooltip/hide_tooltip.

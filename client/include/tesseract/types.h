@@ -191,6 +191,9 @@ struct Event
     std::string sender;
     std::string sender_name;
     std::string sender_avatar_url;
+    /// MSC4426 status of the sender (global profile); empty when unset.
+    std::string sender_status_emoji;
+    std::string sender_status_text;
     std::string body;
     /// HTML body when format == "org.matrix.custom.html"; empty for all other event types.
     std::string formatted_body;

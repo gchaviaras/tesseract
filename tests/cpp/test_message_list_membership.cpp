@@ -181,3 +181,32 @@ TEST_CASE("with_membership_reason appends the reason to removal phrases only",
     row.membership_action = MembershipAction::Left;
     CHECK(with_membership_reason("Bob left the room", row) == "Bob left the room");
 }
+
+TEST_CASE("make_row_data keeps a sender status only when its emoji is pure emoji",
+          "[message_list][status]")
+{
+    auto row_for = [](const std::string& emoji)
+    {
+        tesseract::Event ev;
+        ev.event_id = "$a";
+        ev.sender = "@alice:server";
+        ev.sender_name = "Alice";
+        ev.body = "hi";
+        ev.sender_status_emoji = emoji;
+        ev.sender_status_text = "On holiday";
+        return make_row_data(ev, "@me:server");
+    };
+
+    for (const char* ok : {"🌴", "👩‍💻", "🇫🇷", "❤️"})
+    {
+        const auto r = row_for(ok);
+        CHECK(r.sender_status_emoji == ok);
+        CHECK(r.sender_status_text == "On holiday");
+    }
+    for (const char* bad : {"(admin)", "✔ mod", "🌴a", "", "1"})
+    {
+        const auto r = row_for(bad);
+        CHECK(r.sender_status_emoji.empty());
+        CHECK(r.sender_status_text.empty());
+    }
+}

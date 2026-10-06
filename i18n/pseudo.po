@@ -4360,6 +4360,15 @@ msgstr "[Tïmélïñéx]"
 msgid "Show room join/leave events"
 msgstr "[Shöw rööm jöïñ/léàvé évéñtsxxxxx]"
 
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show status emoji next to names"
+msgstr "[Shöw stàtùs émöjï ñéxt tö ñàmésxxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} ({1}): {2}"
+msgstr "[{0} ({1}): {2}xx]"
+
 #: ui/shared/views/settings/DevicesSection.cpp:39
 msgid "never"
 msgstr "[ñévérx]"

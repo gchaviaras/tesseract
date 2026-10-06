@@ -1251,3 +1251,75 @@ TEST_CASE("bubble layout draws a portrait sticker at full height with no slack",
     // The row reserves only the sticker plus a little bubble padding.
     CHECK(row.h - hit->world_rect.h < 40.0f);
 }
+
+// ── sender status emoji ─────────────────────────────────────────────────
+
+namespace
+{
+struct SenderStatusGuard
+{
+    bool prev = tesseract::Settings::instance().show_sender_status_in_timeline;
+    explicit SenderStatusGuard(bool on)
+    {
+        tesseract::Settings::instance().show_sender_status_in_timeline = on;
+    }
+    ~SenderStatusGuard()
+    {
+        tesseract::Settings::instance().show_sender_status_in_timeline = prev;
+    }
+};
+
+// Hover row 0 of a single status-bearing message and return the recorded
+// status-emoji rect (0-area when not painted).
+tk::Rect status_rect_for(tesseract::Settings::MessageLayout layout, bool setting_on,
+                         const std::string& emoji, float* name_max_w = nullptr)
+{
+    LayoutGuard lg{layout};
+    SenderStatusGuard sg{setting_on};
+    TkMessageListLayoutCacheStage st;
+    MessageListView v;
+    v.on_display_prefs_changed();
+    auto m = make_rich("$a", "hello");
+    m.sender_status_emoji = emoji;
+    m.sender_status_text = "On holiday";
+    v.set_messages({m}, false);
+    st.run(v, {0, 0, 600, 400});
+
+    const tk::Rect row0 = v.row_world_rect(0);
+    v.on_pointer_move({row0.x + row0.w * 0.5f, row0.y + row0.h * 0.5f});
+    st.run(v, {0, 0, 600, 400});
+    if (name_max_w)
+        *name_max_w = v.sender_name_max_w_for_test(0);
+    return v.hovered_row_geom().status_emoji;
+}
+} // namespace
+
+TEST_CASE("sender status emoji is not drawn while the setting is off",
+          "[message_list][layout_cache][status]")
+{
+    using ML = tesseract::Settings::MessageLayout;
+    CHECK(status_rect_for(ML::Classic, false, "🌴").w == 0.0f);
+}
+
+TEST_CASE("sender status emoji sits right of the name and shrinks its width",
+          "[message_list][layout_cache][status]")
+{
+    using ML = tesseract::Settings::MessageLayout;
+    for (ML layout : {ML::Classic, ML::Bubbles})
+    {
+        float w_off = 0.0f, w_on = 0.0f;
+        status_rect_for(layout, false, "🌴", &w_off);
+        const tk::Rect r = status_rect_for(layout, true, "🌴", &w_on);
+        REQUIRE(r.w > 0.0f);
+        REQUIRE(r.h > 0.0f);
+        CHECK(w_on < w_off);
+    }
+}
+
+TEST_CASE("sender status emoji is not drawn in the IRC layout or when empty",
+          "[message_list][layout_cache][status]")
+{
+    using ML = tesseract::Settings::MessageLayout;
+    CHECK(status_rect_for(ML::Irc, true, "🌴").w == 0.0f);
+    CHECK(status_rect_for(ML::Classic, true, "").w == 0.0f);
+}

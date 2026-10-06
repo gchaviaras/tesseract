@@ -1,6 +1,12 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-06**. 2238 C++ + 765 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-06**. 2255 C++ + 765 Rust tests.
+
+> **Sender status in the timeline (2026-10-06).** Optional Appearance › Timeline
+> setting shows each sender's MSC4426 status emoji after their name (Classic
+> and Bubbles); hover shows the text. Data arrives via MSC4262 sync through
+> matrix-sdk's typed profile; the profile card uses the same typed API.
+> Qt6 build + ctest 2255/2255.
 
 > **Recovery set up without asking (2026-10-06).**
 > Accounts without recovery get it set up silently; the key stays in the OS

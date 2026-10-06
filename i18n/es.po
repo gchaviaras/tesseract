@@ -1284,6 +1284,15 @@ msgid "Show room join/leave events"
 msgstr "Mostrar eventos de entrada/salida de sala"
 
 #: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show status emoji next to names"
+msgstr "Mostrar emoji de estado junto a los nombres"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} ({1}): {2}"
+msgstr "{0} ({1}): {2}"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
 msgid "Layout"
 msgstr "Disposición"
 

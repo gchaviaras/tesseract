@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "views/SettingsView.h"
+#include "views/settings/AppearanceSection.h"
 #include "views/settings/LanguageSection.h"
 #include "views/settings/UserPackEditor.h"
 #include "tk/controls.h"
@@ -68,7 +69,39 @@ tk::Button* find_button(tk::Widget& root, const std::string& label)
     return nullptr;
 }
 
+void collect_check_buttons(tk::Widget& root, std::vector<tk::CheckButton*>& out)
+{
+    for (auto& c : root.children())
+    {
+        if (auto* b = dynamic_cast<tk::CheckButton*>(c.get()))
+            out.push_back(b);
+        collect_check_buttons(*c, out);
+    }
+}
+
 } // namespace
+
+TEST_CASE("AppearanceSection: the sender-status checkbox fires its callback, set_ is silent",
+          "[settings-view]")
+{
+    tesseract::views::AppearanceSection section;
+    std::vector<tk::CheckButton*> boxes;
+    collect_check_buttons(section, boxes);
+    REQUIRE_FALSE(boxes.empty());
+    // Added last, to the Timeline group.
+    tk::CheckButton* status_cb = boxes.back();
+
+    std::vector<bool> fired;
+    section.on_show_sender_status_changed = [&](bool v) { fired.push_back(v); };
+
+    section.set_show_sender_status(true);
+    CHECK(status_cb->checked());
+    CHECK(fired.empty());
+
+    status_cb->on_change(false);
+    REQUIRE(fired.size() == 1);
+    CHECK(fired[0] == false);
+}
 
 TEST_CASE("LanguageSection: Restart now shows only while a restart is pending",
           "[settings-view]")

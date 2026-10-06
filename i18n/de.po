@@ -1233,6 +1233,15 @@ msgid "Show room join/leave events"
 msgstr "Bei- und Austritte im Chat anzeigen"
 
 #: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show status emoji next to names"
+msgstr "Status-Emoji neben Namen anzeigen"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} ({1}): {2}"
+msgstr "{0} ({1}): {2}"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
 msgid "Layout"
 msgstr "Layout"
 

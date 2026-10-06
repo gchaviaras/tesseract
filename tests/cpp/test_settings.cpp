@@ -668,3 +668,34 @@ TEST_CASE("missing device ID keys load as empty string", "[settings][audio_video
     REQUIRE(tesseract::Settings::instance().audio_output_device_id.empty());
     REQUIRE(tesseract::Settings::instance().camera_device_id.empty());
 }
+
+TEST_CASE("Settings show_sender_status_in_timeline round-trip", "[settings]")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("sender_status_roundtrip");
+
+    auto& s = tesseract::Settings::instance();
+    s.show_sender_status_in_timeline = true;
+    s.save_to_disk(dir);
+
+    s.show_sender_status_in_timeline = false;
+    s.load_from_disk(dir);
+    CHECK(s.show_sender_status_in_timeline == true);
+
+    fs::remove_all(dir);
+}
+
+TEST_CASE("Settings show_sender_status_in_timeline missing key defaults to false",
+          "[settings]")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("sender_status_missing_key");
+    write_file(dir / "app_settings.json", "{\"theme\":\"dark\"}");
+
+    auto& s = tesseract::Settings::instance();
+    s.show_sender_status_in_timeline = true;
+    s.load_from_disk(dir);
+    CHECK(s.show_sender_status_in_timeline == false);
+
+    fs::remove_all(dir);
+}

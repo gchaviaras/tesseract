@@ -4397,6 +4397,9 @@ protected:
     // change is reflected immediately instead of waiting for the next room
     // switch.
     void handle_show_membership_events_toggle_(bool enabled);
+    void handle_show_sender_status_toggle_(bool enabled);
+    /// Re-reads display prefs in every message list (main, thread, popouts).
+    void refresh_all_message_lists_display_prefs_();
 
 #ifdef TESSERACT_UPDATE_CHECKS
     // Persists the "check for updates automatically" preference.

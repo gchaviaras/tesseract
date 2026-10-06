@@ -218,6 +218,13 @@ add_executable(tesseract_tests
     cpp/test_views_accessibility.cpp
 )
 
+# Points config_dir()/data_dir() at a temporary directory for every test case,
+# so no test can overwrite the developer's real settings or accounts. Kept out
+# of unity batching so adding it doesn't reshuffle the other batches.
+target_sources(tesseract_tests PRIVATE cpp/test_isolation_listener.cpp)
+set_source_files_properties(cpp/test_isolation_listener.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
 # Screenshot-mode sources are only in tesseract_tk when the mode is ON (they
 # stay out of release builds); compile them into the test binary otherwise so
 # the director/fixture stay covered by the normal ctest run.

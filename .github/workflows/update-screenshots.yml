@@ -113,7 +113,7 @@ jobs:
 
       # coreutils provides gtimeout for the capture step.
       - name: Install build dependencies
-        run: brew install librsvg opus coreutils
+        run: brew install resvg opus coreutils
 
       - name: Expose opus to audiopus_sys
         run: |

@@ -14,19 +14,38 @@ string(REPLACE
     _svg_patched "${_svg_raw}")
 file(WRITE "${_svg}" "${_svg_patched}")
 
+# Rasterise with resvg (single Rust binary, `cargo install resvg`; same
+# renderer the Windows icon generator uses) or librsvg's rsvg-convert.
+find_program(TESSERACT_RESVG resvg)
+find_program(TESSERACT_RSVG_CONVERT rsvg-convert)
+if(NOT TESSERACT_RESVG AND NOT TESSERACT_RSVG_CONVERT)
+    message(FATAL_ERROR
+        "Generating Tesseract.icns needs resvg (`cargo install resvg`) or rsvg-convert (librsvg)")
+endif()
+
+set(_icon_commands)
+foreach(_entry
+        "16|icon_16x16"     "32|icon_16x16@2x"
+        "32|icon_32x32"     "64|icon_32x32@2x"
+        "128|icon_128x128"  "256|icon_128x128@2x"
+        "256|icon_256x256"  "512|icon_256x256@2x"
+        "512|icon_512x512"  "1024|icon_512x512@2x")
+    string(REPLACE "|" ";" _entry "${_entry}")
+    list(GET _entry 0 _px)
+    list(GET _entry 1 _name)
+    if(TESSERACT_RESVG)
+        list(APPEND _icon_commands COMMAND "${TESSERACT_RESVG}"
+            -w ${_px} -h ${_px} "${_svg}" "${_set}/${_name}.png")
+    else()
+        list(APPEND _icon_commands COMMAND "${TESSERACT_RSVG_CONVERT}"
+            -w ${_px} -h ${_px} "${_svg}" -o "${_set}/${_name}.png")
+    endif()
+endforeach()
+
 add_custom_command(
     OUTPUT "${_icns}"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${_set}"
-    COMMAND rsvg-convert -w 16   -h 16   "${_svg}" -o "${_set}/icon_16x16.png"
-    COMMAND rsvg-convert -w 32   -h 32   "${_svg}" -o "${_set}/icon_16x16@2x.png"
-    COMMAND rsvg-convert -w 32   -h 32   "${_svg}" -o "${_set}/icon_32x32.png"
-    COMMAND rsvg-convert -w 64   -h 64   "${_svg}" -o "${_set}/icon_32x32@2x.png"
-    COMMAND rsvg-convert -w 128  -h 128  "${_svg}" -o "${_set}/icon_128x128.png"
-    COMMAND rsvg-convert -w 256  -h 256  "${_svg}" -o "${_set}/icon_128x128@2x.png"
-    COMMAND rsvg-convert -w 256  -h 256  "${_svg}" -o "${_set}/icon_256x256.png"
-    COMMAND rsvg-convert -w 512  -h 512  "${_svg}" -o "${_set}/icon_256x256@2x.png"
-    COMMAND rsvg-convert -w 512  -h 512  "${_svg}" -o "${_set}/icon_512x512.png"
-    COMMAND rsvg-convert -w 1024 -h 1024 "${_svg}" -o "${_set}/icon_512x512@2x.png"
+    ${_icon_commands}
     COMMAND iconutil -c icns "${_set}" -o "${_icns}"
     DEPENDS "${_svg}"
     COMMENT "Generating Tesseract.icns"

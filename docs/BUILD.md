@@ -50,7 +50,7 @@ Notes on the less obvious deps:
 ### macOS / AppKit
 
 ```bash
-brew install ninja cmake opus
+brew install ninja cmake opus resvg   # resvg renders the app icon; without Homebrew: cargo install resvg
 xcode-select --install   # Xcode Command Line Tools
 # Rust toolchain + native macOS targets (pick the one matching the preset):
 #   rustup toolchain install stable

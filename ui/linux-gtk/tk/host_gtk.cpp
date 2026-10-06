@@ -25,6 +25,81 @@ namespace tk::gtk4
 {
 
 // ─────────────────────────────────────────────────────────────────────────
+//  Popup occlusion for native text controls
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Opacity 0 hides a native control from the screen but not from GTK's
+// picking, so a canvas popup painted over it (an emoji picker overlapping
+// the composer) would otherwise lose every click, hover and wheel event in
+// the overlap to the control — a sibling of the drawing area inside the
+// GtkOverlay, so the drawing area's controllers (and with them Host's popup
+// routing) never see them. GtkWidget's contains() can't help: picking
+// tries a widget's children before consulting its contains().
+//
+// Instead the Host stacks an invisible, targetable "shield" overlay child at
+// the open popup's rect, above every native control, carrying the drawing
+// area's own pointer controllers — GTK's real stacking order then matches
+// what the canvas paints. The popup's own native controls (a picker's search
+// field) are restacked above the shield. See Host::refresh_popup_shield_ and
+// NativeTextField::set_occlusion_query.
+
+class GtkOcclusionClient;
+
+struct GtkOcclusionRegistry
+{
+    std::vector<GtkOcclusionClient*> clients;
+    // Set when a control registers or gets its query, so the Host restacks
+    // even though the popup itself didn't change.
+    bool dirty = false;
+};
+
+class GtkOcclusionClient
+{
+public:
+    explicit GtkOcclusionClient(std::weak_ptr<GtkOcclusionRegistry> registry)
+        : registry_(std::move(registry))
+    {
+        if (auto r = registry_.lock())
+        {
+            r->clients.push_back(this);
+            r->dirty = true;
+        }
+    }
+    virtual ~GtkOcclusionClient()
+    {
+        if (auto r = registry_.lock())
+            std::erase(r->clients, this);
+    }
+    GtkOcclusionClient(const GtkOcclusionClient&) = delete;
+    GtkOcclusionClient& operator=(const GtkOcclusionClient&) = delete;
+
+    // While a popup is open: moves this control's overlay child to the top
+    // of `overlay`'s stacking order when the control belongs to that popup
+    // (its query reports no popup over it), keeping it above the shield.
+    void raise_if_popup_owned(GtkWidget* overlay)
+    {
+        GtkWidget* w = occlusion_widget_();
+        if (!w || !occlusion_query_ || occlusion_query_())
+            return;
+        gtk_widget_insert_before(w, overlay, nullptr);
+    }
+
+protected:
+    void set_occlusion_query_(std::function<std::optional<Rect>()> fn)
+    {
+        occlusion_query_ = std::move(fn);
+        if (auto r = registry_.lock())
+            r->dirty = true;
+    }
+    // The control's own GtkOverlay child.
+    virtual GtkWidget* occlusion_widget_() const = 0;
+
+private:
+    std::weak_ptr<GtkOcclusionRegistry> registry_;
+    std::function<std::optional<Rect>()> occlusion_query_;
+};
+
+// ─────────────────────────────────────────────────────────────────────────
 //  GtkNativeTextField — GtkEntry-backed NativeTextField overlay
 // ─────────────────────────────────────────────────────────────────────────
 //
@@ -33,14 +108,16 @@ namespace tk::gtk4
 // size request, since GtkOverlay positions children with halign/valign
 // + margin rather than (x, y).
 
-class GtkNativeTextField : public NativeTextField
+class GtkNativeTextField : public NativeTextField, public GtkOcclusionClient
 {
 public:
     // `canvas` is the drawing-area surface widget to hand GTK focus back to
     // when this field's focus is explicitly cleared (set_focused(false)) —
     // may be null for callers that don't care (focus then simply stays put).
-    explicit GtkNativeTextField(GtkWidget* overlay, GtkWidget* canvas = nullptr)
-        : overlay_(overlay), canvas_(canvas), entry_(gtk_entry_new())
+    GtkNativeTextField(GtkWidget* overlay, GtkWidget* canvas,
+                       std::weak_ptr<GtkOcclusionRegistry> occlusion)
+        : GtkOcclusionClient(std::move(occlusion)), overlay_(overlay),
+          canvas_(canvas), entry_(gtk_entry_new())
     {
         gtk_widget_set_halign(entry_, GTK_ALIGN_START);
         gtk_widget_set_valign(entry_, GTK_ALIGN_START);
@@ -295,6 +372,10 @@ public:
     {
         on_pointer_down_ = std::move(cb);
     }
+    void set_occlusion_query(std::function<std::optional<Rect>()> fn) override
+    {
+        set_occlusion_query_(std::move(fn));
+    }
     void set_compact(bool compact) override
     {
         if (!entry_)
@@ -328,6 +409,12 @@ public:
             gtk_widget_add_css_class(entry_, "tesseract-compact");
         else
             gtk_widget_remove_css_class(entry_, "tesseract-compact");
+    }
+
+protected:
+    GtkWidget* occlusion_widget_() const override
+    {
+        return entry_;
     }
 
 private:
@@ -636,14 +723,16 @@ private:
 // height of the TextView; on_height_changed fires whenever the buffer's
 // changed signal produces a height delta.
 
-class GtkNativeTextArea : public NativeTextArea
+class GtkNativeTextArea : public NativeTextArea, public GtkOcclusionClient
 {
 public:
     // `canvas` is the drawing-area surface widget to hand GTK focus back to
     // when this area's focus is explicitly cleared (set_focused(false)) —
     // may be null for callers that don't care (focus then simply stays put).
-    explicit GtkNativeTextArea(GtkWidget* overlay, GtkWidget* canvas = nullptr)
-        : overlay_(overlay), canvas_(canvas), scroll_(gtk_scrolled_window_new()),
+    GtkNativeTextArea(GtkWidget* overlay, GtkWidget* canvas,
+                      std::weak_ptr<GtkOcclusionRegistry> occlusion)
+        : GtkOcclusionClient(std::move(occlusion)), overlay_(overlay),
+          canvas_(canvas), scroll_(gtk_scrolled_window_new()),
           view_(gtk_text_view_new())
     {
         gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view_), GTK_WRAP_WORD_CHAR);
@@ -1118,6 +1207,10 @@ public:
     void set_on_pointer_down(std::function<void()> cb) override
     {
         on_pointer_down_ = std::move(cb);
+    }
+    void set_occlusion_query(std::function<std::optional<Rect>()> fn) override
+    {
+        set_occlusion_query_(std::move(fn));
     }
 
     void set_on_edit_last(std::function<bool()> fn) override
@@ -1689,6 +1782,12 @@ public:
                              static_cast<gdouble>(emoji_pt), nullptr);
             }
         }
+    }
+
+protected:
+    GtkWidget* occlusion_widget_() const override
+    {
+        return scroll_;
     }
 
 private:
@@ -2699,11 +2798,13 @@ public:
 
     std::unique_ptr<NativeTextField> make_text_field() override
     {
-        return std::make_unique<GtkNativeTextField>(overlay_, drawing_area_);
+        return std::make_unique<GtkNativeTextField>(overlay_, drawing_area_,
+                                                    occlusion_);
     }
     std::unique_ptr<NativeTextArea> make_text_area() override
     {
-        return std::make_unique<GtkNativeTextArea>(overlay_, drawing_area_);
+        return std::make_unique<GtkNativeTextArea>(overlay_, drawing_area_,
+                                                   occlusion_);
     }
 
     std::unique_ptr<tk::PopupSurfaceHandle> make_popup_surface() override
@@ -3101,6 +3202,7 @@ public:
         root_->paint(ctx);
         popup_ = pending_popup_;
         popup_trigger_ = pending_popup_trigger_;
+        refresh_popup_shield_();
         root_->paint_overlay(ctx);
         const Rect surface_bounds{0, 0, static_cast<float>(w),
                                   static_cast<float>(h)};
@@ -3208,6 +3310,9 @@ public:
             }
         }
         live_overlays_.clear();
+        if (overlay_ && popup_shield_)
+            gtk_overlay_remove_overlay(GTK_OVERLAY(overlay_), popup_shield_);
+        popup_shield_ = nullptr;
         overlay_ = nullptr;
         drawing_area_ = nullptr;
     }
@@ -3245,6 +3350,39 @@ private:
     // trampolines below, which it references.
     void sync_anim_overlays_();
 
+    // Shows/positions/restacks popup_shield_ when the open popup changed or
+    // moved, or a native control registered — see GtkOcclusionRegistry.
+    void refresh_popup_shield_()
+    {
+        const Widget* p = popup();
+        const Rect r = p ? p->bounds() : Rect{};
+        if (!occlusion_->dirty && p == shield_popup_ &&
+            r.x == shield_rect_.x && r.y == shield_rect_.y &&
+            r.w == shield_rect_.w && r.h == shield_rect_.h)
+            return;
+        occlusion_->dirty = false;
+        shield_popup_ = p;
+        shield_rect_ = r;
+        if (!overlay_)
+            return;
+        if (!p)
+        {
+            if (popup_shield_)
+                gtk_widget_set_visible(popup_shield_, FALSE);
+            return;
+        }
+        ensure_popup_shield_();
+        position_anim_overlay_(popup_shield_, r);
+        gtk_widget_set_visible(popup_shield_, TRUE);
+        gtk_widget_insert_before(popup_shield_, overlay_, nullptr);
+        const std::vector<GtkOcclusionClient*> clients = occlusion_->clients;
+        for (GtkOcclusionClient* c : clients)
+            c->raise_if_popup_owned(overlay_);
+    }
+    // Creates popup_shield_ on first use. Defined after the pointer
+    // callbacks it attaches.
+    void ensure_popup_shield_();
+
     // Shared by both the create and reposition paths in sync_anim_overlays_.
     void position_anim_overlay_(GtkWidget* w, const Rect& visible)
     {
@@ -3260,6 +3398,13 @@ private:
     const Theme* theme_;
     std::unique_ptr<CanvasFactory> factory_;
     bool transparent_ = false;
+    // Declared before root_ so it outlives every native control root_'s
+    // widgets own (they unregister from it on destruction).
+    std::shared_ptr<GtkOcclusionRegistry> occlusion_ =
+        std::make_shared<GtkOcclusionRegistry>();
+    GtkWidget* popup_shield_ = nullptr; // owned by overlay_
+    const Widget* shield_popup_ = nullptr; // identity only, never deref'd
+    Rect shield_rect_{};
     std::unique_ptr<Widget> root_;
     std::function<void()> on_layout_;
     std::vector<std::function<void()>> layout_listeners_;
@@ -3429,6 +3574,105 @@ gboolean scroll_cb(GtkEventControllerScroll* controller, double dx, double dy,
     }
     return TRUE;
 }
+
+// Popup shield (see GtkOcclusionRegistry): its controllers run the drawing
+// area's own callbacks, translated from shield-local to drawing-area
+// coordinates.
+static void shield_to_canvas(GtkEventController* c, double& x, double& y)
+{
+    GtkWidget* shield = gtk_event_controller_get_widget(c);
+    GtkWidget* overlay = gtk_widget_get_parent(shield);
+    GtkWidget* canvas =
+        overlay ? gtk_overlay_get_child(GTK_OVERLAY(overlay)) : nullptr;
+    const graphene_point_t in =
+        GRAPHENE_POINT_INIT(static_cast<float>(x), static_cast<float>(y));
+    graphene_point_t out;
+    if (canvas && gtk_widget_compute_point(shield, canvas, &in, &out))
+    {
+        x = out.x;
+        y = out.y;
+    }
+}
+
+void shield_click_pressed_cb(GtkGestureClick* g, int n_press, double x,
+                             double y, gpointer p)
+{
+    shield_to_canvas(GTK_EVENT_CONTROLLER(g), x, y);
+    click_pressed_cb(g, n_press, x, y, p);
+}
+
+void shield_click_released_cb(GtkGestureClick* g, int n_press, double x,
+                              double y, gpointer p)
+{
+    shield_to_canvas(GTK_EVENT_CONTROLLER(g), x, y);
+    click_released_cb(g, n_press, x, y, p);
+}
+
+void shield_click_pressed_secondary_cb(GtkGestureClick* g, int n_press,
+                                       double x, double y, gpointer p)
+{
+    shield_to_canvas(GTK_EVENT_CONTROLLER(g), x, y);
+    click_pressed_secondary_cb(g, n_press, x, y, p);
+}
+
+void shield_motion_cb(GtkEventControllerMotion* m, double x, double y,
+                      gpointer p)
+{
+    shield_to_canvas(GTK_EVENT_CONTROLLER(m), x, y);
+    motion_cb(m, x, y, p);
+}
+
+} // namespace
+
+void Host::ensure_popup_shield_()
+{
+    if (popup_shield_ || !overlay_)
+        return;
+    // Draws nothing (no draw func); opacity 0 is belt-and-braces. Mirrors
+    // the drawing area's controller set in Surface::Surface. scroll_cb reads
+    // the pointer position motion cached, so it needs no translation.
+    GtkWidget* w = gtk_drawing_area_new();
+    gtk_widget_set_opacity(w, 0.0);
+    gtk_widget_set_can_focus(w, FALSE);
+    gtk_widget_set_focusable(w, FALSE);
+    gtk_widget_set_halign(w, GTK_ALIGN_START);
+    gtk_widget_set_valign(w, GTK_ALIGN_START);
+    gtk_widget_set_visible(w, FALSE);
+
+    GtkGesture* click = gtk_gesture_click_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click),
+                                  GDK_BUTTON_PRIMARY);
+    g_signal_connect(click, "pressed", G_CALLBACK(&shield_click_pressed_cb),
+                     this);
+    g_signal_connect(click, "released", G_CALLBACK(&shield_click_released_cb),
+                     this);
+    gtk_widget_add_controller(w, GTK_EVENT_CONTROLLER(click));
+
+    GtkGesture* click_secondary = gtk_gesture_click_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_secondary),
+                                  GDK_BUTTON_SECONDARY);
+    g_signal_connect(click_secondary, "pressed",
+                     G_CALLBACK(&shield_click_pressed_secondary_cb), this);
+    gtk_widget_add_controller(w, GTK_EVENT_CONTROLLER(click_secondary));
+
+    GtkEventController* motion = gtk_event_controller_motion_new();
+    g_signal_connect(motion, "motion", G_CALLBACK(&shield_motion_cb), this);
+    g_signal_connect(motion, "leave", G_CALLBACK(&leave_cb), this);
+    gtk_widget_add_controller(w, motion);
+
+    GtkEventController* scroll = gtk_event_controller_scroll_new(
+        static_cast<GtkEventControllerScrollFlags>(
+            GTK_EVENT_CONTROLLER_SCROLL_VERTICAL |
+            GTK_EVENT_CONTROLLER_SCROLL_HORIZONTAL));
+    g_signal_connect(scroll, "scroll", G_CALLBACK(&scroll_cb), this);
+    gtk_widget_add_controller(w, scroll);
+
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay_), w);
+    popup_shield_ = w;
+}
+
+namespace
+{
 
 Key key_from_gdk(guint keyval)
 {

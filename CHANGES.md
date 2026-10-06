@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-06
 
+- fix(tk): a popup drawn over a native text field (e.g. the reaction emoji picker overlapping the composer) now gets the clicks, hover and scrolling in the overlap instead of the field. Qt masks the field, macOS declines `hitTest:`, GTK4 stacks an input shield above it. Qt6 build + ctest 2248/2248, user-verified Qt6
 - fix(encryption): silent recovery setup no longer turns key backup back on for users who turned it off, in Tesseract or another client, including when turning it off failed partway. Qt6 build + ctest 2247/2247, cargo tests for the new check
 - feat(encryption): signing out with an unsaved recovery key can also delete it from the computer, and the notice for existing accounts can turn the new backup off. Qt6 build + ctest 2246/2246
 - build: `-DTESSERACT_ENABLE_SILENT_RECOVERY_SETUP=OFF` (default `ON`) restores the encryption setup dialog instead of silent recovery setup. Qt6 build + ctest 2240/2240

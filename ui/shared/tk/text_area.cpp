@@ -44,6 +44,10 @@ void TextArea::ensure_native_()
     // popup while the composer was already focused).
     area_->set_on_pointer_down([this] { host()->request_focus(this); });
 
+    // Keep an open popup drawn over this control from losing pointer input
+    // to it — see NativeTextField::set_occlusion_query.
+    area_->set_occlusion_query([this] { return host()->popup_rect_over(this); });
+
     // Unlike tk::TextField (which always claims Tab/ShiftTab for canvas
     // traversal before consulting its handler stack), TextArea gives the
     // pushed-handler stack first refusal on every key, including

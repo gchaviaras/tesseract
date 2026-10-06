@@ -29,6 +29,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -132,6 +133,19 @@ public:
     // comment) gets dismissed by a click into a field that was already
     // focused when the popup opened. Default no-op so backends opt in.
     virtual void set_on_pointer_down(std::function<void()>) {}
+
+    // Supplies the world rect of an open register_popup()'d popup drawn on
+    // top of this control (nullopt when none is). The canvas paints the
+    // popup over the control's captured image, but the real native control
+    // still sits in the OS's own hit-testing, so without this a click,
+    // hover or wheel event over the overlapping part goes straight to the
+    // control and never reaches Host's popup routing. Backends exclude that
+    // rect from the control's native hit-testing — Qt with
+    // QWidget::setMask(), refreshed via refresh_occlusion(). Default no-op:
+    // Win32's control is already outside OS hit-testing.
+    virtual void set_occlusion_query(std::function<std::optional<Rect>()>) {}
+    // Re-read the occlusion query — the open popup or this control moved.
+    virtual void refresh_occlusion() {}
 
     // Reduce internal padding so the field fits inside a compact inline row
     // (e.g. the account settings display-name row). Default no-op.
@@ -443,6 +457,10 @@ public:
     // doc comment above — same rationale, mirrored here for TextArea.
     // Default no-op so backends opt in.
     virtual void set_on_pointer_down(std::function<void()>) {}
+
+    // See NativeTextField::set_occlusion_query / refresh_occlusion.
+    virtual void set_occlusion_query(std::function<std::optional<Rect>()>) {}
+    virtual void refresh_occlusion() {}
 
     /// Fired when the Up arrow is pressed while the composer is empty and
     /// the shortcode popup is not open — used to edit the last own message
@@ -1018,6 +1036,16 @@ public:
     {
         auto p = popup_.lock();
         return p && p->contains_world(world);
+    }
+    // The open popup's world rect when it is drawn over `w` — i.e. `w` is
+    // not the popup itself or part of its subtree (a picker's own search
+    // field). Feeds NativeTextField/NativeTextArea::set_occlusion_query.
+    std::optional<Rect> popup_rect_over(const Widget* w) const
+    {
+        auto p = popup_.lock();
+        if (!p || p->is_ancestor_of(w))
+            return std::nullopt;
+        return p->bounds();
     }
 
     // Closes the currently registered popup (if any) immediately, the same

@@ -714,6 +714,21 @@ tk::KeyEvent translate_key_event(NSEvent* event)
 namespace tk::macos
 {
 
+// True when `p` — in the surface view's (flipped, world-space) coordinates,
+// which is what -hitTest: receives on a direct subview — lies under a popup
+// drawn over a native text control. See NativeTextField::set_occlusion_query:
+// the control's -hitTest: then returns nil, so AppKit falls through to the
+// surface view and Host's popup routing instead of the alphaValue-0 control.
+static bool occluded_at(const std::function<std::optional<Rect>()>& query,
+                        NSPoint p)
+{
+    if (!query)
+        return false;
+    const std::optional<Rect> r = query();
+    return r && p.x >= r->x && p.y >= r->y && p.x < r->x + r->w &&
+           p.y < r->y + r->h;
+}
+
 class NSTextFieldNative : public NativeTextField
 {
 public:
@@ -747,6 +762,15 @@ public:
     void set_on_popup_nav(std::function<bool(NavKey)> cb) override
     {
         popup_nav_ = std::move(cb);
+    }
+    void set_occlusion_query(std::function<std::optional<Rect>()> fn) override
+    {
+        occlusion_query_ = std::move(fn);
+    }
+    // Queried per point by the field views' -hitTest: — see occluded_at().
+    bool occluded_at(NSPoint p) const
+    {
+        return macos::occluded_at(occlusion_query_, p);
     }
 
     const tk::Image* rendered_image() const override
@@ -804,6 +828,7 @@ private:
     std::function<void()> on_submit_;
     std::function<void(bool)> on_focus_changed_;
     std::function<void()> on_pointer_down_;
+    std::function<std::optional<Rect>()> occlusion_query_;
 };
 
 } // namespace tk::macos
@@ -909,6 +934,12 @@ private:
 @end
 
 @implementation TKTextFieldView
+- (NSView*)hitTest:(NSPoint)point
+{
+    if (self.owner && self.owner->occluded_at(point))
+        return nil;
+    return [super hitTest:point];
+}
 - (void)mouseDown:(NSEvent*)event
 {
     [super mouseDown:event];
@@ -924,6 +955,12 @@ private:
 @end
 
 @implementation TKSecureTextFieldView
+- (NSView*)hitTest:(NSPoint)point
+{
+    if (self.owner && self.owner->occluded_at(point))
+        return nil;
+    return [super hitTest:point];
+}
 - (void)mouseDown:(NSEvent*)event
 {
     [super mouseDown:event];
@@ -1352,6 +1389,15 @@ public:
     {
         on_pointer_down_ = std::move(cb);
     }
+    void set_occlusion_query(std::function<std::optional<Rect>()> fn) override
+    {
+        occlusion_query_ = std::move(fn);
+    }
+    // Queried per point by TKOcclusionScrollView's -hitTest:.
+    bool occluded_at(NSPoint p) const
+    {
+        return macos::occluded_at(occlusion_query_, p);
+    }
 
     void set_on_edit_last(std::function<bool()> fn) override
     {
@@ -1399,6 +1445,7 @@ public:
     FilePasteHandler on_file_paste_;
 
 private:
+    std::function<std::optional<Rect>()> occlusion_query_;
     TKSurfaceView* superview_ = nil;
     NSScrollView* scroll_ = nil;
     NSTextView* view_ = nil;
@@ -1825,13 +1872,33 @@ private:
 }
 @end
 
+// scroll_ is the text area's outermost subview of the surface, so it is the
+// view whose -hitTest: must decline a point under a popup — declining in
+// the text view inside it would just leave the click to the clip/scroll
+// view. See occluded_at().
+@interface TKOcclusionScrollView : NSScrollView
+@property(nonatomic, assign) tk::macos::NSTextViewNative* owner;
+@end
+
+@implementation TKOcclusionScrollView
+- (NSView*)hitTest:(NSPoint)point
+{
+    if (self.owner && self.owner->occluded_at(point))
+        return nil;
+    return [super hitTest:point];
+}
+@end
+
 namespace tk::macos
 {
 
 NSTextViewNative::NSTextViewNative(TKSurfaceView* superview)
     : superview_(superview)
 {
-    scroll_ = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    TKOcclusionScrollView* sv =
+        [[TKOcclusionScrollView alloc] initWithFrame:NSZeroRect];
+    sv.owner = this;
+    scroll_ = sv;
     scroll_.borderType = NSNoBorder;
     scroll_.hasVerticalScroller = YES;
     scroll_.hasHorizontalScroller = NO;
@@ -1937,6 +2004,7 @@ NSTextViewNative::~NSTextViewNative()
     {
         static_cast<TKComposeTextView*>(view_).owner = nullptr;
     }
+    static_cast<TKOcclusionScrollView*>(scroll_).owner = nullptr;
     [scroll_ removeFromSuperview];
     [placeholder_ removeFromSuperview];
     scroll_ = nil;

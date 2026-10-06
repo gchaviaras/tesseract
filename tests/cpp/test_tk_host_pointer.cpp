@@ -427,3 +427,30 @@ TEST_CASE("Tab traversal skips a disabled subtree", "[tk][widget][disabled]")
     b->set_enabled(false);
     CHECK(next_focusable(root.get(), a, /*forward=*/true) == a); // b skipped
 }
+
+TEST_CASE("popup_rect_over reports the open popup only to widgets outside it",
+          "[tk][host][popup]")
+{
+    // Feeds NativeTextField/NativeTextArea::set_occlusion_query: a native
+    // control under the popup (the composer under a reaction picker) must
+    // stop hit-testing there, but the popup's own search field must not.
+    ProbeWidget root({0, 0, 400, 400});
+    ProbeWidget* composer =
+        root.add_child(std::make_unique<ProbeWidget>(Rect{0, 350, 400, 50}));
+    ProbeWidget popup({100, 200, 200, 180});
+    ProbeWidget* search =
+        popup.add_child(std::make_unique<ProbeWidget>(Rect{110, 210, 180, 24}));
+    TestHost host(&root);
+
+    REQUIRE_FALSE(host.popup_rect_over(composer).has_value()); // none open
+
+    host.set_active_popup(&popup);
+    const auto over = host.popup_rect_over(composer);
+    REQUIRE(over.has_value());
+    REQUIRE(over->x == 100);
+    REQUIRE(over->y == 200);
+    REQUIRE(over->w == 200);
+    REQUIRE(over->h == 180);
+    REQUIRE_FALSE(host.popup_rect_over(search).has_value());
+    REQUIRE_FALSE(host.popup_rect_over(&popup).has_value());
+}

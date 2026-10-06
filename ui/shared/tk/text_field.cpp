@@ -49,6 +49,10 @@ void TextField::ensure_native_()
     // every click.
     field_->set_on_pointer_down([this] { host()->request_focus(this); });
 
+    // Keep an open popup drawn over this control from losing pointer input
+    // to it — see NativeTextField::set_occlusion_query.
+    field_->set_occlusion_query([this] { return host()->popup_rect_over(this); });
+
     // Forward Tab/Shift-Tab into canvas traversal. Reuses the existing
     // popup-nav mechanism rather than a new callback type — safe to install
     // permanently since nothing else drives popup-nav on a plain field.

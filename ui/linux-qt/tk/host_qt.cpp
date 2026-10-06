@@ -262,10 +262,106 @@ protected:
     }
 };
 
-class QtNativeTextField : public NativeTextField
+// ─────────────────────────────────────────────────────────────────────────
+//  Popup occlusion for native text controls
+// ─────────────────────────────────────────────────────────────────────────
+//
+// WA_DontShowOnScreen hides a native edit from the screen but not from Qt's
+// own hit-testing, so a canvas popup painted over it (an emoji picker
+// overlapping the composer) would otherwise lose every click, hover and
+// wheel event in the overlap to the edit, which never reach Surface — and so
+// never reach Host's popup routing. Each control masks the popup's rect out
+// of its hit-testing (QWidget::setMask; Qt's childAt() honors the mask, and
+// with WA_DontShowOnScreen the mask has no visual effect). The Host refreshes
+// every control's mask when the open popup changes or moves; a control
+// refreshes its own when it moves. See NativeTextField::set_occlusion_query.
+
+class QtOcclusionClient;
+
+struct QtOcclusionRegistry
+{
+    std::vector<QtOcclusionClient*> clients;
+    void refresh_all();
+};
+
+class QtOcclusionClient
 {
 public:
-    explicit QtNativeTextField(QWidget* parent) : edit_(new NavLineEdit(parent))
+    explicit QtOcclusionClient(std::weak_ptr<QtOcclusionRegistry> registry)
+        : registry_(std::move(registry))
+    {
+        if (auto r = registry_.lock())
+            r->clients.push_back(this);
+    }
+    virtual ~QtOcclusionClient()
+    {
+        if (auto r = registry_.lock())
+            std::erase(r->clients, this);
+    }
+    QtOcclusionClient(const QtOcclusionClient&) = delete;
+    QtOcclusionClient& operator=(const QtOcclusionClient&) = delete;
+
+    virtual void refresh_occlusion_mask() = 0;
+
+protected:
+    // Re-applies `w`'s mask from occlusion_query_. Returns true when the
+    // mask changed, so the caller recaptures the control: a capture taken
+    // while masked may leave the masked-out part blank.
+    bool apply_occlusion_mask_(QWidget* w)
+    {
+        const std::optional<Rect> over =
+            occlusion_query_ ? occlusion_query_() : std::nullopt;
+        QRect hole;
+        if (over)
+            hole = QRectF(over->x - w->x(), over->y - w->y(), over->w, over->h)
+                       .toAlignedRect() &
+                   w->rect();
+        if (hole.isEmpty())
+        {
+            if (!masked_)
+                return false;
+            w->clearMask();
+            masked_ = false;
+            mask_ = QRegion();
+            return true;
+        }
+        QRegion region = QRegion(w->rect()).subtracted(hole);
+        // An empty region means "no mask" to setMask(), which would make a
+        // fully covered control hit-testable everywhere again — mask it to a
+        // pixel outside its own rect instead, which nothing can hit.
+        if (region.isEmpty())
+            region = QRegion(-2, -2, 1, 1);
+        if (masked_ && region == mask_)
+            return false;
+        w->setMask(region);
+        masked_ = true;
+        mask_ = region;
+        return true;
+    }
+
+    std::function<std::optional<Rect>()> occlusion_query_;
+
+private:
+    std::weak_ptr<QtOcclusionRegistry> registry_;
+    bool masked_ = false;
+    QRegion mask_;
+};
+
+void QtOcclusionRegistry::refresh_all()
+{
+    // Copy: a refresh must not be able to invalidate the iteration.
+    const std::vector<QtOcclusionClient*> snapshot = clients;
+    for (QtOcclusionClient* c : snapshot)
+        c->refresh_occlusion_mask();
+}
+
+class QtNativeTextField : public NativeTextField, public QtOcclusionClient
+{
+public:
+    QtNativeTextField(QWidget* parent,
+                      std::weak_ptr<QtOcclusionRegistry> occlusion)
+        : QtOcclusionClient(std::move(occlusion)),
+          edit_(new NavLineEdit(parent))
     {
         edit_->setAttribute(Qt::WA_StyledBackground, true);
         edit_->setFrame(false);
@@ -384,6 +480,22 @@ public:
         int y = static_cast<int>(r.y) + (static_cast<int>(r.h) - h) / 2;
         edit_->setGeometry(static_cast<int>(r.x), y, static_cast<int>(r.w), h);
         refresh_image();
+        refresh_occlusion();
+    }
+
+    void set_occlusion_query(std::function<std::optional<Rect>()> fn) override
+    {
+        occlusion_query_ = std::move(fn);
+        refresh_occlusion();
+    }
+    void refresh_occlusion() override
+    {
+        if (edit_ && apply_occlusion_mask_(edit_))
+            request_capture();
+    }
+    void refresh_occlusion_mask() override
+    {
+        refresh_occlusion();
     }
 
     const tk::Image* rendered_image() const override
@@ -993,11 +1105,13 @@ protected:
     }
 };
 
-class QtNativeTextArea : public NativeTextArea
+class QtNativeTextArea : public NativeTextArea, public QtOcclusionClient
 {
 public:
-    explicit QtNativeTextArea(QWidget* parent)
-        : edit_(new ComposeTextEdit(parent))
+    QtNativeTextArea(QWidget* parent,
+                     std::weak_ptr<QtOcclusionRegistry> occlusion)
+        : QtOcclusionClient(std::move(occlusion)),
+          edit_(new ComposeTextEdit(parent))
     {
         edit_->setAttribute(Qt::WA_StyledBackground, true);
         edit_->setFrameShape(QFrame::NoFrame);
@@ -1155,6 +1269,22 @@ public:
         const int y = ry + (rh - h) / 2;
         edit_->setGeometry(rx, y, rw, h);
         refresh_image();
+        refresh_occlusion();
+    }
+
+    void set_occlusion_query(std::function<std::optional<Rect>()> fn) override
+    {
+        occlusion_query_ = std::move(fn);
+        refresh_occlusion();
+    }
+    void refresh_occlusion() override
+    {
+        if (edit_ && apply_occlusion_mask_(edit_))
+            request_capture();
+    }
+    void refresh_occlusion_mask() override
+    {
+        refresh_occlusion();
     }
     void set_text(std::string text) override
     {
@@ -2422,7 +2552,7 @@ public:
         {
             return nullptr;
         }
-        return std::make_unique<QtNativeTextField>(surface_);
+        return std::make_unique<QtNativeTextField>(surface_, occlusion_);
     }
 
     std::unique_ptr<NativeTextArea> make_text_area() override
@@ -2431,7 +2561,7 @@ public:
         {
             return nullptr;
         }
-        return std::make_unique<QtNativeTextArea>(surface_);
+        return std::make_unique<QtNativeTextArea>(surface_, occlusion_);
     }
 
     std::unique_ptr<tk::PopupSurfaceHandle> make_popup_surface() override
@@ -2667,6 +2797,7 @@ public:
         root_->paint(ctx);
         popup_ = pending_popup_;
         popup_trigger_ = pending_popup_trigger_;
+        refresh_popup_occlusion_();
         root_->paint_overlay(ctx);
         const Rect surface_bounds{0, 0, static_cast<float>(surface_->width()),
                                   static_cast<float>(surface_->height())};
@@ -2796,10 +2927,31 @@ protected:
     }
 
 private:
+    // Re-mask every native text control when the open popup changed or
+    // moved since the last frame — see QtOcclusionRegistry.
+    void refresh_popup_occlusion_()
+    {
+        const Widget* p = popup();
+        const Rect r = p ? p->bounds() : Rect{};
+        if (p == occlusion_popup_ && r.x == occlusion_popup_rect_.x &&
+            r.y == occlusion_popup_rect_.y && r.w == occlusion_popup_rect_.w &&
+            r.h == occlusion_popup_rect_.h)
+            return;
+        occlusion_popup_ = p;
+        occlusion_popup_rect_ = r;
+        occlusion_->refresh_all();
+    }
+
     Surface* surface_;
     const Theme* theme_;
     std::unique_ptr<CanvasFactory> factory_;
     bool transparent_ = false;
+    // Declared before root_ so it outlives every native control root_'s
+    // widgets own (they unregister from it on destruction).
+    std::shared_ptr<QtOcclusionRegistry> occlusion_ =
+        std::make_shared<QtOcclusionRegistry>();
+    const Widget* occlusion_popup_ = nullptr; // identity only, never deref'd
+    Rect occlusion_popup_rect_{};
     std::unique_ptr<Widget> root_;
     std::function<void()> on_layout_;
     std::vector<std::function<void()>> layout_listeners_;

@@ -412,7 +412,7 @@ if(APPLE)
     add_custom_command(
         TARGET cargo-build_tesseract_sdk_ffi
         POST_BUILD
-        COMMAND sh -c "${CMAKE_AR} d '$<TARGET_FILE:tesseract_sdk_ffi-static>' cppgen_plugin.o protozero_plugin.o main.o || true"
+        COMMAND sh -c "${CMAKE_AR} d '$<TARGET_PROPERTY:tesseract_sdk_ffi-static,IMPORTED_LOCATION>' cppgen_plugin.o protozero_plugin.o main.o || true"
         COMMENT "Stripping stray protoc-plugin objects from libtesseract_sdk_ffi.a (if present)"
         VERBATIM
     )

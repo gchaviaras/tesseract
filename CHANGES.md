@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-06
 
+- fix(cmake): macOS configure no longer fails with a dependency cycle on `cargo-build_tesseract_sdk_ffi`; the protoc-object strip step reads the archive path via `TARGET_PROPERTY` instead of `TARGET_FILE`. macOS x86_64 Release build, user-verified
 - fix(roomlist): section-header collapse/expand indicator is a Lucide chevron (down = collapsed, up = expanded) instead of a ▸/▾ glyph that some fonts drew as emoji. Qt6 build + ctest 2200/2200, user-verified Qt6
 
 ### 2026-10-05

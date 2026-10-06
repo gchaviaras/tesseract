@@ -253,7 +253,8 @@ pub(crate) async fn build_configured_client(
         // 10MiB) — a tested upstream preset that was previously left unused,
         // taking every default instead.
         .sqlite_store_with_config_and_cache_path(
-            SqliteStoreConfig::with_low_memory_config(sqlite_path).key(store_key),
+            SqliteStoreConfig::with_low_memory_config(sqlite_path)
+                .key(store_key.map(|k| k.as_slice())),
             None::<&std::path::Path>,
         )
         .handle_refresh_tokens()

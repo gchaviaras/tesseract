@@ -70,107 +70,114 @@ struct GetTokenResponse {
     url: String, // LiveKit SFU WebSocket URL
 }
 
+/// The first LiveKit transport's `livekit_service_url` in `transports`.
+fn livekit_service_url(
+    transports: &[matrix_sdk::ruma::api::client::rtc::RtcTransport],
+) -> Option<String> {
+    use matrix_sdk::ruma::api::client::rtc::RtcTransport;
+    transports.iter().find_map(|t| match t {
+        RtcTransport::LiveKit(info) => Some(info.service_url.clone()),
+        _ => None,
+    })
+}
+
 /// Fetch the LiveKit service URL for a call session.
 ///
 /// Discovery order (mirrors Element Call):
 ///  1. `GET /_matrix/client/v1/rtc/transports` (stable; schema per MSC4195,
-///     formalized as the MatrixRTC transports registry by MSC4519)
-///  2. `GET /_matrix/client/unstable/org.matrix.msc4143/rtc/transports`
+///     formalized as the MatrixRTC transports registry by MSC4519), via
+///     matrix-sdk, which caches the answer.
+///  2. `m.rtc_foci` / `org.matrix.msc4143.rtc_foci` in
+///     `/.well-known/matrix/client`, via matrix-sdk. Tried even when step 1
+///     answered with an empty list.
+///  3. `GET /_matrix/client/unstable/org.matrix.msc4143/rtc/transports`
 ///     (unstable-period path per MSC4519; unstable transport `type`s are
-///     registry-prefixed, e.g. `msc4195.livekit`)
-///  3. `org.matrix.msc4143.rtc_foci` in `/.well-known/matrix/client`
+///     registry-prefixed, e.g. `msc4195.livekit`). matrix-sdk doesn't know
+///     this path, so it stays a hand-rolled fallback for older homeservers.
 ///
 /// Neither MSC4519 nor the widget-facing MSC4515 (which just delegates
 /// `GET /rtc/transports` through a `get_rtc_transports` widget action —
 /// not applicable here, as Tesseract hosts no Matrix widgets) deprecates
-/// this well-known fallback, so all three tiers are tried in order.
-///
-/// `server_name` is the Matrix server name (e.g. `"example.com"`) used to
-/// build the well-known URL; it is distinct from `homeserver_url` in
-/// delegated deployments.
+/// the well-known fallback, so all three tiers are tried in order.
 pub async fn fetch_livekit_service_url(
+    client: &matrix_sdk::Client,
     http: &reqwest::Client,
-    homeserver_url: &str,
-    access_token: &str,
-    server_name: &str,
 ) -> anyhow::Result<String> {
-    let base = homeserver_url.trim_end_matches('/');
-    let candidates = [
-        format!("{base}/_matrix/client/v1/rtc/transports"),
-        format!("{base}/_matrix/client/unstable/org.matrix.msc4143/rtc/transports"),
-    ];
-
-    for url in &candidates {
-        let resp = http
-            .get(url)
-            .bearer_auth(access_token)
-            .send()
-            .await
-            .context("GET /rtc/transports")?;
-
-        if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            continue;
+    // A failure here (5xx, network blip) must not stop the fallbacks below.
+    match client.discover_rtc_transports().await {
+        Ok(found) => {
+            if let Some(url) = found.as_deref().and_then(livekit_service_url) {
+                return Ok(url);
+            }
         }
-        if !resp.status().is_success() {
-            return Err(anyhow!("GET /rtc/transports → {}", resp.status()));
-        }
-
-        let text = resp.text().await.context("read /rtc/transports body")?;
-        let body: TransportsResponse = serde_json::from_str(&text)
-            .with_context(|| format!("parse /rtc/transports — body was: {text}"))?;
-
-        if let Some(url) = body
-            .rtc_transports
-            .into_iter()
-            .find(|t| t.kind == "livekit" || t.kind.ends_with(".livekit"))
-            .and_then(|t| t.livekit_service_url)
-        {
-            return Ok(url);
-        }
-        // Endpoint responded but listed no livekit transport — fall through to well-known.
-        break;
+        Err(e) => tracing::warn!("rtc: /rtc/transports discovery failed: {e}"),
     }
-
-    // Fall back to org.matrix.msc4143.rtc_foci in /.well-known/matrix/client.
-    // This is how Element Call discovers LiveKit when /rtc/transports is absent
-    // or returns an empty transport list.
-    if let Some(url) = rtc_foci_from_well_known(http, server_name).await {
+    // Step 1 may have answered with an empty/livekit-less list, which the SDK
+    // doesn't follow up with the well-known.
+    if let Some(url) = client
+        .well_known_rtc_transports()
+        .await
+        .ok()
+        .as_deref()
+        .and_then(livekit_service_url)
+    {
         return Ok(url);
+    }
+    match fetch_unstable_livekit_service_url(client, http).await {
+        Ok(Some(url)) => return Ok(url),
+        Ok(None) => {}
+        Err(e) => tracing::warn!("rtc: unstable /rtc/transports probe failed: {e:#}"),
     }
 
     Err(anyhow!(
         "no livekit transport found via /rtc/transports or \
-         /.well-known/matrix/client (org.matrix.msc4143.rtc_foci)"
+         /.well-known/matrix/client (rtc_foci)"
     ))
+}
+
+/// Tier 3 of [`fetch_livekit_service_url`]: the unstable-prefix
+/// `/rtc/transports` endpoint. `Ok(None)` when it is absent (404) or lists no
+/// livekit transport.
+async fn fetch_unstable_livekit_service_url(
+    client: &matrix_sdk::Client,
+    http: &reqwest::Client,
+) -> anyhow::Result<Option<String>> {
+    let Some(access_token) = client.access_token() else {
+        return Ok(None);
+    };
+    let base = client.homeserver().to_string();
+    let url = format!(
+        "{}/_matrix/client/unstable/org.matrix.msc4143/rtc/transports",
+        base.trim_end_matches('/')
+    );
+    let resp = http
+        .get(&url)
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .context("GET unstable /rtc/transports")?;
+
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if !resp.status().is_success() {
+        return Err(anyhow!("GET unstable /rtc/transports → {}", resp.status()));
+    }
+
+    let text = resp.text().await.context("read /rtc/transports body")?;
+    let body: TransportsResponse = serde_json::from_str(&text)
+        .with_context(|| format!("parse /rtc/transports — body was: {text}"))?;
+    Ok(body
+        .rtc_transports
+        .into_iter()
+        .find(|t| t.kind == "livekit" || t.kind.ends_with(".livekit"))
+        .and_then(|t| t.livekit_service_url))
 }
 
 /// Returns true when the homeserver has at least one configured livekit transport.
 /// Used during server-info fetch to gate the call UI without doing a full JWT exchange.
-pub async fn probe_livekit_support(
-    http: &reqwest::Client,
-    homeserver_url: &str,
-    access_token: &str,
-    server_name: &str,
-) -> bool {
-    fetch_livekit_service_url(http, homeserver_url, access_token, server_name)
-        .await
-        .is_ok()
-}
-
-/// Look up `org.matrix.msc4143.rtc_foci` in `https://<server_name>/.well-known/matrix/client`
-/// and return the `livekit_service_url` of the first livekit focus, if present.
-async fn rtc_foci_from_well_known(http: &reqwest::Client, server_name: &str) -> Option<String> {
-    let url = format!("https://{}/.well-known/matrix/client", server_name);
-    let resp = http.get(&url).send().await.ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let body: serde_json::Value = resp.json().await.ok()?;
-    let foci = body.get("org.matrix.msc4143.rtc_foci")?.as_array()?;
-    foci.iter()
-        .find(|f| f.get("type").and_then(|t| t.as_str()) == Some("livekit"))
-        .and_then(|f| f.get("livekit_service_url")?.as_str())
-        .map(|s| s.to_owned())
+pub async fn probe_livekit_support(client: &matrix_sdk::Client, http: &reqwest::Client) -> bool {
+    fetch_livekit_service_url(client, http).await.is_ok()
 }
 
 /// Exchange an OpenID token for a LiveKit JWT at the authorization service.
@@ -294,6 +301,30 @@ pub fn decode_jwt_sub(jwt: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn transports(json: serde_json::Value) -> Vec<matrix_sdk::ruma::api::client::rtc::RtcTransport> {
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn livekit_service_url_picks_the_first_livekit_transport() {
+        let t = transports(serde_json::json!([
+            {"type": "something.else", "foo": 1},
+            {"type": "livekit", "livekit_service_url": "https://lk-a.example.com"},
+            {"type": "livekit", "livekit_service_url": "https://lk-b.example.com"},
+        ]));
+        assert_eq!(
+            livekit_service_url(&t).as_deref(),
+            Some("https://lk-a.example.com")
+        );
+    }
+
+    #[test]
+    fn livekit_service_url_is_none_without_a_livekit_transport() {
+        assert_eq!(livekit_service_url(&[]), None);
+        let t = transports(serde_json::json!([{"type": "something.else"}]));
+        assert_eq!(livekit_service_url(&t), None);
+    }
 
     #[test]
     fn room_alias_is_room_id() {

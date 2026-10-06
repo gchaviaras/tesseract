@@ -368,14 +368,11 @@ mod net {
         (!bytes.is_empty()).then_some((bytes, mime))
     }
 
-    #[allow(deprecated)]
     async fn homeserver_preview(client: &Client, encrypted: bool, url: &str) -> Option<UrlPreview> {
         use matrix_sdk::media::{MediaFormat, MediaRequestParameters};
         use matrix_sdk::ruma::events::room::MediaSource;
-        use ruma::api::client::media::get_media_preview::v3::Request;
 
-        let resp = client.send(Request::new(url.to_owned())).await.ok()?;
-        let json = resp.data?;
+        let json = client.media().get_media_preview(url, None).await.ok()??;
         if json.get().len() > super::super::media::MAX_URL_BYTES {
             return None;
         }

@@ -391,13 +391,12 @@ impl ClientFfi {
         // sync child tasks — no manual stop/start cycle or exponential
         // backoff needed on our side.
         //
-        // `with_profiles_extension` enables MSC4262 so global profile changes
-        // made on another device (timezone, status, name, avatar) arrive via
-        // sync; see the own-profile watcher below.
+        // The MSC4262 Profiles extension is always on, so global profile
+        // changes made on another device (timezone, status, name, avatar)
+        // arrive via sync; see the own-profile watcher below.
         let sync_service = match self.rt.block_on(
             SyncService::builder(client.clone())
                 .with_offline_mode()
-                .with_profiles_extension()
                 .build(),
         ) {
             Ok(s) => Arc::new(s),
@@ -410,6 +409,11 @@ impl ClientFfi {
             }
         };
         self.sync_service = Some(Arc::clone(&sync_service));
+
+        // Mirror this device's MatrixRTC participation into the MSC4426
+        // `m.call` profile field (set on joining a call, cleared on leaving
+        // the last one). Idempotent across sync restarts.
+        client.enable_automatic_call_status(true);
 
         // Own-profile watcher (MSC4262). Profile fields aren't account data,
         // so none of the account-data watchers see a change made on another

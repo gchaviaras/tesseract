@@ -777,7 +777,7 @@ pub struct ClientFfi {
     /// unconditional dual stable+unstable reads, personal pack always
     /// loaded). Controlled by `set_msc2545_legacy_compat`.
     pub(super) msc2545_legacy_compat: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// Last set of room IDs pushed to `RoomListService::subscribe_to_rooms`.
+    /// Last set of room IDs pushed to `RoomListService::set_room_subscriptions`.
     /// Used by `sync_room_subscriptions` to skip the re-push (and the SQL
     /// fan-out it triggers inside matrix-sdk) when the subscribed set is
     /// unchanged — e.g. re-selecting the same room, or toggling a thread that
@@ -1445,11 +1445,14 @@ impl ClientFfi {
     // Sync the full set of currently open rooms to the server's sliding-sync
     // subscription. Must be called after every subscribe_room/unsubscribe_room
     // so the server always sees the union of all open timeline rooms.
-    // RoomListService::subscribe_to_rooms calls clear_and_subscribe internally,
-    // so we always pass the complete set — never just the delta.
+    // RoomListService::set_room_subscriptions makes the subscriptions exactly
+    // the given rooms (anything else is forgotten), so we always pass the
+    // complete set — never just the delta. Unlike `reset_and_add_room_
+    // subscriptions` it does not mark members as missing, so re-subscribing an
+    // already-subscribed room does not refetch its members.
     //
     // Diff-aware: skips the re-push when the set is identical to the last one
-    // pushed. matrix-sdk's `subscribe_to_rooms` walks the state store for
+    // pushed. matrix-sdk's `set_room_subscriptions` walks the state store for
     // every subscribed room, which triggers `chunk_large_query_over` calls;
     // re-pushing an unchanged set during routine UI churn (selecting the
     // already-active room, opening a thread in an already-subscribed room)
@@ -1478,7 +1481,7 @@ impl ClientFfi {
         self.rt.spawn(async move {
             let refs: Vec<&matrix_sdk::ruma::RoomId> =
                 ids.iter().map(OwnedRoomId::as_ref).collect();
-            svc.room_list_service().subscribe_to_rooms(&refs).await;
+            svc.room_list_service().set_room_subscriptions(&refs).await;
         });
     }
 
@@ -2524,13 +2527,13 @@ pub(super) async fn dm_other_user(room: &Room, me: &UserId) -> Option<crate::ffi
     if active.saturating_sub(service) != 2 {
         return None;
     }
-    if let Ok(members) = room.members(matrix_sdk::RoomMemberships::JOIN).await {
-        let mut real = members
-            .iter()
-            .filter(|m| m.user_id() != me && !functional.contains(m.user_id()));
+    if let Ok(ids) = room.human_member_ids(matrix_sdk::RoomMemberships::JOIN).await {
+        let mut real = ids.iter().filter(|id| **id != *me);
         if let Some(first) = real.next() {
             if real.next().is_none() {
-                return Some(to_bridge(first));
+                if let Ok(Some(m)) = room.get_member_no_sync(first).await {
+                    return Some(to_bridge(&m));
+                }
             }
         }
     }

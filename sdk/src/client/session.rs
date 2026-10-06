@@ -427,10 +427,6 @@ impl ClientFfi {
                 url.trim_end_matches('/').to_owned()
             };
             let access_token = client.access_token().unwrap_or_default();
-            let server_name = client
-                .user_id()
-                .map(|uid| uid.server_name().to_string())
-                .unwrap_or_default();
 
             let (versions_resp, caps_resp) = tokio::join!(
                 http.get(format!("{base}/_matrix/client/versions")).send(),
@@ -512,13 +508,7 @@ impl ClientFfi {
             let preview_url_enabled = preview_url_enabled(&caps);
             preview_url_slot.store(preview_url_enabled, Ordering::Relaxed);
 
-            let supports_calls = crate::client::rtc::transport::probe_livekit_support(
-                &http,
-                &base,
-                &access_token,
-                &server_name,
-            )
-            .await;
+            let supports_calls = crate::client::rtc::transport::probe_livekit_support(&client, &http).await;
 
             serde_json::json!({
                 "homeserver": base,
@@ -562,10 +552,6 @@ impl ClientFfi {
                 url.trim_end_matches('/').to_owned()
             };
             let access_token = client.access_token().unwrap_or_default();
-            let server_name = client
-                .user_id()
-                .map(|uid| uid.server_name().to_string())
-                .unwrap_or_default();
 
             let (versions_resp, caps_resp) = tokio::join!(
                 http.get(format!("{base}/_matrix/client/versions")).send(),
@@ -647,13 +633,7 @@ impl ClientFfi {
             let preview_url_enabled = preview_url_enabled(&caps);
             preview_url_slot.store(preview_url_enabled, Ordering::Relaxed);
 
-            let supports_calls = crate::client::rtc::transport::probe_livekit_support(
-                &http,
-                &base,
-                &access_token,
-                &server_name,
-            )
-            .await;
+            let supports_calls = crate::client::rtc::transport::probe_livekit_support(&client, &http).await;
 
             let json = serde_json::json!({
                 "homeserver": base,

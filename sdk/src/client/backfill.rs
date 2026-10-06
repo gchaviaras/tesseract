@@ -323,7 +323,7 @@ impl ClientFfi {
                             chunk.iter().map(|id| id.as_ref()).collect();
                         sync_service
                             .room_list_service()
-                            .subscribe_to_rooms(&refs)
+                            .set_room_subscriptions(&refs)
                             .await;
                     }
 

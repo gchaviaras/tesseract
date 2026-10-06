@@ -1452,10 +1452,7 @@ impl ClientFfi {
     /// Async counterpart of `get_url_preview`. Spawns the fetch under the bulk
     /// lane and fires `on_url_preview_ready(request_id, json)` on completion
     /// (empty string on failure).
-    #[allow(deprecated)]
     pub fn get_url_preview_async(&self, request_id: u64, group_id: u64, url: &str) {
-        use ruma::api::client::media::get_media_preview::v3::Request;
-
         let handler = self.handler.clone();
         let deliver = |json: &str| {
             if let Some(h) = &handler {
@@ -1512,11 +1509,10 @@ impl ClientFfi {
                 #[cfg(debug_assertions)]
                 format!("media/url/{} group={}", url_str, group_id),
             );
-            let req = Request::new(url_str);
             let json = tokio::select! {
-                result = async { client.send(req).await } => match result {
-                    Ok(resp) => {
-                        let json = resp.data.map(|v| v.get().to_owned()).unwrap_or_default();
+                result = async { client.media().get_media_preview(&url_str, None).await } => match result {
+                    Ok(data) => {
+                        let json = data.map(|v| v.get().to_owned()).unwrap_or_default();
                         if json.len() > MAX_URL_BYTES { String::new() } else { json }
                     }
                     Err(_) => String::new(),

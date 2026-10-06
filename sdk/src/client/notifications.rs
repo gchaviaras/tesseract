@@ -114,7 +114,7 @@ impl ClientFfi {
         self.rt.spawn(async move {
             let refs: Vec<&matrix_sdk::ruma::RoomId> =
                 ids.iter().map(OwnedRoomId::as_ref).collect();
-            svc.room_list_service().subscribe_to_rooms(&refs).await;
+            svc.room_list_service().set_room_subscriptions(&refs).await;
         });
         ok("")
     }

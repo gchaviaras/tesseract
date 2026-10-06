@@ -1152,7 +1152,6 @@ impl ClientFfi {
 
     #[cfg(not(test))]
     pub fn set_presence(&self, state: u8) -> OpResult {
-        use matrix_sdk::ruma::api::client::presence::set_presence::v3;
         use matrix_sdk::ruma::presence::PresenceState;
         let presence = match state {
             1 => PresenceState::Online,
@@ -1163,9 +1162,6 @@ impl ClientFfi {
         let Some(client) = self.client.clone() else {
             return err("not logged in");
         };
-        let Some(user_id) = client.user_id().map(|u| u.to_owned()) else {
-            return err("not logged in");
-        };
         let _guard = super::InFlightGuard::new(
             &self.in_flight,
             &self.handler,
@@ -1174,12 +1170,11 @@ impl ClientFfi {
             #[cfg(debug_assertions)]
             "account/set_presence".to_string(),
         );
-        let result = self.rt.block_on(async move {
-            let req = v3::Request::new(user_id, presence);
-            client.send(req).await
-        });
+        let result = self
+            .rt
+            .block_on(async move { client.set_presence(presence, None, true).await });
         match result {
-            Ok(_) => ok(""),
+            Ok(()) => ok(""),
             Err(e) => err(e.to_string()),
         }
     }
@@ -1195,7 +1190,6 @@ impl ClientFfi {
     /// task; no callback — failures are silently ignored.
     #[cfg(not(test))]
     pub fn set_presence_async(&self, state: u8) {
-        use matrix_sdk::ruma::api::client::presence::set_presence::v3;
         use matrix_sdk::ruma::presence::PresenceState;
         let presence = match state {
             1 => PresenceState::Online,
@@ -1204,9 +1198,6 @@ impl ClientFfi {
             _ => return,
         };
         let Some(client) = self.client.clone() else {
-            return;
-        };
-        let Some(user_id) = client.user_id().map(|u| u.to_owned()) else {
             return;
         };
         let in_flight = self.in_flight.clone();
@@ -1222,8 +1213,7 @@ impl ClientFfi {
                 #[cfg(debug_assertions)]
                 "account/set_presence".to_string(),
             );
-            let req = v3::Request::new(user_id, presence);
-            let _ = client.send(req).await;
+            let _ = client.set_presence(presence, None, true).await;
         });
     }
     #[cfg(test)]
@@ -1258,16 +1248,10 @@ impl ClientFfi {
             // so a bridged 1:1 (you + bot + puppet) still matches as a DM.
             for room in client.joined_rooms() {
                 if room.is_direct().await.unwrap_or(false) {
-                    if let Ok(members) = room.members(matrix_sdk::RoomMemberships::JOIN).await {
-                        let functional = room.service_members().unwrap_or_default();
-                        let ids: Vec<_> = members
-                            .iter()
-                            .map(|m| m.user_id())
-                            .filter(|id| !functional.contains(*id))
-                            .collect();
+                    if let Ok(ids) = room.human_member_ids(matrix_sdk::RoomMemberships::JOIN).await {
                         if ids.len() == 2
                             && ids.iter().any(|id| *id == uid)
-                            && client.user_id().is_some_and(|me| ids.contains(&me))
+                            && client.user_id().is_some_and(|me| ids.iter().any(|id| id == me))
                         {
                             return room.room_id().to_string();
                         }

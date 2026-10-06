@@ -197,10 +197,6 @@ pub async fn start_call(
         .get_room(&room_oid)
         .ok_or_else(|| anyhow::anyhow!("room not found: {room_id}"))?;
 
-    let hs_url = client.homeserver().to_string();
-    let access_token = client
-        .access_token()
-        .ok_or_else(|| anyhow::anyhow!("not logged in"))?;
     let uid = client
         .user_id()
         .ok_or_else(|| anyhow::anyhow!("not logged in"))?;
@@ -210,12 +206,10 @@ pub async fn start_call(
         .to_owned();
     let device_id = own_device.to_string();
     let user_id = uid.to_string();
-    let server_name = uid.server_name().as_str();
 
     // Our own homeserver's SFU: the one we publish on, whatever the other
     // members use (multi-SFU).
-    let local_service_url =
-        fetch_livekit_service_url(http, &hs_url, &access_token, server_name).await?;
+    let local_service_url = fetch_livekit_service_url(client, http).await?;
     let lk_alias = livekit_room_alias(room_id, slot_id);
     info!("rtc: publishing on local SFU {local_service_url}");
 

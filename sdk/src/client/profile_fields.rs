@@ -109,6 +109,16 @@ fn parse_biography(j: &serde_json::Value) -> String {
     String::new()
 }
 
+/// The MSC4426 status profile key written by the settings editor.
+const STATUS_KEY: &str = "org.matrix.msc4426.status";
+
+/// `(emoji, text)` from the editor's `{ "text": .., "emoji": .. }` value;
+/// either part defaults to an empty string.
+fn status_parts(v: &serde_json::Value) -> (String, String) {
+    let part = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_owned();
+    (part("emoji"), part("text"))
+}
+
 /// The user's MSC4426 `status` via the typed ruma accessor. `None` when the
 /// field is absent, malformed, or has neither text nor emoji. Only the
 /// unstable `org.matrix.msc4426.status` key is read.
@@ -309,7 +319,20 @@ impl ClientFfi {
 
             use matrix_sdk::ruma::profile::{ProfileFieldName, ProfileFieldValue};
 
-            let result = if is_delete {
+            // MSC4426 status goes through matrix-sdk's typed setters.
+            let result = if key_owned == STATUS_KEY {
+                let outcome = match &value {
+                    None => client.account().clear_status().await,
+                    Some(v) => {
+                        let (emoji, text) = status_parts(v);
+                        client.account().set_status(emoji, text).await
+                    }
+                };
+                match outcome {
+                    Ok(()) => ok(""),
+                    Err(e) => err(format!("failed to update status: {e}")),
+                }
+            } else if is_delete {
                 match client
                     .account()
                     .delete_profile_field(ProfileFieldName::from(key_owned.as_str()))
@@ -339,46 +362,6 @@ impl ClientFfi {
             }
         });
     }
-
-    /// Publish or clear the caller's own `m.call` (MSC4426) profile field.
-    /// `Some(ts)` sets `{ "call_joined_ts": ts }` (unix seconds); `None`
-    /// deletes the field. Fire-and-forget — MSC4426 says applications set
-    /// `m.call` programmatically, and a failure here must never block or
-    /// surface in the call UI. No-op when the server doesn't advertise
-    /// MSC4133 profile-field writes.
-    pub(crate) fn publish_own_call_field(&self, joined_ts: Option<u64>) {
-        if self.profile_fields_prefix.read().unwrap().is_none() {
-            return;
-        }
-        let Some(client) = self.client.as_ref() else {
-            return;
-        };
-        let client = client.clone();
-        self.rt.spawn(async move {
-            use matrix_sdk::ruma::profile::{ProfileFieldName, ProfileFieldValue};
-            const KEY: &str = "org.matrix.msc4426.call";
-            let result = match joined_ts {
-                Some(ts) => {
-                    match ProfileFieldValue::new(KEY, serde_json::json!({ "call_joined_ts": ts })) {
-                        Ok(v) => client.account().set_profile_field(v).await,
-                        Err(e) => {
-                            tracing::warn!("MSC4426 m.call encode failed: {e}");
-                            return;
-                        }
-                    }
-                }
-                None => {
-                    client
-                        .account()
-                        .delete_profile_field(ProfileFieldName::from(KEY))
-                        .await
-                }
-            };
-            if let Err(e) = result {
-                tracing::warn!("MSC4426 m.call publish failed: {e}");
-            }
-        });
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -396,8 +379,6 @@ impl ClientFfi {
         _value_json: &str,
     ) {
     }
-
-    pub(crate) fn publish_own_call_field(&self, _joined_ts: Option<u64>) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -616,6 +597,24 @@ mod tests {
     }
 
     // --- extract_status / extract_call_joined_ts (MSC4426, typed) ---
+
+    #[test]
+    fn status_parts_reads_both_fields() {
+        let v = serde_json::json!({"text": "On holiday", "emoji": "🌴"});
+        assert_eq!(super::status_parts(&v), ("🌴".to_owned(), "On holiday".to_owned()));
+    }
+
+    #[test]
+    fn status_parts_defaults_missing_fields_to_empty() {
+        assert_eq!(
+            super::status_parts(&serde_json::json!({"emoji": "🌴"})),
+            ("🌴".to_owned(), String::new())
+        );
+        assert_eq!(
+            super::status_parts(&serde_json::json!({})),
+            (String::new(), String::new())
+        );
+    }
 
     fn profile_with(key: &str, value: serde_json::Value) -> matrix_sdk::ruma::profile::UserProfile {
         let mut p = matrix_sdk::ruma::profile::UserProfile::new();

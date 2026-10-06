@@ -7,7 +7,7 @@ sdk: org.kde.Sdk
 # Concurrent/Network (see ui/linux-qt/CMakeLists.txt's find_package(Qt6 ...
 # COMPONENTS) list), no KF6 APIs. This is the standard choice for Qt widgets
 # apps on Flathub specifically because it ships Qt6 prebuilt.
-# matrix-sdk 0.18 requires rustc >= 1.93. org.kde.Sdk//6.11's own declared
+# matrix-sdk 0.19 requires rustc >= 1.96. org.kde.Sdk//6.11's own declared
 # companion branch for org.freedesktop.Sdk.Extension.* (25.08) only ships
 # rustc 1.98 today, but pinning to a specific extension branch is still
 # fragile as runtimes move — an `add-build-extensions` override to a newer

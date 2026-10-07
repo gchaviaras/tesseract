@@ -5,6 +5,10 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-07
+
+- feat(threads): bridged rooms show the threads button when the bridge advertises thread support in `com.beeper.room_features` (mautrix bridgev2, e.g. Discord guild channels); support is cached per room alongside the bridge status. macOS x86_64 Release build + ctest 2251/2254 (SessionStore migration, F1 overlay, mention-pill ellipsis failing), cargo 771
+
 ### 2026-10-06
 
 - feat(timeline): consecutive membership events of different kinds (join, leave, invite, accept, …) form one group; collapsed, it shows one line per kind instead of a separate group each time the kind changes. Win32 Release build + ctest 2254/2255 (emoji backend probe failing)

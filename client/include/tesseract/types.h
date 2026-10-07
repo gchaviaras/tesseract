@@ -556,6 +556,16 @@ struct PinnedEvent
     }
 };
 
+/// Features a bridge advertises through the undocumented
+/// `com.beeper.room_features` state event. `threads` is true when the bridge
+/// supports threads at least partially.
+struct BridgeCapabilities
+{
+    bool threads = false;
+
+    bool operator==(const BridgeCapabilities&) const = default;
+};
+
 struct RoomInfo
 {
     std::string id;
@@ -636,6 +646,10 @@ struct RoomInfo
     std::string bridge_network_name;
     /// `mxc://` avatar URI of the bridged network/protocol. Empty when unavailable.
     std::string bridge_network_avatar_url;
+    /// Features the bridge advertises (parsed from `com.beeper.room_features`).
+    /// Only meaningful when `is_bridged`; consumers gate a feature as
+    /// `!bridged || bridge_capabilities.<cap>`.
+    BridgeCapabilities bridge_capabilities;
     /// Room history visibility: "world_readable" | "shared" | "invited" | "joined".
     std::string history_visibility;
     /// Room join rule: "public" | "invite" | "knock" | "restricted" |
@@ -689,6 +703,7 @@ struct RoomInfo
                bridge_overridden == other.bridge_overridden &&
                bridge_network_name == other.bridge_network_name &&
                bridge_network_avatar_url == other.bridge_network_avatar_url &&
+               bridge_capabilities == other.bridge_capabilities &&
                history_visibility == other.history_visibility &&
                join_rule == other.join_rule &&
                guest_access == other.guest_access &&

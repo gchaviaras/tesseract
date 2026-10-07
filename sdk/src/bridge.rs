@@ -205,6 +205,9 @@ pub mod ffi {
         /// `mxc://` avatar URI of the bridged network/protocol, parsed the
         /// same way as `bridge_network_name`. Empty when unavailable.
         bridge_network_avatar_url: String,
+        /// Features the bridge advertises via `com.beeper.room_features`.
+        /// All-false when the room is not bridged or has no such event.
+        bridge_capabilities: BridgeCapabilities,
         /// Room history visibility: "world_readable" | "shared" | "invited" | "joined".
         history_visibility: String,
         /// Room join rule: "public" | "invite" | "knock" | "restricted" |
@@ -691,6 +694,14 @@ pub mod ffi {
         ok: bool,
         message: String,
         verification_uri: String,
+    }
+
+    /// Features a bridge supports, parsed from the `com.beeper.room_features`
+    /// state event (an undocumented Beeper/mautrix-go event). `threads` is true
+    /// when its `thread` support level is >= 1 (partial or full).
+    #[derive(Clone, Copy, Default)]
+    struct BridgeCapabilities {
+        threads: bool,
     }
 
     /// One of the 7 emoji displayed during an SAS device-verification flow.
@@ -4235,6 +4246,7 @@ impl Clone for ffi::RoomInfo {
             is_bridged: self.is_bridged,
             bridge_network_name: self.bridge_network_name.clone(),
             bridge_network_avatar_url: self.bridge_network_avatar_url.clone(),
+            bridge_capabilities: self.bridge_capabilities,
             history_visibility: self.history_visibility.clone(),
             join_rule: self.join_rule.clone(),
             guest_access: self.guest_access,

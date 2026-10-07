@@ -520,7 +520,10 @@ impl ClientFfi {
                         .as_ref()
                         .and_then(|conn| {
                             conn.query_row(
-                                "SELECT 1 FROM bridge_status WHERE room_id = ?1",
+                                // A bridged row cached before `cap_threads` existed has
+                                // NULL there; treat it as uncached so it's re-fetched once.
+                                "SELECT 1 FROM bridge_status WHERE room_id = ?1 \
+                                 AND (is_bridged = 0 OR cap_threads IS NOT NULL)",
                                 rusqlite::params![id.as_str()],
                                 |_| Ok(()),
                             )
@@ -554,6 +557,7 @@ impl ClientFfi {
                 bool,
                 Option<String>,
                 Option<String>,
+                crate::ffi::BridgeCapabilities,
             )> = tokio::task::JoinSet::new();
             for room_id in uncached {
                 let client = client.clone();
@@ -572,30 +576,39 @@ impl ClientFfi {
                         #[cfg(debug_assertions)]
                         label,
                     );
-                    let bridge_event = client
+                    let room_state = client
                         .send(state_api::Request::new(room_id.clone()))
                         .await
                         .ok()
-                        .and_then(|resp| {
-                            resp.room_state.into_iter().find(|raw| {
-                                raw.get_field::<String>("type").ok().flatten().as_deref()
-                                    == Some("uk.half-shot.bridge")
-                            })
-                        });
+                        .map(|resp| resp.room_state)
+                        .unwrap_or_default();
+                    let find_event = |event_type: &str| {
+                        room_state.iter().find(|raw| {
+                            raw.get_field::<String>("type").ok().flatten().as_deref()
+                                == Some(event_type)
+                        })
+                    };
+                    let bridge_event = find_event("uk.half-shot.bridge");
                     let bridged = bridge_event.is_some();
-                    let bridge_content = bridge_event.as_ref().and_then(|raw| {
+                    let bridge_content = bridge_event.and_then(|raw| {
                         raw.get_field::<serde_json::Value>("content").ok().flatten()
                     });
                     let (network_name, network_avatar_url) = bridge_content
                         .as_ref()
                         .map(super::parse_bridge_network_info)
                         .unwrap_or((None, None));
-                    (room_id, bridged, network_name, network_avatar_url)
+                    let capabilities = find_event("com.beeper.room_features")
+                        .and_then(|raw| {
+                            raw.get_field::<serde_json::Value>("content").ok().flatten()
+                        })
+                        .map(|c| super::parse_bridge_capabilities(&c))
+                        .unwrap_or_default();
+                    (room_id, bridged, network_name, network_avatar_url, capabilities)
                 });
             }
 
             let mut any_bridged = false;
-            while let Some(Ok((room_id, bridged, network_name, network_avatar_url))) =
+            while let Some(Ok((room_id, bridged, network_name, network_avatar_url, capabilities))) =
                 joinset.join_next().await
             {
                 {
@@ -603,13 +616,14 @@ impl ClientFfi {
                     if let Some(conn) = guard.as_ref() {
                         let _ = conn.execute(
                             "INSERT OR REPLACE INTO bridge_status \
-                             (room_id, is_bridged, network_name, network_avatar_url) \
-                             VALUES (?1, ?2, ?3, ?4)",
+                             (room_id, is_bridged, network_name, network_avatar_url, cap_threads) \
+                             VALUES (?1, ?2, ?3, ?4, ?5)",
                             rusqlite::params![
                                 room_id.as_str(),
                                 bridged as i32,
                                 network_name,
-                                network_avatar_url
+                                network_avatar_url,
+                                capabilities.threads as i32
                             ],
                         );
                     }
@@ -1042,7 +1056,7 @@ pub(super) fn open_app_cache_db(data_dir: &std::path::Path) -> Option<rusqlite::
     .ok()?;
     conn.execute_batch(super::history_export::store::CREATE_TABLE_SQL).ok()?;
     super::history_export::store::ensure_stop_at_ts_column(&conn).ok()?;
-    ensure_bridge_network_columns(&conn).ok()?;
+    ensure_bridge_status_columns(&conn).ok()?;
     conn.execute_batch(super::room_media_store::CREATE_TABLE_SQL).ok()?;
     prune_stale_backoff_and_cache_rows(&conn);
     Some(conn)
@@ -1050,11 +1064,13 @@ pub(super) fn open_app_cache_db(data_dir: &std::path::Path) -> Option<rusqlite::
 
 /// `bridge_status` shipped with only `is_bridged`; `network_name` and
 /// `network_avatar_url` were added later so the UI can show which platform a
-/// room is bridged to instead of a generic "Bridged" label. Same
+/// room is bridged to instead of a generic "Bridged" label, and `cap_threads`
+/// (one nullable column per bridge capability, NULL = not fetched yet) after
+/// that. Same
 /// check-then-`ALTER TABLE` shape as `ensure_stop_at_ts_column` in
 /// `history_export::store`, since `ALTER TABLE ADD COLUMN` errors on a column
 /// that already exists.
-fn ensure_bridge_network_columns(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+fn ensure_bridge_status_columns(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare("PRAGMA table_info(bridge_status)")?;
     let existing: std::collections::HashSet<String> = stmt
         .query_map([], |row| row.get::<_, String>(1))?
@@ -1069,6 +1085,9 @@ fn ensure_bridge_network_columns(conn: &rusqlite::Connection) -> rusqlite::Resul
             "ALTER TABLE bridge_status ADD COLUMN network_avatar_url TEXT",
             [],
         )?;
+    }
+    if !existing.contains("cap_threads") {
+        conn.execute("ALTER TABLE bridge_status ADD COLUMN cap_threads INTEGER", [])?;
     }
     Ok(())
 }
@@ -1636,6 +1655,45 @@ mod tests {
         let out = select_prefetch_rooms(&ids, &skip, |_| Some(false));
         // Invalid id dropped; the LRU order the shell passed in is preserved.
         assert_eq!(out, vec![rid("!b:ex.org"), rid("!a:ex.org")]);
+    }
+}
+
+#[cfg(test)]
+mod bridge_status_migration_tests {
+    use super::ensure_bridge_status_columns;
+    use rusqlite::Connection;
+
+    fn columns(conn: &Connection) -> Vec<String> {
+        let mut stmt = conn.prepare("PRAGMA table_info(bridge_status)").unwrap();
+        stmt.query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect()
+    }
+
+    #[test]
+    fn adds_cap_threads_to_old_schema_and_is_idempotent() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE bridge_status (
+                 room_id    TEXT    NOT NULL PRIMARY KEY,
+                 is_bridged INTEGER NOT NULL
+             );
+             INSERT INTO bridge_status (room_id, is_bridged) VALUES ('!a:x', 1);",
+        )
+        .unwrap();
+        ensure_bridge_status_columns(&conn).unwrap();
+        ensure_bridge_status_columns(&conn).unwrap();
+        let cols = columns(&conn);
+        assert_eq!(cols.iter().filter(|c| *c == "cap_threads").count(), 1);
+        let cap: Option<i64> = conn
+            .query_row(
+                "SELECT cap_threads FROM bridge_status WHERE room_id = '!a:x'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(cap, None);
     }
 }
 

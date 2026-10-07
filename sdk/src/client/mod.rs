@@ -2735,6 +2735,25 @@ pub(super) fn parse_bridge_network_info(
     (name, avatar)
 }
 
+/// Parse the bridge's advertised capabilities from the `content` of a
+/// `com.beeper.room_features` state event (undocumented; emitted by
+/// mautrix-go bridgev2). `thread` is a support level: -2 rejected, -1 dropped,
+/// 0 unsupported, 1 partial, 2 full; >= 1 means threads work. Lenient:
+/// missing or malformed content yields all-false.
+pub(super) fn parse_bridge_capabilities(
+    room_features: &serde_json::Value,
+) -> crate::ffi::BridgeCapabilities {
+    #[derive(serde::Deserialize, Default)]
+    struct Features {
+        thread: Option<i64>,
+    }
+    let features: Features =
+        serde_json::from_value(room_features.clone()).unwrap_or_default();
+    crate::ffi::BridgeCapabilities {
+        threads: features.thread.is_some_and(|t| t >= 1),
+    }
+}
+
 /// Build a single `RoomInfo` snapshot from a `Room`. Returns `None` for
 /// tombstoned rooms (filtered out of the UI list). Called both during the
 /// initial `joined_rooms()` walk in `build_room_infos` and per-room from the
@@ -2895,7 +2914,7 @@ pub(super) async fn build_room_info(
     // bridged to another platform. Calls and threads are suppressed for such rooms.
     // HTTP fetching is deferred to start_bridge_status_check (called on demand
     // when visible rooms change); here we only read the fast local sources.
-    let (is_bridged, bridge_network_name, bridge_network_avatar_url) = {
+    let (is_bridged, bridge_network_name, bridge_network_avatar_url, bridge_capabilities) = {
         use matrix_sdk::deserialized_responses::RawAnySyncOrStrippedState;
         use matrix_sdk::ruma::events::StateEventType;
         let room_id_str = room.room_id().to_string();
@@ -2920,7 +2939,23 @@ pub(super) async fn build_room_info(
                 .as_ref()
                 .map(parse_bridge_network_info)
                 .unwrap_or((None, None));
-            (true, name.unwrap_or_default(), avatar.unwrap_or_default())
+            let features = room
+                .get_state_events(StateEventType::from("com.beeper.room_features"))
+                .await
+                .unwrap_or_default();
+            let caps = features
+                .first()
+                .and_then(|raw_state| match raw_state {
+                    RawAnySyncOrStrippedState::Sync(raw) => {
+                        raw.get_field::<serde_json::Value>("content").ok().flatten()
+                    }
+                    RawAnySyncOrStrippedState::Stripped(raw) => {
+                        raw.get_field::<serde_json::Value>("content").ok().flatten()
+                    }
+                })
+                .map(|c| parse_bridge_capabilities(&c))
+                .unwrap_or_default();
+            (true, name.unwrap_or_default(), avatar.unwrap_or_default(), caps)
         } else {
             // Persistent cache from SQLite — written by start_bridge_status_check.
             let guard = app_cache_db.lock();
@@ -2928,7 +2963,7 @@ pub(super) async fn build_room_info(
                 .as_ref()
                 .and_then(|conn| {
                     conn.query_row(
-                        "SELECT is_bridged, network_name, network_avatar_url \
+                        "SELECT is_bridged, network_name, network_avatar_url, cap_threads \
                          FROM bridge_status WHERE room_id = ?1",
                         rusqlite::params![room_id_str],
                         |row| {
@@ -2936,12 +2971,17 @@ pub(super) async fn build_room_info(
                                 row.get::<_, bool>(0)?,
                                 row.get::<_, Option<String>>(1)?.unwrap_or_default(),
                                 row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                                crate::ffi::BridgeCapabilities {
+                                    threads: row
+                                        .get::<_, Option<bool>>(3)?
+                                        .unwrap_or(false),
+                                },
                             ))
                         },
                     )
                     .ok()
                 })
-                .unwrap_or((false, String::new(), String::new()))
+                .unwrap_or((false, String::new(), String::new(), Default::default()))
         }
     };
     let history_visibility = {
@@ -3049,6 +3089,7 @@ pub(super) async fn build_room_info(
         is_bridged,
         bridge_network_name,
         bridge_network_avatar_url,
+        bridge_capabilities,
         history_visibility,
         join_rule,
         guest_access,
@@ -3418,6 +3459,27 @@ mod tests {
             id: id.to_owned(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn bridge_capabilities_thread_levels() {
+        let caps = |v: serde_json::Value| parse_bridge_capabilities(&v).threads;
+        assert!(caps(serde_json::json!({"thread": 2})));
+        assert!(caps(serde_json::json!({"thread": 1})));
+        assert!(!caps(serde_json::json!({"thread": 0})));
+        assert!(!caps(serde_json::json!({"thread": -1})));
+        assert!(!caps(serde_json::json!({"thread": -2})));
+    }
+
+    #[test]
+    fn bridge_capabilities_missing_or_garbage_is_false() {
+        let caps = |v: serde_json::Value| parse_bridge_capabilities(&v).threads;
+        assert!(!caps(serde_json::json!({})));
+        assert!(!caps(serde_json::json!({"reply": 2})));
+        assert!(!caps(serde_json::json!({"thread": "full"})));
+        assert!(!caps(serde_json::json!("garbage")));
+        assert!(!caps(serde_json::json!(null)));
+        assert!(!caps(serde_json::json!([1, 2])));
     }
 
     #[test]

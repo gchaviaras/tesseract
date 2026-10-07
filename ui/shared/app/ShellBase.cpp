@@ -12917,12 +12917,15 @@ void ShellBase::apply_threads_list_(std::vector<ThreadInfo> threads)
     // every on_threads_updated tick (including the initial empty tick after
     // subscribe), so the button reveals when the SDK paginates non-empty and
     // hides when the list goes empty (e.g., redactions, room switch).
-    // Bridged rooms (MSC2346) never show the threads button regardless of
-    // thread count, because bridges cannot relay threads to the remote platform.
+    // Bridged rooms (MSC2346) hide the threads button regardless of thread
+    // count, unless the bridge advertises thread support via
+    // com.beeper.room_features (otherwise it cannot relay them).
     const auto* cur_room = room_by_id_(current_room_id_);
     const bool cur_room_bridged =
         cur_room && cur_room->is_bridged && !cur_room->bridge_overridden;
-    const bool show_threads = !threads.empty() && !cur_room_bridged;
+    const bool show_threads =
+        !threads.empty() &&
+        (!cur_room_bridged || cur_room->bridge_capabilities.threads);
     room_view_->set_show_threads_button(show_threads);
 
     // Unread-thread indicator: fold the per-thread flags into the header dot.

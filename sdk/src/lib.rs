@@ -88,6 +88,11 @@ pub mod ffi {
         pub timestamp_ts: u64,
     }
 
+    #[derive(Debug, PartialEq, Default, Clone, Copy)]
+    pub struct BridgeCapabilities {
+        pub threads: bool,
+    }
+
     #[derive(Debug, PartialEq, Default)]
     pub struct RoomInfo {
         pub id: String,

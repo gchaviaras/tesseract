@@ -1,5 +1,6 @@
 #include "canvas_d2d.h"
 #include "pill.h"
+#include "tk/image_sniff.h"
 
 #include <d2d1_1.h>
 #include <d2d1_1helper.h>
@@ -2236,6 +2237,8 @@ public:
     decode_animated_image(std::span<const std::uint8_t> bytes,
                           int max_px) override
     {
+        if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+            return nullptr;
         // Each frame is already downscaled to max_px inside decode_animation
         // (per-frame, as it is produced) — no separate scaling pass needed.
         auto raw = tk::d2d::decode_animation(owner_, bytes, max_px, max_px);
@@ -3112,6 +3115,8 @@ std::unique_ptr<Image> decode_image(Backend& /*b*/,
     {
         return nullptr;
     }
+    if (!tk::decode_size_allowed(bytes, /*animated=*/false))
+        return nullptr;
 
     // Create a per-call WIC factory in the calling thread's own apartment.
     // CoInitializeEx is ref-counted per thread: S_OK means we initialised and

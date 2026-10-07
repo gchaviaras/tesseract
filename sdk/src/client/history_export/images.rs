@@ -193,6 +193,13 @@ fn sniff_image_extension(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
+/// Windows device names: a file whose stem is one of these (any case, any
+/// extension) can't be created normally on Windows.
+const WINDOWS_RESERVED_STEMS: [&str; 22] = [
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+    "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
 /// Strips characters illegal (or awkward) in a filename on Windows, macOS,
 /// or Linux, and caps length so a long caption-derived name can't exceed
 /// filesystem limits.
@@ -208,7 +215,11 @@ fn sanitize_component(s: &str) -> String {
     let trimmed = cleaned.trim().trim_matches('.');
     let capped: String = trimmed.chars().take(120).collect();
     if capped.is_empty() {
-        "file".to_string()
+        return "file".to_string();
+    }
+    let stem = capped.split('.').next().unwrap_or("").trim_end();
+    if WINDOWS_RESERVED_STEMS.iter().any(|r| r.eq_ignore_ascii_case(stem)) {
+        format!("_{capped}")
     } else {
         capped
     }
@@ -266,6 +277,15 @@ mod tests {
     #[test]
     fn sanitize_component_strips_illegal_characters() {
         assert_eq!(sanitize_component("a/b\\c:d*e?f\"g<h>i|j"), "a_b_c_d_e_f_g_h_i_j");
+    }
+
+    #[test]
+    fn sanitize_component_avoids_windows_reserved_names() {
+        assert_eq!(sanitize_component("CON"), "_CON");
+        assert_eq!(sanitize_component("nul.txt"), "_nul.txt");
+        assert_eq!(sanitize_component("Com1.jpg"), "_Com1.jpg");
+        assert_eq!(sanitize_component("console.txt"), "console.txt");
+        assert_eq!(sanitize_component("LPT10"), "LPT10");
     }
 
     #[test]

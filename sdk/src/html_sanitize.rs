@@ -18,19 +18,13 @@
 //! Timeline-provided `FormattedBody`, which has already been mutated in
 //! place by the time Tesseract's conversion code runs.
 //!
-//! **Known upstream gap, not introduced by this module**: testing directly
-//! against `ruma-html` 0.8.0 (see `tests::img_src_scheme_gap_is_not_our_bug`)
-//! shows Compat mode's documented mxc-only scheme restriction on `<img src>`
-//! is not actually enforced — a `<img src="https://...">` survives
-//! unstripped, even with an explicit `allow_schemes(..., Override)` call
-//! that unambiguously bypasses whatever internal spec/compat resolution
-//! logic might otherwise be suspect. (`<a href>`'s scheme restriction, by
-//! contrast, works correctly — this appears specific to `img`/`src`.) This
-//! is not a new risk from this file: Tesseract only ever renders an actual
-//! image for a tag that also independently passes
-//! `img_src.rfind("mxc://", 0) == 0` in `html_spans.cpp` — a non-mxc `src`
-//! is never treated as a renderable emoticon regardless of what either
-//! sanitizer does or doesn't strip.
+//! **Known upstream gap**: testing directly against `ruma-html` 0.8.0 shows
+//! Compat mode's documented mxc-only scheme restriction on `<img src>` is
+//! not actually enforced — a `<img src="https://...">` survives unstripped
+//! (`<a href>`'s scheme restriction, by contrast, works correctly). This
+//! module closes the gap itself: `strip_non_mxc_img_src` drops any non-`mxc://`
+//! `src` after sanitizing, so neither the timeline nor exported HTML can
+//! carry a remote image URL. `alt` is kept.
 
 use ruma::html::{
     Attribute, Html, ListBehavior, NodeData, NodeRef, PropertiesNames, SanitizerConfig, StrTendril,
@@ -72,6 +66,7 @@ pub fn sanitize_formatted_body(raw_html: &str, remove_reply_fallback: bool) -> S
     let html = Html::parse(raw_html);
     html.sanitize_with(&config);
     normalize_table_cell_styles(&html);
+    strip_non_mxc_img_src(&html);
     html.to_string()
 }
 
@@ -102,6 +97,30 @@ fn normalize_table_cell_styles(html: &Html) {
                         });
                     }
                 }
+            }
+        }
+        for child in node.children() {
+            visit(&child);
+        }
+    }
+    for child in html.children() {
+        visit(&child);
+    }
+}
+
+/// Drop `src` from every `<img>` whose source isn't `mxc://`. ruma-html's
+/// Compat config documents an mxc-only rule for `<img src>` but doesn't
+/// enforce it (see module docs); without this, a remote `src` survives into
+/// exported HTML and is fetched when the file is opened in a browser. `alt`
+/// stays, so emoticons still read as their shortcode.
+fn strip_non_mxc_img_src(html: &Html) {
+    #[allow(clippy::mutable_key_type)]
+    fn visit(node: &NodeRef) {
+        if let NodeData::Element(el) = node.data() {
+            if el.name.local.as_ref() == "img" {
+                el.attrs
+                    .borrow_mut()
+                    .retain(|a| a.name.local.as_ref() != "src" || a.value.starts_with("mxc://"));
             }
         }
         for child in node.children() {
@@ -234,15 +253,27 @@ mod tests {
         assert!(!out.contains("text-align"), "got: {out}");
     }
 
-    // NOTE: this module's doc comment describes a known ruma-html 0.8.0 gap
-    // where <img src> scheme enforcement behaves inconsistently (verified
-    // during development: identical scheme-restriction configs produced
-    // different results depending on unrelated attributes like `alt` being
-    // present). That inconsistency made it impractical to pin down with a
-    // stable unit test here, and — more importantly — Tesseract's actual
-    // safety guarantee doesn't depend on it: html_spans.cpp independently
-    // requires an mxc:// prefix before treating any <img> as a renderable
-    // emoticon (see "img: non-mxc src is rejected..." in
-    // tests/cpp/test_html_spans.cpp), regardless of what either sanitizer
-    // does or doesn't strip.
+    #[test]
+    fn img_with_remote_src_loses_src_but_keeps_alt() {
+        let out = sanitize_formatted_body(
+            "<img src=\"https://evil.example/p.png\" alt=\"x\">",
+            false,
+        );
+        assert!(!out.contains("evil.example"), "got: {out}");
+        assert!(out.contains("alt=\"x\""), "got: {out}");
+    }
+
+    #[test]
+    fn mxc_emoticon_img_is_untouched() {
+        let out = sanitize_formatted_body(
+            "<img data-mx-emoticon src=\"mxc://example.org/abc\" alt=\":party:\">",
+            false,
+        );
+        assert!(out.contains("src=\"mxc://example.org/abc\""), "got: {out}");
+        assert!(out.contains("alt=\":party:\""), "got: {out}");
+    }
+
+    // NOTE: ruma-html 0.8.0 doesn't enforce the mxc-only rule for <img src>
+    // (see the module docs); `strip_non_mxc_img_src` enforces it here, and
+    // html_spans.cpp independently requires an mxc:// prefix before rendering.
 }

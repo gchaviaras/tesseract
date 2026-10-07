@@ -4,6 +4,7 @@
 
 #include <cerrno>
 #include <cstdlib>
+#include <climits>
 #include <cstring>
 #include <thread>
 
@@ -11,6 +12,7 @@
 #include <poll.h>
 #include <sys/file.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -20,16 +22,62 @@ namespace tk
 namespace
 {
 
+bool is_private_dir(const std::string& path)
+{
+    struct stat st{};
+    return lstat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode) &&
+           st.st_uid == getuid() && (st.st_mode & 077) == 0;
+}
+
 std::string lock_path()
 {
-    return "/tmp/tesseract-" + std::to_string(getuid()) +
-           tesseract::profile_suffix() + ".lock";
+    const std::string dir = private_runtime_dir();
+    return dir.empty() ? std::string{}
+                       : dir + "/tesseract" + tesseract::profile_suffix() + ".lock";
 }
 
 std::string socket_path()
 {
-    return "/tmp/tesseract-activate-" + std::to_string(getuid()) +
-           tesseract::profile_suffix();
+    const std::string dir = private_runtime_dir();
+    return dir.empty() ? std::string{}
+                       : dir + "/tesseract-activate" + tesseract::profile_suffix();
+}
+
+// Transitional: builds before 2026-10 used fixed /tmp paths. Remove after the next release.
+std::string legacy_lock_path()
+{
+    return "/tmp/tesseract-" + std::to_string(getuid()) + tesseract::profile_suffix() + ".lock";
+}
+
+std::string legacy_socket_path()
+{
+    return "/tmp/tesseract-activate-" + std::to_string(getuid()) + tesseract::profile_suffix();
+}
+
+// True when an older build still holds its flock on the legacy lock path.
+// Never creates the file.
+bool legacy_instance_alive()
+{
+    const int fd = open(legacy_lock_path().c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0)
+    {
+        return false;
+    }
+    struct stat st{};
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_uid != getuid())
+    {
+        close(fd);
+        return false;
+    }
+    if (flock(fd, LOCK_SH | LOCK_NB) != 0)
+    {
+        const bool held = errno == EWOULDBLOCK || errno == EAGAIN;
+        close(fd);
+        return held;
+    }
+    flock(fd, LOCK_UN);
+    close(fd);
+    return false;
 }
 
 // Non-blocking AF_UNIX stream socket. fcntl rather than SOCK_NONBLOCK, which
@@ -70,6 +118,48 @@ std::string one_line(std::string s)
 }
 
 } // namespace
+
+std::string private_runtime_dir()
+{
+#if defined(__APPLE__)
+    char buf[PATH_MAX];
+    const std::size_t n = confstr(_CS_DARWIN_USER_TEMP_DIR, buf, sizeof(buf));
+    if (n > 0 && n <= sizeof(buf))
+    {
+        std::string dir(buf);
+        while (dir.size() > 1 && dir.back() == '/')
+        {
+            dir.pop_back();
+        }
+        if (is_private_dir(dir))
+        {
+            return dir;
+        }
+    }
+#else
+    // Flatpak gives every instance its own $XDG_RUNTIME_DIR bind mount; the
+    // shared per-app directory under the real one is what they have in common.
+    const char* xdg = std::getenv("XDG_RUNTIME_DIR");
+    if (const char* app = std::getenv("FLATPAK_ID"); app && *app && xdg && *xdg)
+    {
+        const std::string shared = std::string(xdg) + "/app/" + app;
+        if (is_private_dir(shared))
+        {
+            return shared;
+        }
+    }
+    if (xdg && *xdg && is_private_dir(xdg))
+    {
+        return xdg;
+    }
+#endif
+    const std::string fallback = "/tmp/tesseract-" + std::to_string(getuid());
+    if (mkdir(fallback.c_str(), 0700) != 0 && errno != EEXIST)
+    {
+        return {};
+    }
+    return is_private_dir(fallback) ? fallback : std::string{};
+}
 
 std::string format_activation_payload(const ActivationRequest& req)
 {
@@ -115,7 +205,13 @@ SingleInstanceLock acquire_single_instance_lock(std::chrono::milliseconds wait)
     // O_CLOEXEC: a process this one spawns (a --relaunch) must not inherit
     // the descriptor, or it would keep the flock held after we exit and then
     // wait on its own lock.
-    int fd = open(lock_path().c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    const std::string path = lock_path();
+    if (path.empty())
+    {
+        // No private runtime directory available — fail open.
+        return {true};
+    }
+    int fd = open(path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0)
     {
         // Can't even open the lock file (e.g. /tmp unwritable) — fail open
@@ -123,8 +219,17 @@ SingleInstanceLock acquire_single_instance_lock(std::chrono::milliseconds wait)
         return {true};
     }
     const auto deadline = std::chrono::steady_clock::now() + wait;
-    while (flock(fd, LOCK_EX | LOCK_NB) != 0)
+    for (;;)
     {
+        if (flock(fd, LOCK_EX | LOCK_NB) == 0)
+        {
+            if (!legacy_instance_alive())
+            {
+                break;
+            }
+            // An older build is still running: don't hold ours while waiting.
+            flock(fd, LOCK_UN);
+        }
         if (std::chrono::steady_clock::now() >= deadline)
         {
             close(fd);
@@ -145,7 +250,12 @@ SingleInstanceLock acquire_single_instance_lock(std::chrono::milliseconds wait)
 
 int single_instance_owner_pid()
 {
-    int fd = open(lock_path().c_str(), O_RDONLY);
+    const std::string path = lock_path();
+    if (path.empty())
+    {
+        return 0;
+    }
+    int fd = open(path.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0)
     {
         return 0;
@@ -156,7 +266,11 @@ int single_instance_owner_pid()
     return n > 0 ? std::atoi(buf) : 0;
 }
 
-bool forward_activation_request(const ActivationRequest& request)
+namespace
+{
+
+// Connects to the listener at `path` and writes `request` to it.
+bool send_activation_to(const std::string& path, const ActivationRequest& request)
 {
     int sock = make_nonblocking_socket();
     if (sock < 0)
@@ -165,7 +279,7 @@ bool forward_activation_request(const ActivationRequest& request)
     }
 
     sockaddr_un addr;
-    if (!make_sockaddr(addr, socket_path()))
+    if (!make_sockaddr(addr, path))
     {
         close(sock);
         return false;
@@ -206,9 +320,33 @@ bool forward_activation_request(const ActivationRequest& request)
     return true;
 }
 
+} // namespace
+
+bool forward_activation_request(const ActivationRequest& request)
+{
+    const std::string path = socket_path();
+    if (!path.empty() && send_activation_to(path, request))
+    {
+        return true;
+    }
+    // Transitional: an older build listens on the fixed /tmp socket.
+    const std::string legacy = legacy_socket_path();
+    struct stat st{};
+    if (lstat(legacy.c_str(), &st) == 0 && S_ISSOCK(st.st_mode) && st.st_uid == getuid())
+    {
+        return send_activation_to(legacy, request);
+    }
+    return false;
+}
+
 ActivationListener::ActivationListener(Callback on_activate)
     : on_activate_(std::move(on_activate))
 {
+    const std::string path = socket_path();
+    if (path.empty())
+    {
+        return;
+    }
     int fd = make_nonblocking_socket();
     if (fd < 0)
     {
@@ -216,7 +354,6 @@ ActivationListener::ActivationListener(Callback on_activate)
     }
 
     sockaddr_un addr;
-    const std::string path = socket_path();
     if (!make_sockaddr(addr, path))
     {
         close(fd);

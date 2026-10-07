@@ -327,6 +327,7 @@ impl ExportSink for HtmlSink {
         let exported = labels.format(ExportLabel::ExportedOn, &[&format_ts(meta.exported_at_ms)]);
         format!(
             "<!doctype html>\n<html><head><meta charset=\"utf-8\">\n\
+             <meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src 'self' file: data:; style-src 'unsafe-inline'\">\n\
              <meta name=\"color-scheme\" content=\"light dark\">\n\
              <title>{}</title>\n\
              <style>\n\
@@ -745,6 +746,27 @@ mod tests {
         let ev = base_event();
         let line = TextSink.event(&ev, &EventContext::default(), AttachmentState::Saved("media/abc-photo.jpg"), &labels());
         assert!(line.contains("Attachment: media/abc-photo.jpg"), "{line}");
+    }
+
+    #[test]
+    fn html_header_has_restrictive_csp() {
+        let meta = ExportMeta { room_name: "R".into(), exported_at_ms: 0 };
+        let header = HtmlSink.header(&meta, &labels());
+        assert!(header.contains("http-equiv=\"Content-Security-Policy\""), "{header}");
+        assert!(header.contains("default-src 'none'"), "{header}");
+    }
+
+    #[test]
+    fn html_event_drops_remote_img_but_keeps_emoticon_alt() {
+        let mut ev = base_event();
+        ev.formatted_body = "hi <img src=\"https://tracker.example/b.gif\" alt=\"t\"> \
+                             <img data-mx-emoticon src=\"mxc://a/b\" alt=\":party:\">"
+            .into();
+        let out = HtmlSink.event(&ev, &EventContext::default(), AttachmentState::None, &labels());
+        assert!(!out.contains("tracker.example"), "{out}");
+        assert!(out.contains(":party:"), "{out}");
+        assert!(out.contains("alt=\":party:\""), "{out}");
+        assert!(out.contains("src=\"mxc://a/b\""), "{out}");
     }
 
     #[test]

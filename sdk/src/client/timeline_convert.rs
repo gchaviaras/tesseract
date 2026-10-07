@@ -314,6 +314,15 @@ pub(super) fn split_source_opt(
     }
 }
 
+/// True for an absolute http/https URL. `matched_url` is sender-controlled
+/// and a card click hands it to the OS URL opener, so the body-substring
+/// check alone is not enough. `Url::parse` lowercases the scheme.
+fn is_http_url(s: &str) -> bool {
+    url::Url::parse(s)
+        .map(|u| matches!(u.scheme(), "http" | "https"))
+        .unwrap_or(false)
+}
+
 /// Map the MSC4095 bundled URL previews carried on an `m.text` message's
 /// content (`com.beeper.linkpreviews` / `m.url_previews`) into the FFI shape.
 ///
@@ -339,6 +348,9 @@ fn map_bundled_url_previews(
         .filter_map(|p| {
             let matched_url = p.matched_url.clone()?;
             if !body.contains(&matched_url) {
+                return None;
+            }
+            if !is_http_url(&matched_url) {
                 return None;
             }
             let (image_url, image_encrypted_json, image_width, image_height) = match &p.image {
@@ -1777,6 +1789,57 @@ mod bundled_url_preview_tests {
             "m.url_previews": []
         }));
         assert!(map_bundled_url_previews(&previews, "https://matrix.org").is_empty());
+    }
+
+    #[test]
+    fn non_http_matched_url_is_filtered_even_when_in_body() {
+        // A sender controls both body and matched_url; the substring check
+        // alone lets any scheme through to the OS URL opener.
+        for hostile in [
+            "file:///etc/passwd",
+            "search-ms:query=x&crumb=location:\\\\evil\\share",
+            "ms-msdt:/id PCWDiagnostic",
+            "-aCalculator",
+            "javascript:alert(1)",
+        ] {
+            let body = format!("look {hostile}");
+            let previews = previews_from(serde_json::json!({
+                "msgtype": "m.text",
+                "body": body,
+                "m.url_previews": [{ "matrix:matched_url": hostile, "og:title": "x" }]
+            }));
+            assert!(
+                map_bundled_url_previews(&previews, &body).is_empty(),
+                "kept hostile matched_url {hostile}"
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_previews_keep_only_the_http_one() {
+        let body = "https://matrix.org and file:///etc/passwd";
+        let previews = previews_from(serde_json::json!({
+            "msgtype": "m.text",
+            "body": body,
+            "m.url_previews": [
+                { "matrix:matched_url": "https://matrix.org", "og:title": "ok" },
+                { "matrix:matched_url": "file:///etc/passwd", "og:title": "bad" }
+            ]
+        }));
+        let out = map_bundled_url_previews(&previews, body);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].matched_url, "https://matrix.org");
+    }
+
+    #[test]
+    fn uppercase_http_scheme_is_kept() {
+        let body = "HTTPS://matrix.org";
+        let previews = previews_from(serde_json::json!({
+            "msgtype": "m.text",
+            "body": body,
+            "m.url_previews": [{ "matrix:matched_url": "HTTPS://matrix.org", "og:title": "ok" }]
+        }));
+        assert_eq!(map_bundled_url_previews(&previews, body).len(), 1);
     }
 }
 

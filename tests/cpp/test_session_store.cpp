@@ -13,6 +13,7 @@
 #if defined(_WIN32)
 #  include <process.h>
 #else
+#  include <sys/stat.h>
 #  include <unistd.h>
 #endif
 
@@ -825,3 +826,23 @@ TEST_CASE("migrate_legacy_layout is a no-op when the data dir is already "
     CHECK(loaded.user_ids[0] == "@erin:example.org");
     CHECK(fs::exists(tesseract::config_dir() / "accounts.json"));
 }
+
+#if !defined(_WIN32)
+TEST_CASE("SessionStore::save: stale tmp file's loose permissions don't carry over")
+{
+    const fs::path p = tesseract::SessionStore::path();
+    fs::create_directories(p.parent_path());
+    const fs::path tmp = p.string() + ".tmp";
+    {
+        std::ofstream(tmp) << "stale";
+    }
+    fs::permissions(tmp, fs::perms::owner_read | fs::perms::owner_write |
+                             fs::perms::group_read | fs::perms::others_read);
+
+    REQUIRE(tesseract::SessionStore::save("{\"k\":1}"));
+
+    struct stat st{};
+    REQUIRE(::stat(p.c_str(), &st) == 0);
+    CHECK((st.st_mode & 0777) == 0600);
+}
+#endif

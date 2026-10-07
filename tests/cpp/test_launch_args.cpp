@@ -326,3 +326,25 @@ TEST_CASE("parse_launch_args: screenshot output is available in CI builds")
     CHECK_FALSE(args.matrix_uri);
 }
 #endif
+
+TEST_CASE("parse_launch_args: options after -- are not honoured")
+{
+    auto args = tesseract::parse_launch_args({"--", "--logoutall"});
+    CHECK_FALSE(args.logout_all);
+}
+
+TEST_CASE("parse_launch_args: matrix URI after -- is still recognised")
+{
+    auto args = tesseract::parse_launch_args({"--", "matrix:r/room:example.org"});
+    REQUIRE(args.matrix_uri.has_value());
+    CHECK(*args.matrix_uri == "matrix:r/room:example.org");
+}
+
+TEST_CASE("parse_launch_args: quote break-out after -- stays positional")
+{
+    // What CommandLineToArgvW yields for  "exe" -- "matrix:x" --logoutall ""
+    // i.e. a URI containing a raw quote launched through the registered handler.
+    auto args = tesseract::parse_launch_args(
+        {"--", "matrix:r/x:example.org", "--logoutall", ""});
+    CHECK_FALSE(args.logout_all);
+}

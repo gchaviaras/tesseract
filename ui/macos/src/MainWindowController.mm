@@ -36,6 +36,7 @@
 #include "tk/emoji_support.h"
 #include "tk/host.h"
 #include "tk/host_macos.h"
+#include "tk/image_sniff.h"
 #include "tk/theme.h"
 #include "util.h"
 #include "views/BrandView.h"
@@ -1643,6 +1644,9 @@ tesseract::ShellBase::DecodedImage
 MacShell::decode_image_(const std::vector<uint8_t>& bytes, int max_w,
                         int max_h)
 {
+    // Untrusted bytes: refuse over-budget images before any codec allocates (tk/image_sniff.h).
+    if (!tk::decode_size_allowed(bytes, tk::bytes_may_be_animated(bytes)))
+        return DecodedImage{};
     DecodedImage d;
     tk::cg::DecodedFrames decoded =
         tk::cg::decode_image_bytes(bytes, max_w, max_h);
@@ -1657,6 +1661,8 @@ bool MacShell::decode_image_streamed_(
     const std::function<void(std::unique_ptr<tk::Image>, int)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+        return false;
     bool got_first = false;
     std::function<void(std::unique_ptr<tk::Image>, int)> first_cb =
         [&](std::unique_ptr<tk::Image> img, int delay_ms)
@@ -1675,6 +1681,8 @@ bool MacShell::decode_image_streamed_windowed_(
                              std::size_t)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+        return false;
     bool got_first = false;
     std::function<void(std::unique_ptr<tk::Image>, int,
                        std::shared_ptr<tk::AnimDecodeSession>, std::size_t)>

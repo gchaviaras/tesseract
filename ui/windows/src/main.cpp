@@ -327,7 +327,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/,
     ) {
         wchar_t exe_path[MAX_PATH]{};
         GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
-        std::wstring cmd = std::wstring(L"\"") + exe_path + L"\" \"%1\"";
+        // "--" ends option parsing, so a URI carrying a raw quote can't
+        // break out of "%1" and smuggle in options such as --logoutall.
+        std::wstring cmd = std::wstring(L"\"") + exe_path + L"\" -- \"%1\"";
 
         HKEY key = nullptr;
         if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\matrix",

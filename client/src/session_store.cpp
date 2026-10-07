@@ -163,7 +163,10 @@ static bool atomic_write(const fs::path& p, std::string_view content)
                   _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _SH_DENYNO,
                   _S_IREAD | _S_IWRITE);
 #else
-        int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        // A leftover .tmp (crash, or planted) would keep its own mode under
+        // O_TRUNC; start from a fresh file so 0600 always applies.
+        ::unlink(tmp.c_str());
+        int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
 #endif
         if (fd < 0)
         {

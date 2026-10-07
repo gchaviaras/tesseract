@@ -13,10 +13,11 @@
 <Package
     xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
     xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
     xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
     xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
     xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-    IgnorableNamespaces="uap uap10 desktop rescap">
+    IgnorableNamespaces="uap uap3 uap10 desktop rescap">
 
   <Identity
       Name="@TESSERACT_MSIX_IDENTITY_NAME@"
@@ -70,11 +71,11 @@
              parser (see ui/windows/src/main.cpp) — packaged installs rely on
              this declaration instead of the HKCU registry registration the
              unpackaged/NSIS build writes at first launch. -->
-        <uap:Extension Category="windows.protocol">
-          <uap:Protocol Name="matrix">
+        <uap3:Extension Category="windows.protocol">
+          <uap3:Protocol Name="matrix" Parameters="-- &quot;%1&quot;">
             <uap:DisplayName>Tesseract (Matrix)</uap:DisplayName>
-          </uap:Protocol>
-        </uap:Extension>
+          </uap3:Protocol>
+        </uap3:Extension>
 
         <!-- TaskId matches the WinRT StartupTask id Win32Autostart.cpp already
              queries/enables via Windows.ApplicationModel.StartupTask. -->

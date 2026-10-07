@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Forward-declare the Rust opaque type so we don't need to pull in cxx headers
@@ -291,6 +292,13 @@ public:
     void cancel_qr_grant();
 
     static bool open_in_browser(const std::string& url);
+
+    /// True when `url` may be handed to the OS URL opener: an http(s) URL
+    /// (scheme case-insensitive) with no whitespace or control characters.
+    /// open_in_browser() refuses everything else, so a sender-controlled
+    /// string can never reach ShellExecute / xdg-open / open as another
+    /// scheme or as a command-line option.
+    static bool is_launchable_url(std::string_view url);
 
     /// MSC4153 "exclude insecure devices" mode, process-wide: share room
     /// keys only with cross-signed devices and hide messages from devices

@@ -7,6 +7,7 @@
 #include "views/BrandView.h"
 #include "SettingsWidget.h"
 #include "tk/i18n.h"
+#include "tk/image_sniff.h"
 #include "../../shared/linux_autostart.h"
 #include "LinuxPowerMonitorGtk.h"
 #include "LinuxScreenLockGtk.h"
@@ -3614,11 +3615,30 @@ cairo_surface_t* pixbuf_to_premultiplied_argb32(GdkPixbuf* pb)
 cairo_surface_t*
 decode_image_to_cairo_surface(const std::vector<uint8_t>& bytes)
 {
+    if (!tk::decode_size_allowed(bytes, /*animated=*/false))
+    {
+        return nullptr;
+    }
     if (bytes.empty())
     {
         return nullptr;
     }
     GdkPixbufLoader* loader = gdk_pixbuf_loader_new();
+    // Same cap as canvas_cairo.cpp decode_image: formats the header probe
+    // doesn't know are scaled down to the still budget.
+    g_signal_connect(loader, "size-prepared",
+                     G_CALLBACK(+[](GdkPixbufLoader* l, int w, int h, gpointer)
+                                {
+                                    const std::uint64_t px = std::uint64_t(std::max(w, 0)) *
+                                                             std::uint64_t(std::max(h, 0));
+                                    if (px <= tk::kMaxStillDecodePixels)
+                                        return;
+                                    const double s =
+                                        std::sqrt(double(tk::kMaxStillDecodePixels) / double(px));
+                                    gdk_pixbuf_loader_set_size(l, std::max(1, int(w * s)),
+                                                               std::max(1, int(h * s)));
+                                }),
+                     nullptr);
     GError* err = nullptr;
     if (!gdk_pixbuf_loader_write(loader, bytes.data(), bytes.size(), &err))
     {
@@ -4583,6 +4603,9 @@ MainWindow::DecodedImage
 MainWindow::decode_image_(const std::vector<uint8_t>& bytes, int max_w,
                           int max_h)
 {
+    // Untrusted bytes: refuse over-budget images before any codec allocates (tk/image_sniff.h).
+    if (!tk::decode_size_allowed(bytes, tk::bytes_may_be_animated(bytes)))
+        return DecodedImage{};
     // decode_image_to_cairo_surface / decode_animation are in this
     // file's anonymous namespace and are thread-safe (GdkPixbuf + cairo).
     // tk::cairo_pango::make_image refcounts the surface (thread-safe).
@@ -4615,6 +4638,8 @@ bool MainWindow::decode_image_streamed_(
     const std::function<void(std::unique_ptr<tk::Image>, int)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+        return false;
     bool got_first = false;
     std::function<void(cairo_surface_t*, int)> first_cb =
         [&](cairo_surface_t* surf, int delay_ms)
@@ -4640,6 +4665,8 @@ bool MainWindow::decode_image_streamed_windowed_(
                              std::size_t)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+        return false;
     return decode_animation_windowed(bytes, max_w, max_h, on_first_frame,
                                      on_frame);
 }

@@ -7,6 +7,12 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-07
 
+- fix(security): link previews bundled into a message by the sender only open if they are http(s) links, and Tesseract never hands any other kind of link (`file:`, `search-ms:`, …) or one starting with `-` to the system browser launcher. Qt6 build + ctest 2309/2309 + cargo 788
+- fix(windows): the `matrix:` link handler (unpackaged and MSIX) passes `--` before the link, so a crafted link can't add command-line options such as `--logoutall`. Qt6 build + ctest 2309/2309 + cargo 788
+- fix(export): exported HTML keeps no remote image addresses from messages and carries a Content-Security-Policy, so opening an export never loads remote images; export file names avoid Windows device names (CON, NUL, …). Qt6 build + ctest 2309/2309 + cargo 788
+- fix(linux,macos): the single-instance lock and activation socket moved from `/tmp` to the per-user runtime directory; a still-running older build is detected through its old lock, and Flatpak instances share one lock. Qt6 build + ctest 2309/2309 + cargo 788
+- fix(media): images and animations over a size budget (100 MP still, 268 MP for JPEG photos, 16 MP animated) are refused before decoding, so an oversized image can't exhaust memory. Qt6 build + ctest 2309/2309 + cargo 788
+- fix(session): the session file's temporary copy is always created fresh with owner-only permissions. Qt6 build + ctest 2309/2309 + cargo 788
 - fix(qt): hyperlinks in the status bar and rich text use the theme accent instead of the desktop platform theme's link colour, which differed between KDE and GNOME and could be unreadable on the dark theme. Qt6 build + ctest 2284/2284
 - feat(avatars): animated avatars (GIF, animated WebP, APNG) now play everywhere an avatar is shown; Appearance › Timeline › "Animate avatars" (on by default) turns it off, and low power mode freezes them. Needs a server that serves animated thumbnails (Synapse does). Qt6 build + ctest 2284/2284 + cargo 779
 - feat(strip): the sidebar user strip shows your own avatar in the active room (set with `/myroomavatar`), falling back to your account avatar; it follows room switches and changes made from other clients. Qt6 build + ctest 2284/2284

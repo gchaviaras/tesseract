@@ -1,42 +1,9 @@
 #include "status_links.h"
 
-#include <cctype>
-#include <string_view>
+#include <tesseract/client.h>
 
 namespace tesseract
 {
-
-namespace
-{
-
-bool has_prefix_ci(const std::string& s, std::string_view prefix)
-{
-    if (s.size() < prefix.size())
-        return false;
-    for (size_t i = 0; i < prefix.size(); ++i)
-    {
-        if (std::tolower(static_cast<unsigned char>(s[i])) != prefix[i])
-            return false;
-    }
-    return true;
-}
-
-// Link-safety gate: http(s) scheme only, no whitespace / control chars.
-// Status messages can embed server-controlled text (error descriptions),
-// so anything that fails this check stays literal.
-bool url_is_safe(const std::string& url)
-{
-    if (!has_prefix_ci(url, "http://") && !has_prefix_ci(url, "https://"))
-        return false;
-    for (unsigned char c : url)
-    {
-        if (c <= 0x20 || c == 0x7F)
-            return false;
-    }
-    return true;
-}
-
-} // namespace
 
 std::vector<StatusSegment> parse_status_links(const std::string& msg)
 {
@@ -68,7 +35,7 @@ std::vector<StatusSegment> parse_status_links(const std::string& msg)
 
         std::string label = msg.substr(open + 1, mid - open - 1);
         std::string url   = msg.substr(mid + 2, close - mid - 2);
-        if (label.empty() || !url_is_safe(url))
+        if (label.empty() || !tesseract::Client::is_launchable_url(url))
         {
             plain += '[';
             pos = open + 1;

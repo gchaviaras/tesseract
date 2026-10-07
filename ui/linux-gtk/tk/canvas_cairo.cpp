@@ -1,5 +1,6 @@
 #include "canvas_cairo.h"
 #include "tk/anim_decode_session.h"
+#include "tk/image_sniff.h"
 #include "pill.h"
 
 #include <cairo.h>
@@ -875,7 +876,25 @@ public:
         {
             return nullptr;
         }
+        if (!tk::decode_size_allowed(bytes, /*animated=*/false))
+            return nullptr;
         GdkPixbufLoader* loader = gdk_pixbuf_loader_new();
+        // Formats probe_image_dimensions doesn't know still go through
+        // whatever gdk-pixbuf loaders are installed; cap their output size.
+        g_signal_connect(loader, "size-prepared",
+                         G_CALLBACK(+[](GdkPixbufLoader* l, int w, int h, gpointer)
+                                    {
+                                        const std::uint64_t px =
+                                            std::uint64_t(std::max(w, 0)) *
+                                            std::uint64_t(std::max(h, 0));
+                                        if (px <= tk::kMaxStillDecodePixels)
+                                            return;
+                                        const double s = std::sqrt(
+                                            double(tk::kMaxStillDecodePixels) / double(px));
+                                        gdk_pixbuf_loader_set_size(
+                                            l, std::max(1, int(w * s)), std::max(1, int(h * s)));
+                                    }),
+                         nullptr);
         GError* err = nullptr;
         if (!gdk_pixbuf_loader_write(loader, bytes.data(), bytes.size(), &err))
         {
@@ -984,6 +1003,8 @@ public:
                           int max_px) override
     {
         if (bytes.empty())
+            return nullptr;
+        if (!tk::decode_size_allowed(bytes, /*animated=*/true))
             return nullptr;
 
         GInputStream* stream = g_memory_input_stream_new_from_data(

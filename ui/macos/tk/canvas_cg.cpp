@@ -1,6 +1,7 @@
 #include "canvas_cg.h"
 #include "canvas_cg_webp.h"
 #include "pill.h"
+#include "tk/image_sniff.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
@@ -1470,6 +1471,8 @@ public:
         {
             return nullptr;
         }
+        if (!tk::decode_size_allowed(bytes, /*animated=*/false))
+            return nullptr;
         CFRetained<CFDataRef> data{
             CFDataCreate(kCFAllocatorDefault, bytes.data(),
                          static_cast<CFIndex>(bytes.size()))};
@@ -1535,6 +1538,8 @@ public:
     decode_animated_image(std::span<const std::uint8_t> bytes,
                           int max_px) override
     {
+        if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+            return nullptr;
         // Each frame is already downscaled to max_px inside decode_image_bytes
         // (per-frame, as it is produced) — no separate scaling pass needed.
         DecodedFrames d = decode_image_bytes(bytes, max_px, max_px);

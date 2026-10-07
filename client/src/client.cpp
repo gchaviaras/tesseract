@@ -8,6 +8,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <shared_mutex>
@@ -252,8 +254,36 @@ void Client::set_exclude_insecure_devices(bool enabled)
     tesseract_ffi::set_exclude_insecure_devices(enabled);
 }
 
+bool Client::is_launchable_url(std::string_view url)
+{
+    auto has_prefix_ci = [url](std::string_view prefix)
+    {
+        if (url.size() < prefix.size())
+            return false;
+        for (std::size_t i = 0; i < prefix.size(); ++i)
+        {
+            if (std::tolower(static_cast<unsigned char>(url[i])) != prefix[i])
+                return false;
+        }
+        return true;
+    };
+    if (!has_prefix_ci("http://") && !has_prefix_ci("https://"))
+        return false;
+    for (unsigned char c : url)
+    {
+        if (c <= 0x20 || c == 0x7F || c == '"')
+            return false;
+    }
+    return true;
+}
+
 bool Client::open_in_browser(const std::string& url)
 {
+    if (!is_launchable_url(url))
+    {
+        std::fprintf(stderr, "[open_in_browser] refused a non-http(s) URL\n");
+        return false;
+    }
 #if defined(_WIN32)
     HINSTANCE hi = ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr,
                                  SW_SHOWNORMAL);

@@ -42,6 +42,15 @@ pub fn webp_is_data(bytes: &[u8]) -> bool {
     }
 }
 
+/// Animated-WebP canvas budget; matches tk::kMaxAnimatedDecodePixels.
+/// WebPAnimDecoderNew allocates two full canvases up front, so this must be
+/// checked from the header before calling it.
+const MAX_ANIM_CANVAS_PIXELS: u64 = 4096 * 4096;
+
+fn canvas_within_limit(w: i32, h: i32) -> bool {
+    w > 0 && h > 0 && (w as u64) * (h as u64) <= MAX_ANIM_CANVAS_PIXELS
+}
+
 /// Never fails outright; check `valid()` (cxx `Result` would throw into C++).
 pub fn webp_anim_decoder_new(bytes: &[u8]) -> Box<WebpAnimDecoder> {
     let mut d = Box::new(WebpAnimDecoder {
@@ -53,6 +62,12 @@ pub fn webp_anim_decoder_new(bytes: &[u8]) -> Box<WebpAnimDecoder> {
         timestamp_ms: 0,
     });
     unsafe {
+        let (mut cw, mut ch) = (0i32, 0i32);
+        if w::WebPGetInfo(d._data.as_ptr(), d._data.len(), &mut cw, &mut ch) == 0
+            || !canvas_within_limit(cw, ch)
+        {
+            return d;
+        }
         let mut opts: w::WebPAnimDecoderOptions = std::mem::zeroed();
         if w::WebPAnimDecoderOptionsInit(&mut opts) == 0 {
             return d;
@@ -143,6 +158,16 @@ impl WebpAnimDecoder {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn canvas_limit_matches_tk_animated_budget() {
+        assert!(canvas_within_limit(4096, 4096));
+        assert!(canvas_within_limit(1, 1));
+        assert!(!canvas_within_limit(4097, 4096));
+        assert!(!canvas_within_limit(16383, 16383));
+        assert!(!canvas_within_limit(0, 10));
+        assert!(!canvas_within_limit(-1, 10));
+    }
+
     use super::*;
 
     fn solid_anim() -> Vec<u8> {

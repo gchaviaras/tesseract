@@ -21,6 +21,7 @@
 
 #include "tk/canvas_qpainter.h"
 #include "tk/i18n.h"
+#include "tk/image_sniff.h"
 #include "tk/status_icons.h"
 #include "tk/svg.h"
 #include "tk/theme.h"
@@ -3136,6 +3137,9 @@ MainWindow::DecodedImage
 MainWindow::decode_image_(const std::vector<uint8_t>& bytes, int max_w,
                           int max_h)
 {
+    // Untrusted bytes: refuse over-budget images before any codec allocates (tk/image_sniff.h).
+    if (!tk::decode_size_allowed(bytes, tk::bytes_may_be_animated(bytes)))
+        return DecodedImage{};
     DecodedImage d;
     if (bytes.empty())
     {
@@ -3221,6 +3225,8 @@ bool MainWindow::decode_image_streamed_(
     const std::function<void(std::unique_ptr<tk::Image>, int)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+        return false;
     if (bytes.empty())
     {
         return false;
@@ -3376,6 +3382,8 @@ bool MainWindow::decode_image_streamed_windowed_(
                              std::size_t)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+        return false;
     if (bytes.empty())
     {
         return false;

@@ -27,6 +27,8 @@ LoginView::LoginView(QWidget* parent)
     shared_->set_open_browser(
         [](const std::string& url)
         {
+            if (!tesseract::Client::is_launchable_url(url))
+                return;
             if (!QDesktopServices::openUrl(QUrl(QString::fromStdString(url))))
                 tesseract::Client::open_in_browser(url);
         });

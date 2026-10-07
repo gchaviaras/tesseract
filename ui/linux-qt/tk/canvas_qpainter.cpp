@@ -1,5 +1,6 @@
 #include "canvas_qpainter.h"
 #include "pill.h"
+#include "tk/image_sniff.h"
 
 #include <QtWidgets/QApplication>
 
@@ -1075,6 +1076,8 @@ public:
         {
             return nullptr;
         }
+        if (!tk::decode_size_allowed(bytes, /*animated=*/false))
+            return nullptr;
         QImage img;
         if (!img.loadFromData(bytes.data(), static_cast<int>(bytes.size())))
         {
@@ -1112,6 +1115,8 @@ public:
     decode_animated_image(std::span<const std::uint8_t> bytes,
                           int max_px) override
     {
+        if (!tk::decode_size_allowed(bytes, /*animated=*/true))
+            return nullptr;
         std::vector<std::unique_ptr<Image>> frames;
         std::vector<int> delays;
         decode_animated_frames_(

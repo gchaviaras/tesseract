@@ -20,6 +20,14 @@ struct SingleInstanceLock
     bool acquired = false;
 };
 
+// Per-user directory for the single-instance lock and activation socket:
+// $XDG_RUNTIME_DIR/app/$FLATPAK_ID inside a Flatpak (so sandbox instances share
+// one lock), else $XDG_RUNTIME_DIR on Linux / DARWIN_USER_TEMP_DIR on macOS when it is a
+// real directory owned by this user and closed to group/other, else a
+// /tmp/tesseract-<uid> directory created 0700 and checked the same way.
+// Empty when no such directory is available; callers then fail open.
+std::string private_runtime_dir();
+
 // What a losing launch hands the running instance. Every field may be empty.
 struct ActivationRequest
 {

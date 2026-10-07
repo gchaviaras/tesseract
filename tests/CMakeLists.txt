@@ -88,6 +88,7 @@ add_executable(tesseract_tests
     cpp/test_settings.cpp
     cpp/test_cli.cpp
     cpp/test_launch_args.cpp
+    cpp/test_launchable_url.cpp
     cpp/test_single_instance.cpp
     cpp/test_pending_send.cpp
     cpp/test_compose_bar_media.cpp
@@ -223,6 +224,7 @@ add_executable(tesseract_tests
 # (adding a file reshuffles them and exposed an unrelated anonymous-namespace
 # make_session() clash between two older shell tests).
 set_source_files_properties(cpp/test_animated_avatars.cpp cpp/test_image_sniff.cpp
+                            cpp/test_launchable_url.cpp
                             PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Points config_dir()/data_dir() at a temporary directory for every test case,

@@ -9,7 +9,7 @@
 #include "views/media_drop.h"
 #include "views/shortcut_registry.h"
 #include "SettingsWidget.h"
-#include "LinuxAutostartQt.h"
+#include "../../shared/linux_autostart.h"
 #include "LinuxPowerMonitorQt.h"
 #include "LinuxScreenLockQt.h"
 #include "app/DeferredTeardown.h"
@@ -169,7 +169,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
 
     set_screen_lock_(std::make_unique<LinuxScreenLockQt>());
     set_power_monitor_(std::make_unique<LinuxPowerMonitorQt>());
-    set_autostart_(std::make_unique<LinuxAutostartQt>());
+    set_autostart_(std::make_unique<LinuxAutostart>("tesseract-matrix"));
 
     setWindowTitle("Tesseract");
     setMinimumSize(static_cast<int>(tesseract::visual::kMinWindowWidth),
@@ -2637,40 +2637,18 @@ void MainWindow::apply_window_title_ui_(const std::string& title)
     setWindowTitle(QString::fromStdString(title));
 }
 
-void MainWindow::onRoomSelected(const std::string& room_id)
+void MainWindow::hide_compose_popups_()
 {
-    if (room_id.empty())
-    {
-        return;
-    }
-
-    // Drill into a space if the clicked row is one.
-    if (const auto* r = room_by_id_(room_id); r && r->is_space)
-    {
-        space_nav_frames_.push_back(
-            SpaceNavFrame::capture(mainApp_->room_list_view()));
-        space_stack_.push_back(room_id);
-        refreshRoomList();
-        SpaceNavFrame::enter(mainApp_->room_list_view());
-        return;
-    }
-
-    // Route through the controllers so their visible_ state stays in sync with
-    // the hidden frames.
     if (slash_controller_)
         slash_controller_->hide();
     if (shortcode_controller_)
         shortcode_controller_->hide();
     if (mention_controller_)
         mention_controller_->hide();
-    handle_compose_room_leaving_(current_room_id_);
-    // (No unsubscribe-on-leave here: the warm-subscription LRU in
-    // ShellBase::prune_warm_subscriptions_ now owns timeline lifecycle, keeping
-    // recently-left rooms warm for instant reuse and evicting the rest.)
-    current_room_id_ = room_id;
-    // Member prefetch (for mention pills/clicks) now lives in the shared
-    // RoomView::set_room(), so every shell gets it without wiring it here.
-    clear_focused_state_(room_id);
+}
+
+void MainWindow::restart_mark_read_timer_(int delay_ms)
+{
     if (!markReadTimer_)
     {
         markReadTimer_ = new QTimer(this);
@@ -2681,39 +2659,7 @@ void MainWindow::onRoomSelected(const std::string& room_id)
                     mark_room_read_(current_room_id_);
                 });
     }
-    markReadTimer_->start(
-        tesseract::Settings::instance().mark_as_read_delay_ms);
-    update_typing_bar_({}, false);
-    if (mainApp_)
-    {
-        mainApp_->room_view()->compose_bar()->clear_reply();
-        mainApp_->room_view()->compose_bar()->clear_editing();
-        mainApp_->room_view()->clear_compose_text();
-    }
-    if (roomTextArea_)
-    {
-        roomTextArea_->set_text("");
-    }
-    // Focus is handled by RoomView::set_room()'s own default-focus policy
-    // below — no need to request it here too.
-
-    if (const auto* r = room_by_id_(current_room_id_))
-    {
-        if (mainApp_)
-        {
-            mainApp_->room_view()->set_room(*r);
-        }
-    }
-    refresh_window_title_();
-    if (main_room_pane_)
-        main_room_pane_->apply_compose_draft_(current_room_id_);
-
-    // Subscribe (mut pool) + initial history (shared pool). The split keeps the
-    // network paginate off the single mut thread so the next switch's reset is
-    // never blocked. See ShellBase::start_room_subscription_.
-    auto visible_ids = mainApp_ ? mainApp_->room_list_view()->visible_room_ids()
-                                : std::vector<std::string>{};
-    start_room_subscription_(current_room_id_, std::move(visible_ids));
+    markReadTimer_->start(delay_ms);
 }
 
 void MainWindow::requestMoreHistory(const std::string& room_id)
@@ -3591,22 +3537,6 @@ void MainWindow::extract_drop_media_(std::uint32_t pending_gen,
     }
 }
 
-void MainWindow::post_pending_attachment_(
-    const tesseract::views::MediaInfo& info,
-    tesseract::views::ComposeBar* target, std::shared_ptr<bool> alive)
-{
-    if (target)
-    {
-        // Pop-out window: post to its compose bar only while it lives.
-        if (alive && *alive)
-            target->update_pending_attachment(info);
-    }
-    else if (mainApp_)
-    {
-        mainApp_->room_view()->compose_bar()->update_pending_attachment(info);
-    }
-}
-
 void MainWindow::extract_drop_video_(std::uint32_t pending_gen,
                                      std::vector<std::uint8_t> bytes,
                                      tesseract::views::ComposeBar* target,
@@ -3721,120 +3651,71 @@ void MainWindow::extract_drop_audio_(std::uint32_t pending_gen,
     player->play();
 }
 
-void MainWindow::extract_video_first_frame_jpeg_(
-    const std::string& /*event_id*/, const std::string& source_token,
-    std::function<void(std::vector<std::uint8_t>)> cb)
+void MainWindow::decode_video_first_frame_(
+    std::vector<std::uint8_t> bytes,
+    std::function<void(std::vector<std::uint8_t>)> done)
 {
-    if (!client_)
-    {
-        cb({});
-        return;
-    }
-    const std::string src = source_token;
-    // decode: runs the QMediaPlayer/QVideoSink decode + JPEG-encode against
-    // `bytes` and invokes `done(jpeg)` exactly once (empty jpeg on any
-    // failure, including a decode error — e.g. a truncated prefix that
-    // lacks its container's sample table). Shared (via shared_ptr) so both
-    // the prefix attempt and the full-file fallback below can reuse it.
-    auto decode = std::make_shared<
-        std::function<void(std::vector<std::uint8_t>,
-                           std::function<void(std::vector<std::uint8_t>)>)>>();
-    *decode =
-        [this](std::vector<std::uint8_t> bytes,
-               std::function<void(std::vector<std::uint8_t>)> done)
+    // Runs the QMediaPlayer/QVideoSink decode + JPEG-encode against `bytes`
+    // and invokes `done(jpeg)` exactly once (empty jpeg on any failure,
+    // including a decode error — e.g. a truncated prefix that lacks its
+    // container's sample table).
+    // Qt multimedia objects (QMediaPlayer, QVideoSink) must live on
+    // the UI thread — the caller is already on the UI thread.
+    auto* player = new QMediaPlayer(this);
+    auto* sink = new QVideoSink(player);
+    player->setVideoSink(sink);
+    auto* buf = new QBuffer(player);
+    QByteArray ba(reinterpret_cast<const char*>(bytes.data()),
+                  static_cast<qsizetype>(bytes.size()));
+    buf->setData(ba);
+    buf->open(QIODevice::ReadOnly);
+    player->setSourceDevice(buf);
+    // Both signal handlers can fire (e.g. an error after a partial
+    // frame) — `fired` ensures `done` runs exactly once.
+    auto fired = std::make_shared<bool>(false);
+    QObject::connect(
+        sink, &QVideoSink::videoFrameChanged, sink,
+        [done, player, fired](const QVideoFrame& frame) mutable
         {
-            // Qt multimedia objects (QMediaPlayer, QVideoSink) must live on
-            // the UI thread — the caller is already on the UI thread.
-            auto* player = new QMediaPlayer(this);
-            auto* sink = new QVideoSink(player);
-            player->setVideoSink(sink);
-            auto* buf = new QBuffer(player);
-            QByteArray ba(reinterpret_cast<const char*>(bytes.data()),
-                          static_cast<qsizetype>(bytes.size()));
-            buf->setData(ba);
-            buf->open(QIODevice::ReadOnly);
-            player->setSourceDevice(buf);
-            // Both signal handlers can fire (e.g. an error after a partial
-            // frame) — `fired` ensures `done` runs exactly once.
-            auto fired = std::make_shared<bool>(false);
-            QObject::connect(
-                sink, &QVideoSink::videoFrameChanged, sink,
-                [done, player, fired](const QVideoFrame& frame) mutable
-                {
-                    if (*fired || !frame.isValid())
-                        return;
-                    *fired = true;
-                    player->stop();
-                    player->deleteLater();
-                    QImage img = frame.toImage();
-                    if (img.isNull())
-                    {
-                        done({});
-                        return;
-                    }
-                    QByteArray enc;
-                    QBuffer encbuf(&enc);
-                    encbuf.open(QIODevice::WriteOnly);
-                    img.save(&encbuf, "JPEG", 85);
-                    if (enc.isEmpty())
-                    {
-                        done({});
-                        return;
-                    }
-                    std::vector<std::uint8_t> v(
-                        reinterpret_cast<const std::uint8_t*>(enc.constData()),
-                        reinterpret_cast<const std::uint8_t*>(enc.constData()) +
-                            enc.size());
-                    done(std::move(v));
-                });
-            QObject::connect(
-                player, &QMediaPlayer::errorOccurred, player,
-                [done, player, fired](QMediaPlayer::Error error,
-                                      const QString&) mutable
-                {
-                    if (*fired || error == QMediaPlayer::NoError)
-                        return;
-                    *fired = true;
-                    player->stop();
-                    player->deleteLater();
-                    done({});
-                });
-            player->play();
-        };
-    auto req_id = begin_media_req_(0,
-        [this, cb, src, decode](std::vector<std::uint8_t> prefix_bytes) mutable
-        {
-            if (prefix_bytes.empty())
+            if (*fired || !frame.isValid())
+                return;
+            *fired = true;
+            player->stop();
+            player->deleteLater();
+            QImage img = frame.toImage();
+            if (img.isNull())
             {
-                cb({});
+                done({});
                 return;
             }
-            (*decode)(
-                std::move(prefix_bytes),
-                [this, cb, src, decode](std::vector<std::uint8_t> jpeg) mutable
-                {
-                    if (!jpeg.empty())
-                    {
-                        cb(std::move(jpeg));
-                        return;
-                    }
-                    // Prefix wasn't enough (e.g. a non-fast-start file with
-                    // its moov atom at EOF) — fall back to the full file.
-                    auto full_req = begin_media_req_(0,
-                        [cb, decode](std::vector<std::uint8_t> full_bytes) mutable
-                        {
-                            if (full_bytes.empty())
-                            {
-                                cb({});
-                                return;
-                            }
-                            (*decode)(std::move(full_bytes), cb);
-                        });
-                    client_->fetch_source_bytes_async(full_req, src);
-                });
+            QByteArray enc;
+            QBuffer encbuf(&enc);
+            encbuf.open(QIODevice::WriteOnly);
+            img.save(&encbuf, "JPEG", 85);
+            if (enc.isEmpty())
+            {
+                done({});
+                return;
+            }
+            std::vector<std::uint8_t> v(
+                reinterpret_cast<const std::uint8_t*>(enc.constData()),
+                reinterpret_cast<const std::uint8_t*>(enc.constData()) +
+                    enc.size());
+            done(std::move(v));
         });
-    client_->fetch_source_prefix_async(
-        req_id, src, tesseract::visual::kVideoThumbnailPrefixBytes);
+    QObject::connect(
+        player, &QMediaPlayer::errorOccurred, player,
+        [done, player, fired](QMediaPlayer::Error error,
+                              const QString&) mutable
+        {
+            if (*fired || error == QMediaPlayer::NoError)
+                return;
+            *fired = true;
+            player->stop();
+            player->deleteLater();
+            done({});
+        });
+    player->play();
 }
 
 void MainWindow::onMessageAnimTick_()
@@ -4354,53 +4235,6 @@ void MainWindow::handle_notification_ui_(
 
 // ── Tab management (ShellBase virtual hooks) ──────────────────────────────────
 
-void MainWindow::on_tab_state_changed_ui_()
-{
-    if (!mainApp_)
-    {
-        return;
-    }
-
-    auto* tb = mainApp_->tab_bar();
-    const bool show_bar = tabs_.size() > 1;
-    mainApp_->set_tab_bar_visible(show_bar);
-
-    if (tb)
-    {
-        // Rebuild in tabs_ order so visual order is always stable.
-        tb->clear();
-        for (const auto& t : tabs_)
-        {
-            const tk::Image* avatar = nullptr;
-            std::string name;
-            if (const auto* r = room_by_id_(t.room_id))
-            {
-                name = r->name;
-                const std::string& av_mxc = r->effective_avatar_url();
-                if (!av_mxc.empty())
-                {
-                    avatar = account_manager_.thumbnail_cache().peek(tk::CacheKey::media(av_mxc));
-                }
-            }
-            tb->add_tab(t.room_id, name, avatar);
-        }
-
-        if (active_tab_idx_ < tabs_.size())
-        {
-            tb->set_active(tabs_[active_tab_idx_].room_id);
-        }
-    }
-
-    // Navigate to the active tab's room.
-    if (active_tab_idx_ < tabs_.size())
-    {
-        const auto& active = tabs_[active_tab_idx_];
-        onRoomSelected(active.room_id);
-    }
-
-    schedule_relayout_();
-}
-
 float MainWindow::get_message_scroll_fraction_()
 {
     if (!mainApp_ || !mainApp_->room_view()->message_list())
@@ -4670,63 +4504,34 @@ void MainWindow::beginAddAccount()
 
 void MainWindow::logoutActiveAccount()
 {
-    // An unsaved recovery key is offered for saving first (ShellBase); this
-    // re-enters once the user has saved it or chosen to sign out anyway.
-    if (intercept_sign_out_for_unsaved_key_([this] { logoutActiveAccount(); }))
-        return;
-
-    // Platform-agnostic teardown (unsubscribe the room, up_connector/presence
-    // logout, client_->logout() + failure surface, stop_sync, clear account
-    // state, tray refresh, index update, and — when other accounts remain — the
-    // switch to a survivor) lives in ShellBase.
-    const auto result = logout_active_account_impl_();
-    if (!result.logged_out)
+    // Shared sequence lives in ShellBase (unsaved-key intercept, teardown,
+    // last-account main-UI clear); the lambda holds the native follow-up.
+    sign_out_active_account_([this] { logoutActiveAccount(); },
+                             [this](const LogoutResult& result)
     {
-        return;
-    }
-
-    // Native widget cleanup of the now-empty surface (the remaining-account
-    // branch already repainted via refresh_account_ui_after_switch_).
-    if (!result.has_remaining)
-    {
-        refreshRoomList();
-        clearMessages();
-        if (mainApp_ && mainApp_->room_view())
+        if (!result.has_remaining)
         {
-            // Drop RoomView's (and its EmojiPicker/StickerPicker's) cached raw
-            // Client* — it's never re-pointed once there's no survivor to
-            // switch to, and the old Client is about to be destroyed
-            // asynchronously by logout_active_account_impl_'s drain barrier.
-            mainApp_->room_view()->set_client(nullptr);
-        }
-        if (mainApp_)
-        {
-            mainApp_->clear_content();
+            refreshRoomList();
             mainAppSurface_->relayout();
+
+            // No accounts left → back to initial login.
+            ensureLoginView_();
+            loginView_->set_mode(tesseract::views::LoginView::Mode::Initial);
+            pending_login_is_add_account_ = false;
+            add_account_return_idx_ = -1;
+            loginView_->set_client(reset_pending_login_client_());
+            loginView_->set_on_begin_oauth([this] { arm_pending_login_(); });
+            loginView_->reset();
+            contentStack_->setCurrentWidget(loginView_);
+            statusBar()->showMessage(QString::fromStdString(tk::tr("Signed out")), 3000);
+            rebuildAccountPicker();
+            return;
         }
-    }
 
-    if (!result.has_remaining)
-    {
-        // No accounts left → back to initial login.
-        ensureLoginView_();
-        loginView_->set_mode(tesseract::views::LoginView::Mode::Initial);
-        pending_login_is_add_account_ = false;
-        add_account_return_idx_ = -1;
-        pending_login_temp_dir_.clear();
-        pending_login_client_ = std::make_unique<tesseract::Client>();
-        loginView_->set_client(pending_login_client_.get());
-        loginView_->set_on_begin_oauth([this] { arm_pending_login_(); });
-        loginView_->reset();
-        contentStack_->setCurrentWidget(loginView_);
-        statusBar()->showMessage(QString::fromStdString(tk::tr("Signed out")), 3000);
-        rebuildAccountPicker();
-        return;
-    }
-
-    statusBar()->showMessage(
-        QString::fromStdString(tk::tr("Signed out of %1")).arg(QString::fromStdString(result.logged_out_uid)),
-        3000);
+        statusBar()->showMessage(
+            QString::fromStdString(tk::tr("Signed out of %1")).arg(QString::fromStdString(result.logged_out_uid)),
+            3000);
+    });
 }
 
 void MainWindow::rebuildAccountPicker()

@@ -163,10 +163,7 @@ bool SlashCommandController::on_nav(tk::NavKey nk)
         return false;
     }
     popup_->set_selected_index(next);
-    if (hooks_.repaint)
-    {
-        hooks_.repaint();
-    }
+    repaint_selection_();
     return true;
 }
 
@@ -336,6 +333,18 @@ bool SlashCommandController::submit_bot_command()
     }
     hide();
     return true;
+}
+
+void SlashCommandController::repaint_selection_()
+{
+    if (hooks_.repaint_selection)
+    {
+        hooks_.repaint_selection();
+    }
+    else if (hooks_.repaint)
+    {
+        hooks_.repaint();
+    }
 }
 
 void SlashCommandController::hide()

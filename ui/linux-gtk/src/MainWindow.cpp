@@ -7,7 +7,7 @@
 #include "views/BrandView.h"
 #include "SettingsWidget.h"
 #include "tk/i18n.h"
-#include "LinuxAutostartGtk.h"
+#include "../../shared/linux_autostart.h"
 #include "LinuxPowerMonitorGtk.h"
 #include "LinuxScreenLockGtk.h"
 #include "app/DeferredTeardown.h"
@@ -407,7 +407,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
 {
     set_screen_lock_(std::make_unique<LinuxScreenLockGtk>());
     set_power_monitor_(std::make_unique<LinuxPowerMonitorGtk>());
-    set_autostart_(std::make_unique<LinuxAutostartGtk>());
+    set_autostart_(std::make_unique<LinuxAutostart>("tesseract-matrix-gtk"));
 
     if (start_hidden_)
     {
@@ -3365,43 +3365,25 @@ void MainWindow::apply_window_title_ui_(const std::string& title)
     gtk_window_set_title(GTK_WINDOW(window_), title.c_str());
 }
 
-void MainWindow::on_room_selected(const std::string& room_id)
+void MainWindow::hide_compose_popups_()
 {
-    if (room_id.empty())
-    {
-        return;
-    }
-
-    // Drill into a space if the clicked row is one.
-    if (const auto* r = room_by_id_(room_id); r && r->is_space)
-    {
-        space_nav_frames_.push_back(SpaceNavFrame::capture(room_list_view_));
-        space_stack_.push_back(room_id);
-        refresh_room_list();
-        SpaceNavFrame::enter(room_list_view_);
-        return;
-    }
-
-    // Route through the controllers so their visible_ state stays in sync.
     if (slash_controller_)
         slash_controller_->hide();
     if (shortcode_controller_)
         shortcode_controller_->hide();
     if (mention_controller_)
         mention_controller_->hide();
-    handle_compose_room_leaving_(current_room_id_);
-    // (No unsubscribe-on-leave here: ShellBase::prune_warm_subscriptions_ owns
-    // timeline lifecycle via the warm-subscription LRU.)
-    current_room_id_ = room_id;
-    clear_focused_state_(room_id);
+}
+
+void MainWindow::restart_mark_read_timer_(int delay_ms)
+{
     if (mark_read_timer_id_)
     {
         g_source_remove(mark_read_timer_id_);
         mark_read_timer_id_ = 0;
     }
     mark_read_timer_id_ = g_timeout_add(
-        static_cast<guint>(
-            tesseract::Settings::instance().mark_as_read_delay_ms),
+        static_cast<guint>(delay_ms),
         [](gpointer user_data) -> gboolean
         {
             auto* self = static_cast<MainWindow*>(user_data);
@@ -3410,37 +3392,6 @@ void MainWindow::on_room_selected(const std::string& room_id)
             return G_SOURCE_REMOVE;
         },
         this);
-    update_typing_bar_({}, false);
-    if (room_view_)
-    {
-        room_view_->compose_bar()->clear_reply();
-        room_view_->compose_bar()->clear_editing();
-    }
-    if (room_text_area_)
-    {
-        room_text_area_->set_text("");
-    }
-    // Focus is handled by RoomView::set_room()'s own default-focus policy
-    // below — no need to request it here too.
-    if (room_view_)
-    {
-        room_view_->clear_compose_text();
-    }
-
-    if (const auto* r = room_by_id_(current_room_id_))
-    {
-        room_view_->set_room(*r);
-    }
-    refresh_window_title_();
-    if (main_room_pane_)
-        main_room_pane_->apply_compose_draft_(current_room_id_);
-
-    // Subscribe (mut pool) + initial history (shared pool). The split keeps the
-    // network paginate off the single mut thread so the next switch's reset is
-    // never blocked. See ShellBase::start_room_subscription_.
-    auto visible_ids = room_list_view_ ? room_list_view_->visible_room_ids()
-                                       : std::vector<std::string>{};
-    start_room_subscription_(current_room_id_, std::move(visible_ids));
 }
 
 void MainWindow::push_paginate_result(std::string room_id, bool reached_start)
@@ -4948,62 +4899,22 @@ void MainWindow::extract_drop_media_(std::uint32_t pending_gen,
                 }
             }
 
-            // Post result to UI thread — resolve compose_bar() at call time
-            // to avoid any raw-pointer lifetime hazard with the captured cb.
-            // guarded() is called here, on the worker thread, at the exact
-            // point the old code read its own alive_ member. target_alive
-            // stays a genuinely-independent shared_ptr<bool> (not this
-            // shell's own guard) — the pop-out it guards is a different
-            // object with its own lifetime; see RoomPane's
-            // media_extract_alive_ for the matching rationale.
-            std::function<void()> fn;
-            if (target)
-            {
-                fn = [target, target_alive, info = std::move(info)]() mutable
-                {
-                    if (target_alive && *target_alive)
-                        target->update_pending_attachment(info);
-                };
-            }
-            else
-            {
-                fn = guarded([this, info = std::move(info)]() mutable
-                {
-                    if (room_view_)
-                        room_view_->compose_bar()->update_pending_attachment(info);
-                });
-            }
-            // fn is std::function<void()> here (not a bare guarded() closure)
-            // because the two branches above build genuinely different
-            // concrete closure types that must unify to one variable.
-            gtk_post_idle(std::move(fn));
+            // Marshal to the UI thread (see ShellBase::post_pending_attachment_).
+            post_pending_attachment_(std::move(info), target,
+                                     std::move(target_alive));
         });
 }
 
-void MainWindow::extract_video_first_frame_jpeg_(
-    const std::string& /*event_id*/, const std::string& source_token,
-    std::function<void(std::vector<std::uint8_t>)> cb)
+void MainWindow::decode_video_first_frame_(
+    std::vector<std::uint8_t> bytes,
+    std::function<void(std::vector<std::uint8_t>)> done)
 {
-    if (!client_)
-    {
-        cb({});
-        return;
-    }
-    const std::string src = source_token;
-    // decode: runs the GStreamer decode + PNG-encode pipeline against
-    // `bytes` off-thread and invokes `done(png)` on the UI thread (empty
-    // png on any failure). Shared (via shared_ptr) so both the prefix
-    // attempt and the full-file fallback below can reuse it.
-    auto decode = std::make_shared<
-        std::function<void(std::vector<uint8_t>,
-                           std::function<void(std::vector<uint8_t>)>)>>();
-    *decode =
-        [this](std::vector<uint8_t> bytes,
-               std::function<void(std::vector<uint8_t>)> done) mutable
+    // Runs the GStreamer decode + PNG-encode pipeline against `bytes`
+    // off-thread and invokes `done(png)` on the UI thread (empty png on any
+    // failure).
+    run_async_(
+        [this, done = std::move(done), bytes = std::move(bytes)]() mutable
         {
-            run_async_(
-                [this, done = std::move(done), bytes = std::move(bytes)]() mutable
-                {
             // Extract first frame via GStreamer appsink.
             GstElement* pipe = gst_pipeline_new(nullptr);
             GstElement* gsrc =
@@ -5167,42 +5078,7 @@ void MainWindow::extract_video_first_frame_jpeg_(
                     }
                     done(std::move(png));
                 }));
-                }); // run_async_
-        }; // *decode
-    auto req_id = begin_media_req_(0,
-        [this, cb, src, decode](std::vector<uint8_t> prefix_bytes) mutable
-        {
-            if (prefix_bytes.empty())
-            {
-                cb({});
-                return;
-            }
-            (*decode)(
-                std::move(prefix_bytes),
-                [this, cb, src, decode](std::vector<uint8_t> png) mutable
-                {
-                    if (!png.empty())
-                    {
-                        cb(std::move(png));
-                        return;
-                    }
-                    // Prefix wasn't enough (e.g. a non-fast-start file with
-                    // its moov atom at EOF) — fall back to the full file.
-                    auto full_req = begin_media_req_(0,
-                        [cb, decode](std::vector<uint8_t> full_bytes) mutable
-                        {
-                            if (full_bytes.empty())
-                            {
-                                cb({});
-                                return;
-                            }
-                            (*decode)(std::move(full_bytes), cb);
-                        });
-                    client_->fetch_source_bytes_async(full_req, src);
-                });
-        });
-    client_->fetch_source_prefix_async(
-        req_id, src, tesseract::visual::kVideoThumbnailPrefixBytes);
+        }); // run_async_
 }
 
 void MainWindow::cache_rgba_image_(const tk::CacheKey& key, int w, int h,
@@ -6147,63 +6023,37 @@ void MainWindow::begin_add_account()
 
 void MainWindow::logout_active_account()
 {
-    // An unsaved recovery key is offered for saving first (ShellBase); this
-    // re-enters once the user has saved it or chosen to sign out anyway.
-    if (intercept_sign_out_for_unsaved_key_([this] { logout_active_account(); }))
-        return;
-
-    // Platform-agnostic teardown (unsubscribe the room, up_connector/presence
-    // logout, client_->logout() + failure surface, stop_sync, clear account
-    // state, tray refresh, index update, and — when other accounts remain — the
-    // switch to a survivor) lives in ShellBase.
-    const auto result = logout_active_account_impl_();
-    if (!result.logged_out)
+    // Shared sequence lives in ShellBase (unsaved-key intercept, teardown,
+    // last-account main-UI clear); the lambda holds the native follow-up.
+    sign_out_active_account_([this] { logout_active_account(); },
+                             [this](const LogoutResult& result)
     {
-        return;
-    }
-
-    // Native widget cleanup of the now-empty surface (the remaining-account
-    // branch already repainted via refresh_account_ui_after_switch_).
-    if (!result.has_remaining)
-    {
-        clear_messages();
-        refresh_room_list();
-        if (room_view_)
+        if (!result.has_remaining)
         {
-            // Drop RoomView's (and its EmojiPicker/StickerPicker's) cached raw
-            // Client* — it's never re-pointed once there's no survivor to
-            // switch to, and the old Client is about to be destroyed
-            // asynchronously by logout_active_account_impl_'s drain barrier.
-            room_view_->set_client(nullptr);
-        }
-        if (main_app_)
-        {
-            main_app_->clear_content();
+            refresh_room_list();
             if (main_app_surface_)
             {
                 main_app_surface_->relayout();
             }
         }
-    }
 
-    // logged_out is already known true here (early-returned above
-    // otherwise); a background logout failure still surfaces separately
-    // via show_status_message_ once client_->logout() completes on
-    // mut_pool_ — see LogoutResult's comment for why there's no synchronous
-    // `ok` to gate this on.
-    gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Signed out").c_str());
+        // logged_out is already known true here (the shared sequence returns
+        // early otherwise); a background logout failure still surfaces
+        // separately via show_status_message_ once client_->logout() completes
+        // on mut_pool_ — see LogoutResult's comment for why there's no
+        // synchronous `ok` to gate this on.
+        gtk_label_set_text(GTK_LABEL(status_bar_), tk::tr("Signed out").c_str());
 
-    if (!result.has_remaining)
-    {
-        pending_login_temp_dir_.clear();
-        ensure_login_view_();
-        pending_login_client_ = std::make_unique<tesseract::Client>();
-        login_view_->set_client(pending_login_client_.get());
-        login_view_->set_on_begin_oauth([this] { arm_pending_login_(); });
-        login_view_->set_mode(tesseract::views::LoginView::Mode::Initial);
-        login_view_->reset();
-        gtk_stack_set_visible_child_name(GTK_STACK(content_stack_), "login");
-    }
+        if (!result.has_remaining)
+        {
+            ensure_login_view_();
+            login_view_->set_client(reset_pending_login_client_());
+            login_view_->set_on_begin_oauth([this] { arm_pending_login_(); });
+            login_view_->set_mode(tesseract::views::LoginView::Mode::Initial);
+            login_view_->reset();
+            gtk_stack_set_visible_child_name(GTK_STACK(content_stack_), "login");
+        }
+    });
 }
 
 void MainWindow::on_login_cancelled()
@@ -6333,52 +6183,6 @@ void MainWindow::open_account_picker(double /*ax*/, double /*ay*/)
 }
 
 // ── Tab management (ShellBase virtual hooks) ──────────────────────────────────
-
-void MainWindow::on_tab_state_changed_ui_()
-{
-    if (!main_app_)
-    {
-        return;
-    }
-
-    auto* tb = main_app_->tab_bar();
-    const bool show_bar = tabs_.size() > 1;
-    main_app_->set_tab_bar_visible(show_bar);
-
-    if (tb)
-    {
-        // Rebuild in tabs_ order so visual order is always stable.
-        tb->clear();
-        for (const auto& t : tabs_)
-        {
-            const tk::Image* avatar = nullptr;
-            std::string name;
-            if (const auto* r = room_by_id_(t.room_id))
-            {
-                name = r->name;
-                const std::string& av_mxc = r->effective_avatar_url();
-                if (!av_mxc.empty())
-                {
-                    avatar = account_manager_.thumbnail_cache().peek(tk::CacheKey::media(av_mxc));
-                }
-            }
-            tb->add_tab(t.room_id, name, avatar);
-        }
-
-        if (active_tab_idx_ < tabs_.size())
-        {
-            tb->set_active(tabs_[active_tab_idx_].room_id);
-        }
-    }
-
-    if (active_tab_idx_ < tabs_.size())
-    {
-        const auto& active = tabs_[active_tab_idx_];
-        on_room_selected(active.room_id);
-    }
-
-    schedule_relayout_();
-}
 
 float MainWindow::get_message_scroll_fraction_()
 {

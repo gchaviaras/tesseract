@@ -63,9 +63,18 @@ void RoomWindowBase::finish_init_()
 
 void RoomWindowBase::repaint_anim_frame()
 {
-    // Default: repaint the room surface so inline animated media advances.
-    // Subclasses override to also repaint visible emoji/sticker pickers.
+    // Repaint the room surface so inline animated media advances, and
+    // invalidate the visible emoji/sticker pickers' image caches so animated
+    // cells advance (the pickers paint inside this window's own surface).
+    // Subclasses override to also tick their composer popups.
     surface_repaint_();
+    if (room_view_)
+    {
+        if (room_view_->emoji_picker_visible() && room_view_->emoji_picker())
+            room_view_->emoji_picker()->invalidate_image_cache();
+        if (room_view_->sticker_picker_visible() && room_view_->sticker_picker())
+            room_view_->sticker_picker()->invalidate_image_cache();
+    }
 }
 
 void RoomWindowBase::schedule_self_close_()

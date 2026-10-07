@@ -175,8 +175,9 @@ public:
 
     // Called by ShellBase::tick_anim_ on every animation frame so this window's
     // animated images (inline media, and any open pickers) advance even when
-    // the pointer is still. The base repaints the room surface; subclasses
-    // override to also repaint visible emoji/sticker pickers.
+    // the pointer is still. The base repaints the room surface and refreshes
+    // visible emoji/sticker pickers; subclasses override to also tick their
+    // composer popups (ComposerPopups::repaint_anim_frame).
     virtual void repaint_anim_frame();
 
     // Returns true if this secondary window is currently on-screen (not
@@ -270,10 +271,6 @@ protected:
     // open them.
     views::ImageViewerOverlay* img_viewer_ = nullptr; // borrowed
     views::VideoViewerOverlay* vid_viewer_ = nullptr; // borrowed
-    // Debounce flag for the native compose text area's typing-notice timer.
-    // Only Win32/macOS wire this directly (Qt6/GTK4 debounce differently);
-    // not part of pane_'s shared wiring, so it stays here.
-    bool compose_typing_active_ = false;
 
     // Owns this window's per-room display state and wiring. Constructed by
     // init_pane_() once the subclass's Host exists (RoomWindowBase's own

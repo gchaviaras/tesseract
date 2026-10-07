@@ -171,7 +171,7 @@ int main(int argc, char* argv[])
     // Matches the desktop file basename packages actually install
     // (packaging/tesseract.desktop.in is renamed tesseract-matrix.desktop —
     // see packaging/debian/rules, packaging/arch/PKGBUILD.in — same name
-    // LinuxAutostartQt.cpp already uses). Read back via desktopFileName() in
+    // ui/shared/linux_autostart.h already uses). Read back via desktopFileName() in
     // LinuxNotifier.cpp to populate the "desktop-entry" hint on legacy D-Bus
     // notifications — required for the daemon's ActivationToken signal to
     // know which app to mint a Wayland xdg_activation_v1 token for (see

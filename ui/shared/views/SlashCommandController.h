@@ -41,6 +41,10 @@ public:
         std::function<void(tk::Rect cursor, int rows)> show;
         std::function<void()> hide;
         std::function<void()> repaint;
+        // Called instead of `repaint` when only the highlighted row changed (no
+        // layout change). Optional - when unset, `repaint` is used, so existing
+        // shells keep their behaviour.
+        std::function<void()> repaint_selection;
         std::function<std::string()> room_id; // active room for the send
         std::function<tesseract::Client*()> client;
         // Clear the shell's shared composer mirror (RoomView::clear_compose_text)
@@ -94,6 +98,8 @@ public:
     }
 
 private:
+    // Selection-only repaint: hooks_.repaint_selection if set, else hooks_.repaint.
+    void repaint_selection_();
     void accept(const SlashCommandSuggestion& s);
     // Recompute and show the argument hint (or error, if `error` is set)
     // for the in-progress bot command, given the composer text after the

@@ -1,18 +1,13 @@
 #include "LinuxUpConnectorQt.h"
 #include <tesseract/client.h>
-#include <tesseract/settings.h>
 #include <QDBusAbstractAdaptor>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QFutureWatcher>
 #include <QStringList>
-#include <QUrl>
 #include <QtConcurrent/QtConcurrent>
-#include <cctype>
 #include <unordered_map>
 
 // ---------------------------------------------------------------------------
@@ -285,17 +280,6 @@ void UpConnector1Adaptor::Unregistered(const QString& token)
 // LinuxUpConnectorQt
 // ---------------------------------------------------------------------------
 
-static std::string sanitize_token(const std::string& user_id)
-{
-    std::string t;
-    t.reserve(user_id.size());
-    for (char c : user_id)
-    {
-        t += (std::isalnum(static_cast<unsigned char>(c)) ? c : '_');
-    }
-    return t;
-}
-
 LinuxUpConnectorQt::LinuxUpConnectorQt() = default;
 
 void LinuxUpConnectorQt::set_distributor(const std::string& service)
@@ -311,44 +295,40 @@ LinuxUpConnectorQt::~LinuxUpConnectorQt()
 void LinuxUpConnectorQt::start(tesseract::Client* client,
                                const std::string& user_id)
 {
-    if (client_)
+    if (!core_.begin(client, user_id))
     {
         return; // already started
     }
-    client_ = client;
-    token_ = sanitize_token(user_id);
-    // Honour the persisted Notifications toggle on startup so a user who
-    // disabled push isn't silently re-registered every launch.
-    enabled_ = tesseract::Settings::instance().notifications_enabled;
 
     UpSharedBusQt& bus = UpSharedBusQt::get();
     if (!bus.acquire())
     {
+        core_.end();
         return; // another process owns the bus name
     }
 
-    bus.add_route(token_, this);
+    bus.add_route(core_.token(), this);
     bus.find_distributor_async(
-        token_, run_async_,
+        core_.token(), run_async_,
         post_to_ui_); // non-blocking; callback sets distributor
 }
 
 void LinuxUpConnectorQt::stop()
 {
-    if (!client_)
+    if (!core_.active())
     {
         return;
     }
     UpSharedBusQt& bus = UpSharedBusQt::get();
-    bus.remove_route(token_);
+    bus.remove_route(core_.token());
     bus.release();
     distributor_service_.clear();
-    client_ = nullptr;
+    core_.end();
 }
 
 void LinuxUpConnectorQt::logout()
 {
-    if (!client_)
+    if (!core_.active())
     {
         return;
     }
@@ -356,96 +336,41 @@ void LinuxUpConnectorQt::logout()
     if (!distributor_service_.empty())
     {
         bus.distributor_unregister(QString::fromStdString(distributor_service_),
-                                   token_);
+                                   core_.token());
     }
-    client_->remove_pusher(token_, "im.gnomos.tesseract");
+    core_.remove_pusher();
     stop();
 }
 
 void LinuxUpConnectorQt::on_new_endpoint(const std::string& endpoint)
 {
-    if (!client_)
-    {
-        return;
-    }
-    // The endpoint string is supplied by the UnifiedPush distributor over
-    // D-Bus — untrusted. Reject anything that isn't a valid https URL before
-    // registering it as this account's Matrix push gateway, otherwise a
-    // malicious/buggy distributor could redirect push traffic anywhere.
-    QUrl url(QString::fromStdString(endpoint), QUrl::StrictMode);
-    if (!url.isValid() || url.scheme() != QLatin1String("https") ||
-        url.host().isEmpty())
-    {
-        return;
-    }
-    // Matrix HTTP pushers require the URL path to be /_matrix/push/v1/notify.
-    // By UP convention the push provider exposes a Matrix gateway at that path.
-    url.setPath(QStringLiteral("/_matrix/push/v1/notify"));
-    url.setQuery(QString{});
-    url.setFragment(QString{});
-    gateway_url_ = url.toString().toStdString();
-    if (!enabled_)
-    {
-        return; // user disabled notifications; keep the endpoint cached
-    }
-    client_->register_pusher(token_, "im.gnomos.tesseract", "Tesseract",
-                             "Linux Desktop", gateway_url_, "en");
+    core_.on_new_endpoint(endpoint);
 }
 
 void LinuxUpConnectorQt::on_unregistered()
 {
-    if (!client_)
+    if (!core_.active())
     {
         return;
     }
-    client_->remove_pusher(token_, "im.gnomos.tesseract");
+    core_.remove_pusher();
     // Re-register so the distributor issues a fresh endpoint.
     if (!distributor_service_.empty())
     {
         UpSharedBusQt::get().distributor_register(
-            QString::fromStdString(distributor_service_), token_);
+            QString::fromStdString(distributor_service_), core_.token());
     }
 }
 
 void LinuxUpConnectorQt::set_enabled(bool enabled)
 {
-    if (enabled_ == enabled)
-    {
-        return;
-    }
-    enabled_ = enabled;
-    if (!client_)
-    {
-        return; // not started yet; honour the flag when start() runs
-    }
-    if (enabled)
-    {
-        if (!gateway_url_.empty())
-        {
-            client_->register_pusher(token_, "im.gnomos.tesseract", "Tesseract",
-                                     "Linux Desktop", gateway_url_, "en");
-        }
-    }
-    else
-    {
-        // remove_pusher is idempotent on the homeserver, so calling it when
-        // no pusher exists is harmless.
-        client_->remove_pusher(token_, "im.gnomos.tesseract");
-    }
+    core_.set_enabled(enabled);
 }
 
 void LinuxUpConnectorQt::on_message(const QByteArray& message)
 {
-    if (!client_)
-    {
-        return;
-    }
-    const auto doc = QJsonDocument::fromJson(message);
-    const auto room_id = doc["notification"]["room_id"].toString();
-    if (!room_id.isEmpty())
-    {
-        client_->hint_push_room(room_id.toStdString());
-    }
+    core_.on_message(std::string_view(message.constData(),
+                                      static_cast<std::size_t>(message.size())));
 }
 
 #include "LinuxUpConnectorQt.moc"

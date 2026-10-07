@@ -284,8 +284,8 @@ void LinuxNotifierGtk::notify(const tesseract::Notification& n)
     // subscription in the constructor) — mirrors KDE's own
     // knotifications/src/notifybypopup.cpp. Matches the basename the GTK
     // package installs (packaging/debian/rules installs it to the
-    // tesseract-matrix-gtk package; see LinuxAutostartGtk.cpp's identical
-    // "tesseract-matrix-gtk" literal).
+    // tesseract-matrix-gtk package; see the identical "tesseract-matrix-gtk"
+    // basename MainWindow.cpp passes to LinuxAutostart).
     g_variant_builder_add(&hints_b, "{sv}", "desktop-entry",
                           g_variant_new_string("tesseract-matrix-gtk"));
     if (legacy_reply_supported_)

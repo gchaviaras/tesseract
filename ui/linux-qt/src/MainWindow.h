@@ -267,7 +267,6 @@ private:
     void populateUserStrip();
     void showRooms(const std::vector<tesseract::RoomInfo>& rooms);
     void refreshRoomList();
-    void onRoomSelected(const std::string& room_id);
     // Push ShellBase::compose_window_title_()'s string to the OS window title.
     void apply_window_title_ui_(const std::string& title) override;
     void clearMessages();
@@ -330,13 +329,16 @@ private:
     void repaint_inflight_spinner_() override;
     void repaint_pickers_() override;
 
+    // Room-selection hooks (ShellBase::on_room_selected_).
+    void hide_compose_popups_() override;
+    void restart_mark_read_timer_(int delay_ms) override;
+
     // Tab management hooks.
-    void on_tab_state_changed_ui_() override;
     float get_message_scroll_fraction_() override;
     void set_message_scroll_fraction_(float t) override;
-    void extract_video_first_frame_jpeg_(
-        const std::string& event_id, const std::string& source_token,
-        std::function<void(std::vector<std::uint8_t>)> cb) override;
+    void decode_video_first_frame_(
+        std::vector<std::uint8_t> bytes,
+        std::function<void(std::vector<std::uint8_t>)> done) override;
 
     // Unified media probe for a dropped file, passed as the extractor hook to
     // tesseract::views::route_file_drop_to_compose_bar. Detects gif/webp animation and
@@ -348,12 +350,6 @@ private:
                              tesseract::views::ComposeBar* target = nullptr,
                              std::shared_ptr<bool> target_alive = nullptr)
         override;
-
-    // Post an extracted MediaInfo to the right compose bar on the UI thread:
-    // `target` (a pop-out, guarded by `alive`) when set, else the main window's.
-    void post_pending_attachment_(const tesseract::views::MediaInfo& info,
-                                  tesseract::views::ComposeBar* target,
-                                  std::shared_ptr<bool> alive);
 
     // Creates a QMediaPlayer on the UI thread (Qt Multimedia constraint),
     // extracts the first frame as a JPEG thumbnail and the media duration,

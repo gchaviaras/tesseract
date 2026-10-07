@@ -1,4 +1,5 @@
 #pragma once
+#include "../../shared/linux_up_connector_core.h"
 #include <tesseract/up_connector.h>
 #include <QObject>
 #include <functional>
@@ -34,14 +35,8 @@ public:
     void on_message(const QByteArray& message);
 
 private:
-    tesseract::Client* client_ = nullptr;
-    std::string token_;
+    tesseract::up::PusherCore core_;
     std::string distributor_service_;
-    // Last gateway URL derived from a distributor endpoint. Cached so a
-    // re-enable after the user toggled notifications off can re-register the
-    // pusher without waiting for a fresh distributor callback.
-    std::string gateway_url_;
-    bool enabled_ = true;
     std::function<void(std::function<void()>)> run_async_;
     std::function<void(std::function<void()>)> post_to_ui_;
 };

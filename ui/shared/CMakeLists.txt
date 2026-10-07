@@ -23,6 +23,8 @@ set(_tk_sources
     app/RoomWindowBase.cpp
     app/RoomPane.h
     app/RoomPane.cpp
+    app/ComposerPopups.h
+    app/ComposerPopups.cpp
     app/SettingsController.h
     app/SettingsController.cpp
     app/HistoryExportController.h
@@ -385,6 +387,8 @@ if(TESSERACT_UI STREQUAL "qt6" OR TESSERACT_UI STREQUAL "gtk" OR TESSERACT_UI ST
         tk/video_decode_gst.cpp
         tk/gst_hw_probe.cpp
         tk/gst_device_listing.cpp
+        # Transport-independent half of the Qt6/GTK4 UnifiedPush connectors.
+        linux_up_connector_core.cpp
     )
 endif()
 

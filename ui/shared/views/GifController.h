@@ -44,6 +44,10 @@ public:
         std::function<void()> show;
         std::function<void()> hide;
         std::function<void()> repaint;
+        // Called instead of `repaint` when only the highlighted row changed (no
+        // layout change). Optional - when unset, `repaint` is used, so existing
+        // shells keep their behaviour.
+        std::function<void()> repaint_selection;
         std::function<std::string()> room_id; // active room for the send
         std::function<tesseract::Client*()> client;
         // Worker / UI-thread plumbing (search + send run off the UI thread).
@@ -88,6 +92,8 @@ public:
     void hide();
 
 private:
+    // Selection-only repaint: hooks_.repaint_selection if set, else hooks_.repaint.
+    void repaint_selection_();
     void run_search(std::string query);
     void accept(const tesseract::GifResult& gif);
     // Show a one-line message in the popup (empty key, no results, failed

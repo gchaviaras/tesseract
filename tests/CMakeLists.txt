@@ -236,10 +236,14 @@ endif()
 
 # tk::clean_device_display_name() lives in tk/gst_device_listing.cpp, which is
 # a Linux-only source in tesseract_tk (see the guard in ui/shared/CMakeLists.txt).
+# Same for linux_up_connector_core.cpp; linux_autostart.h is POSIX/procfs-only.
 # Keep the test with it: listed unconditionally above, the Win32 and macOS test
 # binaries would reference a symbol that isn't defined there.
 if(TESSERACT_UI STREQUAL "qt6" OR TESSERACT_UI STREQUAL "gtk" OR TESSERACT_UI STREQUAL "linux")
-    target_sources(tesseract_tests PRIVATE cpp/test_tk_gst_device_listing.cpp)
+    target_sources(tesseract_tests PRIVATE
+        cpp/test_tk_gst_device_listing.cpp
+        cpp/test_linux_autostart.cpp
+        cpp/test_linux_up_connector_core.cpp)
 endif()
 
 # tk_test_surface implementation is per-backend; only the one matching

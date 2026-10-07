@@ -172,10 +172,7 @@ bool MentionController::on_nav(tk::NativeTextArea::NavKey nk)
         return false;
     }
     popup_->set_selected_index(next);
-    if (hooks_.repaint)
-    {
-        hooks_.repaint();
-    }
+    repaint_selection_();
     return true;
 }
 
@@ -216,6 +213,18 @@ void MentionController::accept(const MentionCandidate& c)
                                    avatar);
     }
     hide();
+}
+
+void MentionController::repaint_selection_()
+{
+    if (hooks_.repaint_selection)
+    {
+        hooks_.repaint_selection();
+    }
+    else if (hooks_.repaint)
+    {
+        hooks_.repaint();
+    }
 }
 
 void MentionController::hide()

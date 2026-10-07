@@ -2647,7 +2647,11 @@ void RoomPane::send_receipt_(const std::string& event_id)
 
 void RoomPane::send_typing_notice_(bool typing)
 {
-    if (room_id_.empty() || !pane_client_())
+    // Also reached from ~ComposerPopups during window teardown: skip once the
+    // shell is shutting down. pane_client_() is already null for a pop-out
+    // whose owning account session is gone (logout) and for no active account.
+    if (room_id_.empty() || !shell_ || shell_->tearing_down_ ||
+        !pane_client_())
     {
         return;
     }

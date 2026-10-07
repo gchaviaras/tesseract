@@ -152,10 +152,7 @@ bool ShortcodeController::on_nav(tk::NavKey nk)
         return false;
     }
     popup_->set_selected_index(next);
-    if (hooks_.repaint)
-    {
-        hooks_.repaint();
-    }
+    repaint_selection_();
     return true;
 }
 
@@ -202,6 +199,18 @@ void ShortcodeController::replace_with(const std::string& r)
         text_area_->replace_range(active_match_.start, active_match_.end, r);
     }
     hide();
+}
+
+void ShortcodeController::repaint_selection_()
+{
+    if (hooks_.repaint_selection)
+    {
+        hooks_.repaint_selection();
+    }
+    else if (hooks_.repaint)
+    {
+        hooks_.repaint();
+    }
 }
 
 void ShortcodeController::hide()

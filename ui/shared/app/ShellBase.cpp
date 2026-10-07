@@ -1430,7 +1430,7 @@ void ShellBase::generate_video_thumbnail_(const std::string& event_id,
                         return;
                     }
                     extract_video_first_frame_jpeg_(
-                        event_id, source_token,
+                        source_token,
                         [this, event_id](std::vector<std::uint8_t> bytes)
                         {
                             if (!bytes.empty())
@@ -1445,6 +1445,101 @@ void ShellBase::generate_video_thumbnail_(const std::string& event_id,
                         });
                 });
         });
+}
+
+void ShellBase::extract_video_first_frame_jpeg_(
+    const std::string& source_token,
+    std::function<void(std::vector<std::uint8_t>)> cb)
+{
+    if (!client_)
+    {
+        cb({});
+        return;
+    }
+    const std::string src = source_token;
+    auto req_id = begin_media_req_(0,
+        [this, cb, src](std::vector<std::uint8_t> prefix_bytes) mutable
+        {
+            if (prefix_bytes.empty())
+            {
+                cb({});
+                return;
+            }
+            // A prefix shorter than the requested cap is the entire file (the
+            // fetch stops only at EOF or the cap), so a full-file fallback
+            // could not decode any better.
+            const bool whole_file =
+                prefix_bytes.size() <
+                tesseract::visual::kVideoThumbnailPrefixBytes;
+            decode_video_first_frame_(
+                std::move(prefix_bytes),
+                [this, cb, src, whole_file](
+                    std::vector<std::uint8_t> jpeg) mutable
+                {
+                    if (!jpeg.empty() || whole_file)
+                    {
+                        cb(std::move(jpeg));
+                        return;
+                    }
+                    // Prefix wasn't enough (e.g. a non-fast-start file with
+                    // its moov atom at EOF) — fall back to the full file.
+                    // `done` may run on any thread (see decode_video_first_
+                    // frame_), but begin_media_req_ mutates UI-thread-only
+                    // state, so marshal the whole fallback to the UI thread.
+                    post_to_ui_alive_(
+                        [this, cb, src]() mutable
+                        {
+                            if (!client_)
+                            {
+                                cb({});
+                                return;
+                            }
+                            auto full_req = begin_media_req_(0,
+                                [this, cb](
+                                    std::vector<std::uint8_t> full_bytes) mutable
+                                {
+                                    if (full_bytes.empty())
+                                    {
+                                        cb({});
+                                        return;
+                                    }
+                                    decode_video_first_frame_(
+                                        std::move(full_bytes), cb);
+                                });
+                            client_->fetch_source_bytes_async(full_req, src);
+                        });
+                });
+        });
+    client_->fetch_source_prefix_async(
+        req_id, src, tesseract::visual::kVideoThumbnailPrefixBytes);
+}
+
+void ShellBase::post_pending_attachment_(views::MediaInfo info,
+                                          views::ComposeBar* target,
+                                          std::shared_ptr<bool> alive)
+{
+    if (target)
+    {
+        // Pop-out window: post to its compose bar only while it lives.
+        // `alive` is a genuinely independent shared_ptr<bool> (not this
+        // shell's own guard) — the pop-out it guards is a different object
+        // with its own lifetime; see RoomPane's media_extract_alive_.
+        post_to_ui_([target, alive = std::move(alive),
+                     info = std::move(info)]() mutable
+        {
+            if (alive && *alive)
+                target->update_pending_attachment(info);
+        });
+        return;
+    }
+    // Main window: resolve compose_bar() at run time to avoid any raw-pointer
+    // lifetime hazard. guarded() is evaluated here, on the calling thread, at
+    // the point the shell's liveness is read.
+    post_to_ui_alive_([this, info = std::move(info)]() mutable
+    {
+        if (room_view_)
+            room_view_->compose_bar()->update_pending_attachment(info);
+    });
 }
 
 void ShellBase::decode_and_cache_video_thumbnail_(std::string event_id,
@@ -9303,6 +9398,63 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     return out;
 }
 
+void ShellBase::sign_out_active_account_(std::function<void()> retry,
+                                         const std::function<void(const LogoutResult&)>& on_signed_out)
+{
+    // An unsaved recovery key is offered for saving first; this re-enters
+    // (via `retry`) once the user has saved it or chosen to sign out anyway.
+    if (intercept_sign_out_for_unsaved_key_(std::move(retry)))
+        return;
+
+    // Platform-agnostic teardown (unsubscribe the room, up_connector/presence
+    // logout, client_->logout() + failure surface, stop_sync, clear account
+    // state, tray refresh, index update, and — when other accounts remain — the
+    // switch to a survivor) lives in logout_active_account_impl_.
+    const auto result = logout_active_account_impl_();
+    if (!result.logged_out)
+    {
+        return;
+    }
+
+    // Cleanup of the now-empty surface (the remaining-account branch already
+    // repainted via refresh_account_ui_after_switch_).
+    if (!result.has_remaining)
+    {
+        clear_main_ui_after_last_logout_();
+    }
+
+    if (on_signed_out)
+    {
+        on_signed_out(result);
+    }
+}
+
+void ShellBase::clear_main_ui_after_last_logout_()
+{
+    if (room_view_)
+    {
+        room_view_->clear_room();
+        room_view_->set_messages({});
+        // Drop RoomView's (and its EmojiPicker/StickerPicker's) cached raw
+        // Client* — it's never re-pointed once there's no survivor to
+        // switch to, and the old Client is about to be destroyed
+        // asynchronously by logout_active_account_impl_'s drain barrier.
+        room_view_->set_client(nullptr);
+    }
+    if (main_app_)
+    {
+        main_app_->clear_content();
+        main_app_->show_encryption_reminder(false);
+    }
+}
+
+Client* ShellBase::reset_pending_login_client_()
+{
+    pending_login_temp_dir_.clear();
+    pending_login_client_ = std::make_unique<Client>();
+    return pending_login_client_.get();
+}
+
 ShellBase::~ShellBase()
 {
     // Signal any UI-thread continuations queued via post_to_ui_alive_ that this
@@ -13337,6 +13489,118 @@ const RoomInfo* ShellBase::room_by_id_(const std::string& room_id) const
     if (it == room_index_by_id_.end() || it->second >= rooms_.size())
         return nullptr;
     return &rooms_[it->second];
+}
+
+void ShellBase::on_room_selected_(const std::string& room_id)
+{
+    if (room_id.empty())
+    {
+        return;
+    }
+
+    // Drill into a space if the clicked row is one.
+    if (const auto* r = room_by_id_(room_id); r && r->is_space)
+    {
+        views::RoomListView* rlv =
+            main_app_ ? main_app_->room_list_view() : nullptr;
+        space_nav_frames_.push_back(SpaceNavFrame::capture(rlv));
+        space_stack_.push_back(room_id);
+        refresh_room_list_();
+        SpaceNavFrame::enter(rlv);
+        return;
+    }
+
+    hide_compose_popups_();
+    handle_compose_room_leaving_(current_room_id_);
+    // (No unsubscribe-on-leave here: the warm-subscription LRU in
+    // prune_warm_subscriptions_ owns timeline lifecycle, keeping recently-left
+    // rooms warm for instant reuse and evicting the rest.)
+    current_room_id_ = room_id;
+    // Member prefetch (for mention pills/clicks) lives in RoomView::set_room(),
+    // so no shell has to wire it here.
+    clear_focused_state_(room_id);
+    restart_mark_read_timer_(Settings::instance().mark_as_read_delay_ms);
+    update_typing_bar_({}, false);
+    if (room_view_)
+    {
+        room_view_->compose_bar()->clear_reply();
+        room_view_->compose_bar()->clear_editing();
+        if (auto* ta = room_view_->compose_bar()->text_area())
+        {
+            ta->set_text("");
+        }
+        room_view_->clear_compose_text();
+    }
+    // Focus is handled by RoomView::set_room()'s own default-focus policy.
+    before_room_set_();
+
+    if (room_view_)
+    {
+        if (const auto* r = room_by_id_(current_room_id_))
+        {
+            room_view_->set_room(*r);
+            after_room_set_();
+        }
+    }
+    refresh_window_title_();
+    if (main_room_pane_)
+        main_room_pane_->apply_compose_draft_(current_room_id_);
+
+    // Subscribe (mut pool) + initial history (shared pool). The split keeps the
+    // network paginate off the single mut thread so the next switch's reset is
+    // never blocked. See start_room_subscription_.
+    auto visible_ids = main_app_ ? main_app_->room_list_view()->visible_room_ids()
+                                 : std::vector<std::string>{};
+    start_room_subscription_(current_room_id_, std::move(visible_ids));
+}
+
+void ShellBase::on_tab_state_changed_ui_()
+{
+    if (!main_app_)
+    {
+        return;
+    }
+
+    auto* tb = main_app_->tab_bar();
+    const bool show_bar = tabs_.size() > 1;
+    main_app_->set_tab_bar_visible(show_bar);
+
+    if (tb)
+    {
+        // Rebuild in tabs_ order so visual order is always stable.
+        tb->clear();
+        for (const auto& t : tabs_)
+        {
+            const tk::Image* avatar = nullptr;
+            std::string name;
+            if (const auto* r = room_by_id_(t.room_id))
+            {
+                name = r->name;
+                const std::string& av_mxc = r->effective_avatar_url();
+                if (!av_mxc.empty())
+                {
+                    avatar = account_manager_.thumbnail_cache().peek(
+                        tk::CacheKey::media(av_mxc));
+                }
+            }
+            tb->add_tab(t.room_id, name, avatar);
+        }
+
+        if (active_tab_idx_ < tabs_.size())
+        {
+            tb->set_active(tabs_[active_tab_idx_].room_id);
+        }
+    }
+
+    // Navigate to the active tab's room. Copy the id: on_room_selected_ can
+    // re-enter tab state and invalidate a reference into tabs_.
+    if (active_tab_idx_ < tabs_.size())
+    {
+        const std::string active_room = tabs_[active_tab_idx_].room_id;
+        on_room_selected_(active_room);
+    }
+
+    schedule_relayout_();
 }
 
 std::string ShellBase::compose_window_title_() const

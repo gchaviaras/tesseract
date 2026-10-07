@@ -141,6 +141,8 @@ When investigating a bug or unexpected behavior, if the first fix attempt fails,
 
 NEVER run the app yourself (launching a built binary/bundle, driving it, etc.) unless the user explicitly requests it. Taking screen captures or using screen/window automation (e.g. `screencapture`, `osascript`/System Events, accessibility APIs) without the user's authorization is FORBIDDEN — the display is the user's real, live desktop, not an isolated sandbox. A clean build is sufficient confirmation on its own; only launch or drive the app when the user explicitly asks for a live/visual check.
 
+NEVER do a cross-platform compile check (e.g. the `windows-xwin-*` presets, or any build targeting a platform other than the host) unless the user explicitly requests it. Build and test only for the host platform.
+
 When `ctest` reports failing tests, do not immediately spend time stashing/reverting the change and rebuilding to prove whether the current change caused them. Report the failing test names to the user first and wait for instructions — the user may already know these are pre-existing/flaky, may want a different repro approach, or may want to investigate a specific one directly. Only do the revert-and-rebuild comparison if the user asks for it.
 
 ## Internationalisation

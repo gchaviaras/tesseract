@@ -38,6 +38,10 @@ public:
         std::function<void(tk::Rect cursor, int rows)> show;
         std::function<void()> hide;
         std::function<void()> repaint;
+        // Called instead of `repaint` when only the highlighted row changed (no
+        // layout change). Optional - when unset, `repaint` is used, so existing
+        // shells keep their behaviour.
+        std::function<void()> repaint_selection;
         std::function<std::string()> room_id; // active room (member cache key)
         // Live client getter. Optional: when set, it is queried on every fetch
         // so the controller always sees the current client even if it was
@@ -92,6 +96,8 @@ public:
     void hide();
 
 private:
+    // Selection-only repaint: hooks_.repaint_selection if set, else hooks_.repaint.
+    void repaint_selection_();
     void accept(const MentionCandidate& c);
 
     tk::TextArea* text_area_;

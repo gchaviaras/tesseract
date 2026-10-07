@@ -2435,6 +2435,28 @@ protected:
     // UI-thread only.
     LogoutResult logout_active_account_impl_();
 
+    // The sign-out sequence shared by every shell's entry point
+    // (logoutActiveAccount / logout_active_account / _logoutActiveAccount):
+    // offer to save an unsaved recovery key first (`retry` re-enters the shell's
+    // own sign-out once the user has decided), run logout_active_account_impl_(),
+    // and — when no accounts remain — clear the native-widget-free main UI.
+    // `on_signed_out` then runs only when an account was actually signed out and
+    // carries the shell's native follow-up (room-list refresh, relayout, status
+    // text, login-view swap). login_view_ is native per shell, so it is never
+    // touched here. UI-thread only.
+    void sign_out_active_account_(std::function<void()> retry,
+                                  const std::function<void(const LogoutResult&)>& on_signed_out);
+
+    // Last-account cleanup of the shared views (no native widgets): empties the
+    // room view, drops its cached Client*, and resets the main content.
+    void clear_main_ui_after_last_logout_();
+
+    // Starts a fresh pending-login attempt: forgets the previous temp dir and
+    // replaces pending_login_client_ with a new Client, returned for the shell
+    // to hand to its native login view (set_client) alongside
+    // set_on_begin_oauth -> arm_pending_login_().
+    Client* reset_pending_login_client_();
+
     // Build the shell's concrete IEventHandler bridge for `uid`, with set_user_id
     // already called. The bridge TYPE is native: EventBridge (Qt6, a QObject so
     // the marshalling QMetaObject::invokeMethod has a receiver), EventHandlerBase
@@ -2761,19 +2783,32 @@ protected:
                                            std::vector<std::uint8_t> bytes,
                                            bool persist);
 
-    // Platform-specific half of generate_video_thumbnail_: fetch the video
-    // (prefix-then-fallback — see fetch_source_prefix_async), decode frame
-    // zero with the platform's native video decoder, encode it to a compact
-    // still-image format (JPEG or PNG — decode_image_ handles either), and
-    // invoke `cb` with those bytes (empty vector on any failure). `cb` may be
-    // invoked from any thread; generate_video_thumbnail_ re-marshals as
-    // needed. Default is a no-op (empty result) for shells without a
-    // video-decode pipeline.
-    virtual void extract_video_first_frame_jpeg_(
-        const std::string& /*event_id*/, const std::string& /*source_token*/,
-        std::function<void(std::vector<std::uint8_t>)> cb)
+    // Client-side first-frame extraction behind generate_video_thumbnail_:
+    // fetch the video (prefix-first via fetch_source_prefix_async; if the
+    // prefix doesn't decode, fall back to the full file), decode frame zero
+    // via the platform hook decode_video_first_frame_, and invoke `cb` with
+    // the encoded still image (JPEG or PNG — decode_image_ handles either;
+    // empty vector on any failure). `cb` may be invoked from any thread (it
+    // runs wherever the shell's decode hook completes); generate_video_
+    // thumbnail_ re-marshals as needed. Concrete; shells only override
+    // decode_video_first_frame_.
+    void extract_video_first_frame_jpeg_(
+        const std::string& source_token,
+        std::function<void(std::vector<std::uint8_t>)> cb);
+
+    // Platform-specific leaf of extract_video_first_frame_jpeg_: decode frame
+    // zero of the container `bytes` (a prefix or the whole file) with the
+    // platform's native video decoder, encode it to a compact still-image
+    // format (JPEG or PNG), and invoke `done` exactly once with those bytes
+    // (empty vector on any failure, including a truncated prefix that lacks
+    // its container's sample table). Called on the UI thread; `done` may be
+    // invoked from any thread. Default invokes done({}) for shells without a
+    // video-decode pipeline (test doubles).
+    virtual void decode_video_first_frame_(
+        std::vector<std::uint8_t> /*bytes*/,
+        std::function<void(std::vector<std::uint8_t>)> done)
     {
-        cb({});
+        done({});
     }
 
     // Drag-and-drop media probe. Each shell overrides this to detect gif/webp
@@ -2792,6 +2827,16 @@ protected:
                                      std::shared_ptr<bool> /*alive*/ = nullptr)
     {
     }
+
+    // Deliver a dropped file's extracted MediaInfo to the right compose bar.
+    // Safe to call from ANY thread (typically the probe's worker, or the UI
+    // thread for Qt's async probes): it marshals via post_to_ui_. `target` (a
+    // pop-out window's compose bar, guarded by `alive`) takes precedence;
+    // otherwise the main window's room_view_ compose bar, resolved at run time
+    // to avoid a dangling pointer and guarded on this shell's lifetime.
+    void post_pending_attachment_(views::MediaInfo info,
+                                  views::ComposeBar* target,
+                                  std::shared_ptr<bool> alive);
 
     // Called on the UI thread when a URL preview fetch completes successfully.
     // Concrete: cache the preview, kick the image fetch, ping the message list
@@ -3277,7 +3322,39 @@ protected:
     // that updates current_room_id_, before this hook runs) plus the next
     // handle_timeline_reset_ui_ call handle the room-switch display gate —
     // no action needed here.
-    virtual void on_tab_state_changed_ui_() = 0;
+    // Default: rebuild the TabBar in tabs_ order (names + avatars), mark the
+    // active tab, navigate to its room via on_room_selected_(), then relayout.
+    // A shell with extra platform work overrides this and calls the base first.
+    virtual void on_tab_state_changed_ui_();
+
+    // ── Room selection ────────────────────────────────────────────────────────
+    // Open `room_id` in the main room pane (or drill the room list into it
+    // when it is a space). Only called from on_tab_state_changed_ui_: room-list
+    // clicks and the quick switcher reach it indirectly, via tab_select_room /
+    // tab_open_room updating tabs_ and firing that hook.
+    void on_room_selected_(const std::string& room_id);
+    // Hide the slash / shortcode / mention suggestion popups. Route through
+    // the shell's popup controllers so their visible_ state stays in sync with
+    // the hidden frames. Default no-op (test shells).
+    virtual void hide_compose_popups_()
+    {
+    }
+    // (Re)arm the one-shot "mark current room read" timer to fire
+    // mark_room_read_(current_room_id_) after `delay_ms`, cancelling any
+    // pending one. Default no-op (test shells).
+    virtual void restart_mark_read_timer_(int /*delay_ms*/)
+    {
+    }
+    // Runs in on_room_selected_() just before RoomView::set_room(). Default
+    // no-op.
+    virtual void before_room_set_()
+    {
+    }
+    // Runs in on_room_selected_() right after RoomView::set_room(). Default
+    // no-op.
+    virtual void after_room_set_()
+    {
+    }
 
     // Read the current fractional scroll position [0,1] of the message list.
     virtual float get_message_scroll_fraction_()

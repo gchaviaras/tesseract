@@ -1,20 +1,13 @@
 #pragma once
 #include <QWidget>
 #include <memory>
+#include "app/ComposerPopups.h"
 #include "app/RoomWindowBase.h"
 #include "tk/host_qt.h"
 class QMoveEvent;
 #include "views/ConfirmDialog.h"
 #include "views/ForwardRoomPicker.h"
-#include "views/GifController.h"
 #include "views/RoomMediaView.h"
-#include "views/GifPopup.h"
-#include "views/MentionController.h"
-#include "views/MentionPopup.h"
-#include "views/ShortcodeController.h"
-#include "views/ShortcodePopup.h"
-#include "views/SlashCommandController.h"
-#include "views/SlashCommandPopup.h"
 
 namespace qt6
 {
@@ -55,9 +48,6 @@ protected:
                               const std::string& message) override;
 
 private:
-    void show_gif_popup_();
-    void hide_gif_popup_();
-
     MainWindow* parent_shell_;
     tk::qt6::Surface* surface_ = nullptr; // owned by Qt (child widget)
     bool rw_was_maximized_ = false; // restore target when leaving viewer full-screen
@@ -69,21 +59,9 @@ private:
     tesseract::views::RoomMediaView* room_media_view_widget_ = nullptr; // borrowed
     tesseract::views::ConfirmDialog* confirm_dialog_widget_ = nullptr; // borrowed
 
-    std::unique_ptr<tk::PopupSurfaceHandle> mention_popup_;
-    tesseract::views::MentionPopup* mention_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::MentionController> mention_controller_;
-
-    std::unique_ptr<tk::PopupSurfaceHandle> slash_popup_;
-    tesseract::views::SlashCommandPopup* slash_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::SlashCommandController> slash_controller_;
-
-    std::unique_ptr<tk::PopupSurfaceHandle> shortcode_popup_;
-    tesseract::views::ShortcodePopup* shortcode_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::ShortcodeController> shortcode_controller_;
-
-    std::unique_ptr<tk::PopupSurfaceHandle> gif_popup_;
-    tesseract::views::GifPopup* gif_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::GifController> gif_controller_;
+    // Composer popups (@mention, /command, :shortcode:, /gif). The popups
+    // are destroyed with the window, before Qt tears down the child surface_.
+    std::unique_ptr<tesseract::ComposerPopups> popups_;
 };
 
 } // namespace qt6

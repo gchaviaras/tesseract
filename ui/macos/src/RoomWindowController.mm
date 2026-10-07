@@ -1,6 +1,7 @@
 #import "RoomWindowController.h"
 #import "tk_locale.h"
 #include "app/ShellBase.h"
+#include "app/ComposerPopups.h"
 #include "app/RoomWindowBase.h"
 #include <tesseract/visual.h>
 #include "tk/host_macos.h"
@@ -12,15 +13,6 @@
 #include "views/RoomMediaView.h"
 #include "views/VideoViewerOverlay.h"
 #include "views/MessageListView.h"
-#include "views/ComposePopups.h"
-#include "views/GifController.h"
-#include "views/GifPopup.h"
-#include "views/MentionController.h"
-#include "views/MentionPopup.h"
-#include "views/ShortcodeController.h"
-#include "views/ShortcodePopup.h"
-#include "views/SlashCommandController.h"
-#include "views/SlashCommandPopup.h"
 
 #include <tesseract/client.h>
 #include <tesseract/image_pack.h>
@@ -56,6 +48,7 @@ public:
     void update_window_title_(const std::string& name) override;
     void apply_theme(const tk::Theme& t) override;
     void apply_scale_change(float scale) override;
+    void repaint_anim_frame() override;
 
     // Called by -windowWillClose: delegate method.
     void on_window_will_close()
@@ -75,9 +68,8 @@ public:
     {
         if (surface_) surface_->host().dismiss_active_popup();
         if (room_view_) room_view_->dismiss_popups();
-        tesseract::views::hide_all_compose_popups(
-            gif_controller_.get(), slash_controller_.get(),
-            shortcode_controller_.get(), mention_controller_.get());
+        if (popups_)
+            popups_->hide_all();
     }
 
     // Called by -keyDown: when Escape is pressed.
@@ -107,7 +99,6 @@ public:
 
 protected:
     void surface_repaint_() override;
-    void hide_mention_popup_();
     // Fan-in for async GIF search results (forwarded by ShellBase to every
     // pop-out; only the controller that issued the search matches).
     void on_gif_results(std::uint64_t request_id,
@@ -116,9 +107,6 @@ protected:
                               const std::string& message) override;
 
 private:
-    void show_gif_popup_();
-    void hide_gif_popup_();
-
     __strong RoomWindowController* controller_ = nil;
     std::unique_ptr<tk::macos::Surface> surface_;
     // Borrowed from room_view_->compose_bar()->text_area() — see
@@ -128,21 +116,10 @@ private:
     tesseract::views::ForwardRoomPicker* forward_picker_widget_ = nullptr; // borrowed
     tesseract::views::RoomMediaView* room_media_view_widget_ = nullptr; // borrowed
     tesseract::views::ConfirmDialog* confirm_dialog_widget_ = nullptr; // borrowed
-    std::unique_ptr<tk::PopupSurfaceHandle> mention_popup_;
-    tesseract::views::MentionPopup* mention_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::MentionController> mention_controller_;
 
-    std::unique_ptr<tk::PopupSurfaceHandle> slash_popup_;
-    tesseract::views::SlashCommandPopup* slash_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::SlashCommandController> slash_controller_;
-
-    std::unique_ptr<tk::PopupSurfaceHandle> shortcode_popup_;
-    tesseract::views::ShortcodePopup* shortcode_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::ShortcodeController> shortcode_controller_;
-
-    std::unique_ptr<tk::PopupSurfaceHandle> gif_popup_;
-    tesseract::views::GifPopup* gif_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::GifController> gif_controller_;
+    // Composer popups (@mention, /command, :shortcode:, /gif). Declared after
+    // surface_ so the popups are destroyed before the Host they came from.
+    std::unique_ptr<tesseract::ComposerPopups> popups_;
     bool link_hovered_ = false;
     bool window_closed_ = false;
 };
@@ -377,48 +354,10 @@ MacRoomWindow::MacRoomWindow(tesseract::ShellBase* shell,
     };
 
     // ── Compose text area (self-owned — see ComposeBar::text_area()) ────────
+    // + composer popups (@mention, /command, :shortcode:, /gif).
     text_area_ = room_view_->compose_bar()->text_area();
-    text_area_->set_on_changed(
-        [this](const std::string& s)
-        {
-            bool typing = !s.empty();
-            if (typing != compose_typing_active_)
-            {
-                compose_typing_active_ = typing;
-                pane_->send_typing_notice_(typing);
-            }
-            if (room_view_)
-            {
-                room_view_->set_current_text(s);
-            }
-            // Drive all composer popups through the shared priority dispatch
-            // (gif > slash > shortcode > mention).
-            tesseract::views::dispatch_compose_text_changed(
-                s, text_area_->cursor_byte_pos(), gif_controller_.get(),
-                slash_controller_.get(), shortcode_controller_.get(),
-                mention_controller_.get());
-        });
-    text_area_->set_on_submit(
-        [this]
-        {
-            if (tesseract::views::dispatch_compose_submit(
-                    gif_controller_.get(), slash_controller_.get(),
-                    shortcode_controller_.get(), mention_controller_.get()))
-            {
-                return;
-            }
-            if (room_view_)
-            {
-                room_view_->compose_bar()->trigger_send();
-            }
-        });
-    text_area_->push_popup_nav(
-        [this](tk::NavKey nk) -> bool
-        {
-            return tesseract::views::dispatch_compose_nav(
-                nk, gif_controller_.get(), slash_controller_.get(),
-                shortcode_controller_.get(), mention_controller_.get());
-        });
+    popups_ = std::make_unique<tesseract::ComposerPopups>(
+        surface_->host(), text_area_, pane_.get(), room_view_);
     surface_->set_on_layout(
         [this]
         {
@@ -520,152 +459,6 @@ MacRoomWindow::MacRoomWindow(tesseract::ShellBase* shell,
         }
     }
 
-    // ── @mention autocomplete popup + controller ──────────────────────────
-    {
-        mention_popup_ = surface_->host().make_popup_surface();
-        auto mw = std::make_unique<tesseract::views::MentionPopup>();
-        mention_popup_widget_ = mw.get();
-        mention_popup_->set_root(std::move(mw));
-
-        tesseract::views::MentionController::Hooks hooks;
-        hooks.show = [this](tk::Rect cursor, int rows)
-        {
-            tesseract::RoomPane::position_dropdown_popup_(
-                mention_popup_.get(), cursor, rows,
-                tesseract::views::MentionPopup::kRowHeight,
-                tesseract::views::MentionPopup::kWidth);
-        };
-        hooks.hide = [this] { hide_mention_popup_(); };
-        hooks.repaint = [this]
-        {
-            if (mention_popup_)
-                mention_popup_->request_relayout();
-        };
-        pane_->wire_mention_hooks_(mention_popup_widget_, hooks);
-        mention_controller_ =
-            std::make_unique<tesseract::views::MentionController>(
-                text_area_, pane_->shell_client_(), mention_popup_widget_,
-                std::move(hooks));
-        if (mention_popup_)
-        {
-            // Pop-outs previously never auto-dismissed on outside click,
-            // unlike the main window's mention popup — intentional behavior
-            // fix, not a pre-existing pattern being ported.
-            mention_popup_->on_dismiss_requested = [this]
-            {
-                if (mention_controller_)
-                    mention_controller_->hide();
-            };
-        }
-    }
-
-    // ── /command autocomplete popup ───────────────────────────────────────
-    {
-        slash_popup_ = surface_->host().make_popup_surface();
-        auto sw = std::make_unique<tesseract::views::SlashCommandPopup>();
-        slash_popup_widget_ = sw.get();
-        slash_popup_->set_root(std::move(sw));
-
-        tesseract::views::SlashCommandController::Hooks sh;
-        sh.show = [this](tk::Rect cursor, int rows)
-        {
-            tesseract::RoomPane::position_dropdown_popup_(
-                slash_popup_.get(), cursor, rows,
-                tesseract::views::SlashCommandPopup::kRowHeight,
-                tesseract::views::SlashCommandPopup::kWidth);
-        };
-        sh.hide = [this] { if (slash_popup_) slash_popup_->set_visible(false); };
-        sh.repaint = [this]
-        {
-            if (slash_popup_)
-                slash_popup_->request_relayout();
-        };
-        pane_->wire_slash_hooks_(sh);
-        slash_controller_ =
-            std::make_unique<tesseract::views::SlashCommandController>(
-                text_area_, slash_popup_widget_, std::move(sh));
-    }
-    if (slash_popup_)
-    {
-        slash_popup_->on_dismiss_requested = [this]
-        {
-            if (slash_controller_)
-                slash_controller_->hide();
-        };
-    }
-
-    // ── :shortcode: emoji/emoticon autocomplete popup ─────────────────────
-    {
-        shortcode_popup_ = surface_->host().make_popup_surface();
-        auto cw = std::make_unique<tesseract::views::ShortcodePopup>();
-        shortcode_popup_widget_ = cw.get();
-        shortcode_popup_->set_root(std::move(cw));
-
-        tesseract::views::ShortcodeController::Hooks sh;
-        sh.show = [this](tk::Rect cursor, int rows)
-        {
-            tesseract::RoomPane::position_dropdown_popup_(
-                shortcode_popup_.get(), cursor, rows,
-                tesseract::views::ShortcodePopup::kRowHeight,
-                tesseract::views::ShortcodePopup::kWidth);
-        };
-        sh.hide = [this] { if (shortcode_popup_) shortcode_popup_->set_visible(false); };
-        sh.repaint = [this]
-        {
-            if (shortcode_popup_)
-                shortcode_popup_->request_relayout();
-        };
-        // Custom-emoticon thumbnails: peek the shell media cache (populated by
-        // the controller's fetch_image hook, wired below); Unicode emoji
-        // render as glyphs.
-        pane_->wire_shortcode_hooks_(shortcode_popup_widget_, sh);
-        shortcode_controller_ =
-            std::make_unique<tesseract::views::ShortcodeController>(
-                text_area_, shortcode_popup_widget_, std::move(sh));
-    }
-    if (shortcode_popup_)
-    {
-        shortcode_popup_->on_dismiss_requested = [this]
-        {
-            if (shortcode_controller_)
-                shortcode_controller_->hide();
-        };
-    }
-
-    // ── /gif inline result strip ──────────────────────────────────────────
-    {
-        gif_popup_ = surface_->host().make_popup_surface();
-        auto gw = std::make_unique<tesseract::views::GifPopup>();
-        gif_popup_widget_ = gw.get();
-        // Strip cells render via the shell's shared two-stage provider. The
-        // repaint refreshes THIS pop-out's surface and is self-guarded by the
-        // window's liveness token (the shell's in-flight fetch may outlive us).
-        gif_popup_widget_->set_image_provider(
-            [this](const tesseract::GifResult& result) -> const tk::Image*
-            {
-                return pane_->shell_gif_strip_image_(
-                    result,
-                    pane_->guarded([this]
-                    {
-                        if (gif_popup_)
-                            gif_popup_->request_relayout();
-                    }));
-            });
-        gif_popup_->set_root(std::move(gw));
-
-        tesseract::views::GifController::Hooks gh;
-        gh.show = [this] { show_gif_popup_(); };
-        gh.hide = [this] { hide_gif_popup_(); };
-        gh.repaint = [this]
-        {
-            if (gif_popup_)
-                gif_popup_->request_relayout();
-        };
-        pane_->wire_gif_hooks_(gh);
-        gif_controller_ = std::make_unique<tesseract::views::GifController>(
-            text_area_, gif_popup_widget_, std::move(gh));
-    }
-
     room_view_->on_link_hovered = [this](const std::string& url)
     {
         if (!url.empty() && !link_hovered_)
@@ -740,54 +533,30 @@ void MacRoomWindow::update_window_title_(const std::string& name)
     }
 }
 
-void MacRoomWindow::hide_mention_popup_()
-{
-    if (mention_popup_)
-        mention_popup_->set_visible(false);
-}
-
-void MacRoomWindow::show_gif_popup_()
-{
-    if (!gif_popup_ || !gif_popup_widget_ || !text_area_ || !room_view_)
-    {
-        return;
-    }
-    // Full-width strip spanning the compose bar, floating just above it (like
-    // the main window's). content_size() drives only the height + the
-    // empty/status check; the width comes from the compose bar.
-    const tk::Rect cb = room_view_->compose_bar_rect();
-    const tk::Size sz = gif_popup_widget_->content_size(cb.w);
-    if (cb.w <= 0.0f || sz.h <= 0.0f)
-    {
-        hide_gif_popup_();
-        return;
-    }
-    gif_popup_->set_rect(cb, tk::Size{cb.w, sz.h},
-                         tk::PopupPlacement::PreferAbove);
-    gif_popup_->set_visible(true);
-}
-
-void MacRoomWindow::hide_gif_popup_()
-{
-    if (gif_popup_)
-        gif_popup_->set_visible(false);
-}
-
 void MacRoomWindow::on_gif_results(std::uint64_t request_id,
                                    std::vector<tesseract::GifResult> results)
 {
-    if (gif_controller_)
+    if (popups_)
     {
-        gif_controller_->on_results(request_id, std::move(results));
+        popups_->on_gif_results(request_id, std::move(results));
     }
 }
 
 void MacRoomWindow::on_gif_search_failed(std::uint64_t request_id,
                                          const std::string& message)
 {
-    if (gif_controller_)
+    if (popups_)
     {
-        gif_controller_->on_search_failed(request_id, message);
+        popups_->on_gif_search_failed(request_id, message);
+    }
+}
+
+void MacRoomWindow::repaint_anim_frame()
+{
+    RoomWindowBase::repaint_anim_frame();
+    if (popups_)
+    {
+        popups_->repaint_anim_frame();
     }
 }
 
@@ -798,14 +567,8 @@ void MacRoomWindow::apply_theme(const tk::Theme& t)
         surface_->set_theme(t);
         surface_->root()->apply_theme(t);
     }
-    if (mention_popup_)
-        mention_popup_->set_theme(t);
-    if (slash_popup_)
-        slash_popup_->set_theme(t);
-    if (shortcode_popup_)
-        shortcode_popup_->set_theme(t);
-    if (gif_popup_)
-        gif_popup_->set_theme(t);
+    if (popups_)
+        popups_->apply_theme(t);
     // Window chrome mirrors the main controller's -_applyTheme: policy: in
     // System mode leave it nil so it keeps tracking NSApp's (and thus the
     // OS's) appearance; only pin a concrete appearance for an explicit

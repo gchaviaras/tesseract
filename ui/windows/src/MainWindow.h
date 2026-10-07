@@ -242,7 +242,6 @@ private:
     void ensure_settings_view_();
     void teardown_settings_view_();
     void on_send_clicked();
-    void on_room_selected(const std::string& room_id);
     // Push ShellBase::compose_window_title_()'s string to the OS window title
     // (and thus the custom title bar, which reads it via GetWindowTextW).
     // SetWindowTextW alone doesn't repaint the custom-drawn title bar (see
@@ -556,6 +555,11 @@ private:
                                 std::uint64_t total) override;
     void on_upload_finished_ui_(std::uint64_t request_id, bool ok) override;
 
+    // Room-selection hooks (ShellBase::on_room_selected_).
+    void hide_compose_popups_() override;
+    void restart_mark_read_timer_(int delay_ms) override;
+    void before_room_set_() override;
+
     // Tab management hooks.
     void on_tab_state_changed_ui_() override;
     float get_message_scroll_fraction_() override;
@@ -608,9 +612,9 @@ private:
     void stop_inflight_tick_() override;
     void repaint_inflight_spinner_() override;
     void repaint_pickers_() override;
-    void extract_video_first_frame_jpeg_(
-        const std::string& event_id, const std::string& source_token,
-        std::function<void(std::vector<std::uint8_t>)> cb) override;
+    void decode_video_first_frame_(
+        std::vector<std::uint8_t> bytes,
+        std::function<void(std::vector<std::uint8_t>)> done) override;
     void cache_rgba_image_(const tk::CacheKey& key, int w, int h,
                            std::vector<uint8_t> rgba) override;
     std::vector<tk::Rect> get_screen_work_areas_() const override;

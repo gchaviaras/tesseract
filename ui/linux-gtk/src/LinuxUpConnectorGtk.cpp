@@ -1,8 +1,7 @@
 #include "LinuxUpConnectorGtk.h"
 #include <tesseract/client.h>
-#include <tesseract/settings.h>
-#include <cctype>
 #include <cstring>
+#include <string_view>
 #include <unordered_map>
 
 // ---------------------------------------------------------------------------
@@ -285,17 +284,6 @@ void UpSharedBusGtk::distributor_call(GDBusConnection* bus, const char* method,
 // LinuxUpConnectorGtk
 // ---------------------------------------------------------------------------
 
-static std::string sanitize_token(const std::string& user_id)
-{
-    std::string t;
-    t.reserve(user_id.size());
-    for (char c : user_id)
-    {
-        t += (std::isalnum(static_cast<unsigned char>(c)) ? c : '_');
-    }
-    return t;
-}
-
 LinuxUpConnectorGtk::LinuxUpConnectorGtk() = default;
 
 LinuxUpConnectorGtk::~LinuxUpConnectorGtk()
@@ -306,20 +294,15 @@ LinuxUpConnectorGtk::~LinuxUpConnectorGtk()
 void LinuxUpConnectorGtk::start(tesseract::Client* client,
                                 const std::string& user_id)
 {
-    if (client_)
+    if (!core_.begin(client, user_id))
     {
         return;
     }
-    client_ = client;
-    token_ = sanitize_token(user_id);
-    // Honour the persisted Notifications toggle on startup so a user who
-    // disabled push isn't silently re-registered every launch.
-    enabled_ = tesseract::Settings::instance().notifications_enabled;
 
     GDBusConnection* bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
     if (!bus)
     {
-        client_ = nullptr;
+        core_.end();
         return;
     }
 
@@ -327,42 +310,42 @@ void LinuxUpConnectorGtk::start(tesseract::Client* client,
     if (!shared.acquire(bus))
     {
         g_object_unref(bus);
-        client_ = nullptr;
+        core_.end();
         return;
     }
 
-    shared.add_route(token_, this);
+    shared.add_route(core_.token(), this);
 
     std::string dist = shared.find_distributor(bus);
     if (!dist.empty())
     {
         distributor_service_ = dist;
-        shared.distributor_call(bus, "Register", dist.c_str(), token_);
+        shared.distributor_call(bus, "Register", dist.c_str(), core_.token());
     }
     g_object_unref(bus);
 }
 
 void LinuxUpConnectorGtk::stop()
 {
-    if (!client_)
+    if (!core_.active())
     {
         return;
     }
     GDBusConnection* bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, nullptr);
     UpSharedBusGtk& shared = UpSharedBusGtk::get();
-    shared.remove_route(token_);
+    shared.remove_route(core_.token());
     distributor_service_.clear();
     if (bus)
     {
         shared.release(bus);
         g_object_unref(bus);
     }
-    client_ = nullptr;
+    core_.end();
 }
 
 void LinuxUpConnectorGtk::logout()
 {
-    if (!client_)
+    if (!core_.active())
     {
         return;
     }
@@ -375,95 +358,32 @@ void LinuxUpConnectorGtk::logout()
             g_dbus_connection_call(
                 bus, distributor_service_.c_str(),
                 "/org/unifiedpush/Distributor", "org.unifiedpush.Distributor1",
-                "Unregister", g_variant_new("(s)", token_.c_str()), nullptr,
-                G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr, nullptr);
+                "Unregister", g_variant_new("(s)", core_.token().c_str()),
+                nullptr, G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr, nullptr);
             g_object_unref(bus);
         }
     }
-    client_->remove_pusher(token_, "im.gnomos.tesseract");
+    core_.remove_pusher();
     stop();
 }
 
 void LinuxUpConnectorGtk::on_new_endpoint(const std::string& endpoint)
 {
-    if (!client_)
-    {
-        return;
-    }
-    // The endpoint is supplied by the UnifiedPush distributor over D-Bus —
-    // untrusted. Require a well-formed https:// URL with a host before
-    // registering it as this account's Matrix push gateway; a malicious or
-    // buggy distributor must not be able to redirect push traffic.
-    constexpr const char* kScheme = "https://";
-    if (endpoint.rfind(kScheme, 0) != 0)
-    {
-        return;
-    }
-    std::string gateway = endpoint;
-    const std::string prefix = "://";
-    auto host_start = gateway.find(prefix);
-    if (host_start == std::string::npos)
-    {
-        return;
-    }
-    std::size_t host_begin = host_start + prefix.size();
-    auto path_start = gateway.find('/', host_begin);
-    std::string host = gateway.substr(
-        host_begin, path_start == std::string::npos ? std::string::npos
-                                                    : path_start - host_begin);
-    if (host.empty())
-    {
-        return;
-    }
-    if (path_start != std::string::npos)
-    {
-        gateway.erase(path_start);
-    }
-    // Matrix HTTP pushers require the URL path to be /_matrix/push/v1/notify.
-    gateway += "/_matrix/push/v1/notify";
-    gateway_url_ = gateway;
-    if (!enabled_)
-    {
-        return; // user disabled notifications; keep the endpoint cached
-    }
-    client_->register_pusher(token_, "im.gnomos.tesseract", "Tesseract",
-                             "Linux Desktop", gateway_url_, "en");
+    core_.on_new_endpoint(endpoint);
 }
 
 void LinuxUpConnectorGtk::set_enabled(bool enabled)
 {
-    if (enabled_ == enabled)
-    {
-        return;
-    }
-    enabled_ = enabled;
-    if (!client_)
-    {
-        return; // not started yet; honour the flag when start() runs
-    }
-    if (enabled)
-    {
-        if (!gateway_url_.empty())
-        {
-            client_->register_pusher(token_, "im.gnomos.tesseract", "Tesseract",
-                                     "Linux Desktop", gateway_url_, "en");
-        }
-    }
-    else
-    {
-        // remove_pusher is idempotent on the homeserver, so calling it when
-        // no pusher exists is harmless.
-        client_->remove_pusher(token_, "im.gnomos.tesseract");
-    }
+    core_.set_enabled(enabled);
 }
 
 void LinuxUpConnectorGtk::on_unregistered()
 {
-    if (!client_)
+    if (!core_.active())
     {
         return;
     }
-    client_->remove_pusher(token_, "im.gnomos.tesseract");
+    core_.remove_pusher();
     if (!distributor_service_.empty())
     {
         GDBusConnection* bus =
@@ -471,7 +391,7 @@ void LinuxUpConnectorGtk::on_unregistered()
         if (bus)
         {
             UpSharedBusGtk::get().distributor_call(
-                bus, "Register", distributor_service_.c_str(), token_);
+                bus, "Register", distributor_service_.c_str(), core_.token());
             g_object_unref(bus);
         }
     }
@@ -479,23 +399,6 @@ void LinuxUpConnectorGtk::on_unregistered()
 
 void LinuxUpConnectorGtk::on_message(const guint8* data, gsize len)
 {
-    if (!client_)
-    {
-        return;
-    }
-    // Minimal JSON scan for "room_id":"!…" — avoids adding a JSON dep.
-    std::string_view payload(reinterpret_cast<const char*>(data), len);
-    constexpr std::string_view key = "\"room_id\":\"";
-    auto pos = payload.find(key);
-    if (pos == std::string_view::npos)
-    {
-        return;
-    }
-    pos += key.size();
-    auto end = payload.find('"', pos);
-    if (end == std::string_view::npos)
-    {
-        return;
-    }
-    client_->hint_push_room(std::string(payload.substr(pos, end - pos)));
+    core_.on_message(
+        std::string_view(reinterpret_cast<const char*>(data), len));
 }

@@ -172,9 +172,9 @@ protected:
     void on_media_bytes_ready_(const tk::CacheKey& key,
                                ShellBase::MediaKind kind,
                                std::vector<uint8_t> bytes) override;
-    void extract_video_first_frame_jpeg_(
-        const std::string& event_id, const std::string& source_token,
-        std::function<void(std::vector<std::uint8_t>)> cb) override;
+    void decode_video_first_frame_(
+        std::vector<std::uint8_t> bytes,
+        std::function<void(std::vector<std::uint8_t>)> done) override;
     void cache_rgba_image_(const tk::CacheKey& key, int w, int h,
                            std::vector<uint8_t> rgba) override;
 
@@ -275,8 +275,12 @@ protected:
                                               current_theme_);
     }
 
+    // Room-selection hooks (ShellBase::on_room_selected_).
+    void hide_compose_popups_() override;
+    void restart_mark_read_timer_(int delay_ms) override;
+    void after_room_set_() override;
+
     // Tab management hooks.
-    void on_tab_state_changed_ui_() override;
     float get_message_scroll_fraction_() override;
     void set_message_scroll_fraction_(float t) override;
     void navigate_to_room_(const std::string& room_id) override
@@ -465,6 +469,10 @@ public:
         begin_gated_encryption_setup_if_needed_(fin);
     }
     tesseract::ShellBase::LogoutResult        logout_active_account();
+    void sign_out_active_account(std::function<void()> retry,
+                                 const std::function<void(const LogoutResult&)>& on_signed_out)
+    { sign_out_active_account_(std::move(retry), on_signed_out); }
+    tesseract::Client* reset_pending_login_client() { return reset_pending_login_client_(); }
     bool switch_account(const std::string& user_id);
     tesseract::ShellBase::RestoreResult       restore_all_accounts();
     void restore_all_accounts_async(
@@ -610,6 +618,7 @@ public:
     using ShellBase::client_;
     using ShellBase::current_room_id_;
     using ShellBase::current_theme_;
+    using ShellBase::LogoutResult;
     using ShellBase::DecodedImage;
     using ShellBase::low_power_active;
     using ShellBase::RestoreResult;
@@ -849,7 +858,8 @@ using TkImagePtr = std::unique_ptr<tk::Image>;
 - (void)_openAccountPicker;
 - (void)handleBackupProgress:(tesseract::BackupProgress)progress;
 
-- (void)onRoomSelected:(std::string)roomId;
+- (void)_hideComposePopups;
+- (void)_restartMarkReadTimerMs:(int)delayMs;
 // Push ShellBase::compose_window_title_()'s string to the OS window title.
 - (void)applyWindowTitle:(const std::string&)title;
 - (void)showShortcodePopupWithSuggestions:
@@ -1348,119 +1358,72 @@ void MacShell::on_media_bytes_ready_(const tk::CacheKey& key,
         });
 }
 
-void MacShell::extract_video_first_frame_jpeg_(
-    const std::string& event_id, const std::string& source_token,
-    std::function<void(std::vector<std::uint8_t>)> cb)
+void MacShell::decode_video_first_frame_(
+    std::vector<std::uint8_t> bytes,
+    std::function<void(std::vector<std::uint8_t>)> done)
 {
-    MainWindowController* c = ctrl_;
-    if (!c || !client_)
+    if (!ctrl_)
     {
-        cb({});
+        done({});
         return;
     }
-    std::string src = source_token;
-    std::string eid = event_id;
-    // decode: runs the AVAssetImageGenerator decode + JPEG-encode against
-    // `bytes` and invokes `done(jpeg)` (empty jpeg on any failure, including
-    // a truncated prefix AVFoundation can't parse). Shared (via shared_ptr)
-    // so both the prefix attempt and the full-file fallback below can reuse
-    // it.
-    auto decode = std::make_shared<
-        std::function<void(std::vector<std::uint8_t>,
-                           std::function<void(std::vector<std::uint8_t>)>)>>();
-    *decode =
-        [eid](std::vector<std::uint8_t> bytes,
-              std::function<void(std::vector<std::uint8_t>)> done)
-        {
-            // Callback is on the UI thread — do the AVFoundation work directly.
-            NSString* tmpDir = NSTemporaryDirectory();
-            NSString* eidNS = [NSString stringWithUTF8String:eid.c_str()];
-            NSString* tmpPath =
-                [tmpDir stringByAppendingPathComponent:
-                            [NSString stringWithFormat:@"vtmp_%@.mp4", eidNS]];
-            NSData* data = [NSData dataWithBytes:bytes.data()
-                                          length:bytes.size()];
-            [data writeToFile:tmpPath atomically:YES];
-            NSURL* url = [NSURL fileURLWithPath:tmpPath];
-            AVURLAsset* asset = [AVURLAsset URLAssetWithURL:url options:nil];
-            AVAssetImageGenerator* gen =
-                [[AVAssetImageGenerator alloc] initWithAsset:asset];
-            gen.appliesPreferredTrackTransform = YES;
-            CMTime t = CMTimeMake(0, 1);
-            NSError* err = nil;
+    // Runs the AVAssetImageGenerator decode + JPEG-encode against `bytes` and
+    // invokes `done(jpeg)` (empty jpeg on any failure, including a truncated
+    // prefix AVFoundation can't parse).
+    // Called on the UI thread — do the AVFoundation work directly.
+    NSString* tmpDir = NSTemporaryDirectory();
+    NSString* tmpPath =
+        [tmpDir stringByAppendingPathComponent:
+                    [NSString stringWithFormat:@"vtmp_%@.mp4",
+                                         [[NSUUID UUID] UUIDString]]];
+    NSData* data = [NSData dataWithBytes:bytes.data()
+                                  length:bytes.size()];
+    [data writeToFile:tmpPath atomically:YES];
+    NSURL* url = [NSURL fileURLWithPath:tmpPath];
+    AVURLAsset* asset = [AVURLAsset URLAssetWithURL:url options:nil];
+    AVAssetImageGenerator* gen =
+        [[AVAssetImageGenerator alloc] initWithAsset:asset];
+    gen.appliesPreferredTrackTransform = YES;
+    CMTime t = CMTimeMake(0, 1);
+    NSError* err = nil;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            CGImageRef frame = [gen copyCGImageAtTime:t
-                                           actualTime:nil
-                                                error:&err];
+    CGImageRef frame = [gen copyCGImageAtTime:t
+                                   actualTime:nil
+                                        error:&err];
 #pragma clang diagnostic pop
-            [[NSFileManager defaultManager] removeItemAtPath:tmpPath error:nil];
-            if (!frame)
-            {
-                done({});
-                return;
-            }
-            // CGImage → JPEG bytes (same ImageIO recipe as host_macos.mm's
-            // encode_for_send).
-            CFMutableDataRef out_data = CFDataCreateMutable(nullptr, 0);
-            CGImageDestinationRef dst = CGImageDestinationCreateWithData(
-                out_data, (__bridge CFStringRef)UTTypeJPEG.identifier, 1,
-                nullptr);
-            std::vector<std::uint8_t> jpeg;
-            if (dst)
-            {
-                NSDictionary* opts = @{
-                    (NSString*)kCGImageDestinationLossyCompressionQuality : @0.85,
-                };
-                CGImageDestinationAddImage(dst, frame,
-                                           (__bridge CFDictionaryRef)opts);
-                if (CGImageDestinationFinalize(dst))
-                {
-                    const std::uint8_t* p =
-                        CFDataGetBytePtr(out_data);
-                    CFIndex len = CFDataGetLength(out_data);
-                    jpeg.assign(p, p + len);
-                }
-                CFRelease(dst);
-            }
-            CFRelease(out_data);
-            CGImageRelease(frame);
-            done(std::move(jpeg));
+    [[NSFileManager defaultManager] removeItemAtPath:tmpPath error:nil];
+    if (!frame)
+    {
+        done({});
+        return;
+    }
+    // CGImage → JPEG bytes (same ImageIO recipe as host_macos.mm's
+    // encode_for_send).
+    CFMutableDataRef out_data = CFDataCreateMutable(nullptr, 0);
+    CGImageDestinationRef dst = CGImageDestinationCreateWithData(
+        out_data, (__bridge CFStringRef)UTTypeJPEG.identifier, 1,
+        nullptr);
+    std::vector<std::uint8_t> jpeg;
+    if (dst)
+    {
+        NSDictionary* opts = @{
+            (NSString*)kCGImageDestinationLossyCompressionQuality : @0.85,
         };
-    auto req_id = begin_media_req_(0,
-        [this, cb, src, decode](std::vector<uint8_t> prefix_bytes) mutable
+        CGImageDestinationAddImage(dst, frame,
+                                   (__bridge CFDictionaryRef)opts);
+        if (CGImageDestinationFinalize(dst))
         {
-            if (prefix_bytes.empty())
-            {
-                cb({});
-                return;
-            }
-            (*decode)(
-                std::move(prefix_bytes),
-                [this, cb, src, decode](std::vector<uint8_t> jpeg) mutable
-                {
-                    if (!jpeg.empty())
-                    {
-                        cb(std::move(jpeg));
-                        return;
-                    }
-                    // Prefix wasn't enough (e.g. a non-fast-start file with
-                    // its moov atom at EOF) — fall back to the full file.
-                    auto full_req = begin_media_req_(0,
-                        [cb, decode](std::vector<uint8_t> full_bytes) mutable
-                        {
-                            if (full_bytes.empty())
-                            {
-                                cb({});
-                                return;
-                            }
-                            (*decode)(std::move(full_bytes), cb);
-                        });
-                    client_->fetch_source_bytes_async(full_req, src);
-                });
-        });
-    client_->fetch_source_prefix_async(
-        req_id, src, tesseract::visual::kVideoThumbnailPrefixBytes);
+            const std::uint8_t* p =
+                CFDataGetBytePtr(out_data);
+            CFIndex len = CFDataGetLength(out_data);
+            jpeg.assign(p, p + len);
+        }
+        CFRelease(dst);
+    }
+    CFRelease(out_data);
+    CGImageRelease(frame);
+    done(std::move(jpeg));
 }
 
 void MacShell::extract_drop_media_(std::uint32_t pending_gen,
@@ -1586,22 +1549,9 @@ void MacShell::extract_drop_media_(std::uint32_t pending_gen,
             [[NSFileManager defaultManager] removeItemAtPath:tmpPath error:nil];
         }
 
-        // Post result back to the UI thread. A pop-out target (guarded by its
-        // liveness token) takes precedence; otherwise resolve the main
-        // compose_bar() at call time to avoid a dangling pointer.
-        post_to_ui_([this, info = std::move(info), target,
-                     target_alive = std::move(target_alive)]() mutable
-        {
-            if (target)
-            {
-                if (target_alive && *target_alive)
-                    target->update_pending_attachment(info);
-            }
-            else if (room_view_)
-            {
-                room_view_->compose_bar()->update_pending_attachment(info);
-            }
-        });
+        // Marshal to the UI thread (see ShellBase::post_pending_attachment_).
+        post_pending_attachment_(std::move(info), target,
+                                 std::move(target_alive));
     });
 }
 
@@ -2189,50 +2139,22 @@ void MacShell::apply_theme_ui_(const tk::Theme& t)
 
 // ── Tab management (ShellBase virtual hooks) ──────────────────────────────────
 
-void MacShell::on_tab_state_changed_ui_()
+void MacShell::hide_compose_popups_()
 {
-    if (!main_app_)
-    {
-        return;
-    }
+    if (ctrl_)
+        [ctrl_ _hideComposePopups];
+}
 
-    auto* tb = main_app_->tab_bar();
-    const bool show_bar = tabs_.size() > 1;
-    main_app_->set_tab_bar_visible(show_bar);
+void MacShell::restart_mark_read_timer_(int delay_ms)
+{
+    if (ctrl_)
+        [ctrl_ _restartMarkReadTimerMs:delay_ms];
+}
 
-    if (tb)
-    {
-        // Rebuild in tabs_ order so visual order is always stable.
-        tb->clear();
-        for (const auto& t : tabs_)
-        {
-            const tk::Image* avatar = nullptr;
-            std::string name;
-            if (const auto* r = room_by_id_(t.room_id))
-            {
-                name = r->name;
-                const std::string& av_mxc = r->effective_avatar_url();
-                if (!av_mxc.empty())
-                {
-                    avatar = account_manager_.thumbnail_cache().peek(tk::CacheKey::media(av_mxc));
-                }
-            }
-            tb->add_tab(t.room_id, name, avatar);
-        }
-
-        if (active_tab_idx_ < tabs_.size())
-        {
-            tb->set_active(tabs_[active_tab_idx_].room_id);
-        }
-    }
-
-    if (ctrl_ && active_tab_idx_ < tabs_.size())
-    {
-        const auto& active = tabs_[active_tab_idx_];
-        [ctrl_ onRoomSelected:active.room_id];
-    }
-
-    schedule_relayout_();
+void MacShell::after_room_set_()
+{
+    if (ctrl_)
+        [ctrl_ _relayoutChatSurface];
 }
 
 float MacShell::get_message_scroll_fraction_()
@@ -3388,7 +3310,7 @@ private:
             s->_shell->tab_close(room_id);
             // tab_close's own last-tab-closed path clears current_room_id_
             // and the room view, but on_tab_state_changed_ui_'s cascade into
-            // onRoomSelected (which is what normally updates the title) is
+            // ShellBase::on_room_selected_ (which is what normally updates the title) is
             // skipped when tabs_ ends up empty — reset the title here.
             if (s->_shell->current_room_id_.empty())
             {
@@ -7506,70 +7428,48 @@ private:
 
 - (void)_logoutActiveAccount
 {
-    // An unsaved recovery key is offered for saving first (ShellBase); this
-    // re-enters once the user has saved it or chosen to sign out anyway.
+    // Shared sequence lives in ShellBase (unsaved-key intercept, teardown,
+    // last-account main-UI clear); the block holds the native follow-up.
     __weak MainWindowController* ws = self;
-    if (_shell->intercept_sign_out_for_unsaved_key([ws] {
+    _shell->sign_out_active_account(
+        [ws] {
             MainWindowController* s = ws;
             if (s) [s _logoutActiveAccount];
-        }))
-        return;
+        },
+        [ws](const MacShell::LogoutResult& result) {
+            MainWindowController* ctrl = ws;
+            if (!ctrl) return;
 
-    // Platform-agnostic teardown (unsubscribe the room, up_connector/presence
-    // logout, client_->logout() + failure surface, stop_sync, clear account
-    // state, tray refresh, index update, and — when other accounts remain — the
-    // switch to a survivor via switch_active_account_impl_ +
-    // refresh_account_ui_after_switch_) lives in ShellBase.
-    const auto result = _shell->logout_active_account();
-    if (!result.logged_out)
-    {
-        return;
-    }
+            // Privacy hygiene: the signed-out account's rooms/contacts are already
+            // gone from SearchBackend by now, so an immediate (non-debounced)
+            // reindex prunes them from the system-wide Spotlight index right away
+            // rather than leaving them searchable until the next debounce tick.
+            if (ctrl->_spotlightSearch)
+                ctrl->_spotlightSearch->reindex();
 
-    // Privacy hygiene: the signed-out account's rooms/contacts are already
-    // gone from SearchBackend by now, so an immediate (non-debounced)
-    // reindex prunes them from the system-wide Spotlight index right away
-    // rather than leaving them searchable until the next debounce tick.
-    if (_spotlightSearch)
-        _spotlightSearch->reindex();
-
-    if (!result.has_remaining)
-    {
-        // No accounts left → native empty-surface cleanup + login view.
-        [self _refreshRoomList];
-        [self _refreshInviteList];
-        if (_roomView)
-        {
-            _roomView->clear_room();
-            _roomView->set_messages({});
-            // Drop RoomView's (and its EmojiPicker/StickerPicker's) cached raw
-            // Client* — it's never re-pointed once there's no survivor to
-            // switch to, and the old Client is about to be destroyed
-            // asynchronously by logout_active_account_impl_'s drain barrier.
-            _roomView->set_client(nullptr);
-        }
-        if (_shell->main_app_)
-            _shell->main_app_->clear_content();
-        [self _relayoutChatSurface];
-
-        _shell->pending_login_temp_dir_.clear();
-        [self _ensureLoginView];
-        _shell->pending_login_client_ = std::make_unique<tesseract::Client>();
-        [_loginView setClient:_shell->pending_login_client_.get()];
-        __weak MainWindowController* weakSelf = self;
-        _loginView.onBeginOAuth = ^{
-            MainWindowController* s = weakSelf;
-            if (!s)
+            if (!result.has_remaining)
             {
-                return;
+                // No accounts left → native empty-surface cleanup + login view.
+                [ctrl _refreshRoomList];
+                [ctrl _refreshInviteList];
+                [ctrl _relayoutChatSurface];
+
+                [ctrl _ensureLoginView];
+                [ctrl->_loginView setClient:ctrl->_shell->reset_pending_login_client()];
+                ctrl->_loginView.onBeginOAuth = ^{
+                    MainWindowController* s = ws;
+                    if (!s)
+                    {
+                        return;
+                    }
+                    s->_shell->arm_pending_login_();
+                };
+                [ctrl->_loginView setMode:tesseract::views::LoginView::Mode::Initial];
+                [ctrl->_loginView reset];
+                ((__bridge NSView*)ctrl->_mainAppSurface->view_handle()).hidden = YES;
+                ctrl->_loginView.hidden = NO;
             }
-            s->_shell->arm_pending_login_();
-        };
-        [_loginView setMode:tesseract::views::LoginView::Mode::Initial];
-        [_loginView reset];
-        ((__bridge NSView*)_mainAppSurface->view_handle()).hidden = YES;
-        _loginView.hidden = NO;
-    }
+        });
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -8284,35 +8184,21 @@ private:
     self.window.title = [NSString stringWithUTF8String:title.c_str()] ?: @"";
 }
 
-- (void)onRoomSelected:(std::string)roomId
+- (void)_hideComposePopups
 {
-    if (roomId.empty())
-    {
-        return;
-    }
-    if (const auto* r = _shell->room_by_id(roomId); r && r->is_space)
-    {
-        _shell->push_space(roomId, _roomListView);
-        [self _refreshRoomList];
-        tesseract::ShellBase::SpaceNavFrame::enter(_roomListView);
-        return;
-    }
     // Route through the controller so its visible_/active_bot_command_ state
     // stays in sync with the hidden popup (matches the other three shells).
     if (_slashController)
         _slashController->hide();
     [self hideShortcodePopup];
-    _shell->handle_compose_room_leaving();
-    // (No unsubscribe-on-leave here: ShellBase::prune_warm_subscriptions_ owns
-    // timeline lifecycle via the warm-subscription LRU.)
-    _shell->current_room_id_ = roomId;
-    _shell->clear_focused_state(roomId);
+}
+
+- (void)_restartMarkReadTimerMs:(int)delayMs
+{
     [_markReadTimer invalidate];
-    double delayS =
-        tesseract::Settings::instance().mark_as_read_delay_ms / 1000.0;
     __weak MainWindowController* weakSelf = self;
     _markReadTimer = [NSTimer
-        scheduledTimerWithTimeInterval:delayS
+        scheduledTimerWithTimeInterval:delayMs / 1000.0
                                repeats:NO
                                  block:^(NSTimer*) {
                                      MainWindowController* c = weakSelf;
@@ -8321,45 +8207,6 @@ private:
                                          c->_shell->mark_room_read();
                                      }
                                  }];
-    if (_roomView)
-    {
-        _roomView->compose_bar()->clear_reply();
-        _roomView->compose_bar()->clear_editing();
-    }
-    if (_roomTextArea)
-    {
-        _roomTextArea->set_text("");
-    }
-    if (_roomView)
-    {
-        _roomView->set_current_text({});
-        _roomView->set_typing_text({});
-    }
-    // Focus is handled by RoomView::set_room()'s own default-focus policy
-    // below — no need to request it here too.
-    for (const auto& r : _shell->rooms_)
-    {
-        if (r.id == _shell->current_room_id_)
-        {
-            if (_roomView)
-            {
-                _roomView->set_room(r);
-                [self _relayoutChatSurface];
-            }
-            break;
-        }
-    }
-    _shell->refresh_window_title();
-    _shell->apply_room_compose_draft(_shell->current_room_id_);
-
-    // Subscribe (mut pool) + initial history (shared pool). The split keeps the
-    // network paginate off the single mut thread so the next switch's reset is
-    // never blocked. See ShellBase::start_room_subscription_.
-    std::vector<std::string> visibleIds =
-        _roomListView ? _roomListView->visible_room_ids()
-                      : std::vector<std::string>{};
-    _shell->start_room_subscription(_shell->current_room_id_,
-                                    std::move(visibleIds));
 }
 
 - (void)requestMoreHistoryForRoom:(std::string)roomId
@@ -8376,7 +8223,7 @@ private:
 // Note: _ensureRowMedia is now handled by ShellBase::ensure_row_media_() via
 // MacShell. ShellBase::generate_video_thumbnail_ drives client-side first-frame
 // generation for m.video when the server provides no thumbnail, delegating the
-// platform-specific decode to MacShell::extract_video_first_frame_jpeg_.
+// platform-specific decode to MacShell::decode_video_first_frame_.
 
 // ─────────────────────────────────────────────────────────────────────────
 //  Animated sticker support

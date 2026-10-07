@@ -247,7 +247,6 @@ private:
 
     void show_rooms(const std::vector<tesseract::RoomInfo>& rooms);
     void refresh_room_list();
-    void on_room_selected(const std::string& room_id);
     // Push ShellBase::compose_window_title_()'s string to the OS window title.
     void apply_window_title_ui_(const std::string& title) override;
     void ensure_row_media(const tesseract::Event& ev);
@@ -341,13 +340,16 @@ private:
     void repaint_inflight_spinner_() override;
     void repaint_pickers_() override;
 
+    // Room-selection hooks (ShellBase::on_room_selected_).
+    void hide_compose_popups_() override;
+    void restart_mark_read_timer_(int delay_ms) override;
+
     // Tab management hooks.
-    void on_tab_state_changed_ui_() override;
     float get_message_scroll_fraction_() override;
     void set_message_scroll_fraction_(float t) override;
-    void extract_video_first_frame_jpeg_(
-        const std::string& event_id, const std::string& source_token,
-        std::function<void(std::vector<std::uint8_t>)> cb) override;
+    void decode_video_first_frame_(
+        std::vector<std::uint8_t> bytes,
+        std::function<void(std::vector<std::uint8_t>)> done) override;
 
     // Extract media metadata from a dropped file on a background thread, then
     // post via g_idle_add. When `target` is non-null the result goes to that

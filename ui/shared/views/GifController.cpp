@@ -157,10 +157,7 @@ bool GifController::on_nav(tk::NavKey nk)
         hide();
         return true;
     }
-    if (hooks_.repaint)
-    {
-        hooks_.repaint();
-    }
+    repaint_selection_();
     return true;
 }
 
@@ -217,6 +214,18 @@ void GifController::accept(const tesseract::GifResult& gif)
             g.preview_url,
             g.preview_w, g.preview_h,
             /*reply*/ "", /*thread*/ "");
+    }
+}
+
+void GifController::repaint_selection_()
+{
+    if (hooks_.repaint_selection)
+    {
+        hooks_.repaint_selection();
+    }
+    else if (hooks_.repaint)
+    {
+        hooks_.repaint();
     }
 }
 

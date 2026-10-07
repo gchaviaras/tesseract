@@ -4549,47 +4549,26 @@ void MainWindow::apply_window_title_ui_(const std::string& title)
     title_bar_.invalidate_strip(hwnd_);
 }
 
-void MainWindow::on_room_selected(const std::string& room_id)
+void MainWindow::hide_compose_popups_()
 {
-    if (room_id.empty())
-    {
-        return;
-    }
-
-    if (const auto* r = room_by_id_(room_id); r && r->is_space)
-    {
-        space_nav_frames_.push_back(SpaceNavFrame::capture(room_list_view_));
-        space_stack_.push_back(room_id);
-        refresh_room_list();
-        SpaceNavFrame::enter(room_list_view_);
-        return;
-    }
-
-    // Route through the controllers so their visible_ state stays in sync.
     if (slash_controller_)
         slash_controller_->hide();
     if (shortcode_controller_)
         shortcode_controller_->hide();
     if (mention_controller_)
         mention_controller_->hide();
-    handle_compose_room_leaving_(current_room_id_);
-    // (No unsubscribe-on-leave here: ShellBase::prune_warm_subscriptions_ owns
-    // timeline lifecycle via the warm-subscription LRU.)
-    current_room_id_ = room_id;
-    clear_focused_state_(room_id);
+}
+
+void MainWindow::restart_mark_read_timer_(int delay_ms)
+{
     KillTimer(hwnd_, kMarkReadTimerId);
-    SetTimer(hwnd_, kMarkReadTimerId,
-             static_cast<UINT>(
-                 tesseract::Settings::instance().mark_as_read_delay_ms),
-             nullptr);
-    if (room_view_)
-    {
-        room_view_->compose_bar()->clear_reply();
-        room_view_->compose_bar()->clear_editing();
-    }
+    SetTimer(hwnd_, kMarkReadTimerId, static_cast<UINT>(delay_ms), nullptr);
+}
+
+void MainWindow::before_room_set_()
+{
     if (room_text_area_)
     {
-        room_text_area_->set_text("");
         // Deliberately NOT redundant with RoomView::set_room()'s own
         // default-focus policy (which this call precedes): that policy
         // calls the exact same set_focused(true) path, so on a hidden HWND
@@ -4602,28 +4581,6 @@ void MainWindow::on_room_selected(const std::string& room_id)
         if (room_text_area_->visible())
             room_text_area_->set_focused(true);
     }
-    if (room_view_)
-    {
-        room_view_->set_current_text({});
-    }
-    update_typing_bar_({}, false);
-
-    if (const auto* r = room_by_id_(current_room_id_))
-    {
-        if (room_view_)
-        {
-            room_view_->set_room(*r);
-        }
-    }
-    refresh_window_title_();
-    if (main_room_pane_)
-        main_room_pane_->apply_compose_draft_(current_room_id_);
-    // Subscribe (mut pool) + initial history (shared pool). The split keeps the
-    // network paginate off the single mut thread so the next switch's reset is
-    // never blocked. See ShellBase::start_room_subscription_.
-    auto visible_ids = room_list_view_ ? room_list_view_->visible_room_ids()
-                                       : std::vector<std::string>{};
-    start_room_subscription_(current_room_id_, std::move(visible_ids));
 }
 
 void MainWindow::request_more_history(const std::string& room_id)
@@ -5553,176 +5510,113 @@ void MainWindow::extract_drop_media_(std::uint32_t pending_gen,
 
         CoUninitialize();
 
-        // Post result back to the UI thread. A pop-out target (guarded by its
-        // liveness token) takes precedence; otherwise resolve the main
-        // compose_bar() at call time to avoid a dangling pointer.
-        post_to_ui_([this, info = std::move(info), target,
-                     target_alive = std::move(target_alive)]() mutable
-        {
-            if (target)
-            {
-                if (target_alive && *target_alive)
-                    target->update_pending_attachment(info);
-            }
-            else if (room_view_)
-            {
-                room_view_->compose_bar()->update_pending_attachment(info);
-            }
-        });
+        // Marshal to the UI thread (see ShellBase::post_pending_attachment_).
+        post_pending_attachment_(std::move(info), target,
+                                 std::move(target_alive));
     });
 }
 
-void MainWindow::extract_video_first_frame_jpeg_(
-    const std::string& /*event_id*/, const std::string& source_token,
-    std::function<void(std::vector<std::uint8_t>)> cb)
+void MainWindow::decode_video_first_frame_(
+    std::vector<std::uint8_t> bytes,
+    std::function<void(std::vector<std::uint8_t>)> done)
 {
-    if (!client_)
-    {
-        cb({});
-        return;
-    }
-    const std::string src = source_token;
-    // decode: runs tk::decode_video_frames + a WIC JPEG-encode against
-    // `bytes` off-thread and invokes `done(jpeg)` (empty jpeg on any
+    // Runs tk::decode_video_frames + a WIC JPEG-encode against `bytes`
+    // off-thread and invokes `done(jpeg)` from that worker (empty jpeg on any
     // failure, including a truncated prefix with no decodable frame).
-    // Shared (via shared_ptr) so both the prefix attempt and the full-file
-    // fallback below can reuse it.
-    auto decode = std::make_shared<
-        std::function<void(std::vector<std::uint8_t>,
-                           std::function<void(std::vector<std::uint8_t>)>)>>();
-    *decode =
-        [this](std::vector<std::uint8_t> bytes,
-               std::function<void(std::vector<std::uint8_t>)> done)
+    run_async_(
+        [done = std::move(done), bytes = std::move(bytes)]() mutable
         {
-            run_async_(
-                [done = std::move(done), bytes = std::move(bytes)]() mutable
-                {
-                    tk::DecodedVideoFrames dvf = tk::decode_video_frames(
-                        bytes.data(), bytes.size(),
-                        tesseract::visual::kMaxInlineImageWidth,
-                        tesseract::visual::kMaxInlineImageHeight,
-                        /*max_frames=*/1);
-                    if (dvf.frames.empty())
-                    {
-                        done({});
-                        return;
-                    }
-                    const tk::VideoFrame& frame = dvf.frames.front();
-                    // BGRA → JPEG bytes via WIC (same recipe used by the
-                    // selfie-capture path). This runs on a worker thread, so —
-                    // as with tk::d2d::decode_image — create a per-call COM
-                    // apartment here rather than assuming the UI thread's.
-                    const HRESULT coinit_hr =
-                        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-                    struct ComGuard
-                    {
-                        bool owned;
-                        ~ComGuard() { if (owned) CoUninitialize(); }
-                    } com_guard{coinit_hr == S_OK};
-                    std::vector<std::uint8_t> jpeg;
-                    IWICImagingFactory* wic = nullptr;
-                    if (SUCCEEDED(CoCreateInstance(
-                            CLSID_WICImagingFactory, nullptr,
-                            CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))))
-                    {
-                        IStream* out = nullptr;
-                        CreateStreamOnHGlobal(nullptr, TRUE, &out);
-                        IWICBitmapEncoder* enc = nullptr;
-                        if (SUCCEEDED(wic->CreateEncoder(
-                                GUID_ContainerFormatJpeg, nullptr, &enc)) &&
-                            out)
-                        {
-                            enc->Initialize(out, WICBitmapEncoderNoCache);
-                            IWICBitmapFrameEncode* wf = nullptr;
-                            if (SUCCEEDED(enc->CreateNewFrame(&wf, nullptr)))
-                            {
-                                wf->Initialize(nullptr);
-                                wf->SetSize(static_cast<UINT>(frame.w),
-                                           static_cast<UINT>(frame.h));
-                                IWICBitmap* src_bmp = nullptr;
-                                wic->CreateBitmapFromMemory(
-                                    static_cast<UINT>(frame.w),
-                                    static_cast<UINT>(frame.h),
-                                    GUID_WICPixelFormat32bppBGRA,
-                                    static_cast<UINT>(frame.w) * 4u,
-                                    static_cast<UINT>(frame.bgra.size()),
-                                    const_cast<std::uint8_t*>(
-                                        frame.bgra.data()),
-                                    &src_bmp);
-                                if (src_bmp)
-                                {
-                                    IWICFormatConverter* conv = nullptr;
-                                    if (SUCCEEDED(wic->CreateFormatConverter(
-                                            &conv)))
-                                    {
-                                        conv->Initialize(
-                                            src_bmp,
-                                            GUID_WICPixelFormat24bppBGR,
-                                            WICBitmapDitherTypeNone, nullptr,
-                                            0.0, WICBitmapPaletteTypeCustom);
-                                        WICPixelFormatGUID fmt =
-                                            GUID_WICPixelFormat24bppBGR;
-                                        wf->SetPixelFormat(&fmt);
-                                        wf->WriteSource(conv, nullptr);
-                                        conv->Release();
-                                    }
-                                    src_bmp->Release();
-                                }
-                                wf->Commit();
-                                wf->Release();
-                            }
-                            enc->Commit();
-                            enc->Release();
-                            LARGE_INTEGER seek{};
-                            out->Seek(seek, STREAM_SEEK_SET, nullptr);
-                            STATSTG stat{};
-                            out->Stat(&stat, STATFLAG_NONAME);
-                            jpeg.resize(
-                                static_cast<std::size_t>(stat.cbSize.QuadPart));
-                            ULONG nread = 0;
-                            out->Read(jpeg.data(),
-                                     static_cast<ULONG>(jpeg.size()), &nread);
-                        }
-                        if (out) out->Release();
-                        wic->Release();
-                    }
-                    done(std::move(jpeg));
-                });
-        };
-    auto req_id = begin_media_req_(0,
-        [this, cb, src, decode](std::vector<std::uint8_t> prefix_bytes) mutable
-        {
-            if (prefix_bytes.empty())
+            tk::DecodedVideoFrames dvf = tk::decode_video_frames(
+                bytes.data(), bytes.size(),
+                tesseract::visual::kMaxInlineImageWidth,
+                tesseract::visual::kMaxInlineImageHeight,
+                /*max_frames=*/1);
+            if (dvf.frames.empty())
             {
-                cb({});
+                done({});
                 return;
             }
-            (*decode)(
-                std::move(prefix_bytes),
-                [this, cb, src, decode](std::vector<std::uint8_t> jpeg) mutable
+            const tk::VideoFrame& frame = dvf.frames.front();
+            // BGRA → JPEG bytes via WIC (same recipe used by the
+            // selfie-capture path). This runs on a worker thread, so —
+            // as with tk::d2d::decode_image — create a per-call COM
+            // apartment here rather than assuming the UI thread's.
+            const HRESULT coinit_hr =
+                CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            struct ComGuard
+            {
+                bool owned;
+                ~ComGuard() { if (owned) CoUninitialize(); }
+            } com_guard{coinit_hr == S_OK};
+            std::vector<std::uint8_t> jpeg;
+            IWICImagingFactory* wic = nullptr;
+            if (SUCCEEDED(CoCreateInstance(
+                    CLSID_WICImagingFactory, nullptr,
+                    CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))))
+            {
+                IStream* out = nullptr;
+                CreateStreamOnHGlobal(nullptr, TRUE, &out);
+                IWICBitmapEncoder* enc = nullptr;
+                if (SUCCEEDED(wic->CreateEncoder(
+                        GUID_ContainerFormatJpeg, nullptr, &enc)) &&
+                    out)
                 {
-                    if (!jpeg.empty())
+                    enc->Initialize(out, WICBitmapEncoderNoCache);
+                    IWICBitmapFrameEncode* wf = nullptr;
+                    if (SUCCEEDED(enc->CreateNewFrame(&wf, nullptr)))
                     {
-                        cb(std::move(jpeg));
-                        return;
-                    }
-                    // Prefix wasn't enough (e.g. a non-fast-start file with
-                    // its moov atom at EOF) — fall back to the full file.
-                    auto full_req = begin_media_req_(0,
-                        [cb, decode](std::vector<std::uint8_t> full_bytes) mutable
+                        wf->Initialize(nullptr);
+                        wf->SetSize(static_cast<UINT>(frame.w),
+                                   static_cast<UINT>(frame.h));
+                        IWICBitmap* src_bmp = nullptr;
+                        wic->CreateBitmapFromMemory(
+                            static_cast<UINT>(frame.w),
+                            static_cast<UINT>(frame.h),
+                            GUID_WICPixelFormat32bppBGRA,
+                            static_cast<UINT>(frame.w) * 4u,
+                            static_cast<UINT>(frame.bgra.size()),
+                            const_cast<std::uint8_t*>(
+                                frame.bgra.data()),
+                            &src_bmp);
+                        if (src_bmp)
                         {
-                            if (full_bytes.empty())
+                            IWICFormatConverter* conv = nullptr;
+                            if (SUCCEEDED(wic->CreateFormatConverter(
+                                    &conv)))
                             {
-                                cb({});
-                                return;
+                                conv->Initialize(
+                                    src_bmp,
+                                    GUID_WICPixelFormat24bppBGR,
+                                    WICBitmapDitherTypeNone, nullptr,
+                                    0.0, WICBitmapPaletteTypeCustom);
+                                WICPixelFormatGUID fmt =
+                                    GUID_WICPixelFormat24bppBGR;
+                                wf->SetPixelFormat(&fmt);
+                                wf->WriteSource(conv, nullptr);
+                                conv->Release();
                             }
-                            (*decode)(std::move(full_bytes), cb);
-                        });
-                    client_->fetch_source_bytes_async(full_req, src);
-                });
+                            src_bmp->Release();
+                        }
+                        wf->Commit();
+                        wf->Release();
+                    }
+                    enc->Commit();
+                    enc->Release();
+                    LARGE_INTEGER seek{};
+                    out->Seek(seek, STREAM_SEEK_SET, nullptr);
+                    STATSTG stat{};
+                    out->Stat(&stat, STATFLAG_NONAME);
+                    jpeg.resize(
+                        static_cast<std::size_t>(stat.cbSize.QuadPart));
+                    ULONG nread = 0;
+                    out->Read(jpeg.data(),
+                             static_cast<ULONG>(jpeg.size()), &nread);
+                }
+                if (out) out->Release();
+                wic->Release();
+            }
+            done(std::move(jpeg));
         });
-    client_->fetch_source_prefix_async(
-        req_id, src, tesseract::visual::kVideoThumbnailPrefixBytes);
 }
 
 void MainWindow::cache_rgba_image_(const tk::CacheKey& key, int w, int h,
@@ -6101,67 +5995,36 @@ void MainWindow::on_login_cancelled()
 
 void MainWindow::logout_active_account()
 {
-    // An unsaved recovery key is offered for saving first (ShellBase); this
-    // re-enters once the user has saved it or chosen to sign out anyway.
-    if (intercept_sign_out_for_unsaved_key_([this] { logout_active_account(); }))
-        return;
-
-    // Platform-agnostic teardown (unsubscribe the room, up_connector/presence
-    // logout, client_->logout() + failure surface, stop_sync, clear account
-    // state, tray refresh, index update, and — when other accounts remain — the
-    // switch to a survivor) lives in ShellBase.
-    const auto result = logout_active_account_impl_();
-    if (!result.logged_out)
+    // Shared sequence lives in ShellBase (unsaved-key intercept, teardown,
+    // last-account main-UI clear); the lambda holds the native follow-up.
+    sign_out_active_account_([this] { logout_active_account(); },
+                             [this](const LogoutResult& result)
     {
-        return;
-    }
+        if (!result.has_remaining)
+        {
+            if (room_list_view_)
+            {
+                room_list_view_->set_rooms({});
+            }
+            if (main_app_surface_)
+            {
+                main_app_surface_->relayout();
+            }
 
-    // Native widget cleanup of the now-empty surface (the remaining-account
-    // branch already repainted via refresh_account_ui_after_switch_).
-    if (!result.has_remaining)
-    {
-        if (room_list_view_)
-        {
-            room_list_view_->set_rooms({});
+            ensure_login_view_();
+            login_view_->set_client(reset_pending_login_client_());
+            login_view_->set_on_begin_oauth([this] { arm_pending_login_(); });
+            login_view_->set_mode(tesseract::views::LoginView::Mode::Initial);
+            login_view_->reset();
+            RECT rc;
+            GetClientRect(hwnd_, &rc);
+            on_size(rc.right, rc.bottom);
+            show_login_view();
         }
-        if (room_view_)
-        {
-            room_view_->clear_room();
-            room_view_->set_messages({});
-            // Drop RoomView's (and its EmojiPicker/StickerPicker's) cached raw
-            // Client* — it's never re-pointed once there's no survivor to
-            // switch to, and the old Client is about to be destroyed
-            // asynchronously by logout_active_account_impl_'s drain barrier.
-            room_view_->set_client(nullptr);
-        }
-        if (main_app_)
-        {
-            main_app_->clear_content();
-            main_app_->show_encryption_reminder(false);
-        }
-        if (main_app_surface_)
-        {
-            main_app_surface_->relayout();
-        }
-    }
 
-    if (!result.has_remaining)
-    {
-        pending_login_temp_dir_.clear();
-        ensure_login_view_();
-        pending_login_client_ = std::make_unique<tesseract::Client>();
-        login_view_->set_client(pending_login_client_.get());
-        login_view_->set_on_begin_oauth([this] { arm_pending_login_(); });
-        login_view_->set_mode(tesseract::views::LoginView::Mode::Initial);
-        login_view_->reset();
-        RECT rc;
-        GetClientRect(hwnd_, &rc);
-        on_size(rc.right, rc.bottom);
-        show_login_view();
-    }
-
-    SendMessageW(hStatus_, SB_SETTEXTW, 0,
-                 reinterpret_cast<LPARAM>(utf8_to_wstr(tk::tr("Signed out")).c_str()));
+        SendMessageW(hStatus_, SB_SETTEXTW, 0,
+                     reinterpret_cast<LPARAM>(utf8_to_wstr(tk::tr("Signed out")).c_str()));
+    });
 }
 
 void MainWindow::rebuild_account_picker()
@@ -6491,48 +6354,7 @@ void MainWindow::hide_mention_popup_()
 
 void MainWindow::on_tab_state_changed_ui_()
 {
-    if (!main_app_)
-    {
-        return;
-    }
-
-    auto* tb = main_app_->tab_bar();
-    const bool show_bar = tabs_.size() > 1;
-    main_app_->set_tab_bar_visible(show_bar);
-
-    if (tb)
-    {
-        // Rebuild in tabs_ order so visual order is always stable.
-        tb->clear();
-        for (const auto& t : tabs_)
-        {
-            const tk::Image* avatar = nullptr;
-            std::string name;
-            if (const auto* r = room_by_id_(t.room_id))
-            {
-                name = r->name;
-                const std::string& av_mxc = r->effective_avatar_url();
-                if (!av_mxc.empty())
-                {
-                    avatar = account_manager_.thumbnail_cache().peek(tk::CacheKey::media(av_mxc));
-                }
-            }
-            tb->add_tab(t.room_id, name, avatar);
-        }
-
-        if (active_tab_idx_ < tabs_.size())
-        {
-            tb->set_active(tabs_[active_tab_idx_].room_id);
-        }
-    }
-
-    if (active_tab_idx_ < tabs_.size())
-    {
-        const auto& active = tabs_[active_tab_idx_];
-        on_room_selected(active.room_id);
-    }
-
-    schedule_relayout_();
+    ShellBase::on_tab_state_changed_ui_();
 
     if (room_text_area_ && room_text_area_->visible())
     {

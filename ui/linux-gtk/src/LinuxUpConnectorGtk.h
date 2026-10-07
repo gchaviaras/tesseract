@@ -1,4 +1,5 @@
 #pragma once
+#include "../../shared/linux_up_connector_core.h"
 #include <tesseract/up_connector.h>
 #include <gio/gio.h>
 #include <string>
@@ -20,12 +21,6 @@ public:
     void on_message(const guint8* data, gsize len);
 
 private:
-    tesseract::Client* client_ = nullptr;
-    std::string token_;
+    tesseract::up::PusherCore core_;
     std::string distributor_service_;
-    // Last gateway URL derived from a distributor endpoint. Cached so a
-    // re-enable after the user toggled notifications off can re-register the
-    // pusher without waiting for a fresh distributor callback.
-    std::string gateway_url_;
-    bool enabled_ = true;
 };

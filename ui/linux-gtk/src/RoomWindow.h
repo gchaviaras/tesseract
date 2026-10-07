@@ -1,18 +1,11 @@
 #pragma once
 #include <gtk/gtk.h>
+#include "app/ComposerPopups.h"
 #include "app/RoomWindowBase.h"
 #include "tk/host_gtk.h"
 #include "views/ConfirmDialog.h"
 #include "views/ForwardRoomPicker.h"
-#include "views/GifController.h"
 #include "views/RoomMediaView.h"
-#include "views/GifPopup.h"
-#include "views/MentionController.h"
-#include "views/MentionPopup.h"
-#include "views/ShortcodeController.h"
-#include "views/ShortcodePopup.h"
-#include "views/SlashCommandController.h"
-#include "views/SlashCommandPopup.h"
 #include <memory>
 
 namespace gtk4
@@ -48,9 +41,6 @@ protected:
                               const std::string& message) override;
 
 private:
-    void show_gif_popup_();
-    void hide_gif_popup_();
-
     // Closes any open popup — called from the notify::default-width/-height
     // handlers, GTK4's only per-window resize hook with app context. See
     // gtk4::MainWindow::dismiss_popups_on_resize_ for why.
@@ -79,21 +69,10 @@ private:
     tesseract::views::ForwardRoomPicker* forward_picker_widget_ = nullptr; // borrowed
     tesseract::views::RoomMediaView* room_media_view_widget_ = nullptr; // borrowed
     tesseract::views::ConfirmDialog* confirm_dialog_widget_ = nullptr; // borrowed
-    std::unique_ptr<tk::PopupSurfaceHandle> mention_popup_;
-    tesseract::views::MentionPopup* mention_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::MentionController> mention_controller_;
 
-    std::unique_ptr<tk::PopupSurfaceHandle> slash_popup_;
-    tesseract::views::SlashCommandPopup* slash_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::SlashCommandController> slash_controller_;
-
-    std::unique_ptr<tk::PopupSurfaceHandle> shortcode_popup_;
-    tesseract::views::ShortcodePopup* shortcode_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::ShortcodeController> shortcode_controller_;
-
-    std::unique_ptr<tk::PopupSurfaceHandle> gif_popup_;
-    tesseract::views::GifPopup* gif_popup_widget_ = nullptr;
-    std::unique_ptr<tesseract::views::GifController> gif_controller_;
+    // Composer popups (@mention, /command, :shortcode:, /gif). Declared after
+    // surface_ so the popups are destroyed before the Host they came from.
+    std::unique_ptr<tesseract::ComposerPopups> popups_;
 };
 
 } // namespace gtk4

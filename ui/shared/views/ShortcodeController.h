@@ -38,6 +38,10 @@ public:
         std::function<void(tk::Rect cursor, int rows)> show;
         std::function<void()> hide;
         std::function<void()> repaint;
+        // Called instead of `repaint` when only the highlighted row changed (no
+        // layout change). Optional - when unset, `repaint` is used, so existing
+        // shells keep their behaviour.
+        std::function<void()> repaint_selection;
         // The live custom-emoticon pack list (shell-owned cache) used to rank
         // suggestions alongside the Unicode set. Computed fresh per call
         // (see ShellBase::emoticons_for_room_) since it's scoped to
@@ -78,6 +82,8 @@ public:
     void hide();
 
 private:
+    // Selection-only repaint: hooks_.repaint_selection if set, else hooks_.repaint.
+    void repaint_selection_();
     void accept(const ShortcodeSuggestion& s);
     // Replace the active `:prefix` range with `r` and dismiss the popup.
     void replace_with(const std::string& r);

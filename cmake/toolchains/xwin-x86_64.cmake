@@ -39,7 +39,10 @@ set(CMAKE_MT           llvm-mt)
 set(TESSERACT_MSVC_CROSS_CFLAGS
     "--target=x86_64-pc-windows-msvc /imsvc${_xwin}/crt/include /imsvc${_xwin}/sdk/include/ucrt /imsvc${_xwin}/sdk/include/um /imsvc${_xwin}/sdk/include/shared /imsvc${_xwin}/sdk/include/winrt /imsvc${_xwin}/sdk/include/cppwinrt")
 set(CMAKE_C_FLAGS_INIT   "${TESSERACT_MSVC_CROSS_CFLAGS}")
-set(CMAKE_CXX_FLAGS_INIT "${TESSERACT_MSVC_CROSS_CFLAGS}")
+# Diagnostics clang-cl reports but the native MSVC build doesn't (COM overrides
+# without noexcept, CRT getenv/localtime deprecation,
+# clang-cl's default -fdelayed-template-parsing). C++ only: not forwarded to cc-rs.
+set(CMAKE_CXX_FLAGS_INIT "${TESSERACT_MSVC_CROSS_CFLAGS} -Wno-microsoft-exception-spec -Wno-delayed-template-parsing-in-cxx20 -Wno-deprecated-declarations")
 
 set(_xwin_libpaths
     "/libpath:${_xwin}/crt/lib/x86_64 /libpath:${_xwin}/sdk/lib/um/x86_64 /libpath:${_xwin}/sdk/lib/ucrt/x86_64")

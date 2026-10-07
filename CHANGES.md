@@ -7,7 +7,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-07
 
-- feat(threads): bridged rooms show the threads button when the bridge advertises thread support in `com.beeper.room_features` (mautrix bridgev2, e.g. Discord guild channels); support is cached per room alongside the bridge status. macOS x86_64 Release build + ctest 2251/2254 (SessionStore migration, F1 overlay, mention-pill ellipsis failing), cargo 771
+- fix(macos): one-line elided text with a mention pill no longer measures wider than its max width, and the Keychain secret store keeps its in-memory sessions in step when a save or remove fails to persist. The F1 shortcuts test now expects F1 to be unbound on macOS. macOS x86_64 Release build + ctest 2254/2254
+- feat(threads): bridged rooms show the threads button when the bridge advertises thread support in `com.beeper.room_features` (mautrix bridgev2, e.g. Discord guild channels); support is cached per room alongside the bridge status. macOS x86_64 Release build + ctest 2254/2254, cargo 771
 
 ### 2026-10-06
 

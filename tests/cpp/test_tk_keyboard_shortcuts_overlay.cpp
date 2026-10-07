@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "tk/access_tree.h"
+#include "tk/key_chord.h"
 #include "tk/scroll_view.h"
 #include "views/ConfirmDialog.h"
 #include "views/RoomView.h"
@@ -90,6 +91,13 @@ TEST_CASE("F1 opens the shortcuts overlay and Escape closes it",
 {
     ShortcutsStage st;
     st.run();
+    if (tk::current_platform() == tk::Platform::MacOS)
+    {
+        // F1 is a media key on macOS, so the registry deliberately leaves it unbound.
+        CHECK_FALSE(st.host.dispatch_key_down(KeyEvent{Key::F1}));
+        CHECK_FALSE(st.overlay().is_open());
+        return;
+    }
     CHECK(st.host.dispatch_key_down(KeyEvent{Key::F1}));
     CHECK(st.overlay().is_open());
     st.run();

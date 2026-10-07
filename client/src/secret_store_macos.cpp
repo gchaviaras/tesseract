@@ -371,10 +371,22 @@ bool SecretStore::save_entry_(const std::string& user_id, const std::string& jso
     // users' sessions with an empty map.
     ensure_map_loaded();
 
+    // Roll the in-memory map back if the flush fails, so a later load() can't
+    // return a secret that was never persisted.
+    std::optional<nlohmann::json> previous;
+    if (auto it = g_map->find(user_id); it != g_map->end())
+        previous = *it;
+
     (*g_map)[user_id] = json;
 
     if (!flush_map())
+    {
+        if (previous)
+            (*g_map)[user_id] = *previous;
+        else
+            g_map->erase(user_id);
         return false;
+    }
 
     keychain_remove(user_id); // remove old per-user item if present
     return true;
@@ -386,8 +398,20 @@ void SecretStore::remove_entry_(const std::string& user_id)
 
     ensure_map_loaded();
 
-    g_map->erase(user_id);
-    flush_map();
+    // Put the entry back if the flush fails: the persisted item still holds
+    // it, so load() must keep returning it (save_account relies on that to
+    // detect a remove that didn't take).
+    auto it = g_map->find(user_id);
+    if (it == g_map->end())
+    {
+        keychain_remove(user_id); // remove old per-user item if present
+        return;
+    }
+    nlohmann::json previous = std::move(*it);
+    g_map->erase(it);
+
+    if (!flush_map())
+        (*g_map)[user_id] = std::move(previous);
 
     keychain_remove(user_id); // remove old per-user item if present
 }

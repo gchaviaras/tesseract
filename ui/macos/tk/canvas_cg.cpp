@@ -491,6 +491,13 @@ public:
                 {
                     CGFloat lh = elided_ascent_ + elided_descent_;
                     measured_.h = static_cast<float>(lh > 0 ? lh : 1);
+                    // The framesetter width is the widest *wrapped* line, so an
+                    // unbreakable run (a mention pill) wider than max_width_
+                    // can overshoot it; the drawn content is the elided line.
+                    CGFloat w = elided_width_;
+                    if (max_width_ > 0 && w > max_width_)
+                        w = max_width_;
+                    measured_.w = static_cast<float>(w);
                 }
                 else
                 {
@@ -937,8 +944,8 @@ private:
         CFRetain(out);
         elided_line_ = out;
         CGFloat leading = 0;
-        CTLineGetTypographicBounds(elided_line_, &elided_ascent_,
-                                   &elided_descent_, &leading);
+        elided_width_ = CTLineGetTypographicBounds(
+            elided_line_, &elided_ascent_, &elided_descent_, &leading);
         elided_descent_ += leading;
         return true;
     }
@@ -1033,6 +1040,7 @@ private:
     // draws a bare CTLine (which ignores it) — see draw_elided_line().
     CTTextAlignment align_ = kCTTextAlignmentLeft;
     mutable CTLineRef elided_line_ = nullptr;
+    mutable CGFloat   elided_width_ = 0;
     mutable CGFloat   elided_ascent_ = 0;
     mutable CGFloat   elided_descent_ = 0; // includes leading; see ensure_elided_line()
     std::string utf8_;

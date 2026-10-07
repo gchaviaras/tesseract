@@ -2785,6 +2785,34 @@ impl ClientFfi {
         err("not logged in")
     }
 
+    /// The current user's own avatar (mxc://) in `room_id`, from the local
+    /// store only (no network). Empty when the room is unknown, the member
+    /// event isn't cached, or the user has no per-room avatar.
+    #[cfg(not(test))]
+    pub fn own_room_avatar(&self, room_id: &str) -> String {
+        let Some(client) = self.client.as_ref() else {
+            return String::new();
+        };
+        let Some(user_id) = client.user_id() else {
+            return String::new();
+        };
+        let Some(room) = super::parse_room_id(room_id)
+            .ok()
+            .and_then(|rid| client.get_room(&rid))
+        else {
+            return String::new();
+        };
+        match self.rt.block_on(room.get_member_no_sync(user_id)) {
+            Ok(Some(m)) => m.avatar_url().map(|u| u.to_string()).unwrap_or_default(),
+            _ => String::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn own_room_avatar(&self, _room_id: &str) -> String {
+        String::new()
+    }
+
     /// Send an m.room.name state event to set the room's own display name
     /// (visible to all members) — distinct from set_user_room_display_name,
     /// which only sets the current user's per-room member override. Blocks —

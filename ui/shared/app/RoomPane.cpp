@@ -3435,7 +3435,7 @@ bool RoomPane::handle_forward_failed_(std::uint64_t request_id,
 
 const tk::Image* RoomPane::shell_avatar_(const std::string& mxc) const
 {
-    return shell_->account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc));
+    return shell_->avatar_image_(mxc);
 }
 
 std::vector<tesseract::ImagePackImage>
@@ -3617,8 +3617,7 @@ RoomPane::mention_avatar_for_user_(const std::string& user_id) const
             return nullptr;
         shell_->ensure_user_avatar_(m.avatar_url,
                                     shell_->media_group_for_room_(room_id_));
-        return shell_->account_manager_.thumbnail_cache().peek(
-            tk::CacheKey::media(m.avatar_url));
+        return shell_->avatar_image_(m.avatar_url);
     }
     return nullptr;
 }
@@ -3633,8 +3632,7 @@ const tk::Image* RoomPane::room_self_avatar_() const
     if (mxc.empty())
         return nullptr;
     shell_->ensure_room_avatar_(*info);
-    return shell_->account_manager_.thumbnail_cache().peek(
-        tk::CacheKey::media(mxc));
+    return shell_->avatar_image_(mxc);
 }
 
 const tk::Image* RoomPane::room_self_avatar_for_compose_()

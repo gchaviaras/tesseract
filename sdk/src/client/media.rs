@@ -371,7 +371,8 @@ pub(super) async fn download_media_outcome(
             let Some(room) = client.get_room(&room_id) else {
                 return Failed;
             };
-            let settings = MediaThumbnailSettings::new(w.into(), h.into());
+            let mut settings = MediaThumbnailSettings::new(w.into(), h.into());
+            settings.animated = animated;
             let bytes = room
                 .avatar(MediaFormat::Thumbnail(settings))
                 .await

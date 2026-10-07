@@ -5342,7 +5342,7 @@ void MainWindow::populate_user_strip()
     ui->set_avatar_url(my_avatar_url_);
     ui->set_image_provider(
         [this](const std::string& mxc) -> const tk::Image*
-        { return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc)); });
+        { return avatar_image_(mxc); });
     if (main_app_surface_)
     {
         main_app_surface_->relayout();
@@ -5417,7 +5417,7 @@ void MainWindow::open_settings_()
     settings_widget_->populate(
         my_display_name_, my_user_id_, my_avatar_url_,
         [this](const std::string& mxc) -> const tk::Image*
-        { return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc)); });
+        { return avatar_image_(mxc); });
 
     // load_persisted_settings() (inside populate()) seeded the checkbox from
     // the cached Settings::launch_at_login; refresh_launch_at_login_pref_()

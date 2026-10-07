@@ -3602,6 +3602,8 @@ pub mod ffi {
         /// (m.room.member state event). Blocks — worker thread.
         fn set_user_room_avatar(self: &ClientFfi, room_id: &str, mxc_uri: &str) -> OpResult;
         fn set_user_room_avatar_from_url(self: &ClientFfi, room_id: &str, url: &str) -> OpResult;
+        /// The user's own avatar mxc in `room_id` from the local store; empty if none.
+        fn own_room_avatar(self: &ClientFfi, room_id: &str) -> String;
 
         /// Send an m.room.name state event to set the room's own display name
         /// (visible to all members) — distinct from set_user_room_display_name,

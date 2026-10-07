@@ -544,6 +544,14 @@ AppearanceSection::AppearanceSection()
             if (on_show_membership_events_changed) on_show_membership_events_changed(v);
         };
 
+        auto cb_anim_avatars = tk::create_widget<tk::CheckButton>(
+            this, tk::tr("Animate avatars"), s.animate_avatars);
+        animate_avatars_cb_ = timeline_group->add_widget(std::move(cb_anim_avatars));
+        animate_avatars_cb_->on_change = [this](bool v)
+        {
+            if (on_animate_avatars_changed) on_animate_avatars_changed(v);
+        };
+
         auto cb_status = tk::create_widget<tk::CheckButton>(
             this, tk::tr("Show status emoji next to names"),
             s.show_sender_status_in_timeline);
@@ -605,6 +613,11 @@ void AppearanceSection::set_show_membership_events(bool enabled)
 void AppearanceSection::set_show_sender_status(bool enabled)
 {
     if (show_sender_status_cb_) show_sender_status_cb_->set_checked(enabled);
+}
+
+void AppearanceSection::set_animate_avatars(bool enabled)
+{
+    if (animate_avatars_cb_) animate_avatars_cb_->set_checked(enabled);
 }
 
 } // namespace tesseract::views

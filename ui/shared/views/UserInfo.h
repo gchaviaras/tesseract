@@ -28,6 +28,15 @@ public:
     void set_user_id(std::string user_id);    // shown under display_name
     void set_avatar_url(std::string mxc_url); // empty → initials fallback
 
+    // Optional: resolve the avatar URL on every paint instead of using the
+    // value from set_avatar_url(). The sidebar strip uses this so it can show
+    // the active room's own avatar and follow room switches without the host
+    // re-populating the widget. Must be cheap (a cache lookup). It may start an
+    // idempotent, deduped lookup as a side effect (the same lazy
+    // fetch-on-paint pattern as on_avatar_needed).
+    using AvatarUrlProvider = std::function<std::string()>;
+    void set_avatar_url_provider(AvatarUrlProvider provider);
+
     // MSC4426 status — a third text line below the Matrix ID. Only rendered
     // when set_status_line_enabled(true) (the sidebar strip; NOT AccountPicker
     // rows). With both parts empty the line shows a "Click to set status"
@@ -180,6 +189,7 @@ private:
     std::string display_name_;
     std::string user_id_;
     std::string avatar_url_;
+    AvatarUrlProvider avatar_url_provider_;
     std::string status_emoji_;
     std::string status_text_;
     bool keyboard_focusable_ = false;

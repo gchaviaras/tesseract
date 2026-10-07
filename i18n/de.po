@@ -1240,6 +1240,10 @@ msgstr "Bei- und Austritte im Chat anzeigen"
 msgid "Show status emoji next to names"
 msgstr "Status-Emoji neben Namen anzeigen"
 
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Animate avatars"
+msgstr "Avatare animieren"
+
 #: ui/shared/views/MessageListView.cpp
 #, c++-format
 msgid "{0} ({1}): {2}"

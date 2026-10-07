@@ -65,6 +65,10 @@ public:
     // timeline (hover shows the status text). Default off.
     bool show_sender_status_in_timeline = false;
 
+    // Play animated avatars (GIF / animated WebP / APNG) instead of showing
+    // their first frame. Not applied while low power mode is active. Default on.
+    bool animate_avatars = true;
+
     // ── Message layout ──────────────────────────────────────────────
     // How the timeline arranges message rows. Live-applied.
     //   Classic → avatar in the left gutter, one left-aligned column (default).

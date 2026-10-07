@@ -128,6 +128,10 @@ SettingsView::SettingsView()
     {
         if (on_show_sender_status_changed) on_show_sender_status_changed(v);
     };
+    appearance->on_animate_avatars_changed = [this](bool v)
+    {
+        if (on_animate_avatars_changed) on_animate_avatars_changed(v);
+    };
     appearance->on_message_layout_changed =
         [this](tesseract::Settings::MessageLayout l)
     {
@@ -531,6 +535,11 @@ void SettingsView::set_show_sender_status_pref(bool enabled)
     if (appearance_) appearance_->set_show_sender_status(enabled);
 }
 
+void SettingsView::set_animate_avatars_pref(bool enabled)
+{
+    if (appearance_) appearance_->set_animate_avatars(enabled);
+}
+
 void SettingsView::set_message_layout_pref(tesseract::Settings::MessageLayout layout)
 {
     if (appearance_) appearance_->set_message_layout(layout);
@@ -789,6 +798,7 @@ void SettingsView::load_persisted_settings()
     set_autoscroll_unread_pref(s.autoscroll_unread_rooms);
     set_show_membership_events_pref(s.show_room_join_leave_events);
     set_show_sender_status_pref(s.show_sender_status_in_timeline);
+    set_animate_avatars_pref(s.animate_avatars);
     set_message_layout_pref(s.message_layout);
     set_msc2545_legacy_compat_pref(s.msc2545_legacy_compat);
     set_developer_mode_pref(s.developer_mode);

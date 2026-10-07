@@ -1630,6 +1630,10 @@ public:
     Result set_user_room_avatar_from_url(const std::string& room_id,
                                          const std::string& url);
 
+    /// The current user's own avatar (mxc://) in `room_id`, read from the
+    /// local store without network I/O; empty when none/unknown.
+    std::string own_room_avatar(const std::string& room_id);
+
     /// Send an m.room.name state event to set the room's own display name
     /// (visible to all members) — distinct from set_user_room_display_name,
     /// which only sets the current user's per-room member override.

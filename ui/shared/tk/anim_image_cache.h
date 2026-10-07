@@ -111,6 +111,9 @@ public:
                                    int delay_ms);
 
     bool has(const CacheKey& key) const;
+
+    // Drop one entry (no-op when absent). Hit/miss counters are untouched.
+    void erase(const CacheKey& key);
     bool empty() const;
 
     // A pending decode-ahead request for one windowed entry, handed out by
@@ -143,6 +146,13 @@ public:
     // Return the current frame for `key`, or nullptr if not found / no frames.
     // Calling this marks the entry as visible (it is on the current paint).
     const tk::Image* current_frame(const CacheKey& key) const;
+
+    // current_frame() for callers that probe keys which mostly aren't here
+    // (avatars: most are stills). A miss is not counted in the hit/miss
+    // statistics, and on a hit the entry's paused state is set to `paused`
+    // under the same lock — one acquisition instead of has + set_paused +
+    // current_frame. Marks a found entry visible, like current_frame().
+    const tk::Image* peek_frame(const CacheKey& key, bool paused);
 
     // Freeze/unfreeze `key` at its current frame: while paused, advance()
     // leaves the entry's frame index (and, for windowed entries, its

@@ -62,6 +62,12 @@ public:
     // Fired when the user toggles the "show status emoji next to names" checkbox.
     std::function<void(bool)> on_show_sender_status_changed;
 
+    // Silently update the control without firing on_animate_avatars_changed.
+    void set_animate_avatars(bool enabled);
+
+    // Fired when the user toggles the "animate avatars" checkbox.
+    std::function<void(bool)> on_animate_avatars_changed;
+
     // ----- Layout group -----
     // Silently update the message-layout combobox.
     void set_message_layout(tesseract::Settings::MessageLayout layout);
@@ -79,6 +85,7 @@ private:
     tk::CheckButton* autoscroll_cb_      = nullptr;
     tk::CheckButton* show_membership_events_cb_ = nullptr;
     tk::CheckButton* show_sender_status_cb_     = nullptr;
+    tk::CheckButton* animate_avatars_cb_        = nullptr;
     tk::ComboBox*    message_layout_combo_      = nullptr;
     tk::Label*       message_layout_desc_       = nullptr;
     MessageLayoutPreview* message_layout_preview_ = nullptr;

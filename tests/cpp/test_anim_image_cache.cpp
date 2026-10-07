@@ -500,3 +500,34 @@ TEST_CASE("current_bytes includes the decode session's retained state",
     f.cache.store(key, frames(1), {50}, /*now_ms=*/0, session, 100);
     CHECK(f.cache.current_bytes() == 4096); // fake frames report 0
 }
+
+TEST_CASE("erase drops one entry and leaves the others", "[anim-cache]")
+{
+    Fixture f;
+    f.cache.store(tk::CacheKey::media("a"), frames(2), {50, 50}, 0);
+    f.cache.store(tk::CacheKey::media("b"), frames(2), {50, 50}, 0);
+
+    f.cache.erase(tk::CacheKey::media("a"));
+    CHECK_FALSE(f.cache.has(tk::CacheKey::media("a")));
+    CHECK(f.cache.has(tk::CacheKey::media("b")));
+
+    f.cache.erase(tk::CacheKey::media("missing")); // no-op
+    CHECK(f.cache.has(tk::CacheKey::media("b")));
+}
+
+TEST_CASE("peek_frame returns the frame, applies paused, and does not count misses", "[anim-cache]")
+{
+    Fixture f;
+    f.cache.store(tk::CacheKey::media("a"), frames(2), {50, 50}, 0);
+    const auto misses0 = f.cache.misses();
+
+    CHECK(f.cache.peek_frame(tk::CacheKey::media("absent"), false) == nullptr);
+    CHECK(f.cache.misses() == misses0);
+
+    CHECK(f.cache.peek_frame(tk::CacheKey::media("a"), true) != nullptr);
+    // Paused: advance() leaves the entry on its current frame.
+    CHECK_FALSE(f.cache.advance(60));
+    // Unpaused again by the next peek, so it ticks forward.
+    CHECK(f.cache.peek_frame(tk::CacheKey::media("a"), false) != nullptr);
+    CHECK(f.cache.advance(60));
+}

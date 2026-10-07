@@ -127,6 +127,9 @@ public:
     // Timeline: show status emoji next to sender names.
     void set_show_sender_status_pref(bool enabled);
 
+    // Appearance: play animated avatars.
+    void set_animate_avatars_pref(bool enabled);
+
     // Appearance → Layout: message layout (forwarded from AppearanceSection).
     void set_message_layout_pref(tesseract::Settings::MessageLayout layout);
 
@@ -383,6 +386,9 @@ public:
 
     // Fired when the user toggles "show status emoji next to names" in Timeline.
     std::function<void(bool)> on_show_sender_status_changed;
+
+    // Fired when the user toggles "animate avatars" in Appearance.
+    std::function<void(bool)> on_animate_avatars_changed;
 
     // Fired when the user picks a layout in Appearance → Layout.
     std::function<void(tesseract::Settings::MessageLayout)> on_message_layout_changed;

@@ -58,6 +58,25 @@ TEST_CASE("Settings round-trip: Light")
     fs::remove_all(dir);
 }
 
+TEST_CASE("Settings animate_avatars defaults on and round-trips")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("animate_avatars");
+
+    auto& s = tesseract::Settings::instance();
+    s.load_from_disk(dir); // no file → defaults
+    CHECK(s.animate_avatars);
+
+    s.animate_avatars = false;
+    s.save_to_disk(dir);
+    reset_settings();
+    s.load_from_disk(dir);
+    CHECK_FALSE(s.animate_avatars);
+
+    reset_settings();
+    fs::remove_all(dir);
+}
+
 TEST_CASE("Settings round-trip: Dark")
 {
     reset_settings();

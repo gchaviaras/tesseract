@@ -250,6 +250,20 @@ const tk::Image* AnimImageCache::current_frame(const CacheKey& key) const
     return it->second.frames[it->second.current].get();
 }
 
+const tk::Image* AnimImageCache::peek_frame(const CacheKey& key, bool paused)
+{
+    std::lock_guard<std::mutex> lock(mu_);
+    auto it = entries_.find(key);
+    if (it == entries_.end() || it->second.frames.empty())
+    {
+        return nullptr;
+    }
+    ++hits_;
+    it->second.last_seen_ms = vis_now_();
+    it->second.paused = paused;
+    return it->second.frames[it->second.current].get();
+}
+
 void AnimImageCache::set_paused(const CacheKey& key, bool paused)
 {
     std::lock_guard<std::mutex> lock(mu_);
@@ -426,6 +440,12 @@ void AnimImageCache::sweep()
         total -= entry_bytes_locked_(it->second);
         entries_.erase(it);
     }
+}
+
+void AnimImageCache::erase(const CacheKey& key)
+{
+    std::lock_guard<std::mutex> lock(mu_);
+    entries_.erase(key);
 }
 
 void AnimImageCache::clear()

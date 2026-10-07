@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "app/ShellBase.h"
+#include <tesseract/settings.h>
 
 #include <tesseract/visual.h>
 
@@ -191,6 +192,16 @@ std::vector<std::uint8_t> fake_bytes(const std::string& tag)
 
 // ── media_prefetch_supports_kind_ / media_prefetch_decode_clamp_ ───────────
 
+// The prefetch disk key for an avatar depends on Settings::animate_avatars
+// (animated thumbnails live under an "anim:"-namespaced key). Tests that seed
+// the plain avatar key pin the setting off; the animated key has its own test.
+struct MediaPrefetchAnimateAvatars
+{
+    bool saved = tesseract::Settings::instance().animate_avatars;
+    explicit MediaPrefetchAnimateAvatars(bool v) { tesseract::Settings::instance().animate_avatars = v; }
+    ~MediaPrefetchAnimateAvatars() { tesseract::Settings::instance().animate_avatars = saved; }
+};
+
 TEST_CASE("media_prefetch_supports_kind_ excludes only Tile", "[media-prefetch]")
 {
     using MK = ShellBase::MediaKind;
@@ -286,24 +297,40 @@ TEST_CASE("store_decoded_media_ routes RoomAvatar/UserAvatar into thumbnail_cach
     CHECK(s.thumbnail_cache().contains(tk::CacheKey::media("mxc://user/1")));
 }
 
-TEST_CASE("store_decoded_media_ never animates an avatar (matches today's still-only avatar decode)",
+TEST_CASE("store_decoded_media_ stores a multi-frame avatar as its first frame when animation is off",
           "[media-prefetch]")
 {
+    MediaPrefetchAnimateAvatars pin_still(false);
     MediaPrefetchTestShell s;
-    // An avatar mxc whose bytes happen to decode into multiple frames (an
-    // animated GIF/WebP avatar) is NOT treated as animated — avatars never
-    // go through anim_cache_ today (see ensure_room_avatar_/
-    // ensure_user_avatar_'s decode path, which never even checks for
-    // animation), so a frames-only decode result for an avatar kind is
-    // reported as a decode failure here rather than introducing new
-    // animated-avatar behavior as a side effect of reusing decode_image_.
+    // With animate_avatars off an avatar mxc whose bytes decode into multiple
+    // frames is shown as a still: it never goes through anim_cache_. A
+    // frames-only decode result (no `still`) falls back to its first frame.
     ShellBase::DecodedImage d;
     d.frames.push_back(std::make_unique<MediaPrefetchFakeImage>());
     d.delays_ms.push_back(50);
-    CHECK_FALSE(s.store_decoded_media_(tk::CacheKey::media("mxc://room/2"), ShellBase::MediaKind::RoomAvatar,
-                                       std::move(d)));
-    CHECK_FALSE(s.thumbnail_cache().contains(tk::CacheKey::media("mxc://room/2")));
+    CHECK(s.store_decoded_media_(tk::CacheKey::media("mxc://room/2"), ShellBase::MediaKind::RoomAvatar,
+                                 std::move(d)));
+    CHECK(s.thumbnail_cache().contains(tk::CacheKey::media("mxc://room/2")));
     CHECK_FALSE(s.anim_cache().has(tk::CacheKey::media("mxc://room/2")));
+}
+
+TEST_CASE("run_media_prefetch_impl_ warms an avatar via its animated disk key when animating",
+          "[media-prefetch]")
+{
+    MediaPrefetchAnimateAvatars pin_animated(true);
+    MediaPrefetchTestShell s;
+    const std::string mxc = "mxc://user/anim-1";
+    const int px = tesseract::visual::kAvatarCacheSize;
+    // Animated thumbnails are cached under "anim:"+mxc (see ensure_user_avatar_).
+    s.store_media_bytes_(tk::CacheKey::thumbnail("anim:" + mxc, px, px), fake_bytes("avatar-bytes"));
+
+    std::vector<ShellBase::MediaPrefetchKey> keys{
+        {tk::CacheKey::thumbnail(mxc, px, px), ShellBase::MediaKind::UserAvatar}};
+    s.run_media_prefetch_impl_(keys, std::chrono::steady_clock::now() + std::chrono::seconds(2),
+                               /*max_items=*/12);
+
+    CHECK(s.thumbnail_cache().contains(tk::CacheKey::media(mxc)));
+    CHECK(s.decode_calls == 1);
 }
 
 // ── run_media_prefetch_impl_ ────────────────────────────────────────────────
@@ -327,6 +354,7 @@ TEST_CASE("run_media_prefetch_impl_ warms the cache for a disk hit",
 TEST_CASE("run_media_prefetch_impl_ warms an avatar via its namespaced disk key",
           "[media-prefetch]")
 {
+    MediaPrefetchAnimateAvatars pin_still(false);
     MediaPrefetchTestShell s;
     // Avatars' disk key is namespaced by size (unlike the general kinds,
     // whose disk key equals the plain memory key) — see
@@ -502,6 +530,7 @@ TEST_CASE("run_media_prefetch_impl_ never blocks past its deadline even when dec
 TEST_CASE("run_media_prefetch_impl_ never marks a key in media_fetches_in_flight_",
           "[media-prefetch]")
 {
+    MediaPrefetchAnimateAvatars pin_still(false);
     // Regression: sharing media_fetches_in_flight_ with the network path let a
     // cold-cache prefetch mark an avatar "in flight", so the lazy
     // ensure_room_avatar_ call during the very next paint saw the guard set

@@ -7,6 +7,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-07
 
+- feat(avatars): animated avatars (GIF, animated WebP, APNG) now play everywhere an avatar is shown; Appearance › Timeline › "Animate avatars" (on by default) turns it off, and low power mode freezes them. Needs a server that serves animated thumbnails (Synapse does). Qt6 build + ctest 2284/2284 + cargo 779
+- feat(strip): the sidebar user strip shows your own avatar in the active room (set with `/myroomavatar`), falling back to your account avatar; it follows room switches and changes made from other clients. Qt6 build + ctest 2284/2284
 - feat(slash): `/myroomavatar <http(s) url>` fetches the image, center-crops it to a square of at most 512×512 and uploads it as your avatar in the room; animated GIF/WebP/APNG stay animated (re-encoded as animated WebP). Web URLs go through the same local-network guard as link previews. Qt6 build + ctest 2269/2269 + cargo 779
 - build(macos): the vendored libwebp is gone; animated WebP decode uses the libwebp bundled with the Rust SDK (`libwebp-sys`) through a new `WebpAnimDecoder` wrapper. Qt6 build + ctest + cargo tests (decoder tested in Rust); macOS build not run
 - refactor(shells): room selection, tab bar, sign-out, video thumbnails, attachment delivery and the pop-out composer popups moved from per-shell copies into shared code, as did the Qt6/GTK4 autostart and UnifiedPush logic. Push gateway URLs are validated the same on both Linux shells, and Qt6/GTK4 pop-outs now send typing notices. Qt6 build + ctest 2266/2266

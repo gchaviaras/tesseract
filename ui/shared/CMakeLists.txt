@@ -61,6 +61,8 @@ set(_tk_sources
     tk/canvas_common.cpp
     tk/emoji_segmentation.h
     tk/emoji_segmentation.cpp
+    tk/image_sniff.h
+    tk/image_sniff.cpp
     tk/emoji_support.h
     tk/emoji_support.cpp
     tk/host.h
@@ -460,7 +462,7 @@ set_source_files_properties(tk/status_icons.cpp PROPERTIES SKIP_UNITY_BUILD_INCL
 # emoji_segmentation.cpp is a small self-contained TU (canvas.h only); keeping
 # it out of the unity blobs avoids reordering a neighbour's include set (same
 # tk::PaintCtx leakage reason as status_icons.cpp).
-set_source_files_properties(tk/emoji_segmentation.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(tk/emoji_segmentation.cpp tk/image_sniff.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Embed the application icon PNG as a C byte array so BrandView can decode it
 # cross-platform without per-shell resource loading. Runs at configure time.

@@ -106,6 +106,11 @@ void UserInfo::set_avatar_url(std::string mxc_url)
     avatar_url_ = std::move(mxc_url);
 }
 
+void UserInfo::set_avatar_url_provider(AvatarUrlProvider provider)
+{
+    avatar_url_provider_ = std::move(provider);
+}
+
 void UserInfo::set_status(std::string emoji, std::string text)
 {
     if (status_emoji_ == emoji && status_text_ == text)
@@ -248,6 +253,11 @@ void UserInfo::paint(tk::PaintCtx& ctx)
         bounds_.y + bounds_.h * 0.5f,
     };
 
+    if (avatar_url_provider_)
+    {
+        if (std::string url = avatar_url_provider_(); url != avatar_url_)
+            avatar_url_ = std::move(url);
+    }
     const tk::Image* img = (image_provider_ && !avatar_url_.empty())
                                ? image_provider_(avatar_url_)
                                : nullptr;

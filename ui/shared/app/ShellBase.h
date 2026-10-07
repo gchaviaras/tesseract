@@ -571,6 +571,27 @@ protected:
     std::string my_user_id_;
     std::string my_display_name_;
     std::string my_avatar_url_;
+    // The user's own avatar per room (m.room.member content), "user_id\nroom_id" → mxc;
+    // "" means the room has none (the strip then shows my_avatar_url_). Filled
+    // lazily by request_own_room_avatar_, dropped when an own membership event
+    // arrives for the room. Cleared on account switch / logout.
+    std::unordered_map<std::string, std::string> own_room_avatar_;
+    std::unordered_set<std::string> own_room_avatar_in_flight_;
+    // Lookups requested while one for the same key was already in flight:
+    // re-run once it lands, since its result may predate the change.
+    std::unordered_set<std::string> own_room_avatar_dirty_;
+    // Every mxc that went through the avatar fetch/decode paths, so toggling
+    // "Animate avatars" can evict exactly those entries (the thumbnail and
+    // animation caches are shared with timeline thumbnails and stickers).
+    std::unordered_set<std::string> avatar_mxcs_;
+    std::string strip_avatar_room_; // room the strip last resolved for
+    std::string strip_avatar_user_; // ...and for which account
+    std::string strip_slot_key_;    // own_room_avatar_ key for those two
+    // Bumped whenever the avatar animation mode flips (setting toggled, low
+    // power mode entered/left). An avatar fetch remembers the value at
+    // dispatch; a delivery from an older generation is dropped and re-fetched
+    // in the current mode.
+    std::uint32_t avatar_mode_gen_ = 0;
 
     // ── Tab state ─────────────────────────────────────────────────────────────
     struct TabState
@@ -4475,6 +4496,16 @@ protected:
     // switch.
     void handle_show_membership_events_toggle_(bool enabled);
     void handle_show_sender_status_toggle_(bool enabled);
+
+    // Sidebar user strip: avatar URL to show now — the user's own avatar in
+    // the active room when it has one, else the account avatar. Called from
+    // UserInfo's paint via set_avatar_url_provider; a cache read that kicks a
+    // one-shot async lookup on a miss or when the active room changed.
+    std::string strip_avatar_url_();
+    void request_own_room_avatar_(const std::string& room_id);
+    // Drops the cached own-room avatar when `ev` is the user's own membership
+    // event (join / profile change) so the strip re-reads it.
+    void note_own_membership_event_(const std::string& room_id, const tesseract::Event& ev);
     /// Re-reads display prefs in every message list (main, thread, popouts).
     void refresh_all_message_lists_display_prefs_();
 
@@ -4787,6 +4818,33 @@ protected:
     // callers pass the row's room group so leaving the room cancels them.
     void ensure_user_avatar_(const std::string& mxc, std::uint64_t group_id = 0);
 
+    // Animated avatars. True when avatars should be fetched/decoded as
+    // animations: the user setting is on and low power mode is not active.
+    bool animate_avatars_effective_() const;
+    // Display-scaled avatar edge in pixels (what the thumbnail requests use).
+    int avatar_px_() const;
+    // anim_cache_ key of an animated avatar (CacheUsage::Thumbnail namespace,
+    // so it can never collide with a same-mxc sticker / full-image entry).
+    // Independent of the display scale: avatar animations are decoded at
+    // kAvatarCacheSize whatever the scale, so a scale change keeps them valid.
+    tk::CacheKey avatar_anim_key_(const std::string& mxc) const;
+    // Avatar lookup used by every avatar provider: the current frame of an
+    // animated avatar when one is cached (frozen while low power mode is on),
+    // else the still from thumbnail_cache_. Pure cache read, never fetches.
+    const tk::Image* avatar_image_(const std::string& mxc);
+    // Delivery of fetched avatar bytes that are an animation: decodes off the
+    // UI thread and stores into anim_cache_ (or the still cache when the
+    // decode turns out single-frame). Replaces the shells' still-only branch.
+    void deliver_animated_avatar_(const std::string& mxc, MediaKind kind,
+                                  std::vector<std::uint8_t> bytes);
+    void handle_animate_avatars_toggle_(bool enabled);
+    // The avatar animation mode flipped (setting toggled, or low power mode
+    // entered/left while the setting is on). Bumps avatar_mode_gen_; with
+    // `evict`, also drops every avatar cache entry so avatars refetch lazily in
+    // the new mode (stills fetched under low power become animations again).
+    void on_avatar_animation_mode_changed_(bool evict);
+    void evict_avatar_caches_();
+
     // Non-blocking voice/audio byte provider for the playback path. Returns the
     // clip's bytes if already warmed (moving them out of voice_bytes_cache_),
     // otherwise kicks a one-shot async download (fetch_media_async) and returns
@@ -4912,7 +4970,7 @@ protected:
     make_avatar_image_provider_()
     {
         return [this](const std::string& mxc) -> const tk::Image*
-        { return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc)); };
+        { return avatar_image_(mxc); };
     }
 
     // Static-image lookup: image_cache_ only (used by the shortcode popup).

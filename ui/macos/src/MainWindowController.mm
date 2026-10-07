@@ -613,6 +613,7 @@ public:
     // LEGACY: do not add new entries here. Add a public C++ method above instead.
 public:
     using ShellBase::account_manager_;
+    using ShellBase::avatar_image_;
     using ShellBase::active_account_;
     using ShellBase::add_account_return_idx_;
     using ShellBase::client_;
@@ -3439,8 +3440,7 @@ private:
                     {
                         MainWindowController* c = ws;
                         if (!c) return nullptr;
-                        return c->_shell->account_manager_
-                                   .thumbnail_cache().peek(tk::CacheKey::media(mxc));
+                        return c->_shell->avatar_image_(mxc);
                     });
                 self->_shell->request_relayout_();
             }
@@ -7118,7 +7118,7 @@ private:
             {
                 return nullptr;
             }
-            return s->_shell->account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc));
+            return s->_shell->avatar_image_(mxc);
         });
     _settingsView->load_persisted_settings();
     // load_persisted_settings() seeded the checkbox from the cached
@@ -7365,7 +7365,7 @@ private:
                 {
                     return nullptr;
                 }
-                return s->_shell->account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc));
+                return s->_shell->avatar_image_(mxc);
             });
         _accountPickerSurface->set_root(std::move(picker));
 

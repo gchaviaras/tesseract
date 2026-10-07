@@ -30,6 +30,16 @@ and in-progress work, as a single backlog ordered by priority/urgency.
   then GTK4, Narrator/NVDA, VoiceOver). Phase 5's keyboard-only audit is
   done (2026-10-04) bar a live keyboard-only walkthrough per platform; the
   high-contrast theme and reduce-motion still need their own plan.
+- **Animated avatars: bound their memory.** Animated avatars live in the
+  shared 64 MB `anim_cache_` (stickers, GIFs, pickers). Decoding is capped only
+  by `kAnimDecodeMaxFrames` (200 frames × ~25 KB at 80×80 ≈ 5 MB per avatar),
+  so a room full of long animated avatars can crowd out other animations.
+  Planned fix: in `ShellBase::store_decoded_media_`, keep an avatar animation
+  as its first-frame still when its decoded frames exceed ~2 MB (about 80
+  frames at 80×80). A separate avatar `AnimImageCache` was ruled out for now:
+  its tick (`advance()`) is driven from each shell, so it would touch all four.
+  Off-screen avatar entries can still be evicted by `sweep()` and simply reload
+  from the disk cache the next time they are painted.
 - Cmd/Ctrl+K refinements, room mentions as pills (vs. just user mentions),
   self-mention emphasis, device rename, new-device warnings, edit history
   viewer, GIF picker.

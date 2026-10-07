@@ -104,6 +104,8 @@ add_executable(tesseract_tests
     cpp/test_picker_image_cache.cpp
     cpp/test_media_prefetch.cpp
     cpp/test_anim_image_cache.cpp
+    cpp/test_animated_avatars.cpp
+    cpp/test_image_sniff.cpp
     cpp/test_pixmap_cache.cpp
     cpp/test_compressed_image_cache.cpp
     cpp/test_interval_timer.cpp
@@ -217,6 +219,11 @@ add_executable(tesseract_tests
     cpp/test_lists_accessibility.cpp
     cpp/test_views_accessibility.cpp
 )
+# Standalone TUs: keeps the existing unity batches' composition unchanged
+# (adding a file reshuffles them and exposed an unrelated anonymous-namespace
+# make_session() clash between two older shell tests).
+set_source_files_properties(cpp/test_animated_avatars.cpp cpp/test_image_sniff.cpp
+                            PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Points config_dir()/data_dir() at a temporary directory for every test case,
 # so no test can overwrite the developer's real settings or accounts. Kept out

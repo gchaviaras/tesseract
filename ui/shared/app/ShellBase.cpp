@@ -29,6 +29,7 @@
 #include "views/SettingsView.h"
 #include "views/RoomView.h"
 #include "views/UserInfo.h"
+#include "tk/image_sniff.h"
 #include "views/html_spans.h"
 #include "views/image_pack_order.h"
 #include "views/map_tiles.h"
@@ -581,19 +582,26 @@ bool ShellBase::store_decoded_media_(const tk::CacheKey& cache_key, MediaKind ki
     const bool is_avatar = (kind == MediaKind::RoomAvatar ||
                             kind == MediaKind::UserAvatar);
     const bool is_thumb = is_avatar || (kind == MediaKind::MediaThumbnail);
+    if (is_avatar)
+        avatar_mxcs_.insert(cache_key.id);
     auto& still_cache = is_thumb ? account_manager_.thumbnail_cache()
                                  : account_manager_.image_cache();
-    if (still_cache.contains(cache_key) || account_manager_.anim_cache().has(cache_key))
+    if (still_cache.contains(cache_key) || account_manager_.anim_cache().has(cache_key) ||
+        (is_avatar && account_manager_.anim_cache().has(avatar_anim_key_(cache_key.id))))
     {
         return true; // already warm (e.g. raced with the lazy-fetch path)
     }
-    // Avatars never animate — ensure_room_avatar_/ensure_user_avatar_'s own
-    // decode path never even checks for it (see each shell's
-    // on_media_bytes_ready_ RoomAvatar/UserAvatar branch); an avatar mxc
-    // that happens to be a multi-frame image is treated as a still here too,
-    // matching that existing behavior exactly rather than introducing new
-    // (currently unsupported) animated-avatar behavior as a side effect of
-    // this prefetch pass reusing the general decode_image_ path.
+    if (is_avatar && decoded.frames.size() > 1 && animate_avatars_effective_())
+    {
+        account_manager_.anim_cache().store(
+            avatar_anim_key_(cache_key.id), std::move(decoded.frames),
+            std::move(decoded.delays_ms), monotonic_ms_());
+        start_anim_tick_();
+        return true;
+    }
+    // Past the animated-avatar case above (setting on): an avatar that is a
+    // multi-frame image is stored as its first-frame still — what the shells'
+    // own on_media_bytes_ready_ RoomAvatar/UserAvatar branch does too.
     //
     // Deliberately NOT storing a multi-frame (animated) result here: this
     // prefetch pass always decodes via the plain, unwindowed decode_image_,
@@ -619,6 +627,12 @@ bool ShellBase::store_decoded_media_(const tk::CacheKey& cache_key, MediaKind ki
     if (!is_avatar && !decoded.frames.empty())
     {
         return false;
+    }
+    // An animated source stored as a still (setting off / low power): use its
+    // first frame when the decoder reported frames only.
+    if (is_avatar && !decoded.still && !decoded.frames.empty())
+    {
+        decoded.still = std::move(decoded.frames.front());
     }
     if (decoded.still)
     {
@@ -671,7 +685,8 @@ void ShellBase::run_media_prefetch_impl_(
         auto& still_cache = is_thumb ? account_manager_.thumbnail_cache()
                                      : account_manager_.image_cache();
         const tk::CacheKey mem_key = tk::CacheKey::media(k.key.id);
-        if (still_cache.contains(mem_key) || account_manager_.anim_cache().has(mem_key))
+        if (still_cache.contains(mem_key) || account_manager_.anim_cache().has(mem_key) ||
+            (is_avatar && account_manager_.anim_cache().has(avatar_anim_key_(k.key.id))))
         {
             continue; // already warm
         }
@@ -686,8 +701,12 @@ void ShellBase::run_media_prefetch_impl_(
         {
             const int sw = static_cast<int>(std::lround(k.key.w * current_scale_));
             const int sh = static_cast<int>(std::lround(k.key.h * current_scale_));
-            disk_key = thumb_key(k.key.id, sw, sh);
-            disk_cache_key = tk::CacheKey::thumbnail(k.key.id, sw, sh);
+            // Avatars fetched as animations are cached under their own disk
+            // namespace (see ensure_room_avatar_), so look there.
+            const std::string disk_id =
+                (is_avatar && animate_avatars_effective_()) ? "anim:" + k.key.id : k.key.id;
+            disk_key = thumb_key(disk_id, sw, sh);
+            disk_cache_key = tk::CacheKey::thumbnail(disk_id, sw, sh);
         }
         // If the lazy/network path is already fetching this key, leave it be
         // — that fetch will populate the cache and this key drops out of the
@@ -1035,9 +1054,29 @@ void ShellBase::fetch_media_pipeline_(
         on_media_bytes_ready_(tk::CacheKey::media(cache_key), out_kind, {});
     };
     spec.deliver_ =
-        [this, cache_key, out_kind](std::vector<std::uint8_t>&& bytes)
+        [this, cache_key, out_kind, animated,
+         gen = avatar_mode_gen_](std::vector<std::uint8_t>&& bytes)
     {
         note_media_fetch_ok_(cache_key);
+        // Fetched under a different avatar animation mode than the current one
+        // (setting toggled / low power entered or left mid-flight): the bytes
+        // are the wrong variant — a still would mask the animation, an
+        // animation would be decoded just to be shown as a still. Drop them;
+        // the repaint re-requests the avatar in the current mode.
+        if ((out_kind == MediaKind::RoomAvatar || out_kind == MediaKind::UserAvatar) &&
+            gen != avatar_mode_gen_)
+        {
+            request_repaint_();
+            return;
+        }
+        // An animated avatar bypasses the shells' still-only avatar branch.
+        if (animated &&
+            (out_kind == MediaKind::RoomAvatar || out_kind == MediaKind::UserAvatar) &&
+            tk::bytes_may_be_animated(bytes))
+        {
+            deliver_animated_avatar_(cache_key, out_kind, std::move(bytes));
+            return;
+        }
         on_media_bytes_ready_(tk::CacheKey::media(cache_key), out_kind, std::move(bytes));
     };
     run_media_fetch_(std::move(spec));
@@ -1098,24 +1137,29 @@ void ShellBase::ensure_room_avatar_(const RoomInfo& r)
     {
         return;
     }
+    avatar_mxcs_.insert(mxc);
     // When the user opts into prefetching full media, warm account_manager_.image_cache() with
     // the full-size avatar so opening it in the viewer is instant. Idempotent.
     if (tesseract::Settings::instance().prefetch_full_media)
     {
         ensure_media_image_(mxc, 0, 0);
     }
-    if (account_manager_.thumbnail_cache().contains(tk::CacheKey::media(mxc)))
+    if (account_manager_.thumbnail_cache().contains(tk::CacheKey::media(mxc)) ||
+        account_manager_.anim_cache().has(avatar_anim_key_(mxc)))
     {
         return;
     }
     // Scale the requested pixel size to the display's current scale factor
     // so the server-generated thumbnail stays sharp on HiDPI — see
     // current_scale_'s doc comment in ShellBase.h.
-    const int avatar_px =
-        static_cast<int>(std::lround(visual::kAvatarCacheSize * current_scale_));
+    const int avatar_px = avatar_px_();
     // Thumbnail and full-size fetches of the same mxc must not collide on the
-    // disk cache or in the in-flight set — namespace the thumbnail keys.
-    const std::string tkey = thumb_key(mxc, avatar_px, avatar_px);
+    // disk cache or in the in-flight set — namespace the thumbnail keys. An
+    // animated-thumbnail response differs from the still one for the same
+    // mxc, so it gets its own namespace too.
+    const bool animated = animate_avatars_effective_();
+    const std::string disk_id = animated ? "anim:" + mxc : mxc;
+    const std::string tkey = thumb_key(disk_id, avatar_px, avatar_px);
     if (!media_fetches_in_flight_.insert(tkey).second)
     {
         return;
@@ -1128,10 +1172,10 @@ void ShellBase::ensure_room_avatar_(const RoomInfo& r)
     const auto kind = use_room_endpoint
                           ? tesseract::Client::MediaReqKind::RoomAvatar
                           : tesseract::Client::MediaReqKind::MxcThumbnail;
-    fetch_media_pipeline_(mxc, tk::CacheKey::thumbnail(mxc, avatar_px, avatar_px),
+    fetch_media_pipeline_(mxc, tk::CacheKey::thumbnail(disk_id, avatar_px, avatar_px),
                           tkey, /*group_id=*/0, kind, source,
                           avatar_px, avatar_px,
-                          /*animated=*/false, MediaKind::RoomAvatar);
+                          animated, MediaKind::RoomAvatar);
 }
 
 void ShellBase::ensure_user_avatar_(const std::string& mxc,
@@ -1142,17 +1186,20 @@ void ShellBase::ensure_user_avatar_(const std::string& mxc,
     {
         return;
     }
+    avatar_mxcs_.insert(mxc);
     if (tesseract::Settings::instance().prefetch_full_media)
     {
         ensure_media_image_(mxc, 0, 0);
     }
-    if (account_manager_.thumbnail_cache().contains(tk::CacheKey::media(mxc)))
+    if (account_manager_.thumbnail_cache().contains(tk::CacheKey::media(mxc)) ||
+        account_manager_.anim_cache().has(avatar_anim_key_(mxc)))
     {
         return;
     }
-    const int avatar_px =
-        static_cast<int>(std::lround(visual::kAvatarCacheSize * current_scale_));
-    const std::string tkey = thumb_key(mxc, avatar_px, avatar_px);
+    const int avatar_px = avatar_px_();
+    const bool animated = animate_avatars_effective_();
+    const std::string disk_id = animated ? "anim:" + mxc : mxc;
+    const std::string tkey = thumb_key(disk_id, avatar_px, avatar_px);
     if (!media_fetches_in_flight_.insert(tkey).second)
     {
         return;
@@ -1161,11 +1208,223 @@ void ShellBase::ensure_user_avatar_(const std::string& mxc,
     // them; account-wide callers (quick switcher roster, invites) pass the
     // default 0 — those avatars are reused across rooms and cheap to
     // re-fetch, so there's nothing to gain from cancelling on room switch.
-    fetch_media_pipeline_(mxc, tk::CacheKey::thumbnail(mxc, avatar_px, avatar_px),
+    fetch_media_pipeline_(mxc, tk::CacheKey::thumbnail(disk_id, avatar_px, avatar_px),
                           tkey, group_id,
                           tesseract::Client::MediaReqKind::MxcThumbnail, mxc,
                           avatar_px, avatar_px,
-                          /*animated=*/false, MediaKind::UserAvatar);
+                          animated, MediaKind::UserAvatar);
+}
+
+bool ShellBase::animate_avatars_effective_() const
+{
+    return tesseract::Settings::instance().animate_avatars && !low_power_active();
+}
+
+int ShellBase::avatar_px_() const
+{
+    return static_cast<int>(std::lround(visual::kAvatarCacheSize * current_scale_));
+}
+
+tk::CacheKey ShellBase::avatar_anim_key_(const std::string& mxc) const
+{
+    return tk::CacheKey::thumbnail(mxc, visual::kAvatarCacheSize, visual::kAvatarCacheSize);
+}
+
+const tk::Image* ShellBase::avatar_image_(const std::string& mxc)
+{
+    auto& anim = account_manager_.anim_cache();
+    if (!anim.empty())
+    {
+        // One lock: marks the entry visible and (un)freezes it for low power.
+        if (const auto* f = anim.peek_frame(avatar_anim_key_(mxc), low_power_active()))
+        {
+            start_anim_tick_();
+            return f;
+        }
+    }
+    return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc));
+}
+
+void ShellBase::deliver_animated_avatar_(const std::string& mxc, MediaKind kind,
+                                         std::vector<std::uint8_t> bytes)
+{
+    const tk::CacheKey still_key = tk::CacheKey::media(mxc);
+    if (account_manager_.thumbnail_cache().contains(still_key) ||
+        account_manager_.anim_cache().has(avatar_anim_key_(mxc)))
+    {
+        return;
+    }
+    auto shared_bytes = std::make_shared<std::vector<std::uint8_t>>(std::move(bytes));
+    run_async_(
+        [this, mxc, kind, shared_bytes]() mutable
+        {
+            auto decoded = std::make_shared<DecodedImage>(
+                decode_image_(*shared_bytes, visual::kAvatarCacheSize, visual::kAvatarCacheSize));
+            post_to_ui_alive_(
+                [this, mxc, kind, decoded, shared_bytes]() mutable
+                {
+                    const tk::CacheKey still_key = tk::CacheKey::media(mxc);
+                    if (account_manager_.thumbnail_cache().contains(still_key) ||
+                        account_manager_.anim_cache().has(avatar_anim_key_(mxc)))
+                    {
+                        return;
+                    }
+                    // Multi-frame → animation; single-frame → plain still. When
+                    // this decoder can't read the file at all, hand the bytes to
+                    // the shell's own still decode (QImageReader / GdkPixbuf /
+                    // WIC / ImageIO) rather than blocking the avatar for good.
+                    if (decoded->empty() ||
+                        !store_decoded_media_(still_key, kind, std::move(*decoded)))
+                    {
+                        on_media_bytes_ready_(still_key, kind, std::move(*shared_bytes));
+                        return;
+                    }
+                    if (main_app_ && main_app_->room_view())
+                        main_app_->room_view()->notify_image_ready(mxc);
+                    notify_secondary_media_ready_(mxc, kind);
+                    request_repaint_();
+                });
+        });
+}
+
+// Runs from UserInfo::paint (via set_avatar_url_provider). That makes the
+// room-change re-read a paint-time side effect, deliberately: it follows the
+// lazy fetch-on-paint pattern used for every other avatar (on_avatar_needed),
+// only fires while the strip is actually painted, and avoids hooking the ~13
+// places current_room_id_ is assigned. The lookups are idempotent and deduped
+// (own_room_avatar_in_flight_ / _dirty_), and the per-paint path itself is a
+// couple of string compares plus one map find.
+std::string ShellBase::strip_avatar_url_()
+{
+    if (!current_room_id_.empty())
+    {
+        // Re-read when the active room changed since the last paint: a cached
+        // value could predate a change made from another client.
+        if (strip_avatar_room_ != current_room_id_ || strip_avatar_user_ != my_user_id_)
+        {
+            strip_avatar_room_ = current_room_id_;
+            strip_avatar_user_ = my_user_id_;
+            strip_slot_key_ = my_user_id_ + '\n' + current_room_id_;
+            request_own_room_avatar_(current_room_id_);
+        }
+        if (auto it = own_room_avatar_.find(strip_slot_key_);
+            it != own_room_avatar_.end() && !it->second.empty())
+        {
+            return it->second;
+        }
+    }
+    else
+    {
+        strip_avatar_room_.clear();
+    }
+    return my_avatar_url_;
+}
+
+void ShellBase::request_own_room_avatar_(const std::string& room_id)
+{
+    const auto sess = active_account_;
+    const std::string slot_key = sess ? sess->user_id + '\n' + room_id : std::string{};
+    if (room_id.empty() || !sess || !sess->client)
+        return;
+    if (!own_room_avatar_in_flight_.insert(slot_key).second)
+    {
+        // A lookup is already running and may read state from before the
+        // change that prompted this one — run again when it finishes.
+        own_room_avatar_dirty_.insert(slot_key);
+        return;
+    }
+    run_async_(
+        [this, room_id, slot_key, weak = std::weak_ptr<AccountSession>(sess)]
+        {
+            auto s = weak.lock();
+            if (!s || !s->client)
+                return;
+            std::string mxc = s->client->own_room_avatar(room_id);
+            post_to_ui_alive_(
+                [this, room_id, slot_key, weak, mxc = std::move(mxc)]
+                {
+                    own_room_avatar_in_flight_.erase(slot_key);
+                    auto s = weak.lock();
+                    if (!s || s != active_account_)
+                    {
+                        own_room_avatar_dirty_.erase(slot_key);
+                        return;
+                    }
+                    auto& slot = own_room_avatar_[slot_key];
+                    if (slot != mxc)
+                    {
+                        slot = mxc;
+                        if (room_id == current_room_id_)
+                            request_repaint_();
+                    }
+                    if (own_room_avatar_dirty_.erase(slot_key) != 0)
+                        request_own_room_avatar_(room_id);
+                });
+        });
+}
+
+void ShellBase::note_own_membership_event_(const std::string& room_id,
+                                           const tesseract::Event& ev)
+{
+    if (ev.type != tesseract::EventType::Membership || my_user_id_.empty())
+        return;
+    const auto& m = static_cast<const tesseract::MembershipStateEvent&>(ev);
+    // Only the active room's avatar is shown; any other room is re-read when
+    // it becomes active (strip_avatar_url_), so don't pay a store read for the
+    // own join / profile events a sync or back-pagination replays.
+    if (m.target_user_id != my_user_id_ || room_id != current_room_id_)
+        return;
+    // Keep showing the old value until the re-read lands (no flicker).
+    request_own_room_avatar_(room_id);
+}
+
+void ShellBase::handle_animate_avatars_toggle_(bool enabled)
+{
+    auto& s = tesseract::Settings::instance();
+    if (s.animate_avatars == enabled)
+        return;
+    s.animate_avatars = enabled;
+    s.save_to_disk(tesseract::config_dir());
+    on_avatar_animation_mode_changed_(/*evict=*/true);
+}
+
+void ShellBase::evict_avatar_caches_()
+{
+    // Only avatar entries go: both caches are shared with timeline thumbnails,
+    // stickers and GIFs.
+    for (const auto& mxc : avatar_mxcs_)
+    {
+        account_manager_.thumbnail_cache().evict(tk::CacheKey::media(mxc));
+        account_manager_.anim_cache().erase(avatar_anim_key_(mxc));
+        media_decode_failed_.erase(mxc);
+        media_fetch_failed_.erase(mxc);
+    }
+}
+
+void ShellBase::on_avatar_animation_mode_changed_(bool evict)
+{
+    ++avatar_mode_gen_;
+    if (evict)
+        evict_avatar_caches_();
+    auto reset_tracking = [](views::RoomView* rv)
+    {
+        if (!rv)
+            return;
+        if (auto* ml = rv->message_list())
+            ml->reset_visible_avatar_tracking();
+        if (auto* tv = rv->thread_view())
+            if (auto* tml = tv->message_list())
+                tml->reset_visible_avatar_tracking();
+    };
+    if (main_app_)
+        reset_tracking(main_app_->room_view());
+    for (const auto& [rid, w] : secondary_windows_)
+    {
+        if (w)
+            reset_tracking(w->room_view());
+    }
+    if (main_app_)
+        request_relayout_();
 }
 
 void ShellBase::ensure_media_image_(const std::string& url, int /*max_w*/,
@@ -1663,7 +1922,7 @@ void ShellBase::set_room_low_priority_(const std::string& room_id, bool value,
 void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
 {
     auto avatar_lookup = [this](const std::string& mxc) -> const tk::Image*
-    { return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc)); };
+    { return avatar_image_(mxc); };
 
     app->set_avatar_provider(avatar_lookup);
     if (auto* reminder = app->encryption_reminder())
@@ -2115,6 +2374,9 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
         });
 
     app->user_info()->set_image_provider(avatar_lookup);
+    // The strip shows the user's own avatar in the active room (see
+    // strip_avatar_url_), resolved on every paint.
+    app->user_info()->set_avatar_url_provider([this] { return strip_avatar_url_(); });
     // Lazy avatar fetch: avatar_lookup above is a pure cache peek, so request
     // the user's own avatar whenever the strip paints with a miss — mirrors
     // room_list_view's on_room_avatar_needed and self-heals after a cache
@@ -2285,7 +2547,7 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
             [this]() -> std::vector<tesseract::RoomInfo> { return rooms_; });
         fp->set_avatar_provider(
             [this](const std::string& mxc) -> const tk::Image*
-            { return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc)); });
+            { return avatar_image_(mxc); });
         fp->on_room_avatar_needed =
             [this](const tesseract::RoomInfo& r) { ensure_room_avatar_(r); };
         fp->on_close = [this] { hide_forward_picker_field_(); request_relayout_(); };
@@ -2316,7 +2578,7 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
         {
             jr->set_avatar_provider(
                 [this](const std::string& mxc) -> const tk::Image*
-                { return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc)); });
+                { return avatar_image_(mxc); });
             jr->on_lookup_requested =
                 [this](const std::string& alias) { lookup_room_command_(alias); };
             jr->on_join_requested =
@@ -2344,7 +2606,7 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
         {
             dr->set_avatar_provider(
                 [this](const std::string& mxc) -> const tk::Image*
-                { return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(mxc)); });
+                { return avatar_image_(mxc); });
             // Homeserver placeholder is (re-)set from on_add_room_requested
             // above, not here — client_ is still null at this point (this
             // wiring runs once at shell construction, before login).
@@ -5333,6 +5595,10 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     view->on_show_sender_status_changed = [this](bool enabled)
     {
         handle_show_sender_status_toggle_(enabled);
+    };
+    view->on_animate_avatars_changed = [this](bool enabled)
+    {
+        handle_animate_avatars_toggle_(enabled);
     };
     view->on_launch_at_login_changed = [this](bool enabled)
     {
@@ -8926,6 +9192,10 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
         recent_room_ids_.resize(kRecentRoomsMax);
     my_display_name_ = sess.display_name;
     my_avatar_url_ = sess.avatar_url;
+    own_room_avatar_.clear();
+    own_room_avatar_in_flight_.clear();
+    own_room_avatar_dirty_.clear();
+    strip_avatar_room_.clear();
     restore_gate_ticks_ = 0;
     pending_restore_rooms_ = sess.open_rooms.empty()
         ? (sess.last_room.empty() ? std::vector<std::string>{}
@@ -9259,6 +9529,10 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     my_user_id_.clear();
     my_display_name_.clear();
     my_avatar_url_.clear();
+    own_room_avatar_.clear();
+    own_room_avatar_in_flight_.clear();
+    own_room_avatar_dirty_.clear();
+    strip_avatar_room_.clear();
     rooms_.clear();
     mark_room_index_dirty_();
     invites_.clear();
@@ -10470,6 +10744,7 @@ void ShellBase::handle_message_inserted_ui_(std::string room_id,
     {
         return;
     }
+    note_own_membership_event_(room_id, *ev);
     // In-thread replies belong to a thread, not the main timeline. The main
     // window's list excludes them; pop-out main lists must do the same, or
     // their rows diverge from the main window and later update/remove indices
@@ -10542,6 +10817,7 @@ void ShellBase::handle_message_updated_ui_(std::string room_id,
     {
         return;
     }
+    note_own_membership_event_(room_id, *ev);
     // See handle_message_inserted_ui_: in-thread replies are excluded from the
     // main timeline on both the main window and pop-outs, keeping their rows
     // aligned with the main-timeline indices used by updates/removals.
@@ -11954,6 +12230,12 @@ void ShellBase::apply_low_power_mode_(bool active)
         bridge_check_fingerprint_ = 0;
         unread_prefetch_fingerprint_ = 0;
     }
+
+    // Avatars animate only while low power mode is off. Leaving it evicts the
+    // stills fetched meanwhile so they come back animated; entering it just
+    // invalidates in-flight fetches (animated entries freeze via peek_frame).
+    if (tesseract::Settings::instance().animate_avatars)
+        on_avatar_animation_mode_changed_(/*evict=*/!active);
 
     resolve_presence_polling_();
 }
@@ -13579,8 +13861,7 @@ void ShellBase::on_tab_state_changed_ui_()
                 const std::string& av_mxc = r->effective_avatar_url();
                 if (!av_mxc.empty())
                 {
-                    avatar = account_manager_.thumbnail_cache().peek(
-                        tk::CacheKey::media(av_mxc));
+                    avatar = avatar_image_(av_mxc);
                 }
             }
             tb->add_tab(t.room_id, name, avatar);
@@ -15736,7 +16017,7 @@ void ShellBase::refresh_call_banner_(views::RoomView* rv, const std::string& roo
             auto ait = rit->second.avatar_urls.find(user_id);
             if (ait == rit->second.avatar_urls.end())
                 return nullptr;
-            return account_manager_.thumbnail_cache().peek(tk::CacheKey::media(ait->second));
+            return avatar_image_(ait->second);
         });
     // Join is disabled while the user is in a different call.
     rv->set_call_banner(room_id, r->call_intent, std::move(members), call_session_ == nullptr);
@@ -16228,8 +16509,7 @@ void ShellBase::request_call_(const std::string& room_id, const std::string& slo
             for (const auto& mem : members)
             {
                 if (mem.user_id == user_id && !mem.avatar_url.empty())
-                    return account_manager_.thumbnail_cache().peek(
-                        tk::CacheKey::media(mem.avatar_url));
+                    return avatar_image_(mem.avatar_url);
             }
             return nullptr;
         });
@@ -16501,8 +16781,7 @@ void ShellBase::on_call_overlay_mode_requested_(views::CallOverlayWidget::Mode m
             for (const auto& mem : members)
             {
                 if (mem.user_id == user_id && !mem.avatar_url.empty())
-                    return account_manager_.thumbnail_cache().peek(
-                        tk::CacheKey::media(mem.avatar_url));
+                    return avatar_image_(mem.avatar_url);
             }
         }
         return nullptr;

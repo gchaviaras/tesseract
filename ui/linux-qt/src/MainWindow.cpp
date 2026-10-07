@@ -4903,6 +4903,7 @@ void MainWindow::hide_mention_popup_()
 
 void MainWindow::apply_theme_ui_(const tk::Theme& t)
 {
+    tk::qt6::set_link_color(t.palette.accent);
     if (brandingSurface_)
     {
         brandingSurface_->set_theme(t);
@@ -4947,6 +4948,11 @@ void MainWindow::apply_theme_ui_(const tk::Theme& t)
         pal.setColor(QPalette::WindowText,
                      QColor(p.text_secondary.r, p.text_secondary.g,
                             p.text_secondary.b, p.text_secondary.a));
+        // Rich-text status links (statusLinkLabel_) take their colour from
+        // QPalette::Link, which otherwise stays Qt's dark blue.
+        const QColor link(p.accent.r, p.accent.g, p.accent.b, p.accent.a);
+        pal.setColor(QPalette::Link, link);
+        pal.setColor(QPalette::LinkVisited, link);
         statusBar()->setPalette(pal);
         statusBar()->setAutoFillBackground(true);
     }

@@ -90,7 +90,16 @@ QString initials_upper(std::string_view name, AvatarText text)
         .toUpper();
 }
 
+// Theme link colour (see set_link_color); invalid until the shell applies a
+// theme, in which case Qt's own anchor colour is left alone.
+QColor g_link_color;
+
 } // namespace
+
+void set_link_color(Color c)
+{
+    g_link_color = to_qcolor(c);
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 //  BlankTextObjectInterface — reserves a box for an is_image span's carrier
@@ -1543,7 +1552,11 @@ public:
                 else
                 {
                     t = QLatin1String("<a href=\"") + href +
-                        QLatin1String("\">") + t + QLatin1String("</a>");
+                        (g_link_color.isValid()
+                             ? QLatin1String("\" style=\"color:") +
+                                   g_link_color.name() + QLatin1String(";\">")
+                             : QLatin1String("\">")) +
+                        t + QLatin1String("</a>");
                 }
             }
             if (sp.is_emoji_run)

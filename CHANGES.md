@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-07
 
+- fix(qt): hyperlinks in the status bar and rich text use the theme accent instead of the desktop platform theme's link colour, which differed between KDE and GNOME and could be unreadable on the dark theme. Qt6 build + ctest 2284/2284
 - feat(avatars): animated avatars (GIF, animated WebP, APNG) now play everywhere an avatar is shown; Appearance › Timeline › "Animate avatars" (on by default) turns it off, and low power mode freezes them. Needs a server that serves animated thumbnails (Synapse does). Qt6 build + ctest 2284/2284 + cargo 779
 - feat(strip): the sidebar user strip shows your own avatar in the active room (set with `/myroomavatar`), falling back to your account avatar; it follows room switches and changes made from other clients. Qt6 build + ctest 2284/2284
 - feat(slash): `/myroomavatar <http(s) url>` fetches the image, center-crops it to a square of at most 512×512 and uploads it as your avatar in the room; animated GIF/WebP/APNG stay animated (re-encoded as animated WebP). Web URLs go through the same local-network guard as link previews. Qt6 build + ctest 2269/2269 + cargo 779

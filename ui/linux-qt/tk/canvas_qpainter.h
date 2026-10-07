@@ -30,6 +30,12 @@ std::unique_ptr<Canvas> make_canvas(QPainter& painter);
 
 std::unique_ptr<CanvasFactory> make_factory();
 
+// Colour for plain hyperlink runs in rich text. Without it Qt takes the link
+// colour from the desktop's platform theme (KDE/GNOME differ, and some are
+// unreadable on the app's dark theme). Baked into a layout when it is built,
+// so call before the views rebuild their text on a theme change.
+void set_link_color(Color c);
+
 // Wrap an already-decoded QImage as a tk::Image. The wrapper owns the
 // QImage by value; integration code can hand this directly to an
 // avatar / image provider lambda.

@@ -194,8 +194,6 @@ string(STRIP "${_opus_id}" _opus_id)
 target_link_libraries(tesseract_macos PRIVATE
     $<LINK_LIBRARY:WHOLE_ARCHIVE,tesseract_sdk_bridge_cxx,tesseract_client,tesseract_sdk_ffi-static>
     tesseract_tk
-    webp                                   # tk/canvas_cg_webp.cpp animated WebP decode
-    webpdemux                              # tk/canvas_cg_webp.cpp WebPAnimDecoder
     "-framework AppKit"
     "-framework Carbon"                   # tk/host_macos.mm TIS input sources (Cmd shortcuts on non-Latin layouts)
     "-framework Foundation"

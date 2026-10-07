@@ -1,4 +1,5 @@
 #include "app/SlashCommands.h"
+#include <tesseract/client.h>
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("available_commands lists me and shrug", "[slash]")
@@ -133,3 +134,37 @@ TEST_CASE("parse_slash_args keeps a quoted span as a single argument",
             std::vector<std::string>{"@bob:example.org", "come chat with us"});
 }
 
+
+TEST_CASE("/myroomavatar routes by argument scheme", "[slash][myroomavatar]")
+{
+    tesseract::Client client; // not logged in: SDK calls fail with "not logged in"
+
+    SECTION("a bare word is rejected before reaching the client")
+    {
+        auto r = tesseract::dispatch_compose_send(client, "!r:x", "/myroomavatar nonsense", "");
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.message == "expected an mxc:// or http(s) image URL");
+    }
+    SECTION("no argument is an error")
+    {
+        auto r = tesseract::dispatch_compose_send(client, "!r:x", "/myroomavatar   ", "");
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.message.find("no image URL provided") == 0);
+    }
+    SECTION("http(s) URLs (any case) reach the URL path")
+    {
+        for (const char* body : {"/myroomavatar https://example.com/a.png",
+                                 "/myroomavatar HTTP://example.com/a.gif  "})
+        {
+            auto r = tesseract::dispatch_compose_send(client, "!r:x", body, "");
+            REQUIRE_FALSE(r.ok);
+            REQUIRE(r.message == "not logged in");
+        }
+    }
+    SECTION("mxc URIs still reach the mxc path")
+    {
+        auto r = tesseract::dispatch_compose_send(client, "!r:x", "/myroomavatar mxc://srv/abc", "");
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.message == "not logged in");
+    }
+}

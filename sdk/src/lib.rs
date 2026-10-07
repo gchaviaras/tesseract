@@ -8,6 +8,7 @@
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+mod avatar_image;
 mod bot_commands;
 mod client;
 #[cfg(feature = "crash_handler")]
@@ -28,6 +29,7 @@ mod text_utils;
 mod url_preview;
 mod waveform;
 mod waveform_store;
+mod webp_anim;
 
 // Production cxx bridge — skipped during `cargo test` to avoid needing C++ linked.
 // Tests use the pure-Rust stub module below instead.

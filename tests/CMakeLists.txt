@@ -422,8 +422,6 @@ elseif(_TESSERACT_TEST_UI STREQUAL "macos")
         "${CMAKE_SOURCE_DIR}/ui/macos/tk/canvas_cg_webp.cpp"
         PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
     target_link_libraries(tesseract_tests PRIVATE
-        webp                      # canvas_cg_webp.cpp animated WebP decode
-        webpdemux                 # canvas_cg_webp.cpp WebPAnimDecoder
         "-framework CoreGraphics"
         "-framework CoreText"
         "-framework ImageIO"

@@ -2722,6 +2722,69 @@ impl ClientFfi {
         err("not logged in")
     }
 
+    /// `/myroomavatar <http(s) url>`: fetch the image through the SSRF-guarded
+    /// client, make it a square avatar of at most 512x512 (animations stay
+    /// animated as WebP), upload it and set it as the user's avatar in
+    /// `room_id`. Blocks — worker thread.
+    #[cfg(not(test))]
+    pub fn set_user_room_avatar_from_url(&self, room_id: &str, url: &str) -> OpResult {
+        use crate::net_guard::{guarded_client, guarded_get};
+
+        const AVATAR_MAX_SIDE: u32 = 512;
+        const AVATAR_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+        const AVATAR_MAX_FETCH_BYTES: usize = 20 * 1024 * 1024;
+
+        let Some(client) = self.client.clone() else {
+            return err("not logged in");
+        };
+        let parsed = match url::Url::parse(url) {
+            Ok(u) if matches!(u.scheme(), "http" | "https") => u,
+            _ => return err("not a valid http(s) URL"),
+        };
+        let Some(http) = guarded_client(AVATAR_FETCH_TIMEOUT) else {
+            return err("could not create HTTP client");
+        };
+        let mxc = {
+            let _guard = super::InFlightGuard::new(
+                &self.in_flight,
+                &self.handler,
+                #[cfg(debug_assertions)]
+                &self.in_flight_urls,
+                #[cfg(debug_assertions)]
+                "room_list/set_avatar_from_url".to_string(),
+            );
+            let fetched = self.block_on_cancellable(async {
+                let (resp, _) = guarded_get(&http, parsed).await?;
+                let bytes = super::media::read_body_capped(resp, url, AVATAR_MAX_FETCH_BYTES).await;
+                (!bytes.is_empty()).then_some(bytes)
+            });
+            let bytes = match fetched {
+                None => return err("cancelled"),
+                Some(None) => return err("could not download the image"),
+                Some(Some(b)) => b,
+            };
+            let (data, mime_str) = match crate::avatar_image::make_square_avatar(&bytes, AVATAR_MAX_SIDE) {
+                Ok(r) => r,
+                Err(e) => return err(e),
+            };
+            let mime: mime::Mime = match mime_str.parse() {
+                Ok(m) => m,
+                Err(_) => return err(format!("invalid mime type: {mime_str}")),
+            };
+            match self.block_on_cancellable(super::account::upload_bytes(&client, data, &mime)) {
+                None => return err("cancelled"),
+                Some(Ok(m)) => m.to_string(),
+                Some(Err(e)) => return err(e.to_string()),
+            }
+        };
+        self.set_user_room_avatar(room_id, &mxc)
+    }
+
+    #[cfg(test)]
+    pub fn set_user_room_avatar_from_url(&self, _room_id: &str, _url: &str) -> OpResult {
+        err("not logged in")
+    }
+
     /// Send an m.room.name state event to set the room's own display name
     /// (visible to all members) — distinct from set_user_room_display_name,
     /// which only sets the current user's per-room member override. Blocks —

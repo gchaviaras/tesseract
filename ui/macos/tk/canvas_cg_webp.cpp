@@ -24,8 +24,7 @@
 // path in canvas_cg.cpp unchanged — only content is_webp_data() identifies
 // as WebP ever reaches this file.
 
-#include <webp/decode.h>
-#include <webp/demux.h>
+#include <tesseract/webp_anim.h>
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
@@ -66,21 +65,8 @@ struct WebPCFRetained
     T get() const { return ref; }
 };
 
-struct WebPAnimDecoderDeleter
-{
-    void operator()(WebPAnimDecoder* d) const
-    {
-        if (d)
-        {
-            WebPAnimDecoderDelete(d);
-        }
-    }
-};
-using WebPAnimDecoderPtr =
-    std::unique_ptr<WebPAnimDecoder, WebPAnimDecoderDeleter>;
-
-// Wrap one decoded frame buffer (premultiplied BGRA, native byte order per
-// WebPAnimDecoderOptions::color_mode = MODE_bgrA below) into an owned (+1
+// Wrap one decoded frame buffer (premultiplied BGRA, native byte order — the
+// decoder is configured for MODE_bgrA in sdk/src/webp_anim.rs) into an owned (+1
 // retained, Create-rule) CGImageRef. `pixels` is copied into a fresh
 // CFDataRef — WebPAnimDecoderGetNext's buffer is only valid until the next
 // GetNext call or decoder teardown, so it cannot be wrapped directly the way
@@ -123,40 +109,24 @@ CGImageRef make_cgimage_from_bgra(const std::uint8_t* pixels, int width,
         provider.get(), nullptr, false, kCGRenderingIntentDefault);
 }
 
-// Owns a persistent copy of the compressed bytes (WebPData points at
-// borrowed memory, and a windowed session's decoder may be used long after
-// the caller's own buffer goes away — same reasoning as CGAnimSession owning
-// its retained CGImageSourceRef in canvas_cg.cpp) plus the WebPAnimDecoder
-// itself. Shared by both the whole-batch decode functions below and
+// Wraps tesseract::WebpAnimDecoder (libwebp's WebPAnimDecoder, owned by the
+// Rust SDK; it keeps its own copy of the compressed bytes, which a windowed
+// session's decoder needs long after the caller's own buffer goes away —
+// same reasoning as CGAnimSession owning its retained CGImageSourceRef in
+// canvas_cg.cpp). Shared by both the whole-batch decode functions below and
 // WebPAnimSession so there is exactly one place that knows how to pull a
-// frame + delay out of a WebPAnimDecoder and turn it into a CGImageRef.
+// frame + delay out of the decoder and turn it into a CGImageRef.
 class WebPDecodeHandle
 {
 public:
     explicit WebPDecodeHandle(std::span<const std::uint8_t> bytes)
-        : owned_bytes_(bytes.begin(), bytes.end())
+        : decoder_(bytes), source_bytes_(bytes.size())
     {
-        webp_data_.bytes = owned_bytes_.data();
-        webp_data_.size = owned_bytes_.size();
-        WebPAnimDecoderOptions options;
-        if (!WebPAnimDecoderOptionsInit(&options))
-        {
-            return; // decoder_ stays null — valid() reports false
-        }
-        options.color_mode = MODE_bgrA; // see make_cgimage_from_bgra
-        decoder_.reset(WebPAnimDecoderNew(&webp_data_, &options));
-        if (decoder_ && !WebPAnimDecoderGetInfo(decoder_.get(), &info_))
-        {
-            decoder_.reset(); // treat a GetInfo failure as invalid too
-        }
     }
 
-    bool valid() const { return decoder_ != nullptr; }
-    std::size_t total_frames() const { return info_.frame_count; }
-    bool has_more_frames() const
-    {
-        return decoder_ && WebPAnimDecoderHasMoreFrames(decoder_.get());
-    }
+    bool valid() const { return decoder_.valid(); }
+    std::size_t total_frames() const { return decoder_.frame_count(); }
+    bool has_more_frames() const { return decoder_.has_more_frames(); }
 
     // Decodes exactly one more frame from the decoder's own internal
     // sequential cursor. Returns nullptr (out_delay_ms left unchanged) once
@@ -168,22 +138,21 @@ public:
         {
             return nullptr;
         }
-        std::uint8_t* buf = nullptr;
         int timestamp_ms = 0;
-        if (!WebPAnimDecoderGetNext(decoder_.get(), &buf, &timestamp_ms) ||
-            !buf)
+        const std::uint8_t* buf = decoder_.next_frame(timestamp_ms);
+        if (!buf)
         {
             return nullptr;
         }
         CGImageRef cg = make_cgimage_from_bgra(
-            buf, static_cast<int>(info_.canvas_width),
-            static_cast<int>(info_.canvas_height));
+            buf, static_cast<int>(decoder_.canvas_width()),
+            static_cast<int>(decoder_.canvas_height()));
         if (!cg)
         {
             return nullptr;
         }
-        // GetNext's timestamp is cumulative ms since the animation started,
-        // not this frame's own duration.
+        // The timestamp is cumulative ms since the animation started, not
+        // this frame's own duration.
         const int delay_ms = timestamp_ms - last_timestamp_ms_;
         last_timestamp_ms_ = timestamp_ms;
         out_delay_ms = tk::normalize_frame_delay_ms(delay_ms);
@@ -197,10 +166,7 @@ public:
 
     void restart()
     {
-        if (decoder_)
-        {
-            WebPAnimDecoderReset(decoder_.get());
-        }
+        decoder_.reset();
         last_timestamp_ms_ = 0;
     }
 
@@ -208,16 +174,14 @@ public:
     // (current frame + previous-disposed).
     std::size_t memory_bytes() const
     {
-        return owned_bytes_.size() +
-               2u * static_cast<std::size_t>(info_.canvas_width) *
-                   info_.canvas_height * 4u;
+        return source_bytes_ +
+               2u * static_cast<std::size_t>(decoder_.canvas_width()) *
+                   decoder_.canvas_height() * 4u;
     }
 
 private:
-    std::vector<std::uint8_t> owned_bytes_;
-    WebPData webp_data_{};
-    WebPAnimInfo info_{};
-    WebPAnimDecoderPtr decoder_;
+    tesseract::WebpAnimDecoder decoder_;
+    std::size_t source_bytes_;
     int last_timestamp_ms_ = 0;
 };
 
@@ -281,7 +245,7 @@ private:
 
 bool is_webp_data(std::span<const std::uint8_t> bytes)
 {
-    return WebPGetInfo(bytes.data(), bytes.size(), nullptr, nullptr) != 0;
+    return tesseract::is_webp_data(bytes);
 }
 
 DecodedFrames decode_webp_bytes_libwebp(

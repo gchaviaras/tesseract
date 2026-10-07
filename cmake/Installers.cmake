@@ -52,12 +52,11 @@ if(APPLE)
     endif()
     set(CPACK_PACKAGE_FILE_NAME "Tesseract-${PROJECT_VERSION}-${_arch_tag}")
 
-    # libwebp (vendored for ui/macos's animated-WebP decode path, see root
-    # CMakeLists.txt) has no install-disable option and unconditionally
-    # installs its headers/static libs/pkgconfig files into the staging
-    # prefix's include/, lib/, and share/ trees. Nothing else installs into
-    # those three directories, so deleting them right before CPack archives
-    # the prefix drops libwebp's dev artifacts from the DMG without touching
+    # Vendored subprojects (Corrosion's CMake helper scripts, for one) install
+    # unconditionally into the staging prefix's include/, lib/, and share/
+    # trees, with no install-disable option. Nothing the app itself ships lives
+    # in those three directories, so deleting them right before CPack archives
+    # the prefix keeps those dev artifacts out of the DMG without touching
     # vendored code. This install(CODE) is appended after every other
     # install() in the build (ui/macos's included last, via add_subdirectory
     # above), so it runs last during `cmake --install`.

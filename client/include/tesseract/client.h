@@ -1623,6 +1623,13 @@ public:
     Result set_user_room_avatar(const std::string& room_id,
                                 const std::string& mxc_uri);
 
+    /// Like set_user_room_avatar, but takes an http(s) image URL: fetches it,
+    /// center-crops to a square of at most 512x512 (animations stay animated,
+    /// as WebP), uploads it and sets it as the avatar.
+    /// Blocks the calling thread — call from a worker thread.
+    Result set_user_room_avatar_from_url(const std::string& room_id,
+                                         const std::string& url);
+
     /// Send an m.room.name state event to set the room's own display name
     /// (visible to all members) — distinct from set_user_room_display_name,
     /// which only sets the current user's per-room member override.

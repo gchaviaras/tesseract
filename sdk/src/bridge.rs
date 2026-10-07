@@ -1,4 +1,5 @@
 pub use super::client::ClientFfi;
+pub use super::webp_anim::{webp_anim_decoder_new, webp_is_data, WebpAnimDecoder};
 
 pub fn client_create(log_level: &str, filter_override: &str) -> Box<ClientFfi> {
     Box::new(ClientFfi::new(log_level, filter_override))
@@ -1995,6 +1996,23 @@ pub mod ffi {
         /// Cheap, synchronous, no I/O — safe to call from the UI thread.
         fn classify_maps_link(text: &str) -> MapsLinkResult;
 
+        // ----- Animated WebP decode (macOS canvas) -----
+
+        type WebpAnimDecoder;
+        fn webp_is_data(bytes: &[u8]) -> bool;
+        /// Never throws; check `valid()`.
+        fn webp_anim_decoder_new(bytes: &[u8]) -> Box<WebpAnimDecoder>;
+        fn valid(self: &WebpAnimDecoder) -> bool;
+        fn canvas_width(self: &WebpAnimDecoder) -> u32;
+        fn canvas_height(self: &WebpAnimDecoder) -> u32;
+        fn frame_count(self: &WebpAnimDecoder) -> u32;
+        fn has_more_frames(self: &WebpAnimDecoder) -> bool;
+        fn next_frame(self: &mut WebpAnimDecoder) -> bool;
+        /// Premultiplied BGRA; valid until the next `next_frame`/`reset`.
+        fn frame_pixels(self: &WebpAnimDecoder) -> &[u8];
+        fn frame_timestamp_ms(self: &WebpAnimDecoder) -> i32;
+        fn reset(self: &mut WebpAnimDecoder);
+
         // ----- Markdown -----
 
         /// Convert `text` to Matrix HTML using pulldown-cmark.  Returns an
@@ -3583,6 +3601,7 @@ pub mod ffi {
         /// Set the current user's avatar in a specific room
         /// (m.room.member state event). Blocks — worker thread.
         fn set_user_room_avatar(self: &ClientFfi, room_id: &str, mxc_uri: &str) -> OpResult;
+        fn set_user_room_avatar_from_url(self: &ClientFfi, room_id: &str, url: &str) -> OpResult;
 
         /// Send an m.room.name state event to set the room's own display name
         /// (visible to all members) — distinct from set_user_room_display_name,

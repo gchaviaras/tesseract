@@ -73,9 +73,10 @@ std::optional<SpoilerMessage> build_spoiler_message(std::string_view args);
 //     with the text suffixed by `¯\_(ツ)_/¯`. With no trailing text it
 //     sends just the emoticon.
 //   - `/myroomnick <name>` → `Client::set_user_room_display_name`.
-//   - `/myroomavatar <mxc_uri>` → `Client::set_user_room_avatar` with an
-//     explicit mxc:// URI. The no-argument form `/myroomavatar` is NOT
-//     handled here — callers must intercept it before calling this function
+//   - `/myroomavatar <mxc_uri|http(s) url>` → `Client::set_user_room_avatar`
+//     for an mxc:// URI, or `Client::set_user_room_avatar_from_url` (fetch,
+//     square-crop to ≤512x512, upload) for a web URL. The no-argument form `/myroomavatar` is
+//     NOT handled here — callers must intercept it before calling this function
 //     and open a platform file picker instead.
 //
 // Slash commands not recognized here (e.g. `/foo`) fall through to

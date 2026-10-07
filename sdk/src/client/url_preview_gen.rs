@@ -176,7 +176,7 @@ impl ClientFfi {
 #[cfg(not(test))]
 mod net {
     use super::*;
-    use crate::net_guard::{guarded_client, is_disallowed_ip, url_is_fetchable, GUARDED_MAX_REDIRECTS};
+    use crate::net_guard::{guarded_client, guarded_get};
     use crate::url_preview::{decode_html, extract, is_html_content_type};
     use matrix_sdk::ruma::events::room::message::PreviewImage;
     use matrix_sdk::ruma::UInt;
@@ -283,33 +283,6 @@ mod net {
             tracing::debug!("url preview: direct fetch failed for {url}; falling back to homeserver");
         }
         homeserver_preview(client, encrypted, &url).await
-    }
-
-    /// GET `url` through the guarded client, walking redirects manually so
-    /// every hop's scheme and IP-literal host are vetted (the resolver
-    /// vets hostnames) and the peer address is re-checked. Returns the
-    /// final successful response and its URL.
-    async fn guarded_get(http: &reqwest::Client, url: Url) -> Option<(reqwest::Response, Url)> {
-        let mut current = url;
-        for _ in 0..=GUARDED_MAX_REDIRECTS {
-            if !url_is_fetchable(&current) {
-                return None;
-            }
-            let resp = http.get(current.clone()).send().await.ok()?;
-            if resp.remote_addr().is_some_and(|a| is_disallowed_ip(a.ip())) {
-                return None;
-            }
-            if resp.status().is_redirection() {
-                let location = resp.headers().get(reqwest::header::LOCATION)?.to_str().ok()?;
-                current = current.join(location).ok()?;
-                continue;
-            }
-            if !resp.status().is_success() {
-                return None;
-            }
-            return Some((resp, current));
-        }
-        None
     }
 
     fn content_type(resp: &reqwest::Response) -> String {

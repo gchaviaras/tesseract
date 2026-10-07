@@ -7,6 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cctype>
 
 namespace tesseract
@@ -190,7 +191,7 @@ const std::vector<SlashCommandDescriptor>& available_commands()
         {"slap",         "<target>",          tk::tr("Slap someone with a large trout")},
         {"spoiler",      "[(reason)] <text>", tk::tr("Send a hidden spoiler message")},
         {"myroomnick",   "<name>",            tk::tr("Set your display name in this room")},
-        {"myroomavatar", "[mxc_uri]",         tk::tr("Set your avatar in this room")},
+        {"myroomavatar", "[mxc_uri|url]",    tk::tr("Set your avatar in this room")},
         {"join",         "<#room:server>",    tk::tr("Join a room by alias or ID")},
         {"leave",        "",                  tk::tr("Leave the current room")},
         {"invite",       "<@user:server> [reason]", tk::tr("Invite a user to the current room")},
@@ -298,10 +299,11 @@ Result dispatch_compose_send(Client& client,
     if (const char* name = strip_prefix(body, "/myroomnick "))
         return client.set_user_room_display_name(room_id, name);
 
-    // `/myroomavatar <mxc_uri>` — set room-specific avatar to an explicit mxc.
+    // `/myroomavatar <mxc_uri | http(s) url>` — set the room-specific avatar
+    // from an mxc:// URI, or fetch + square + resize + upload a web image.
     // The no-argument form is intercepted by callers before this function is
     // reached; if it arrives here anyway (e.g. empty suffix from the popup),
-    // return an error rather than calling set_user_room_avatar with an empty URI.
+    // return an error rather than calling the client with an empty URI.
     if (const char* sfx = strip_prefix(body, "/myroomavatar"))
     {
         // sfx must start with whitespace or be end-of-string so that
@@ -309,10 +311,27 @@ Result dispatch_compose_send(Client& client,
         if (*sfx == '\0' || *sfx == ' ' || *sfx == '\t')
         {
             while (*sfx == ' ' || *sfx == '\t') ++sfx; // skip separator
-            if (*sfx == '\0')
-                return Result{false, tk::tr("no mxc_uri provided; use /myroomavatar "
+            std::string arg = sfx;
+            while (!arg.empty() && (arg.back() == ' ' || arg.back() == '\t'))
+                arg.pop_back();
+            if (arg.empty())
+                return Result{false, tk::tr("no image URL provided; use /myroomavatar "
                                             "alone to open the image picker")};
-            return client.set_user_room_avatar(room_id, sfx);
+            auto starts_with_ci = [&](std::string_view prefix)
+            {
+                return arg.size() >= prefix.size() &&
+                       std::equal(prefix.begin(), prefix.end(), arg.begin(),
+                                  [](char a, char b)
+                                  {
+                                      return std::tolower(static_cast<unsigned char>(a)) ==
+                                             std::tolower(static_cast<unsigned char>(b));
+                                  });
+            };
+            if (starts_with_ci("mxc://"))
+                return client.set_user_room_avatar(room_id, arg);
+            if (starts_with_ci("http://") || starts_with_ci("https://"))
+                return client.set_user_room_avatar_from_url(room_id, arg);
+            return Result{false, tk::tr("expected an mxc:// or http(s) image URL")};
         }
     }
 

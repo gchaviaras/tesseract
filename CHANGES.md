@@ -7,6 +7,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-07
 
+- feat(slash): `/myroomavatar <http(s) url>` fetches the image, center-crops it to a square of at most 512×512 and uploads it as your avatar in the room; animated GIF/WebP/APNG stay animated (re-encoded as animated WebP). Web URLs go through the same local-network guard as link previews. Qt6 build + ctest 2269/2269 + cargo 779
+- build(macos): the vendored libwebp is gone; animated WebP decode uses the libwebp bundled with the Rust SDK (`libwebp-sys`) through a new `WebpAnimDecoder` wrapper. Qt6 build + ctest + cargo tests (decoder tested in Rust); macOS build not run
 - refactor(shells): room selection, tab bar, sign-out, video thumbnails, attachment delivery and the pop-out composer popups moved from per-shell copies into shared code, as did the Qt6/GTK4 autostart and UnifiedPush logic. Push gateway URLs are validated the same on both Linux shells, and Qt6/GTK4 pop-outs now send typing notices. Qt6 build + ctest 2266/2266
 - fix(macos): one-line elided text with a mention pill no longer measures wider than its max width, and the Keychain secret store keeps its in-memory sessions in step when a save or remove fails to persist. The F1 shortcuts test now expects F1 to be unbound on macOS. macOS x86_64 Release build + ctest 2254/2254
 - feat(threads): bridged rooms show the threads button when the bridge advertises thread support in `com.beeper.room_features` (mautrix bridgev2, e.g. Discord guild channels); support is cached per room alongside the bridge status. macOS x86_64 Release build + ctest 2254/2254, cargo 771

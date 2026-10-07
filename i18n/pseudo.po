@@ -1210,8 +1210,12 @@ msgid "slaps {0} around a bit with a large trout"
 msgstr "[slàps {0} àröùñd à bït wïth à làrgé tröùtxxxxxxxx]"
 
 #: ui/shared/app/SlashCommands.cpp:313
-msgid "no mxc_uri provided; use /myroomavatar alone to open the image picker"
-msgstr "[ñö mxç_ùrï prövïdéd; ùsé /myröömàvàtàr àlöñé tö öpéñ thé ïmàgé pïçkérxxxxxxxxxxxxx]"
+msgid "no image URL provided; use /myroomavatar alone to open the image picker"
+msgstr "[ñö ïmàgé ÙRL prövïdéd; ùsé /myröömàvàtàr àlöñé tö öpéñ thé ïmàgé pïçkérxxxxxxxxxxxxx]"
+
+#: ui/shared/app/SlashCommands.cpp:330
+msgid "expected an mxc:// or http(s) image URL"
+msgstr "[éxpéçtéd àñ mxç:// ör http(s) ïmàgé ÙRLxxxxxxxxx]"
 
 #: ui/shared/app/SlashCommands.cpp:529 ui/shared/app/SlashCommands.cpp:536
 #: ui/shared/app/SlashCommands.cpp:553 ui/shared/app/SlashCommands.cpp:556

@@ -3525,8 +3525,12 @@ msgid "slaps {0} around a bit with a large trout"
 msgstr "schlägt {0} mit einer großen Forelle"
 
 #: ui/shared/app/SlashCommands.cpp:312
-msgid "no mxc_uri provided; use /myroomavatar alone to open the image picker"
-msgstr "keine mxc_uri angegeben; verwende /myroomavatar ohne Argument, um die Bildauswahl zu öffnen"
+msgid "no image URL provided; use /myroomavatar alone to open the image picker"
+msgstr "keine Bild-URL angegeben; verwende /myroomavatar ohne Argument, um die Bildauswahl zu öffnen"
+
+#: ui/shared/app/SlashCommands.cpp:330
+msgid "expected an mxc:// or http(s) image URL"
+msgstr "mxc://- oder http(s)-Bild-URL erwartet"
 
 #: ui/shared/tk/i18n.cpp:633
 msgid "Jan"

@@ -191,6 +191,33 @@ pub(crate) fn guarded_client(total_timeout: Duration) -> Option<reqwest::Client>
         .ok()
 }
 
+/// GET `url` through the guarded client, walking redirects manually so
+/// every hop's scheme and IP-literal host are vetted (the resolver
+/// vets hostnames) and the peer address is re-checked. Returns the
+/// final successful response and its URL.
+pub(crate) async fn guarded_get(http: &reqwest::Client, url: Url) -> Option<(reqwest::Response, Url)> {
+    let mut current = url;
+    for _ in 0..=GUARDED_MAX_REDIRECTS {
+        if !url_is_fetchable(&current) {
+            return None;
+        }
+        let resp = http.get(current.clone()).send().await.ok()?;
+        if resp.remote_addr().is_some_and(|a| is_disallowed_ip(a.ip())) {
+            return None;
+        }
+        if resp.status().is_redirection() {
+            let location = resp.headers().get(reqwest::header::LOCATION)?.to_str().ok()?;
+            current = current.join(location).ok()?;
+            continue;
+        }
+        if !resp.status().is_success() {
+            return None;
+        }
+        return Some((resp, current));
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

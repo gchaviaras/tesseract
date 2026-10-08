@@ -420,9 +420,12 @@ RoomWindow::RoomWindow(MainWindow* parent, const std::string& room_id)
 
     room_view_->on_link_hovered = [this](const std::string& url)
     {
-        if (surface_)
-            surface_->set_cursor(url.empty() ? tk::win32::Cursor::Default
-                                             : tk::win32::Cursor::Pointer);
+        if (!surface_) return;
+        using HC = tesseract::views::MessageListView::HoverCursor;
+        const HC hc = tesseract::views::MessageListView::hover_cursor_for(url);
+        surface_->set_cursor(hc == HC::Text      ? tk::win32::Cursor::IBeam
+                             : hc == HC::Pointer ? tk::win32::Cursor::Pointer
+                                                 : tk::win32::Cursor::Default);
     };
 
     // Force a WM_NCCALCSIZE recompute before the window is shown, in case

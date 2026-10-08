@@ -3739,20 +3739,23 @@ private:
             };
         }
         {
-            auto hovered = std::make_shared<bool>(false);
+            // 0 = none pushed, 1 = pointing hand, 2 = I-beam.
+            auto hovered = std::make_shared<int>(0);
             _mainApp->room_view()->on_link_hovered =
                 [hovered](const std::string& url)
             {
-                if (!url.empty() && !*hovered)
-                {
-                    [[NSCursor pointingHandCursor] push];
-                    *hovered = true;
-                }
-                else if (url.empty() && *hovered)
-                {
+                const auto hc = tesseract::views::MessageListView::hover_cursor_for(url);
+                const int want = hc == tesseract::views::MessageListView::HoverCursor::Text ? 2
+                                 : hc == tesseract::views::MessageListView::HoverCursor::Pointer ? 1 : 0;
+                if (want == *hovered)
+                    return;
+                if (*hovered != 0)
                     [NSCursor pop];
-                    *hovered = false;
-                }
+                if (want == 2)
+                    [[NSCursor IBeamCursor] push];
+                else if (want == 1)
+                    [[NSCursor pointingHandCursor] push];
+                *hovered = want;
             };
         }
         {

@@ -584,8 +584,11 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             {
                 if (sfp)
                 {
-                    sfp->setCursor(url.empty() ? Qt::ArrowCursor
-                                               : Qt::PointingHandCursor);
+                    using HC = tesseract::views::MessageListView::HoverCursor;
+                    const HC hc = tesseract::views::MessageListView::hover_cursor_for(url);
+                    sfp->setCursor(hc == HC::Text      ? Qt::IBeamCursor
+                                   : hc == HC::Pointer ? Qt::PointingHandCursor
+                                                       : Qt::ArrowCursor);
                 }
             };
             mainApp_->space_root()->on_link_hovered =

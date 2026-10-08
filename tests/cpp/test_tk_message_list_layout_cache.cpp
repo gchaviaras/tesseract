@@ -559,6 +559,47 @@ TEST_CASE("MessageListView hit-tests a hyperlink inside a table cell",
     CHECK(saw);
 }
 
+TEST_CASE("MessageListView reports a text hover token over selectable body text",
+          "[message_list][layout_cache][cursor]")
+{
+    using HC = MessageListView::HoverCursor;
+    CHECK(MessageListView::hover_cursor_for("") == HC::Default);
+    CHECK(MessageListView::hover_cursor_for("https://example.com") ==
+          HC::Pointer);
+    CHECK(MessageListView::hover_cursor_for("text://") == HC::Text);
+
+    TkMessageListLayoutCacheStage st;
+    MessageListView v;
+    std::string hovered;
+    v.on_link_hovered = [&](const std::string& u) { hovered = u; };
+    MessageRowData m;
+    m.kind        = MessageRowData::Kind::Text;
+    m.event_id    = "$t";
+    m.sender      = "@alice:example.org";
+    m.sender_name = "Alice";
+    m.body        = "hello selectable world";
+    v.set_messages({m}, false);
+    st.run(v, {0, 0, 600, 400});
+
+    const tk::Rect rr = v.row_world_rect(0);
+    v.on_pointer_move({rr.x + rr.w * 0.5f, rr.y + rr.h * 0.5f});
+    st.run(v, {0, 0, 600, 400});
+
+    bool saw_text = false;
+    for (float dy = 2.0f; dy < rr.h && !saw_text; dy += 2.0f)
+        for (float dx = 2.0f; dx < rr.w && !saw_text; dx += 2.0f)
+        {
+            v.on_pointer_move({rr.x + dx, rr.y + dy});
+            if (hovered == "text://")
+                saw_text = true;
+        }
+    CHECK(saw_text);
+
+    // The empty right-hand side of the row is not selectable text.
+    v.on_pointer_move({rr.x + rr.w - 5.0f, rr.y + rr.h * 0.5f});
+    CHECK(hovered != "text://");
+}
+
 // ── message_layout ──────────────────────────────────────────────────────
 
 namespace

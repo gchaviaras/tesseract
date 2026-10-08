@@ -286,6 +286,40 @@ static int char_at_world(const LinkLayout& le, tk::Point world)
         {world.x - le.origin.x, world.y - le.origin.y});
 }
 
+// True when `ll` (layout-local) lies inside one of the layout's line boxes:
+// each rect from selection_rects() over the whole text spans a line's full
+// height and the width of its text. Per-character boxes flicker between
+// glyphs and words, and char_index_at() returns the nearest character even
+// far from any text, so neither works for the hover cursor.
+static bool over_text_line(const tk::TextLayout& layout, tk::Point ll)
+{
+    constexpr int kWholeText = 1 << 30; // backends clamp to the text length
+    for (const auto& r : layout.selection_rects(0, kWholeText))
+        if (ll.x >= r.x && ll.x < r.x + r.w && ll.y >= r.y &&
+            ll.y < r.y + r.h)
+            return true;
+    return false;
+}
+
+// Hover-cursor counterpart of char_at_world(): true only directly over text.
+static bool text_at_world(const LinkLayout& le, tk::Point world)
+{
+    if (!le.sections.empty())
+    {
+        for (const auto& sec : le.sections)
+        {
+            if (!sec.layout) continue;
+            tk::Point ll{world.x - sec.origin.x, world.y - sec.origin.y};
+            if (ll.y < 0.0f || ll.y >= sec.height) continue;
+            if (over_text_line(*sec.layout, ll)) return true;
+        }
+        return false;
+    }
+    if (!le.layout) return false;
+    return over_text_line(*le.layout,
+                      {world.x - le.origin.x, world.y - le.origin.y});
+}
+
 // If `url` is a matrix.to (or matrix:) *user* permalink, return the Matrix
 // user id (e.g. "@alice:example.org"); otherwise return "". Delegates to
 // Client::parse_matrix_link so decoding/validation matches the pill-kind
@@ -8920,6 +8954,22 @@ bool MessageListView::on_pointer_move(tk::Point local)
                     break;
                 }
             }
+        }
+        // Selectable body text: a press here starts a drag-selection (same
+        // predicate on_pointer_down uses), so report the text sentinel and
+        // let the shell show an I-beam. Keep it while a selection drag is in
+        // progress so the cursor doesn't flicker as the pointer leaves text.
+        if (new_link_url.empty())
+        {
+            bool over_text = press_sel_;
+            std::size_t hrow = hovered_row_geom_.row_index;
+            if (!over_text && !over_active_pill && hrow < messages_.size())
+            {
+                const LinkLayout* le = link_cache_.peek(messages_[hrow].event_id);
+                over_text = le && text_at_world(*le, world);
+            }
+            if (over_text)
+                new_link_url = std::string{kTextHoverToken};
         }
     }
     if (new_link_url != hover_link_url_)

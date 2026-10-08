@@ -120,7 +120,7 @@ private:
     // Composer popups (@mention, /command, :shortcode:, /gif). Declared after
     // surface_ so the popups are destroyed before the Host they came from.
     std::unique_ptr<tesseract::ComposerPopups> popups_;
-    bool link_hovered_ = false;
+    int link_hovered_ = 0;
     bool window_closed_ = false;
 };
 
@@ -461,16 +461,19 @@ MacRoomWindow::MacRoomWindow(tesseract::ShellBase* shell,
 
     room_view_->on_link_hovered = [this](const std::string& url)
     {
-        if (!url.empty() && !link_hovered_)
-        {
-            [[NSCursor pointingHandCursor] push];
-            link_hovered_ = true;
-        }
-        else if (url.empty() && link_hovered_)
-        {
+        // 0 = none pushed, 1 = pointing hand, 2 = I-beam.
+        const auto hc = tesseract::views::MessageListView::hover_cursor_for(url);
+        const int want = hc == tesseract::views::MessageListView::HoverCursor::Text ? 2
+                         : hc == tesseract::views::MessageListView::HoverCursor::Pointer ? 1 : 0;
+        if (want == link_hovered_)
+            return;
+        if (link_hovered_ != 0)
             [NSCursor pop];
-            link_hovered_ = false;
-        }
+        if (want == 2)
+            [[NSCursor IBeamCursor] push];
+        else if (want == 1)
+            [[NSCursor pointingHandCursor] push];
+        link_hovered_ = want;
     };
 
     // Wire up the ObjC window controller.

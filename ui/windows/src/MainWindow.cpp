@@ -2146,8 +2146,12 @@ void MainWindow::on_create(HWND hwnd)
         room_view_->on_link_hovered = [this](const std::string& url)
         {
             if (!main_app_surface_) return;
-            main_app_surface_->set_cursor(url.empty() ? tk::win32::Cursor::Default
-                                                      : tk::win32::Cursor::Pointer);
+            using HC = tesseract::views::MessageListView::HoverCursor;
+            const HC hc = tesseract::views::MessageListView::hover_cursor_for(url);
+            main_app_surface_->set_cursor(
+                hc == HC::Text      ? tk::win32::Cursor::IBeam
+                : hc == HC::Pointer ? tk::win32::Cursor::Pointer
+                                    : tk::win32::Cursor::Default);
         };
         main_app_->space_root()->on_link_hovered = [this](const std::string& url)
         {

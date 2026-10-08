@@ -36,6 +36,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -646,6 +647,17 @@ public:
     // non-empty while hovering, empty when the pointer leaves. Used by the
     // shell to switch the cursor to/from a pointing-hand cursor.
     std::function<void(const std::string& url)> on_link_hovered;
+
+    // Sentinel reported through on_link_hovered while the pointer is over
+    // selectable body text (never a real URL). Shells map the hover string
+    // to a cursor via hover_cursor_for() rather than comparing it directly.
+    static constexpr std::string_view kTextHoverToken = "text://";
+    enum class HoverCursor { Default, Pointer, Text };
+    static HoverCursor hover_cursor_for(const std::string& url)
+    {
+        if (url.empty()) return HoverCursor::Default;
+        return url == kTextHoverToken ? HoverCursor::Text : HoverCursor::Pointer;
+    }
 
     // Fires when the user clicks the quote block of a reply to scroll to
     // the original message. If the event is currently loaded the view scrolls

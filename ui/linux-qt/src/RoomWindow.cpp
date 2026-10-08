@@ -326,9 +326,12 @@ RoomWindow::RoomWindow(MainWindow* parent_shell, const std::string& room_id)
 
     room_view_->on_link_hovered = [this](const std::string& url)
     {
-        if (surface_)
-            surface_->setCursor(url.empty() ? Qt::ArrowCursor
-                                            : Qt::PointingHandCursor);
+        if (!surface_) return;
+        using HC = tesseract::views::MessageListView::HoverCursor;
+        const HC hc = tesseract::views::MessageListView::hover_cursor_for(url);
+        surface_->setCursor(hc == HC::Text      ? Qt::IBeamCursor
+                            : hc == HC::Pointer ? Qt::PointingHandCursor
+                                                : Qt::ArrowCursor);
     };
 
     show();

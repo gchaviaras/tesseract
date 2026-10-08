@@ -1534,9 +1534,12 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         };
         room_view_->on_link_hovered = [this](const std::string& url)
         {
+            using HC = tesseract::views::MessageListView::HoverCursor;
+            const HC hc = tesseract::views::MessageListView::hover_cursor_for(url);
             GtkWidget* w = main_app_surface_->widget();
-            gtk_widget_set_cursor_from_name(w, url.empty() ? "default"
-                                                           : "pointer");
+            gtk_widget_set_cursor_from_name(
+                w, hc == HC::Text ? "text" : hc == HC::Pointer ? "pointer"
+                                                               : "default");
         };
         main_app_->space_root()->on_link_hovered = [this](const std::string& url)
         {

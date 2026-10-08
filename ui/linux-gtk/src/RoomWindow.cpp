@@ -434,8 +434,11 @@ RoomWindow::RoomWindow(MainWindow* parent_shell, const std::string& room_id)
 
     room_view_->on_link_hovered = [this](const std::string& url)
     {
-        gtk_widget_set_cursor_from_name(surface_->widget(),
-                                        url.empty() ? "default" : "pointer");
+        using HC = tesseract::views::MessageListView::HoverCursor;
+        const HC hc = tesseract::views::MessageListView::hover_cursor_for(url);
+        gtk_widget_set_cursor_from_name(
+            surface_->widget(),
+            hc == HC::Text ? "text" : hc == HC::Pointer ? "pointer" : "default");
     };
 
     // "destroy" fires when the GtkWindow is destroyed (user clicks X or

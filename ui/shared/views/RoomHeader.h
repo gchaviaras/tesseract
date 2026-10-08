@@ -139,6 +139,15 @@ public:
     // midnight UTC on the selected day). Replaces on_jump_to_date_requested.
     std::function<void(std::uint64_t ts_ms)> on_date_jump;
 
+    // Fired each time the date picker opens, so the owner can refresh the
+    // cap via set_jump_to_date_max_ts().
+    std::function<void()> on_date_picker_opened;
+
+    // Latest day the picker offers: the local day of `ts_ms` (the room's
+    // newest content event), never later than today. 0 = no cap beyond today.
+    // Applies immediately if the picker is open.
+    void set_jump_to_date_max_ts(std::uint64_t ts_ms);
+
     // Fired when the user clicks the threads button.
     std::function<void()> on_threads_requested;
 
@@ -220,6 +229,8 @@ private:
     // Helpers.
     void show_date_picker_();
     void hide_date_picker_();
+    void apply_picker_max_();
+    std::uint64_t jump_max_ts_ = 0;
     static std::uint64_t date_to_midnight_utc_ms_(int year, int month, int day);
 
 public:

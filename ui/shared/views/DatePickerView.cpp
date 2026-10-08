@@ -75,6 +75,10 @@ void DatePickerView::set_max_date(int year, int month, int day)
     max_year_  = year;
     max_month_ = month;
     max_day_   = day;
+    // A cap that moves while the picker is open (or between opens) must pull
+    // the shown month and cursor back inside it; set_cursor_ clamps.
+    if (cursor_year_ != 0)
+        set_cursor_(cursor_year_, cursor_month_, cursor_day_);
 }
 
 void DatePickerView::open_at(tk::Rect world_rect)

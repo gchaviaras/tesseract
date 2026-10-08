@@ -551,6 +551,7 @@ public:
     std::function<void()> on_near_bottom;
     std::function<void()> on_return_to_live;
     std::function<void(std::uint64_t ts_ms)> on_date_jump;
+    std::function<void()> on_date_picker_opened;
     std::function<void(std::string original_event_id)> on_scroll_to_original;
     // The timeline's "Jump to first unread" found the divider outside the
     // loaded window; `fully_read_event_id` is the room's m.fully_read event.

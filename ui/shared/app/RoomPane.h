@@ -480,6 +480,9 @@ public:
     // Read the room's m.fully_read event id off the UI thread and hand it to
     // the timeline's unread pill.
     void refresh_unread_marker_();
+    // Asks the SDK for the room's newest content event and caps the header's
+    // jump-to-date picker at that day.
+    void refresh_jump_to_date_cap_();
     // The unread pill's jump when the divider isn't in the timeline view.
     void jump_to_unread_(const std::string& fully_read_event_id);
     void send_typing_notice_(bool typing);

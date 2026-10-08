@@ -2357,6 +2357,38 @@ impl ClientFfi {
         crate::ffi::FullyReadMarkerFfi { event_id: String::new(), ts_ms: 0 }
     }
 
+    /// Timestamp (ms) of the newest content event in the room's in-memory
+    /// event cache, or 0 when there is none / the client is not logged in.
+    /// Caps the jump-to-date picker (see `is_dated_content_event`).
+    #[cfg(not(test))]
+    pub fn last_content_event_ts(&self, room_id: &str) -> u64 {
+        let _enter = self.rt.enter();
+        let Some(client) = self.client.as_ref() else {
+            return 0;
+        };
+        let Ok((_, room)) = require_room(client, room_id) else {
+            return 0;
+        };
+        let fut = async {
+            let (cache, _handles) = room.event_cache().await.ok()?;
+            cache
+                .rfind_map_event_in_memory_by(|ev| {
+                    is_dated_content_event(ev)
+                        .then(|| ev.timestamp().map(|ts| u64::from(ts.get())))
+                })
+                .await
+                .ok()
+                .flatten()
+                .flatten()
+        };
+        self.block_on_cancellable(fut).flatten().unwrap_or(0)
+    }
+
+    #[cfg(test)]
+    pub fn last_content_event_ts(&self, _room_id: &str) -> u64 {
+        0
+    }
+
     /// Send public `m.read` and private `m.read.private` receipts for the
     /// latest cached event in `room_id`, plus `m.fully_read` when
     /// `include_fully_read` is set. Clears the unread count without
@@ -3209,4 +3241,107 @@ async fn send_thread_receipt_pair(
     .await?;
     room.send_single_receipt(ReceiptType::ReadPrivate, ReceiptThread::Thread(root), target)
         .await
+}
+
+/// Whether `ev` is a message-like event the user would call content: a
+/// message (any msgtype except a verification request, edits included), a
+/// sticker, or an undecryptable event. State events, reactions, redactions,
+/// redacted events, polls and call notifications are not.
+fn is_dated_content_event(ev: &matrix_sdk::deserialized_responses::TimelineEvent) -> bool {
+    use matrix_sdk::deserialized_responses::TimelineEventKind;
+    use matrix_sdk::ruma::events::{
+        room::message::MessageType, AnyMessageLikeEventContent, AnySyncTimelineEvent,
+    };
+
+    if matches!(ev.kind, TimelineEventKind::UnableToDecrypt { .. }) {
+        return true;
+    }
+    let Ok(AnySyncTimelineEvent::MessageLike(ev)) = ev.raw().deserialize() else {
+        return false;
+    };
+    match ev.original_content() {
+        Some(AnyMessageLikeEventContent::RoomMessage(c)) => {
+            !matches!(c.msgtype, MessageType::VerificationRequest(_))
+        }
+        Some(AnyMessageLikeEventContent::Sticker(_))
+        | Some(AnyMessageLikeEventContent::RoomEncrypted(_)) => true,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod content_event_tests {
+    use super::is_dated_content_event;
+    use matrix_sdk::deserialized_responses::TimelineEvent;
+    use matrix_sdk::ruma::serde::Raw;
+
+    fn ev(json: serde_json::Value) -> TimelineEvent {
+        let mut v = json;
+        v["event_id"] = "$e:x".into();
+        v["sender"] = "@a:x".into();
+        v["origin_server_ts"] = 1_700_000_000_000u64.into();
+        TimelineEvent::from_plaintext(Raw::from_json_string(v.to_string()).unwrap())
+    }
+    fn msg(content: serde_json::Value) -> TimelineEvent {
+        ev(serde_json::json!({"type": "m.room.message", "content": content}))
+    }
+
+    #[test]
+    fn messages_stickers_and_edits_count() {
+        assert!(is_dated_content_event(&msg(
+            serde_json::json!({"msgtype": "m.text", "body": "hi"})
+        )));
+        assert!(is_dated_content_event(&msg(
+            serde_json::json!({"msgtype": "m.image", "body": "a.png", "url": "mxc://x/y"})
+        )));
+        assert!(is_dated_content_event(&msg(serde_json::json!({
+            "msgtype": "m.text", "body": "* hi",
+            "m.new_content": {"msgtype": "m.text", "body": "hi"},
+            "m.relates_to": {"rel_type": "m.replace", "event_id": "$o:x"}
+        }))));
+        assert!(is_dated_content_event(&ev(serde_json::json!({
+            "type": "m.sticker",
+            "content": {"body": "s", "url": "mxc://x/s", "info": {}}
+        }))));
+    }
+
+    #[test]
+    fn encrypted_counts() {
+        assert!(is_dated_content_event(&ev(serde_json::json!({
+            "type": "m.room.encrypted",
+            "content": {"algorithm": "m.megolm.v1.aes-sha2", "ciphertext": "x",
+                        "sender_key": "k", "device_id": "D", "session_id": "S"}
+        }))));
+    }
+
+    #[test]
+    fn non_content_is_ignored() {
+        assert!(!is_dated_content_event(&msg(serde_json::json!({
+            "msgtype": "m.key.verification.request", "body": "v",
+            "from_device": "D", "methods": [], "to": "@b:x"
+        }))));
+        assert!(!is_dated_content_event(&ev(serde_json::json!({
+            "type": "m.reaction",
+            "content": {"m.relates_to": {"rel_type": "m.annotation", "event_id": "$o:x", "key": "x"}}
+        }))));
+        assert!(!is_dated_content_event(&ev(serde_json::json!({
+            "type": "m.room.redaction", "content": {}, "redacts": "$o:x"
+        }))));
+        // Redacted message: content stripped.
+        assert!(!is_dated_content_event(&ev(serde_json::json!({
+            "type": "m.room.message", "content": {},
+            "unsigned": {"redacted_because": {"type": "m.room.redaction", "content": {},
+                "event_id": "$r:x", "sender": "@a:x", "origin_server_ts": 1, "redacts": "$e:x"}}
+        }))));
+        assert!(!is_dated_content_event(&ev(serde_json::json!({
+            "type": "m.room.member", "state_key": "@a:x", "content": {"membership": "join"}
+        }))));
+        assert!(!is_dated_content_event(&ev(serde_json::json!({
+            "type": "org.matrix.msc3381.poll.start",
+            "content": {"org.matrix.msc3381.poll.start": {"question": {"org.matrix.msc1767.text": "q"},
+                "kind": "org.matrix.msc3381.poll.disclosed", "max_selections": 1,
+                "answers": [{"id": "a", "org.matrix.msc1767.text": "a"}]},
+                "org.matrix.msc1767.text": "q"}
+        }))));
+    }
 }

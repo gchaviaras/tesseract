@@ -721,3 +721,22 @@ TEST_CASE("Keyboard movement to the top of a list fires the near-top hook",
     list->on_key_down({Key::Home});
     CHECK(near_top >= 1);
 }
+
+TEST_CASE("DatePickerView: a past max date caps the shown month and cursor",
+          "[tk][datepicker]")
+{
+    auto picker = std::make_unique<DatePickerView>();
+    picker->set_max_date(2020, 3, 14);
+    picker->open_at({0, 0, DatePickerView::kWidth, DatePickerView::kHeight});
+    CHECK(picker->view_year() == 2020);
+    CHECK(picker->view_month() == 3);
+    CHECK(picker->cursor_year() == 2020);
+    CHECK(picker->cursor_month() == 3);
+    CHECK(picker->cursor_day() == 14);
+
+    // A cap that moves earlier while open re-clamps the view and cursor.
+    picker->set_max_date(2019, 11, 2);
+    CHECK(picker->view_year() == 2019);
+    CHECK(picker->view_month() == 11);
+    CHECK(picker->cursor_day() == 2);
+}

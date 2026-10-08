@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <ctime>
+#include <tuple>
 
 namespace tesseract::views
 {
@@ -1081,9 +1083,7 @@ void RoomHeader::show_date_picker_()
     if (!calendar_btn_ || !date_picker_)
         return;
 
-    int ty, tm, td;
-    DatePickerView::today(ty, tm, td);
-    date_picker_->set_max_date(ty, tm, td);
+    apply_picker_max_();
 
     // Position the picker below the calendar button, right-aligned to its
     // right edge; clamp so it never overlaps the header's left edge.
@@ -1093,6 +1093,41 @@ void RoomHeader::show_date_picker_()
     date_picker_->open_at(
         {px, btn.y + btn.h + 4.0f, DatePickerView::kWidth, DatePickerView::kHeight});
     date_picker_visible_ = true;
+    if (on_date_picker_opened)
+        on_date_picker_opened();
+}
+
+void RoomHeader::set_jump_to_date_max_ts(std::uint64_t ts_ms)
+{
+    if (jump_max_ts_ == ts_ms)
+        return;
+    jump_max_ts_ = ts_ms;
+    if (date_picker_)
+        apply_picker_max_();
+}
+
+void RoomHeader::apply_picker_max_()
+{
+    int y, m, d;
+    DatePickerView::today(y, m, d);
+    if (jump_max_ts_ != 0)
+    {
+        const std::time_t t = static_cast<std::time_t>(jump_max_ts_ / 1000);
+        std::tm lt{};
+#ifdef _WIN32
+        localtime_s(&lt, &t);
+#else
+        localtime_r(&t, &lt);
+#endif
+        const int cy = lt.tm_year + 1900, cm = lt.tm_mon + 1, cd = lt.tm_mday;
+        if (std::tie(cy, cm, cd) < std::tie(y, m, d))
+        {
+            y = cy;
+            m = cm;
+            d = cd;
+        }
+    }
+    date_picker_->set_max_date(y, m, d);
 }
 
 void RoomHeader::hide_date_picker_()

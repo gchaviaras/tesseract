@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-08**. 2330 C++ + 794 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-08**. 2331 C++ + 798 Rust tests.
 
 > **Sender status in the timeline (2026-10-06).** Optional Appearance › Timeline
 > setting shows each sender's MSC4426 status emoji after their name (Classic

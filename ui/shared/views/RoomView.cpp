@@ -783,6 +783,11 @@ void RoomView::wire_internal_callbacks()
         if (on_date_jump)
             on_date_jump(ts_ms);
     };
+    header_->on_date_picker_opened = [this]
+    {
+        if (on_date_picker_opened)
+            on_date_picker_opened();
+    };
     header_->on_threads_requested = [this]
     {
         if (on_threads_button_clicked)

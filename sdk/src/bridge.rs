@@ -2926,6 +2926,10 @@ pub mod ffi {
         /// and, when the event cache holds that event, its timestamp.
         fn fully_read_marker(self: &ClientFfi, room_id: &str) -> FullyReadMarkerFfi;
 
+        /// Timestamp (ms) of the newest content event (message, sticker,
+        /// undecryptable) in the room's in-memory event cache; 0 when none.
+        fn last_content_event_ts(self: &ClientFfi, room_id: &str) -> u64;
+
         /// Send public + private MSC3771 **threaded** read receipts for the
         /// thread rooted at `thread_root_id`. This is the only call that
         /// clears a thread's `ThreadInfo::unread` flag; the unthreaded receipt

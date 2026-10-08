@@ -43,6 +43,7 @@ public:
 
     // Restrict selectable dates to at most (year, month, day) inclusive.
     // Defaults to today (set on the first open_at() call if never called).
+    // Re-clamps the shown month and keyboard cursor into the new range.
     void set_max_date(int year, int month, int day);
 
     // Get today's local date — exposed so callers (RoomHeader) can pass it

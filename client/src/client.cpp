@@ -1096,6 +1096,12 @@ FullyReadMarker Client::fully_read_marker(const std::string& room_id)
     return FullyReadMarker{std::string(m.event_id), m.ts_ms};
 }
 
+std::uint64_t Client::last_content_event_ts(const std::string& room_id)
+{
+    SH_FFI;
+    return impl_->ffi->last_content_event_ts(room_id);
+}
+
 Result Client::send_thread_read_receipt(const std::string& room_id,
                                         const std::string& thread_root_id,
                                         const std::string& event_id)

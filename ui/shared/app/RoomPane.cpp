@@ -80,7 +80,12 @@ void RoomPane::retarget(const std::string& new_room_id)
     displayed_once_ = false;
     // The new room's watcher only reports when it has warnings to show.
     if (room_view_)
+    {
         room_view_->set_identity_warnings({});
+        // Another room's last-content day must not cap this room's picker.
+        if (auto* h = room_view_->header())
+            h->set_jump_to_date_max_ts(0);
+    }
     room_id_ = new_room_id;
     // The send-button spinner tracks the room this pane shows, not the
     // composer: a link sent in the previous room must not spin here.
@@ -1437,6 +1442,7 @@ void RoomPane::wire_room_view_()
     {
         handle_date_jump_(ts_ms);
     };
+    rv->on_date_picker_opened = [this] { refresh_jump_to_date_cap_(); };
 
     // ── In-room search ────────────────────────────────────────────────────
     rv->on_room_search_query =
@@ -2214,6 +2220,7 @@ bool RoomPane::on_timeline_reset(std::vector<views::MessageRowData> rows)
             if (!pstate.is_focused)
             {
                 refresh_unread_marker_();
+                refresh_jump_to_date_cap_();
             }
         }
     }
@@ -2248,6 +2255,29 @@ void RoomPane::refresh_unread_marker_()
                         return;
                     if (auto* ml = room_view_->message_list())
                         ml->set_unread_marker_event_id(std::move(m.event_id), m.ts_ms);
+                });
+        });
+}
+
+void RoomPane::refresh_jump_to_date_cap_()
+{
+    auto sess = session_();
+    if (room_id_.empty() || !sess || !sess->client)
+        return;
+    const std::string room_id = room_id_;
+    run_async_(
+        [this, sess, room_id, ui = ui_poster(shell_poster(shell_))]()
+        {
+            if (!ui.owner_alive()) // owner gone before the job started
+                return;
+            const std::uint64_t ts = sess->client->last_content_event_ts(room_id);
+            ui(
+                [this, room_id, ts]()
+                {
+                    if (!room_view_ || room_id_ != room_id)
+                        return;
+                    if (auto* h = room_view_->header())
+                        h->set_jump_to_date_max_ts(ts);
                 });
         });
 }

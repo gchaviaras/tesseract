@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-08
 
+- feat(settings): Settings › About refreshes the cache sizes every 5 s while the About tab is open. macOS x86_64 Release build, user-verified macOS
 - feat(timeline): display-name and avatar changes by a joined member show as "X changed their avatar / display name" lines (your own always, others' with "Show room join/leave events"); the sender's existing messages, the sidebar strip and the room info panel update at once. Qt6 build + ctest 2312/2312 + cargo 791
 - feat(slash): `/myroomavatar reset` restores your account avatar in the room, and `/myroomavatar` (URL, mxc:// or file picker) now confirms success or reports the failure. Qt6 build + ctest 2312/2312 + cargo 791
 

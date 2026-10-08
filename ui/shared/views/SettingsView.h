@@ -463,6 +463,13 @@ public:
     // native overlays whose visibility depends on the selected tab).
     std::function<void()> on_tab_changed;
 
+    // Fired when the About tab becomes the selected tab. ShellBase wires it
+    // to kick the live cache-size refresh (see refresh_cache_sizes_poll_()).
+    std::function<void()> on_about_tab_shown;
+
+    // True while the About tab is the selected tab.
+    bool about_tab_selected() const;
+
     // Fired after the user confirms "Clear all caches" in the About section.
     // Wire to ShellBase::clear_all_caches_() in each shell's settings setup.
     std::function<void()> on_clear_caches;
@@ -523,6 +530,7 @@ private:
     // tabs_->set_tab_visible(kAdvancedTabIdx, false) until the About tab's
     // "Advanced" button reveals it.
     static constexpr int kAdvancedTabIdx = 11;
+    static constexpr int kAboutTabIdx = 10;
     // Account is the first tab added (see the constructor) and hence index 0.
     static constexpr int kAccountTabIdx = 0;
 

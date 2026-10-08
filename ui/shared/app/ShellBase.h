@@ -363,6 +363,7 @@ public:
         ThreadSearch,
         RoomDirectorySearch,
         ActivityMonitor,
+        CacheSizes,
     };
 
     // Run fn() on the UI thread `ms` after the most recent call on `slot`,
@@ -4586,9 +4587,16 @@ protected:
     // calls start_/stop_ when its Settings panel opens/closes. The refresh
     // fetches stats from the active account's client and pushes them to the
     // view, re-arming a slow poll while the history backfill runs.
+    // The same start_/stop_ pair also drives the About tab's live cache-size
+    // refresh (refresh_cache_sizes_poll_()).
     void start_search_index_stats_poll_();
     void stop_search_index_stats_poll_();
     void refresh_search_index_stats_();
+    // Recompute cache sizes into stats_settings_view_ and re-arm every
+    // kCacheSizesPollMs while the Settings panel is open on the About tab.
+    // Stops itself when the user leaves About; on_about_tab_shown restarts it.
+    void refresh_cache_sizes_poll_();
+    static constexpr int kCacheSizesPollMs = 5000;
     // Borrowed pointer to the shell's shared SettingsView (named distinctly so
     // it never shadows a shell's own `settings_view_` member). Each shell sets
     // it once.

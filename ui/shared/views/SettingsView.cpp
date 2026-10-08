@@ -350,6 +350,7 @@ SettingsView::SettingsView()
             hide_status_emoji_picker_();
         }
         if (on_tab_changed) on_tab_changed();
+        if (idx == kAboutTabIdx && on_about_tab_shown) on_about_tab_shown();
     };
     tabs_ = add_child(std::move(tabs));
     // Advanced is hidden until the About tab's "Advanced" button reveals it.
@@ -916,6 +917,11 @@ void SettingsView::set_cache_sizes(uint64_t local_bytes, uint64_t sdk_bytes,
         about_->set_local_cache_stats(disk_hits, disk_misses);
     }
     if (request_repaint_) request_repaint_();
+}
+
+bool SettingsView::about_tab_selected() const
+{
+    return tabs_ && tabs_->selected_idx() == kAboutTabIdx;
 }
 
 void SettingsView::set_request_repaint(std::function<void()> cb)

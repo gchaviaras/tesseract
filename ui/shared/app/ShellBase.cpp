@@ -5751,6 +5751,7 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
         view->set_language_restart_pending(s.language != tesseract::launch_language());
     };
     view->on_restart_requested = [this] { restart_app_(); };
+    view->on_about_tab_shown = [this] { refresh_cache_sizes_poll_(); };
     view->on_clear_caches = [this, view]
     {
         clear_all_caches_([view](uint64_t local, uint64_t sdk, uint64_t memory,
@@ -8253,12 +8254,43 @@ void ShellBase::start_search_index_stats_poll_()
 {
     search_stats_panel_open_ = true;
     refresh_search_index_stats_();
+    // The shell already computed the sizes once on open, so only arm the
+    // next tick here rather than computing again.
+    if (stats_settings_view_ && stats_settings_view_->about_tab_selected())
+        debounce_(DebounceSlot::CacheSizes, kCacheSizesPollMs,
+                  [this] { refresh_cache_sizes_poll_(); });
 }
 
 void ShellBase::stop_search_index_stats_poll_()
 {
     search_stats_panel_open_ = false;
     cancel_debounce_(DebounceSlot::SearchStats);
+    cancel_debounce_(DebounceSlot::CacheSizes);
+}
+
+void ShellBase::refresh_cache_sizes_poll_()
+{
+    if (!search_stats_panel_open_ || !stats_settings_view_ ||
+        !stats_settings_view_->about_tab_selected())
+    {
+        cancel_debounce_(DebounceSlot::CacheSizes);
+        return;
+    }
+    compute_cache_sizes_([this](uint64_t local, uint64_t sdk, uint64_t memory,
+                                uint64_t mh, uint64_t mm,
+                                uint64_t dh, uint64_t dm)
+    {
+        if (!search_stats_panel_open_ || !stats_settings_view_)
+            return;
+        stats_settings_view_->set_cache_sizes(local, sdk, memory, mh, mm, dh,
+                                              dm);
+        // Re-arm only after the result lands, so a slow directory walk never
+        // stacks up overlapping computes; the debounce generation collapses a
+        // tab-switch kick and a pending tick into one loop.
+        if (stats_settings_view_->about_tab_selected())
+            debounce_(DebounceSlot::CacheSizes, kCacheSizesPollMs,
+                      [this] { refresh_cache_sizes_poll_(); });
+    });
 }
 
 void ShellBase::refresh_search_index_stats_()

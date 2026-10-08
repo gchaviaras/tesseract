@@ -2821,6 +2821,23 @@ pub(super) async fn build_room_info(
             })
             .unwrap_or_default()
     };
+    // MSC4334: BCP 47 tag from the room-language state event.
+    let language = {
+        use matrix_sdk::deserialized_responses::SyncOrStrippedState;
+        use matrix_sdk::ruma::events::{room::language::RoomLanguageEventContent, SyncStateEvent};
+        room.get_state_event_static::<RoomLanguageEventContent>()
+            .await
+            .ok()
+            .flatten()
+            .and_then(|raw| raw.deserialize().ok())
+            .and_then(|ev| {
+                let SyncOrStrippedState::Sync(SyncStateEvent::Original(o)) = ev else {
+                    return None;
+                };
+                Some(o.content.language.to_string())
+            })
+            .unwrap_or_default()
+    };
     // MSC3417: creation_content.type == "org.matrix.msc3417.call" marks
     // this as a dedicated call room.
     let is_call_room = rtc::signaling::is_call_room(room).await;
@@ -3063,6 +3080,7 @@ pub(super) async fn build_room_info(
         name,
         topic: room.topic().unwrap_or_default(),
         topic_html,
+        language,
         notification_count,
         highlight_count,
         unread_count,
@@ -3163,6 +3181,7 @@ pub(super) struct RoomListFingerprintKey {
     name: String,
     topic: String,
     topic_html: String,
+    language: String,
     avatar_url: String,
     dm_avatar_url: String,
     is_encrypted: bool,
@@ -3283,6 +3302,7 @@ pub(super) fn room_list_fingerprint(
                 name: r.name.clone(),
                 topic: r.topic.clone(),
                 topic_html: r.topic_html.clone(),
+                language: r.language.clone(),
                 avatar_url: r.avatar_url.clone(),
                 dm_avatar_url: r.dm_avatar_url.clone(),
                 is_encrypted: r.is_encrypted,

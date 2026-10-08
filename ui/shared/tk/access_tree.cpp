@@ -184,6 +184,7 @@ AccessNode widget_node(Widget* w)
     node.role        = w->access_role();
     node.name        = w->access_name();
     node.description = w->access_description();
+    node.language    = w->access_language();
     node.state       = w->access_state();
     node.value       = w->access_value();
     node.modal       = w->access_modal();
@@ -304,6 +305,16 @@ void append_child_node(Widget* ch, std::vector<AccessNode>& out)
     }
 }
 
+// Fills each node's unset language from its parent, so a widget declaring a
+// language covers its synthesized rows/cells and subtree nodes too.
+void inherit_language(AccessNode& node, const std::string& inherited)
+{
+    if (node.language.empty())
+        node.language = inherited;
+    for (auto& child : node.children)
+        inherit_language(child, node.language);
+}
+
 } // namespace
 
 AccessNode build_access_tree(Widget* root)
@@ -321,6 +332,7 @@ AccessNode build_access_tree(Widget* root)
         append_child_node(modal, top.children);
     else
         collect_access_children(root, top.children);
+    inherit_language(top, {});
     return top;
 }
 

@@ -626,6 +626,17 @@ public:
     // avatar is resolved (ShellBase::ensure_room_avatar_). May trigger an
     // async fetch; the view repaints when bytes arrive.
     using RoomAvatarProvider = std::function<const tk::Image*()>;
+
+    // The room's MSC4334 language (BCP 47; empty when unset), reported to
+    // assistive tech as the language of every message row.
+    void set_room_language(std::string bcp47)
+    {
+        room_language_ = std::move(bcp47);
+    }
+    std::string access_language() const override
+    {
+        return room_language_;
+    }
     void set_room_avatar_provider(RoomAvatarProvider p)
     {
         room_avatar_provider_ = std::move(p);
@@ -1385,6 +1396,7 @@ private:
     bool open_link_(const std::string& url);
     MentionAvatarProvider mention_avatar_provider_;
     RoomAvatarProvider room_avatar_provider_;
+    std::string room_language_;
     // Small, dedicated mark-and-sweep cache for rasterized mention-pill
     // bitmaps (tk::PixmapCache — same class/eviction policy the app's
     // network-media caches use, sized down since these are tiny synthetic

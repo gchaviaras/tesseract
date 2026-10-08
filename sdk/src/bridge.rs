@@ -122,6 +122,8 @@ pub mod ffi {
         topic: String,
         /// HTML body from the MSC3765 `m.topic` block; empty when absent.
         topic_html: String,
+        /// BCP 47 tag from the MSC4334 room-language state event; empty when absent.
+        language: String,
         /// Number of unread messages that matched a notify push-rule action.
         notification_count: u64,
         /// Subset of notification_count that matched a highlight (mention) action.
@@ -4246,6 +4248,7 @@ impl Clone for ffi::RoomInfo {
             name: self.name.clone(),
             topic: self.topic.clone(),
             topic_html: self.topic_html.clone(),
+            language: self.language.clone(),
             notification_count: self.notification_count,
             highlight_count: self.highlight_count,
             unread_count: self.unread_count,

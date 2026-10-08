@@ -621,6 +621,8 @@ struct RoomInfo
     bool is_low_priority = false;
     /// HTML body from the MSC3765 m.topic block; empty when absent.
     std::string topic_html;
+    /// BCP 47 tag from the MSC4334 room-language event; empty when absent.
+    std::string language;
     /// True when the room has encryption enabled.
     bool is_encrypted = false;
     /// True when any participant has an active MatrixRTC call in this room
@@ -700,7 +702,7 @@ struct RoomInfo
                is_space == other.is_space && is_call_room == other.is_call_room &&
                is_favorite == other.is_favorite &&
                is_low_priority == other.is_low_priority &&
-               topic_html == other.topic_html &&
+               topic_html == other.topic_html && language == other.language &&
                is_encrypted == other.is_encrypted &&
                has_active_call == other.has_active_call &&
                call_members == other.call_members &&

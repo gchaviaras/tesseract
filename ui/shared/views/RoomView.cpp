@@ -1785,6 +1785,8 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
     }
     has_room_ = true;
     current_room_info_ = info;
+    if (message_list_)
+        message_list_->set_room_language(info.language);
     if (emoji_picker_)
         emoji_picker_->set_current_room_id(info.id);
     if (sticker_picker_)
@@ -1826,6 +1828,8 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
 void RoomView::clear_room()
 {
     has_room_ = false;
+    if (message_list_)
+        message_list_->set_room_language({});
     if (call_lobby_ && call_lobby_->is_open())
     {
         if (call_lobby_->on_cancel) call_lobby_->on_cancel();

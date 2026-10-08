@@ -570,6 +570,16 @@ public:
             pRetVal->vt = VT_BOOL;
             pRetVal->boolVal = node_disabled(*n) ? VARIANT_FALSE : VARIANT_TRUE;
             break;
+        case UIA_CulturePropertyId:
+            // Content language (UIA wants an LCID); an unknown tag maps to 0
+            // and leaves the property unset.
+            if (!n->language.empty())
+            {
+                const LCID lcid = LocaleNameToLCID(utf8_to_wide(n->language).c_str(), 0);
+                if (lcid != 0)
+                    *pRetVal = i4_variant(static_cast<int>(lcid));
+            }
+            break;
         case UIA_HelpTextPropertyId:
             if (!n->description.empty())
                 *pRetVal = bstr_variant(n->description);

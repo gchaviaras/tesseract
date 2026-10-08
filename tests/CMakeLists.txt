@@ -219,6 +219,8 @@ add_executable(tesseract_tests
     cpp/test_encryption_overlay_accessibility.cpp
     cpp/test_lists_accessibility.cpp
     cpp/test_views_accessibility.cpp
+    cpp/test_bcp47_display_name.cpp
+    cpp/test_tk_badge_flow.cpp
 )
 # Standalone TUs: keeps the existing unity batches' composition unchanged
 # (adding a file reshuffles them and exposed an unrelated anonymous-namespace

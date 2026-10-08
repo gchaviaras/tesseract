@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-08
 
+- feat(rooms): the room info panel shows the room's MSC4334 language by name (e.g. "English (United States)"), and screen readers get it as the language of the room's messages (Qt6, Windows, macOS; GTK4 has no per-object language to set). The badge row is a new wrapping `tk::BadgeFlow`, so Encrypted / history / language / bridged badges no longer overflow the 280 px panel. Qt6 build + ctest 2320/2320, macOS x86_64 Release build
 - feat(settings): Settings › About refreshes the cache sizes every 5 s while the About tab is open. macOS x86_64 Release build, user-verified macOS
 - feat(timeline): display-name and avatar changes by a joined member show as "X changed their avatar / display name" lines (your own always, others' with "Show room join/leave events"); the sender's existing messages, the sidebar strip and the room info panel update at once. Qt6 build + ctest 2312/2312 + cargo 791
 - feat(slash): `/myroomavatar reset` restores your account avatar in the room, and `/myroomavatar` (URL, mxc:// or file picker) now confirms success or reports the failure. Qt6 build + ctest 2312/2312 + cargo 791

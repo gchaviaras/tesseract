@@ -11,8 +11,11 @@
 
 #include "tk/i18n.h"
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace tesseract::views
 {
@@ -225,6 +228,158 @@ inline std::string bcp47_language_name(std::string_view code)
         if (lang.code == code)
             return tk::tr(lang.name.data());
     return std::string(code);
+}
+
+// Region (ISO 3166-1 alpha-2 / UN M.49) and script (ISO 15924) subtags that
+// commonly follow the language in a room-language tag. Names are msgids like
+// the language table; unknown subtags are shown as-is.
+inline constexpr Bcp47Language kBcp47Regions[] = {
+    {"US", tk::N_("United States")},
+    {"GB", tk::N_("United Kingdom")},
+    {"AU", tk::N_("Australia")},
+    {"CA", tk::N_("Canada")},
+    {"IE", tk::N_("Ireland")},
+    {"NZ", tk::N_("New Zealand")},
+    {"IN", tk::N_("India")},
+    {"ZA", tk::N_("South Africa")},
+    {"BR", tk::N_("Brazil")},
+    {"PT", tk::N_("Portugal")},
+    {"ES", tk::N_("Spain")},
+    {"MX", tk::N_("Mexico")},
+    {"AR", tk::N_("Argentina")},
+    {"CO", tk::N_("Colombia")},
+    {"CL", tk::N_("Chile")},
+    {"PE", tk::N_("Peru")},
+    {"VE", tk::N_("Venezuela")},
+    {"419", tk::N_("Latin America")},
+    {"FR", tk::N_("France")},
+    {"BE", tk::N_("Belgium")},
+    {"CH", tk::N_("Switzerland")},
+    {"LU", tk::N_("Luxembourg")},
+    {"DE", tk::N_("Germany")},
+    {"AT", tk::N_("Austria")},
+    {"IT", tk::N_("Italy")},
+    {"NL", tk::N_("Netherlands")},
+    {"CN", tk::N_("China")},
+    {"TW", tk::N_("Taiwan")},
+    {"HK", tk::N_("Hong Kong")},
+    {"SG", tk::N_("Singapore")},
+    {"JP", tk::N_("Japan")},
+    {"KR", tk::N_("South Korea")},
+    {"RU", tk::N_("Russia")},
+    {"UA", tk::N_("Ukraine")},
+    {"PL", tk::N_("Poland")},
+    {"SE", tk::N_("Sweden")},
+    {"NO", tk::N_("Norway")},
+    {"DK", tk::N_("Denmark")},
+    {"FI", tk::N_("Finland")},
+    {"TR", tk::N_("Turkey")},
+    {"GR", tk::N_("Greece")},
+    {"IL", tk::N_("Israel")},
+    {"EG", tk::N_("Egypt")},
+    {"SA", tk::N_("Saudi Arabia")},
+    {"AE", tk::N_("United Arab Emirates")},
+    {"PH", tk::N_("Philippines")},
+    {"ID", tk::N_("Indonesia")},
+    {"MY", tk::N_("Malaysia")},
+    {"TH", tk::N_("Thailand")},
+    {"VN", tk::N_("Vietnam")},
+};
+
+inline constexpr Bcp47Language kBcp47Scripts[] = {
+    {"Hans", tk::N_("Simplified")},
+    {"Hant", tk::N_("Traditional")},
+    {"Latn", tk::N_("Latin")},
+    {"Cyrl", tk::N_("Cyrillic")},
+    {"Arab", tk::N_("Arabic script")},
+};
+
+namespace detail
+{
+inline bool ieq(std::string_view a, std::string_view b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (std::size_t i = 0; i < a.size(); ++i)
+        if (std::tolower(static_cast<unsigned char>(a[i])) !=
+            std::tolower(static_cast<unsigned char>(b[i])))
+            return false;
+    return true;
+}
+
+template <std::size_t N>
+inline const Bcp47Language* find_ci(const Bcp47Language (&table)[N], std::string_view code)
+{
+    for (const auto& e : table)
+        if (ieq(e.code, code))
+            return &e;
+    return nullptr;
+}
+} // namespace detail
+
+// Human-readable, translated name for a full BCP-47 tag, e.g. "en-US" ->
+// "English (United States)", "zh-Hans-CN" -> "Chinese (Simplified, China)".
+// Matching is case-insensitive. A tag whose primary language is not in the
+// table is returned unchanged; unknown script/region subtags are shown as
+// written (uppercased for regions) and other subtags are ignored.
+inline std::string bcp47_display_name(std::string_view tag)
+{
+    std::vector<std::string_view> parts;
+    for (std::size_t pos = 0; pos <= tag.size();)
+    {
+        std::size_t end = tag.find_first_of("-_", pos);
+        if (end == std::string_view::npos)
+            end = tag.size();
+        parts.push_back(tag.substr(pos, end - pos));
+        pos = end + 1;
+    }
+    const auto* lang = parts.empty() ? nullptr : detail::find_ci(kBcp47Languages, parts[0]);
+    if (!lang)
+        return std::string(tag);
+
+    std::string qualifiers;
+    for (std::size_t i = 1; i < parts.size(); ++i)
+    {
+        const std::string_view sub = parts[i];
+        std::string text;
+        const bool alpha4 = sub.size() == 4 &&
+            std::all_of(sub.begin(), sub.end(),
+                        [](char c) { return std::isalpha(static_cast<unsigned char>(c)); });
+        const bool region = sub.size() == 3 &&
+            std::all_of(sub.begin(), sub.end(),
+                        [](char c) { return std::isdigit(static_cast<unsigned char>(c)); });
+        const bool alpha2 = sub.size() == 2 &&
+            std::all_of(sub.begin(), sub.end(),
+                        [](char c) { return std::isalpha(static_cast<unsigned char>(c)); });
+        if (alpha4)
+        {
+            if (const auto* sc = detail::find_ci(kBcp47Scripts, sub))
+                text = tk::tr(sc->name.data());
+            else
+                text = std::string(sub);
+        }
+        else if (alpha2 || region)
+        {
+            if (const auto* rg = detail::find_ci(kBcp47Regions, sub))
+                text = tk::tr(rg->name.data());
+            else
+            {
+                text = std::string(sub);
+                for (char& c : text)
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            }
+        }
+        else
+            continue;
+        if (!qualifiers.empty())
+            qualifiers += ", ";
+        qualifiers += text;
+    }
+
+    const std::string name = tk::tr(lang->name.data());
+    if (qualifiers.empty())
+        return name;
+    return tk::trf(tk::tr("{0} ({1})"), {name, qualifiers});
 }
 
 } // namespace tesseract::views

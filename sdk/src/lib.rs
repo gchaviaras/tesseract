@@ -101,6 +101,7 @@ pub mod ffi {
         pub name: String,
         pub topic: String,
         pub topic_html: String,
+        pub language: String,
         pub notification_count: u64,
         pub highlight_count: u64,
         pub unread_count: u64,

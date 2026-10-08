@@ -3,6 +3,7 @@
 #include "tk/access_tree.h"
 #include "tk/list_view.h"
 
+#include <QtCore/QLocale>
 #include <QtCore/QTimer>
 #include <QtGui/QAccessible>
 #include <QtWidgets/QAccessibleWidget>
@@ -466,7 +467,8 @@ class NodeAccessible : public QAccessibleInterface,
                        public QAccessibleActionInterface,
                        public QAccessibleValueInterface,
                        public QAccessibleTableInterface,
-                       public QAccessibleTableCellInterface
+                       public QAccessibleTableCellInterface,
+                       public QAccessibleAttributesInterface
 {
 public:
     NodeAccessible(AccessBridge* bridge, AccessKey key) : bridge_(bridge), key_(key) {}
@@ -596,7 +598,22 @@ public:
             return static_cast<QAccessibleTableInterface*>(this);
         if (t == QAccessible::TableCellInterface && n && n->grid_row >= 0)
             return static_cast<QAccessibleTableCellInterface*>(this);
+        if (t == QAccessible::AttributesInterface && n && !n->language.empty())
+            return static_cast<QAccessibleAttributesInterface*>(this);
         return nullptr;
+    }
+
+    // ---- QAccessibleAttributesInterface (content language) ----
+    QList<QAccessible::Attribute> attributeKeys() const override
+    {
+        return {QAccessible::Attribute::Locale};
+    }
+    QVariant attributeValue(QAccessible::Attribute key) const override
+    {
+        const AccessNode* n = node();
+        if (key == QAccessible::Attribute::Locale && n && !n->language.empty())
+            return QVariant::fromValue(QLocale(QString::fromStdString(n->language)));
+        return {};
     }
 
     // ---- QAccessibleValueInterface (Role::ProgressBar) ----

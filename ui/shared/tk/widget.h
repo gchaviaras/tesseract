@@ -665,6 +665,15 @@ public:
     {
         return {};
     }
+    // BCP 47 language of this widget's content (e.g. a room's MSC4334
+    // language on its timeline), for assistive tech to pick a voice. Empty
+    // inherits from the nearest ancestor that has an access node. Only
+    // honoured on widgets with an access_role() (a Role::None widget gets
+    // no node to carry it). Not user-visible text, so no tr().
+    virtual std::string access_language() const
+    {
+        return {};
+    }
     virtual AccessValue access_value() const
     {
         return {};

@@ -275,3 +275,33 @@ TEST_CASE("a row's accessible name includes the sender status only when the sett
 
     settings.show_sender_status_in_timeline = prev;
 }
+
+TEST_CASE("message rows report the room language set on the list, and none by default",
+         "[message_list][accessibility]")
+{
+    MessageListView v;
+    std::vector<MessageRowData> msgs;
+    msgs.push_back(text_row("$a", "Alice", "bonjour"));
+    v.set_messages(std::move(msgs), false);
+
+    auto row_language = [&v]
+    {
+        AccessNode tree = build_access_tree(&v);
+        const AccessNode* list = find_role_msg(tree, Role::List);
+        REQUIRE(list != nullptr);
+        for (const auto& ch : list->children)
+            if (ch.role == Role::ListItem)
+                return std::pair{list->language, ch.language};
+        FAIL("no message row");
+        return std::pair<std::string, std::string>{};
+    };
+
+    CHECK(row_language() == std::pair<std::string, std::string>{"", ""});
+
+    v.set_room_language("fr-CA");
+    CHECK(row_language() == std::pair<std::string, std::string>{"fr-CA", "fr-CA"});
+
+    // Room switch to a room without a language clears it again.
+    v.set_room_language({});
+    CHECK(row_language() == std::pair<std::string, std::string>{"", ""});
+}

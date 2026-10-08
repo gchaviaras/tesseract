@@ -534,6 +534,11 @@ private:
                                                node.description.c_str(), -1);
             data->last_description = node.description;
         }
+        // AccessNode::language is not mapped: GTK 4.22 has no per-object
+        // language (GtkAccessibleProperty has none; AT-SPI's Locale is the
+        // process locale). The only route is GtkAccessibleText text-run
+        // attributes, which would turn every node into a text object.
+        // GTK's optional AccessKit backend doesn't set a node language either.
         if (first || data->last_checked != node.state.checked ||
             data->last_expanded != node.state.expanded ||
             data->last_selected != node.state.selected ||

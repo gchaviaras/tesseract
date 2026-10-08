@@ -34,6 +34,10 @@ struct AccessNode
     Role role = Role::None;
     std::string name;
     std::string description;
+    // BCP 47 language of this node's content; filled by build_access_tree
+    // from Widget::access_language(), inherited from the parent node when
+    // unset. Empty = unspecified.
+    std::string language;
     AccessState state;
     AccessValue value;
     // Mirrors Widget::access_modal() for a real widget node; bridges set the

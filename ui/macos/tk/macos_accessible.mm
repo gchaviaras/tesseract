@@ -451,6 +451,39 @@ private:
     return [NSString stringWithUTF8String:n->description.c_str()];
 }
 
+// Content language (BCP 47, AccessNode::language) as "AXLanguage", so
+// VoiceOver can pick a matching voice. NSAccessibilityProtocols has no
+// element-level property for it (only NSAccessibilityLanguageTextAttribute
+// inside attributed strings), so this goes through the legacy attribute API
+// under the same name WebKit and Chromium expose on their elements; every
+// other attribute still resolves through the property methods via super.
+static NSString* const kTKLanguageAttribute = @"AXLanguage";
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#pragma clang diagnostic ignored "-Wdeprecated-implementations"
+- (NSArray<NSAccessibilityAttributeName>*)accessibilityAttributeNames
+{
+    NSArray<NSAccessibilityAttributeName>* names = [super accessibilityAttributeNames];
+    const tk::AccessNode* n = self.tkNode;
+    if (n && !n->language.empty() && ![names containsObject:kTKLanguageAttribute])
+        return [names arrayByAddingObject:kTKLanguageAttribute];
+    return names;
+}
+
+- (id)accessibilityAttributeValue:(NSAccessibilityAttributeName)attribute
+{
+    if ([attribute isEqualToString:kTKLanguageAttribute])
+    {
+        const tk::AccessNode* n = self.tkNode;
+        if (!n || n->language.empty())
+            return nil;
+        return [NSString stringWithUTF8String:n->language.c_str()];
+    }
+    return [super accessibilityAttributeValue:attribute];
+}
+#pragma clang diagnostic pop
+
 - (BOOL)isAccessibilityModal
 {
     const tk::AccessNode* n = self.tkNode;

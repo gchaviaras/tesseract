@@ -99,6 +99,8 @@ set(_tk_sources
     tk/controls.cpp
     tk/group_box.h
     tk/group_box.cpp
+    tk/badge_flow.h
+    tk/badge_flow.cpp
     tk/text_field.h
     tk/text_field.cpp
     tk/text_area.h
@@ -538,6 +540,7 @@ set(_icon_svgs
     "${_lucide_dir}/lucide-user-round.svg"
     "${_lucide_dir}/lucide-user-round-minus.svg"
     "${_lucide_dir}/lucide-ban.svg"
+    "${_lucide_dir}/lucide-languages.svg"
     "${_lucide_dir}/lucide-chevron-right.svg"
     "${_lucide_dir}/lucide-arrow-down.svg"
     "${_lucide_dir}/lucide-arrow-up.svg"

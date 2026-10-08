@@ -5576,3 +5576,219 @@ msgid_plural "{0} updated their display names and avatars"
 msgstr[0] "{0} actualizó su nombre visible y su avatar"
 msgstr[1] "{0} actualizaron sus nombres visibles y avatares"
 
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "United States"
+msgstr "Estados Unidos"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "United Kingdom"
+msgstr "Reino Unido"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Australia"
+msgstr "Australia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Canada"
+msgstr "Canadá"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Ireland"
+msgstr "Irlanda"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "New Zealand"
+msgstr "Nueva Zelanda"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "India"
+msgstr "India"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "South Africa"
+msgstr "Sudáfrica"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Brazil"
+msgstr "Brasil"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Portugal"
+msgstr "Portugal"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Spain"
+msgstr "España"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Mexico"
+msgstr "México"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Argentina"
+msgstr "Argentina"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Colombia"
+msgstr "Colombia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Chile"
+msgstr "Chile"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Peru"
+msgstr "Perú"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Venezuela"
+msgstr "Venezuela"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Latin America"
+msgstr "Latinoamérica"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "France"
+msgstr "Francia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Belgium"
+msgstr "Bélgica"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Switzerland"
+msgstr "Suiza"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Luxembourg"
+msgstr "Luxemburgo"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Germany"
+msgstr "Alemania"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Austria"
+msgstr "Austria"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Italy"
+msgstr "Italia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Netherlands"
+msgstr "Países Bajos"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "China"
+msgstr "China"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Taiwan"
+msgstr "Taiwán"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Hong Kong"
+msgstr "Hong Kong"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Singapore"
+msgstr "Singapur"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Japan"
+msgstr "Japón"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "South Korea"
+msgstr "Corea del Sur"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Russia"
+msgstr "Rusia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Ukraine"
+msgstr "Ucrania"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Poland"
+msgstr "Polonia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Sweden"
+msgstr "Suecia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Norway"
+msgstr "Noruega"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Denmark"
+msgstr "Dinamarca"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Finland"
+msgstr "Finlandia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Turkey"
+msgstr "Turquía"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Greece"
+msgstr "Grecia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Israel"
+msgstr "Israel"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Egypt"
+msgstr "Egipto"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Saudi Arabia"
+msgstr "Arabia Saudita"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "United Arab Emirates"
+msgstr "Emiratos Árabes Unidos"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Philippines"
+msgstr "Filipinas"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Indonesia"
+msgstr "Indonesia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Malaysia"
+msgstr "Malasia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Thailand"
+msgstr "Tailandia"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Vietnam"
+msgstr "Vietnam"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Simplified"
+msgstr "Simplificado"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Traditional"
+msgstr "Tradicional"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Cyrillic"
+msgstr "Cirílico"
+
+#: ui/shared/views/settings/bcp47_languages.h
+msgid "Arabic script"
+msgstr "Escritura árabe"
+

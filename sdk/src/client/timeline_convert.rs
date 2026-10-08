@@ -149,6 +149,7 @@ pub(super) fn ffi_event_defaults() -> TimelineEvent {
         membership_reason: String::new(),
         room_name_new: String::new(),
         room_name_old: String::new(),
+        replacement_room_id: String::new(),
     }
 }
 
@@ -819,6 +820,33 @@ pub(super) async fn timeline_item_to_ffi(
                     sender_status_text,
                     room_name_new,
                     room_name_old,
+                    timestamp: event_item.timestamp().get().into(),
+                    ..ffi_event_defaults()
+                });
+            }
+        }
+        if let AnyOtherStateEventContentChange::RoomTombstone(full) = state.content() {
+            if let StateEventContentChange::Original { content, .. } = full {
+                let SenderProfileFfi {
+                    sender_name,
+                    sender_avatar_url,
+                    sender_status_emoji,
+                    sender_status_text,
+                } = sender_profile_ffi(event_item.sender_profile());
+                return Some(TimelineEvent {
+                    room_id: room_id.to_owned(),
+                    msg_type: "m.room.tombstone".to_owned(),
+                    event_id: event_item
+                        .event_id()
+                        .map(|id| id.to_string())
+                        .unwrap_or_default(),
+                    sender: event_item.sender().to_string(),
+                    sender_name,
+                    sender_avatar_url,
+                    sender_status_emoji,
+                    sender_status_text,
+                    body: content.body.clone(),
+                    replacement_room_id: content.replacement_room.to_string(),
                     timestamp: event_item.timestamp().get().into(),
                     ..ffi_event_defaults()
                 });

@@ -12,6 +12,7 @@
 #include "tk/animator.h"
 #include "tk/audio.h"
 #include "tk/canvas.h"
+#include "tk/controls.h"
 #include "tk/host.h"
 #include "tk/list_view.h"
 #include "tk/media_kind.h"
@@ -94,6 +95,7 @@ struct MessageRowData
         Location,
         Membership,         // m.room.member state-event row
         RoomName,           // m.room.name state-event row
+        RoomTombstone,      // m.room.tombstone state-event row ("X upgraded this room")
     };
 
     Kind kind = Kind::Text;
@@ -238,6 +240,10 @@ struct MessageRowData
     std::string membership_target_name;
     std::string membership_target_avatar_url; // mxc
     std::string membership_reason; // free-text kick/ban/… reason; may be empty
+
+    // Room upgrade (Kind::RoomTombstone only): `body` carries the optional
+    // reason; this is the replacement room's id.
+    std::string replacement_room_id;
 
     // Room name change (Kind::RoomName only).
     std::string room_name_new; // empty if the name was removed
@@ -637,6 +643,22 @@ public:
     std::string access_language() const override
     {
         return room_language_;
+    }
+
+    // Room upgrades: true when this room replaced an older one. The
+    // start-of-timeline row then says so and offers a "View older messages"
+    // button, which fires on_open_predecessor.
+    void set_predecessor_available(bool available);
+    bool predecessor_available() const
+    {
+        return predecessor_available_;
+    }
+    std::function<void()> on_open_predecessor;
+    // The "View older messages" button while it is on screen (null/hidden
+    // otherwise) — exposed for tests.
+    tk::Button* predecessor_link() const
+    {
+        return predecessor_link_;
     }
     void set_room_avatar_provider(RoomAvatarProvider p)
     {
@@ -1409,6 +1431,8 @@ private:
     MentionAvatarProvider mention_avatar_provider_;
     RoomAvatarProvider room_avatar_provider_;
     std::string room_language_;
+    bool predecessor_available_ = false;
+    tk::Button* predecessor_link_ = nullptr; // borrowed from child
     // Small, dedicated mark-and-sweep cache for rasterized mention-pill
     // bitmaps (tk::PixmapCache — same class/eviction policy the app's
     // network-media caches use, sized down since these are tiny synthetic

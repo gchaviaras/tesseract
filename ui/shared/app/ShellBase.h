@@ -622,6 +622,22 @@ protected:
     // O(1) room lookup by id; nullptr when not present. The returned pointer is
     // valid until rooms_ is next replaced/cleared.
     const RoomInfo* room_by_id_(const std::string& room_id) const;
+    // Upgraded (tombstoned) rooms the user is in whose successor is joined too:
+    // the room list hides them, but their history stays reachable ("View older
+    // messages", old permalinks). Filled on demand by open_room_version_();
+    // room_by_id_() falls back to it. Entries are dropped once the room shows up
+    // in rooms_ again (push_rooms_). Node-based, so pointers stay valid across
+    // unrelated inserts.
+    std::unordered_map<std::string, RoomInfo> hidden_rooms_;
+    // Open `room_id` — a previous or next version of an upgraded room — in the
+    // active tab. Listed rooms navigate directly; a joined-but-unlisted one is
+    // looked up in the SDK first; a room the user isn't in is joined using `via`
+    // (`join_if_missing`) or offered in the Join dialog instead, as for any other
+    // permalink. `highlight_event` is jumped to once the room is open.
+    void open_room_version_(const std::string& room_id,
+                            const std::vector<std::string>& via,
+                            const std::string& highlight_event = {},
+                            bool join_if_missing = true);
     // ── Invites ───────────────────────────────────────────────────────────────
     std::vector<InviteInfo> invites_;
     // ── Room knocking (MSC2403) ──────────────────────────────────────────────

@@ -192,6 +192,8 @@ set(_tk_sources
     views/ThreadView.cpp
     views/EncryptionReminderBanner.h
     views/EncryptionReminderBanner.cpp
+    views/RoomReplacedBanner.h
+    views/RoomReplacedBanner.cpp
     views/IdentityChangeBanner.h
     views/IdentityChangeBanner.cpp
     views/sas_emoji_tiles.h

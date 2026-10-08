@@ -11,7 +11,7 @@ use crate::ffi::OpResult;
 use std::sync::Arc;
 
 #[cfg(not(test))]
-use super::{build_invite_infos, build_knocked_room_infos, build_room_infos, require_room, stop_fut, try_op};
+use super::{build_invite_infos, build_knocked_room_infos, build_room_info_unfiltered, build_room_infos, require_room, stop_fut, try_op};
 
 #[cfg(not(test))]
 use matrix_sdk::ruma::OwnedRoomId;
@@ -206,6 +206,35 @@ impl ClientFfi {
         }
         #[cfg(test)]
         {
+            Vec::new()
+        }
+    }
+
+    /// See the FFI declaration: one joined room's info, ignoring the
+    /// tombstone-hiding filter.
+    pub fn room_info_by_id(&self, room_id: &str) -> Vec<crate::ffi::RoomInfo> {
+        #[cfg(not(test))]
+        {
+            let Some(client) = self.client.clone() else {
+                return Vec::new();
+            };
+            let Ok(rid) = matrix_sdk::ruma::RoomId::parse(room_id) else {
+                return Vec::new();
+            };
+            let Some(room) = client.get_room(&rid) else {
+                return Vec::new();
+            };
+            if room.state() != matrix_sdk::RoomState::Joined {
+                return Vec::new();
+            }
+            self.rt
+                .block_on(build_room_info_unfiltered(&client, &room, &self.app_cache_db))
+                .into_iter()
+                .collect()
+        }
+        #[cfg(test)]
+        {
+            let _ = room_id;
             Vec::new()
         }
     }

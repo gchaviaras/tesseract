@@ -4304,6 +4304,10 @@ void ShellBase::push_rooms_(std::string user_id, std::vector<RoomInfo> rooms)
     }
     rooms_ = std::move(rooms);
     mark_room_index_dirty_();
+    // A hidden upgraded room that is listed again (its successor was left) is
+    // now served by rooms_ itself.
+    for (const auto& r : rooms_)
+        hidden_rooms_.erase(r.id);
     // A change in the active account's room set may add/remove people; drop the
     // cached roster so the next user-mode query rebuilds it. Member-only changes
     // within existing rooms aren't tracked here — live-resolve covers anyone the
@@ -6990,11 +6994,9 @@ void ShellBase::open_matrix_link(const std::string& uri)
                                [&](const RoomInfo& r) { return r.id == link.primary; });
         if (it != rooms_.end())
             tab_navigate_room(link.primary);
-        else if (main_app_)
-        {
-            main_app_->add_room_view()->open_join_with_prefill(link.primary);
-            request_relayout_();
-        }
+        else
+            // Possibly an upgraded room we're still in but no longer list.
+            open_room_version_(link.primary, link.via, {}, /*join_if_missing=*/false);
         break;
     }
 
@@ -7033,15 +7035,11 @@ void ShellBase::open_matrix_link(const std::string& uri)
         }
         else
         {
-            // Not joined yet: remember the target event so the post-join hook
-            // jumps to it once the join completes.
-            if (!link.event_id.empty())
-                pending_event_scroll_after_join_[link.primary] = link.event_id;
-            if (main_app_)
-            {
-                main_app_->add_room_view()->open_join_with_prefill(link.primary);
-                request_relayout_();
-            }
+            // Not listed: either an upgraded room we're still in (opened in
+            // place), or one we haven't joined (the Join dialog, with the target
+            // event remembered so the post-join hook jumps to it).
+            open_room_version_(link.primary, link.via, link.event_id,
+                               /*join_if_missing=*/false);
         }
         break;
     }
@@ -13857,8 +13855,73 @@ const RoomInfo* ShellBase::room_by_id_(const std::string& room_id) const
         rebuild_room_index_();
     auto it = room_index_by_id_.find(room_id);
     if (it == room_index_by_id_.end() || it->second >= rooms_.size())
-        return nullptr;
+    {
+        auto hidden = hidden_rooms_.find(room_id);
+        return hidden == hidden_rooms_.end() ? nullptr : &hidden->second;
+    }
     return &rooms_[it->second];
+}
+
+void ShellBase::open_room_version_(const std::string& room_id,
+                                   const std::vector<std::string>& via,
+                                   const std::string& highlight_event,
+                                   bool join_if_missing)
+{
+    if (room_id.empty())
+        return;
+    auto reveal = [this, room_id, highlight_event]
+    {
+        tab_navigate_room(room_id);
+        if (!highlight_event.empty())
+        {
+            if (room_view_ && room_view_->message_list())
+                room_view_->message_list()->set_highlighted_event(highlight_event);
+            try_scroll_to_room_event_(highlight_event);
+        }
+    };
+    if (room_by_id_(room_id) && !hidden_rooms_.count(room_id))
+    {
+        reveal();
+        return;
+    }
+    const auto sess = acting_session_(nullptr);
+    if (!sess || !sess->client)
+        return;
+    // Refreshed every time: the cached copy of a hidden room goes stale (its
+    // successor may have been joined or left since).
+    run_async_(
+        "room-version",
+        [this, sess, room_id, via, highlight_event, join_if_missing, reveal]() mutable
+        {
+            std::optional<RoomInfo> info = sess->client->room_info(room_id);
+            post_to_ui_alive_(
+                [this, sess, room_id, via, highlight_event, join_if_missing, reveal,
+                 info = std::move(info)]() mutable
+                {
+                    if (info)
+                    {
+                        // Still listed (e.g. its successor was left meanwhile):
+                        // the live entry wins.
+                        if (!room_by_id_(room_id) || hidden_rooms_.count(room_id))
+                            hidden_rooms_[room_id] = std::move(*info);
+                        reveal();
+                        return;
+                    }
+                    // Not a room we're in: join it (or offer to), and let the
+                    // post-join hook navigate and jump to the event.
+                    if (!highlight_event.empty())
+                        pending_event_scroll_after_join_[room_id] = highlight_event;
+                    if (join_if_missing)
+                    {
+                        join_room_command_(room_id, via, sess);
+                    }
+                    else if (main_app_)
+                    {
+                        main_app_->add_room_view()->open_join_with_prefill(room_id);
+                        request_relayout_();
+                    }
+                });
+        });
 }
 
 void ShellBase::on_room_selected_(const std::string& room_id)

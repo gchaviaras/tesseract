@@ -2754,20 +2754,66 @@ pub(super) fn parse_bridge_capabilities(
     }
 }
 
+/// Whether the room list hides a room. A tombstoned (upgraded) room stays
+/// listed — flagged as replaced — until the user has joined its successor, so
+/// the upgrade can be followed; once they have, only the new room is shown. A
+/// tombstone without a usable replacement id can't be followed, so it's hidden.
+pub(super) fn tombstone_hidden(
+    is_tombstoned: bool,
+    has_successor: bool,
+    successor_joined: bool,
+) -> bool {
+    is_tombstoned && (!has_successor || successor_joined)
+}
+
+/// Server name of a Matrix identifier (`!room:server`, `@user:server`): the
+/// part after the first `:`. `None` for room v12 ids, which carry no server.
+pub(super) fn id_server_part(id: &str) -> Option<&str> {
+    let (_, server) = id.split_once(':')?;
+    (!server.is_empty()).then_some(server)
+}
+
+/// Dedup candidate join-via servers, preserving order and dropping empties.
+pub(super) fn merge_via<I: IntoIterator<Item = String>>(candidates: I) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for c in candidates {
+        if !c.is_empty() && !out.contains(&c) {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Build a single `RoomInfo` snapshot from a `Room`. Returns `None` for
-/// tombstoned rooms (filtered out of the UI list). Called both during the
-/// initial `joined_rooms()` walk in `build_room_infos` and per-room from the
-/// incremental room-info-update watcher in `sync.rs` so we don't pay the
-/// O(N) SQLite fan-out cost when only one room changed.
+/// tombstoned rooms whose successor is already joined (see `tombstone_hidden`).
+/// Called both during the initial `joined_rooms()` walk in `build_room_infos`
+/// and per-room from the incremental room-info-update watcher in `sync.rs` so
+/// we don't pay the O(N) SQLite fan-out cost when only one room changed.
 #[cfg(not(test))]
 pub(super) async fn build_room_info(
     client: &Client,
     room: &Room,
     app_cache_db: &Arc<parking_lot::Mutex<Option<rusqlite::Connection>>>,
 ) -> Option<crate::ffi::RoomInfo> {
-    if room.is_tombstoned() {
+    let info = build_room_info_unfiltered(client, room, app_cache_db).await?;
+    if tombstone_hidden(
+        room.is_tombstoned(),
+        !info.successor_room_id.is_empty(),
+        info.successor_joined,
+    ) {
         return None;
     }
+    Some(info)
+}
+
+/// `build_room_info` without the tombstone-hiding filter: used to open an
+/// upgraded room's history even though it isn't in the room list.
+#[cfg(not(test))]
+pub(super) async fn build_room_info_unfiltered(
+    client: &Client,
+    room: &Room,
+    app_cache_db: &Arc<parking_lot::Mutex<Option<rusqlite::Connection>>>,
+) -> Option<crate::ffi::RoomInfo> {
     let name = room
         .display_name()
         .await
@@ -3075,6 +3121,58 @@ pub(super) async fn build_room_info(
         resolved
     };
 
+    // Room upgrades: the predecessor comes from our `m.room.create`, the
+    // successor from our `m.room.tombstone`. Room v12 ids carry no server part,
+    // so join-via hints also come from the creators' servers and our own.
+    let own_server = client.user_id().map(|u| u.server_name().to_string());
+    let creator_servers: Vec<String> = room
+        .creators()
+        .unwrap_or_default()
+        .iter()
+        .map(|u| u.server_name().to_string())
+        .collect();
+    let (predecessor_room_id, predecessor_via) = match room.predecessor_room() {
+        Some(p) => {
+            let id = p.room_id.to_string();
+            let via = merge_via(
+                id_server_part(&id)
+                    .map(str::to_owned)
+                    .into_iter()
+                    .chain(creator_servers.iter().cloned())
+                    .chain(own_server.clone()),
+            );
+            (id, via)
+        }
+        None => (String::new(), Vec::new()),
+    };
+    let (successor_room_id, successor_reason, successor_via, successor_joined) =
+        match room.successor_room() {
+            Some(s) => {
+                let id = s.room_id.to_string();
+                let via = merge_via(
+                    id_server_part(&id)
+                        .map(str::to_owned)
+                        .into_iter()
+                        .chain(id_server_part(room.room_id().as_str()).map(str::to_owned))
+                        .chain(creator_servers.iter().cloned())
+                        .chain(own_server.clone()),
+                );
+                let joined = client
+                    .get_room(&s.room_id)
+                    .is_some_and(|r| r.state() == matrix_sdk::RoomState::Joined);
+                (id, s.reason.unwrap_or_default(), via, joined)
+            }
+            None => (String::new(), String::new(), Vec::new(), false),
+        };
+
+    // A replaced room is dead history: it must not hold an unread badge (room
+    // list, tray) the user can no longer clear by writing there.
+    let (notification_count, highlight_count, unread_count) = if successor_room_id.is_empty() {
+        (notification_count, highlight_count, unread_count)
+    } else {
+        (0, 0, 0)
+    };
+
     Some(crate::ffi::RoomInfo {
         id: room.room_id().to_string(),
         name,
@@ -3116,6 +3214,12 @@ pub(super) async fn build_room_info(
             .canonical_alias()
             .map(|a| a.to_string())
             .unwrap_or_default(),
+        predecessor_room_id,
+        predecessor_via,
+        successor_room_id,
+        successor_reason,
+        successor_via,
+        successor_joined,
     })
 }
 
@@ -3189,6 +3293,8 @@ pub(super) struct RoomListFingerprintKey {
     guest_access: bool,
     history_visibility: String,
     pinned_ids: String,
+    successor_room_id: String,
+    successor_joined: bool,
 }
 
 /// Change-detection fingerprint for the room-list snapshot. The sync watcher
@@ -3315,6 +3421,11 @@ pub(super) fn room_list_fingerprint(
                     .map(|p| format!("{}\u{2}{}", p.event_id, p.body_preview))
                     .collect::<Vec<_>>()
                     .join("\u{1}"),
+                // Room upgrade: a tombstoned room gains a "replaced" marker and
+                // loses it from the list when its successor is joined; neither
+                // touches unread/name/recency, so they must perturb the key.
+                successor_room_id: r.successor_room_id.clone(),
+                successor_joined: r.successor_joined,
             }
         })
         .collect()
@@ -3479,6 +3590,36 @@ mod tests {
             id: id.to_owned(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn tombstone_hidden_truth_table() {
+        // Not tombstoned: always listed.
+        assert!(!tombstone_hidden(false, false, false));
+        assert!(!tombstone_hidden(false, true, true));
+        // Tombstoned, successor not joined yet: listed so the upgrade can be followed.
+        assert!(!tombstone_hidden(true, true, false));
+        // Tombstoned, successor joined: only the new room is shown.
+        assert!(tombstone_hidden(true, true, true));
+        // Tombstoned with no usable replacement: nothing to follow, hidden.
+        assert!(tombstone_hidden(true, false, false));
+    }
+
+    #[test]
+    fn id_server_part_handles_v11_and_v12_ids() {
+        assert_eq!(id_server_part("!abc:example.org"), Some("example.org"));
+        assert_eq!(id_server_part("@u:host:8448"), Some("host:8448"));
+        // Room v12: no server part.
+        assert_eq!(id_server_part("!Zm9vYmFy"), None);
+        assert_eq!(id_server_part("!abc:"), None);
+    }
+
+    #[test]
+    fn merge_via_dedups_in_order_and_drops_empties() {
+        let v = merge_via(
+            ["b.org", "", "a.org", "b.org"].into_iter().map(String::from),
+        );
+        assert_eq!(v, vec!["b.org".to_string(), "a.org".to_string()]);
     }
 
     #[test]

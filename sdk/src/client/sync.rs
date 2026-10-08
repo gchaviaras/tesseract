@@ -754,10 +754,21 @@ impl ClientFfi {
                                     cache.remove(&rid);
                                 }
                             }
+                            // Joining (or leaving) an upgraded room's successor
+                            // changes whether its tombstoned predecessor is
+                            // listed, though the predecessor itself sees no
+                            // update — re-evaluate it alongside.
+                            let predecessors: Vec<OwnedRoomId> = changed
+                                .iter()
+                                .filter_map(|id| client_clone.get_room(id))
+                                .filter_map(|r| r.predecessor_room())
+                                .map(|p| p.room_id)
+                                .collect();
+                            changed.extend(predecessors);
                             // Apply: per-room rebuild. Rooms whose membership
-                            // moved out of `Joined` (left/kicked/tombstoned)
-                            // are dropped from the cache, so the next emit
-                            // omits them.
+                            // moved out of `Joined` (left/kicked) or that were
+                            // tombstoned with a joined successor are dropped
+                            // from the cache, so the next emit omits them.
                             for room_id in &changed {
                                 let room = client_clone.get_room(room_id);
                                 let still_joined = room
@@ -770,7 +781,7 @@ impl ClientFfi {
                                     {
                                         cache.insert(room_id.clone(), info);
                                     } else {
-                                        // Tombstoned — exclude from the UI.
+                                        // Replaced by a joined successor — exclude from the UI.
                                         cache.remove(room_id);
                                     }
                                 } else {

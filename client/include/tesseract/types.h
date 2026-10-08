@@ -32,6 +32,7 @@ enum class EventType
     CallNotification, // org.matrix.msc4075.rtc.notification
     Membership, // m.room.member state-event row (join/leave/kick/ban/invite/knock/…)
     RoomName, // m.room.name state-event timeline row
+    RoomTombstone, // m.room.tombstone: this room was upgraded to another
 };
 
 /// One `m.room.member` membership transition, computed server-side by
@@ -484,6 +485,18 @@ struct RoomNameStateEvent : public Event
     std::string old_name; ///< empty if the room had no prior name
 };
 
+/// m.room.tombstone state event surfaced as a timeline row ("X upgraded this
+/// room"). `sender`/`sender_name` (base Event fields) identify who upgraded it;
+/// `body` carries the optional free-text reason.
+struct RoomTombstoneStateEvent : public Event
+{
+    RoomTombstoneStateEvent()
+    {
+        type = EventType::RoomTombstone;
+    }
+    std::string replacement_room_id;
+};
+
 /// org.matrix.msc4075.rtc.notification — MatrixRTC call ring/notification event.
 /// `body` carries the m.call.intent value: "audio" | "video" | "" (unknown/absent).
 struct CallNotificationEvent : public Event
@@ -675,6 +688,20 @@ struct RoomInfo
     /// Canonical alias of the room (`#alias:server`), empty when none is set.
     /// Read from local state — no network round-trip.
     std::string canonical_alias;
+    /// Room upgrade: id of the room this one replaces (`m.room.create`
+    /// `predecessor`), empty when this room is not an upgrade.
+    std::string predecessor_room_id;
+    /// Candidate servers to join `predecessor_room_id` through.
+    std::vector<std::string> predecessor_via;
+    /// Room upgrade: id of the room that replaces this one (`m.room.tombstone`
+    /// `replacement_room`), empty when this room has not been replaced.
+    std::string successor_room_id;
+    /// Free-text reason given with the tombstone; may be empty.
+    std::string successor_reason;
+    /// Candidate servers to join `successor_room_id` through.
+    std::vector<std::string> successor_via;
+    /// True when the successor room is one the user has already joined.
+    bool successor_joined = false;
 
     /// Effective avatar mxc to render for this room: the room's own avatar
     /// when set, otherwise the DM-counterpart fallback. May be empty (caller
@@ -716,7 +743,13 @@ struct RoomInfo
                join_rule == other.join_rule &&
                guest_access == other.guest_access &&
                pinned_events == other.pinned_events &&
-               canonical_alias == other.canonical_alias;
+               canonical_alias == other.canonical_alias &&
+               predecessor_room_id == other.predecessor_room_id &&
+               predecessor_via == other.predecessor_via &&
+               successor_room_id == other.successor_room_id &&
+               successor_reason == other.successor_reason &&
+               successor_via == other.successor_via &&
+               successor_joined == other.successor_joined;
     }
     bool operator!=(const RoomInfo& other) const
     {

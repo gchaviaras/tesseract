@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-08
 
+- feat(rooms): upgraded rooms keep their history reachable. The top of a new room says "This room continues an older conversation" with a **View older messages** button (joins the old room if needed); the old room shows a "replaced" strip with a disabled composer and a **Go to / Join the new room** button, an "X upgraded this room" line in its timeline, and stays in the room list as "Replaced by a newer room" until its successor is joined. Old permalinks into an upgraded room open in place. Qt6 build + ctest 2330/2330 + cargo 794, user-verified Qt6
 - feat(timeline): the mouse cursor turns into an I-beam over selectable message text (line boxes, so it doesn't flicker between characters) in all four shells. Qt6 build + ctest 2321/2321, user-verified Qt6
 - feat(rooms): the room info panel shows the room's MSC4334 language by name (e.g. "English (United States)"), and screen readers get it as the language of the room's messages (Qt6, Windows, macOS; GTK4 has no per-object language to set). The badge row is a new wrapping `tk::BadgeFlow`, so Encrypted / history / language / bridged badges no longer overflow the 280 px panel. Qt6 build + ctest 2320/2320, macOS x86_64 Release build
 - feat(settings): Settings › About refreshes the cache sizes every 5 s while the About tab is open. macOS x86_64 Release build, user-verified macOS

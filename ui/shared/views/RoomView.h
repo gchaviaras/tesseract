@@ -41,6 +41,7 @@
 #include "CallOverlayWidget.h"
 #include "CallBanner.h"
 #include "IdentityChangeBanner.h"
+#include "RoomReplacedBanner.h"
 #include "CallLobbyView.h"
 
 #include "tk/audio.h"
@@ -415,9 +416,21 @@ public:
     // Whether the identity-change strip holds a warning (whether or not
     // RoomView itself is currently visible).
     bool identity_warning_shown() const;
+    // The "this room has been replaced" strip (shown for an upgraded room).
+    RoomReplacedBanner* replaced_banner() const
+    {
+        return replaced_banner_;
+    }
     // Fired when the user clicks the strip's button for `w`: pin the new
     // identity (Kind::Changed) or withdraw verification (VerificationBroken).
     std::function<void(const tesseract::IdentityWarning& w)> on_resolve_identity_warning;
+
+    // Room upgrades: fired to open the shown room's previous version ("View
+    // older messages" at the top of the timeline) or its replacement (the
+    // "replaced" strip's button). `via` are candidate servers for joining it.
+    std::function<void(const std::string& room_id,
+                       const std::vector<std::string>& via)>
+        on_open_room_version;
 
     // Fired when the user answers (banner or header button). The shell calls
     // ShellBase::start_call(room_id, slot_id, audio_only).
@@ -960,6 +973,9 @@ private:
     // Identity-change strip — created in constructor (hidden), driven by
     // set_identity_warnings().
     IdentityChangeBanner* identity_banner_ = nullptr;
+    // "This room has been replaced" strip — shown for a tombstoned room, whose
+    // composer is disabled. Created hidden; driven by set_room().
+    RoomReplacedBanner* replaced_banner_ = nullptr;
     // Docked call panel — lazily created by mount_call_panel(), removed by
     // unmount_call_panel(). nullptr when no call is active.
     views::CallOverlayWidget* call_panel_ = nullptr;

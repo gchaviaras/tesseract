@@ -458,6 +458,18 @@ inline RoomInfo from_ffi(const tesseract_ffi::RoomInfo& r)
         out.pinned_events.push_back(from_ffi(p));
     }
     out.canonical_alias = std::string(r.canonical_alias);
+    out.predecessor_room_id = std::string(r.predecessor_room_id);
+    for (const auto& s : r.predecessor_via)
+    {
+        out.predecessor_via.emplace_back(std::string(s));
+    }
+    out.successor_room_id = std::string(r.successor_room_id);
+    out.successor_reason = std::string(r.successor_reason);
+    for (const auto& s : r.successor_via)
+    {
+        out.successor_via.emplace_back(std::string(s));
+    }
+    out.successor_joined = r.successor_joined;
     out.call_members.reserve(r.call_members.size());
     for (const auto& m : r.call_members)
     {
@@ -801,6 +813,14 @@ inline std::unique_ptr<Event> make_event(const tesseract_ffi::TimelineEvent& e)
         assign_base(*ev, e);
         ev->new_name = std::string(e.room_name_new);
         ev->old_name = std::string(e.room_name_old);
+        return ev;
+    }
+
+    if (msg_type == "m.room.tombstone")
+    {
+        auto ev = std::make_unique<RoomTombstoneStateEvent>();
+        assign_base(*ev, e);
+        ev->replacement_room_id = std::string(e.replacement_room_id);
         return ev;
     }
 

@@ -86,6 +86,11 @@ std::string preview_text_for(const tesseract::RoomInfo& room)
     {
         return room.topic;
     }
+    // An upgraded room's last message is stale history: say where it went.
+    if (!room.successor_room_id.empty())
+    {
+        return tk::tr("Replaced by a newer room");
+    }
     if (room.last_message_kind.empty())
     {
         return {};
@@ -776,7 +781,8 @@ private:
         const bool is_own_sender = room.last_message_sender_name.empty();
         const bool media_ok      = !owner_.media_allowed_provider_
                                    || owner_.media_allowed_provider_(room.id, is_own_sender);
-        if (!room.is_space && has_preview && owner_.sticker_provider_ && media_ok)
+        if (!room.is_space && room.successor_room_id.empty() && has_preview &&
+            owner_.sticker_provider_ && media_ok)
         {
             const std::string& kind = room.last_message_kind;
             thumb_url = kind == "sticker" ? room.last_message_sticker_url
@@ -805,7 +811,7 @@ private:
         // path + name centring even for a kind we render no text for); only
         // spaces recompute it from the topic string.
         std::string preview = preview_text_for(room);
-        if (room.is_space)
+        if (room.is_space || !room.successor_room_id.empty())
         {
             has_preview = !preview.empty();
         }

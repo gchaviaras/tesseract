@@ -419,6 +419,12 @@ public:
     /// are already handled by that call.
     std::vector<KnockedRoomInfo> list_my_knocks() const;
 
+    /// `RoomInfo` for one joined room, including an upgraded (tombstoned) room
+    /// the room list no longer shows because its successor is joined. Empty
+    /// when the room is unknown or not joined. Reads the local SDK cache; may
+    /// block briefly — call from a worker thread.
+    std::optional<RoomInfo> room_info(const std::string& room_id) const;
+
     /// Subscribe to the live list of pending knock requests for `room_id`
     /// (rooms the current user moderates). Fires an immediate
     /// IEventHandler::on_knock_requests_updated poke, then one on every

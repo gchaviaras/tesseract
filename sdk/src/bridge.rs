@@ -227,6 +227,20 @@ pub mod ffi {
         /// Canonical alias of the room (`#alias:server`), or empty when none
         /// is set.  Read from local state — no network round-trip.
         canonical_alias: String,
+        /// Room upgrade (`m.room.create` `predecessor`): id of the room this
+        /// one replaces, empty when this room is not an upgrade.
+        predecessor_room_id: String,
+        /// Candidate servers to join `predecessor_room_id` through.
+        predecessor_via: Vec<String>,
+        /// Room upgrade (`m.room.tombstone` `replacement_room`): id of the
+        /// room that replaces this one, empty when this room is not tombstoned.
+        successor_room_id: String,
+        /// Free-text reason from the tombstone's `body`; empty when absent.
+        successor_reason: String,
+        /// Candidate servers to join `successor_room_id` through.
+        successor_via: Vec<String>,
+        /// True when the successor room is one the user has already joined.
+        successor_joined: bool,
     }
 
     /// One entry from `m.room.pinned_events` resolved for the banner UI.
@@ -634,6 +648,9 @@ pub mod ffi {
         /// "m.room.name" only: the previous room name, empty when the room
         /// had none before (or the diff carries no previous content).
         room_name_old: String,
+        /// "m.room.tombstone" only: id of the replacement room (`body` carries
+        /// the optional reason). Empty otherwise.
+        replacement_room_id: String,
     }
 
     /// Outcome of an asynchronous SDK operation.
@@ -2203,6 +2220,12 @@ pub mod ffi {
         // ----- Room list -----
 
         fn list_rooms(self: &ClientFfi) -> Vec<RoomInfo>;
+
+        /// `RoomInfo` for one joined room, bypassing the room-list filter that
+        /// hides a tombstoned room once its successor is joined. Returns an
+        /// empty vec when the room is unknown or not joined, otherwise exactly
+        /// one element. Reads the local SDK cache; blocks — worker thread only.
+        fn room_info_by_id(self: &ClientFfi, room_id: &str) -> Vec<RoomInfo>;
 
         // ----- Invitations -----
 
@@ -4281,6 +4304,12 @@ impl Clone for ffi::RoomInfo {
             guest_access: self.guest_access,
             pinned_events: self.pinned_events.clone(),
             canonical_alias: self.canonical_alias.clone(),
+            predecessor_room_id: self.predecessor_room_id.clone(),
+            predecessor_via: self.predecessor_via.clone(),
+            successor_room_id: self.successor_room_id.clone(),
+            successor_reason: self.successor_reason.clone(),
+            successor_via: self.successor_via.clone(),
+            successor_joined: self.successor_joined,
         }
     }
 }

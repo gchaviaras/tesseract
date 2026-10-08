@@ -495,6 +495,17 @@ std::vector<KnockedRoomInfo> Client::list_my_knocks() const
     return ffi_vec<KnockedRoomInfo>(impl_->ffi->list_my_knocks());
 }
 
+std::optional<RoomInfo> Client::room_info(const std::string& room_id) const
+{
+    SH_FFI;
+    auto v = ffi_vec<RoomInfo>(impl_->ffi->room_info_by_id(room_id));
+    if (v.empty())
+    {
+        return std::nullopt;
+    }
+    return std::move(v.front());
+}
+
 Result Client::subscribe_room_knock_requests(const std::string& room_id)
 {
     SH_FFI;

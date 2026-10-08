@@ -5656,3 +5656,35 @@ msgstr "cyrillique"
 msgid "Arabic script"
 msgstr "écriture arabe"
 
+
+#: ui/shared/views
+msgid "This room continues an older conversation."
+msgstr "Ce salon poursuit une conversation plus ancienne."
+
+#: ui/shared/views
+msgid "View older messages"
+msgstr "Afficher les anciens messages"
+
+#: ui/shared/views
+msgid "{0} upgraded this room"
+msgstr "{0} a mis à niveau ce salon"
+
+#: ui/shared/views
+msgid "This room has been replaced and is no longer active."
+msgstr "Ce salon a été remplacé et n'est plus actif."
+
+#: ui/shared/views
+msgid "Go to the new room"
+msgstr "Aller au nouveau salon"
+
+#: ui/shared/views
+msgid "Join the new room"
+msgstr "Rejoindre le nouveau salon"
+
+#: ui/shared/views
+msgid "Replaced by a newer room"
+msgstr "Remplacé par un salon plus récent"
+
+#: ui/shared/views
+msgid "Switch to this account to open this room."
+msgstr "Passez à ce compte pour ouvrir ce salon."

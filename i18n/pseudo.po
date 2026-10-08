@@ -6341,3 +6341,35 @@ msgstr "[Çyrïllïçx]"
 msgid "Arabic script"
 msgstr "[Àràbïç sçrïptxx]"
 
+
+#: ui/shared/views
+msgid "This room continues an older conversation."
+msgstr "[Thïs rööm çöñtïñùés àñ öldér çöñvérsàtïöñ.xxxxxxxx]"
+
+#: ui/shared/views
+msgid "View older messages"
+msgstr "[Vïéw öldér méssàgésxxx]"
+
+#: ui/shared/views
+msgid "{0} upgraded this room"
+msgstr "[{0} ùpgràdéd thïs röömxxxx]"
+
+#: ui/shared/views
+msgid "This room has been replaced and is no longer active."
+msgstr "[Thïs rööm hàs bééñ réplàçéd àñd ïs ñö löñgér àçtïvé.xxxxxxxxxx]"
+
+#: ui/shared/views
+msgid "Go to the new room"
+msgstr "[Gö tö thé ñéw röömxxx]"
+
+#: ui/shared/views
+msgid "Join the new room"
+msgstr "[Jöïñ thé ñéw röömxxx]"
+
+#: ui/shared/views
+msgid "Replaced by a newer room"
+msgstr "[Réplàçéd by à ñéwér röömxxxx]"
+
+#: ui/shared/views
+msgid "Switch to this account to open this room."
+msgstr "[Swïtçh tö thïs àççöùñt tö öpéñ thïs rööm.xxxxxxxx]"

@@ -606,6 +606,13 @@ MessageRowData make_row_data(const tesseract::Event& ev,
         row.membership_reason = mem.reason;
         break;
     }
+    case tesseract::EventType::RoomTombstone:
+    {
+        row.kind = Kind::RoomTombstone;
+        row.replacement_room_id =
+            static_cast<const tesseract::RoomTombstoneStateEvent&>(ev).replacement_room_id;
+        break;
+    }
     case tesseract::EventType::RoomName:
     {
         row.kind = Kind::RoomName;
@@ -819,6 +826,9 @@ constexpr float kThreadChipRadius = tesseract::visual::kRadiusSM;
 constexpr float kDaySepH = 28.0f;
 constexpr float kReadMarkerH = 20.0f;
 constexpr float kTimelineStartH = 20.0f;
+// Extra height under the "start of conversation" label for the "View older
+// messages" button when the room replaced an older one.
+constexpr float kPredecessorLinkH = 28.0f;
 constexpr float kPinnedEventH   = 24.0f;  // m.room.pinned_events state row
 constexpr float kTypingRowH = 20.0f;
 
@@ -1144,6 +1154,17 @@ std::string room_name_change_phrase(const MessageRowData& m)
     return tk::trf(tk::tr("{0} changed the room name to {1}"), {s, m.room_name_new});
 }
 
+// Per-event phrase for an m.room.tombstone row, e.g. "Alice upgraded this
+// room: moving to the new version".
+std::string room_tombstone_phrase(const MessageRowData& m)
+{
+    const std::string s = m.sender_name.empty() ? m.sender : m.sender_name;
+    std::string line = tk::trf(tk::tr("{0} upgraded this room"), {s});
+    if (!m.body.empty())
+        line = tk::trf(tk::tr("{0}: {1}"), {line, m.body});
+    return line;
+}
+
 // Build the "Alice, Bob and 3 others" style name list for a collapsed
 // membership-group summary.
 std::string membership_names_label(const std::vector<std::string>& names)
@@ -1292,7 +1313,7 @@ static bool is_virtual_event(MessageRowData::Kind k)
     return k == Kind::DaySeparator || k == Kind::ReadMarker ||
            k == Kind::TimelineStart || k == Kind::PinnedEvent ||
            k == Kind::CallNotification || k == Kind::Membership ||
-           k == Kind::RoomName;
+           k == Kind::RoomName || k == Kind::RoomTombstone;
 }
 
 // Kinds whose body/caption can be edited in place. Image/File/Video carry an
@@ -1759,7 +1780,8 @@ public:
         }
         if (m.kind == Kind::TimelineStart)
         {
-            return kTimelineStartH;
+            return kTimelineStartH +
+                   (owner_.predecessor_available_ ? kPredecessorLinkH : 0.0f);
         }
         if (m.kind == Kind::PinnedEvent)
         {
@@ -1769,7 +1791,7 @@ public:
         {
             return kPinnedEventH;
         }
-        if (m.kind == Kind::RoomName)
+        if (m.kind == Kind::RoomName || m.kind == Kind::RoomTombstone)
         {
             return kPinnedEventH;
         }
@@ -1903,6 +1925,11 @@ public:
         if (m.kind == Kind::RoomName)
         {
             paint_room_name_change(m, ctx, bounds);
+            return;
+        }
+        if (m.kind == Kind::RoomTombstone)
+        {
+            paint_room_name_change(m, ctx, bounds, room_tombstone_phrase(m));
             return;
         }
         if (m.kind == Kind::Membership)
@@ -3365,7 +3392,9 @@ public:
                       ? tk::tr("New messages")
                       : std::string{};
         case Kind::TimelineStart:
-            return tk::tr("Start of conversation");
+            return owner_.predecessor_available_
+                       ? tk::tr("This room continues an older conversation.")
+                       : tk::tr("Start of conversation");
         case Kind::PinnedEvent:
             return m.sender_name.empty() ? m.body
                                          : tk::trf(tk::tr("{0} {1}"), {m.sender_name, m.body});
@@ -3381,6 +3410,8 @@ public:
         }
         case Kind::RoomName:
             return room_name_change_phrase(m);
+        case Kind::RoomTombstone:
+            return room_tombstone_phrase(m);
         case Kind::Membership:
         {
             if (is_membership_group_start(index))
@@ -4011,6 +4042,7 @@ private:
         case Kind::CallNotification:
         case Kind::Membership:
         case Kind::RoomName:
+        case Kind::RoomTombstone:
             return tk::Role::StaticText;
         default:
             return tk::Role::ListItem;
@@ -4129,7 +4161,11 @@ private:
         tk::TextStyle st{};
         st.role = tk::FontRole::Small;
         st.wrap = false;
-        auto lo = ctx.factory.build_text(tk::tr("Start of conversation"), st);
+        auto lo = ctx.factory.build_text(
+            owner_.predecessor_available_
+                ? tk::tr("This room continues an older conversation.")
+                : tk::tr("Start of conversation"),
+            st);
         if (!lo)
         {
             return;
@@ -4186,9 +4222,10 @@ private:
     }
 
     void paint_room_name_change(const MessageRowData& m, tk::PaintCtx& ctx,
-                                tk::Rect bounds) const
+                                tk::Rect bounds, std::string label = {}) const
     {
-        std::string label = room_name_change_phrase(m);
+        if (label.empty())
+            label = room_name_change_phrase(m);
         if (label.empty())
         {
             return;
@@ -4750,6 +4787,7 @@ private:
         case MessageRowData::Kind::CallNotification:
         case MessageRowData::Kind::Membership:
         case MessageRowData::Kind::RoomName:
+        case MessageRowData::Kind::RoomTombstone:
             return 0.0f;
         }
         return quote_h;
@@ -5143,6 +5181,7 @@ private:
         case MessageRowData::Kind::CallNotification:
         case MessageRowData::Kind::Membership:
         case MessageRowData::Kind::RoomName:
+        case MessageRowData::Kind::RoomTombstone:
             break;
         }
         return y;
@@ -7377,6 +7416,31 @@ MessageListView::MessageListView() : adapter_(std::make_unique<Adapter>(*this))
             request_repaint_();
     };
     add_child(std::move(uw));
+
+    // "View older messages" — a real button, positioned over the
+    // start-of-timeline row at paint time (see paint()).
+    auto pl = tk::create_widget<tk::Button>(this, tk::tr("View older messages"),
+                                            std::function<void()>{},
+                                            tk::Button::Variant::Link);
+    pl->set_on_click(
+        [this]
+        {
+            if (on_open_predecessor)
+                on_open_predecessor();
+        });
+    pl->set_visible(false);
+    predecessor_link_ = add_child(std::move(pl));
+}
+
+void MessageListView::set_predecessor_available(bool available)
+{
+    if (predecessor_available_ == available)
+        return;
+    predecessor_available_ = available;
+    if (!available && predecessor_link_)
+        predecessor_link_->set_visible(false);
+    // The start-of-timeline row changes height.
+    invalidate_data();
 }
 
 std::optional<MessageListView::StickerHit>
@@ -11512,6 +11576,40 @@ void MessageListView::paint(tk::PaintCtx& ctx)
     else
     {
         unread_pill_rect_ = {};
+    }
+
+    // "View older messages" — sits under the start-of-timeline label while that
+    // row is on screen; hidden (so it neither paints nor takes input) whenever
+    // the row is scrolled partly out of view.
+    if (predecessor_link_)
+    {
+        bool show = false;
+        if (predecessor_available_)
+        {
+            const std::size_t scan = std::min<std::size_t>(messages_.size(), 3);
+            for (std::size_t i = 0; i < scan && !show; ++i)
+            {
+                if (messages_[i].kind != MessageRowData::Kind::TimelineStart)
+                    continue;
+                const tk::Rect row = row_world_rect(static_cast<int>(i));
+                const tk::Rect v = bounds();
+                const tk::Rect slot{row.x, row.y + kTimelineStartH, row.w,
+                                    kPredecessorLinkH};
+                if (slot.y >= v.y && slot.y + slot.h <= v.y + v.h)
+                {
+                    tk::LayoutCtx lctx{ctx.factory, ctx.theme};
+                    const float w = std::min(
+                        predecessor_link_->measure(lctx, {slot.w, slot.h}).w, slot.w);
+                    predecessor_link_->set_visible(true);
+                    predecessor_link_->arrange(
+                        lctx, {slot.x + (slot.w - w) * 0.5f, slot.y, w, slot.h});
+                    predecessor_link_->paint(ctx);
+                    show = true;
+                }
+            }
+        }
+        if (!show)
+            predecessor_link_->set_visible(false);
     }
 
     // Tooltip overlay: paint a small panel listing senders of the

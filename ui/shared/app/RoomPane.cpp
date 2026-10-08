@@ -338,6 +338,21 @@ void RoomPane::wire_room_view_()
         resolve_identity_warning_(w);
     };
 
+    // Room upgrades: the "View older messages" link and the "replaced" strip.
+    // Wired here so pop-outs get them too; navigation always happens in the
+    // main window's active account.
+    rv->on_open_room_version = [this](const std::string& room_id,
+                                      const std::vector<std::string>& via)
+    {
+        if (session_() != shell_->active_account_)
+        {
+            shell_show_status_message_(
+                tk::tr("Switch to this account to open this room."));
+            return;
+        }
+        shell_->open_room_version_(room_id, via);
+    };
+
     // Encryption trust row on the profile panel (user verification). Wired
     // per pane so pop-outs get it too, each on its own account.
     if (auto* panel = rv->user_profile_panel())

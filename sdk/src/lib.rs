@@ -138,6 +138,12 @@ pub mod ffi {
         pub guest_access: bool,
         pub pinned_events: Vec<PinnedEvent>,
         pub canonical_alias: String,
+        pub predecessor_room_id: String,
+        pub predecessor_via: Vec<String>,
+        pub successor_room_id: String,
+        pub successor_reason: String,
+        pub successor_via: Vec<String>,
+        pub successor_joined: bool,
     }
 
     #[derive(Debug, PartialEq, Default, Clone)]
@@ -283,6 +289,7 @@ pub mod ffi {
         pub membership_reason: String,
         pub room_name_new: String,
         pub room_name_old: String,
+        pub replacement_room_id: String,
     }
 
     #[derive(Debug, PartialEq, Default)]

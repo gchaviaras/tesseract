@@ -287,6 +287,22 @@ RoomView::RoomView()
         if (on_resolve_identity_warning) on_resolve_identity_warning(w);
     };
 
+    replaced_banner_ = add_child(std::make_unique<RoomReplacedBanner>());
+    replaced_banner_->set_visible(false);
+    replaced_banner_->on_open = [this]
+    {
+        if (on_open_room_version && !current_room_info_.successor_room_id.empty())
+            on_open_room_version(current_room_info_.successor_room_id,
+                                 current_room_info_.successor_via);
+    };
+    if (message_list_)
+        message_list_->on_open_predecessor = [this]
+        {
+            if (on_open_room_version && !current_room_info_.predecessor_room_id.empty())
+                on_open_room_version(current_room_info_.predecessor_room_id,
+                                     current_room_info_.predecessor_via);
+        };
+
     if (header_)
         header_->on_call_requested = [this](tk::Rect btn_rect)
         {
@@ -1786,7 +1802,20 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
     has_room_ = true;
     current_room_info_ = info;
     if (message_list_)
+    {
         message_list_->set_room_language(info.language);
+        message_list_->set_predecessor_available(!info.predecessor_room_id.empty());
+    }
+    // An upgraded room is read-only history: the strip points at its successor.
+    const bool replaced = !info.successor_room_id.empty();
+    if (replaced_banner_)
+    {
+        const bool was_shown = replaced_banner_->own_visible();
+        replaced_banner_->set_successor_joined(info.successor_joined);
+        replaced_banner_->set_visible(replaced);
+        if (was_shown != replaced && on_layout_changed)
+            on_layout_changed();
+    }
     if (emoji_picker_)
         emoji_picker_->set_current_room_id(info.id);
     if (sticker_picker_)
@@ -1805,7 +1834,7 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
     }
     if (compose_bar_)
     {
-        compose_bar_->set_enabled(true);
+        compose_bar_->set_enabled(!replaced);
         compose_bar_->set_room_name(info.name.empty() ? info.id : info.name);
         // Default-focus policy: composing is the primary activity in a chat
         // client, so a genuine room switch (not a same-room metadata
@@ -1820,7 +1849,7 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
         // Calling focus() synchronously here raced that and silently
         // no-op'd via Host::request_focus's visible_in_tree() guard, with
         // nothing ever retrying once the widget became visible.
-        if (room_changed)
+        if (room_changed && !replaced)
             pending_default_focus_ = true;
     }
 }
@@ -1829,7 +1858,12 @@ void RoomView::clear_room()
 {
     has_room_ = false;
     if (message_list_)
+    {
         message_list_->set_room_language({});
+        message_list_->set_predecessor_available(false);
+    }
+    if (replaced_banner_)
+        replaced_banner_->set_visible(false);
     if (call_lobby_ && call_lobby_->is_open())
     {
         if (call_lobby_->on_cancel) call_lobby_->on_cancel();
@@ -2290,6 +2324,14 @@ void RoomView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
         list_top += IdentityChangeBanner::kHeight;
     }
 
+    // Room-replaced strip — same full-width strip, for an upgraded room.
+    if (replaced_banner_ && replaced_banner_->visible())
+    {
+        replaced_banner_->arrange(ctx, {bounds.x, list_top, bounds.w,
+                                        RoomReplacedBanner::kHeight});
+        list_top += RoomReplacedBanner::kHeight;
+    }
+
     // Docked call panel — occupies kDockedH between banners and message list.
     // DockedExpanded collapses the message area entirely.
     if (call_panel_ && call_panel_->visible())
@@ -2467,6 +2509,8 @@ void RoomView::paint(tk::PaintCtx& ctx)
         call_banner_->paint(ctx);
     if (identity_banner_ && identity_banner_->visible())
         identity_banner_->paint(ctx);
+    if (replaced_banner_ && replaced_banner_->visible())
+        replaced_banner_->paint(ctx);
     if (room_search_bar_ && room_search_bar_->is_open())
         room_search_bar_->paint(ctx);
     if (message_list_)

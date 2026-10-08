@@ -5654,3 +5654,35 @@ msgstr "Kyrillisch"
 msgid "Arabic script"
 msgstr "Arabische Schrift"
 
+
+#: ui/shared/views
+msgid "This room continues an older conversation."
+msgstr "Dieser Raum setzt eine ältere Unterhaltung fort."
+
+#: ui/shared/views
+msgid "View older messages"
+msgstr "Ältere Nachrichten anzeigen"
+
+#: ui/shared/views
+msgid "{0} upgraded this room"
+msgstr "{0} hat diesen Raum aktualisiert"
+
+#: ui/shared/views
+msgid "This room has been replaced and is no longer active."
+msgstr "Dieser Raum wurde ersetzt und ist nicht mehr aktiv."
+
+#: ui/shared/views
+msgid "Go to the new room"
+msgstr "Zum neuen Raum wechseln"
+
+#: ui/shared/views
+msgid "Join the new room"
+msgstr "Dem neuen Raum beitreten"
+
+#: ui/shared/views
+msgid "Replaced by a newer room"
+msgstr "Durch einen neueren Raum ersetzt"
+
+#: ui/shared/views
+msgid "Switch to this account to open this room."
+msgstr "Wechsle zu diesem Konto, um diesen Raum zu öffnen."

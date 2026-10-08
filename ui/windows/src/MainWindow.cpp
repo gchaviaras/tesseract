@@ -3845,6 +3845,9 @@ void MainWindow::bind_settings_controller_()
     // settings_controller_ is freshly constructed by
     // ShellBase::ensure_settings_controller_(); install the native key/file
     // dialog hooks and bind it to the native settings view + name field.
+    // It is only constructed on the login/account-switch paths, so it can
+    // still be null here: wire_key_dialog_callbacks_() tolerates that, and
+    // wire_settings_controller_common_() already guards on it.
     wire_key_dialog_callbacks_();
 
     if (settings_view_)
@@ -6396,6 +6399,13 @@ void MainWindow::set_message_scroll_fraction_(float t)
 
 void MainWindow::wire_key_dialog_callbacks_()
 {
+    // Screenshot mode never logs in, so ensure_settings_controller_() never
+    // ran and the controller is still null. Binding these hooks would
+    // dereference it and access-violate, which killed the capture on the
+    // settings scene. Nothing here is reachable without a signed-in client.
+    if (!settings_controller_)
+        return;
+
     settings_controller_->show_passphrase_prompt =
         [this](std::string title, std::function<void(std::string)> cb)
     {

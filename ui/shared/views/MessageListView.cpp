@@ -1080,6 +1080,18 @@ std::string membership_expanded_phrase_base(const MessageRowData& m)
                    ? tk::trf(tk::tr("{0}'s request to join was denied by {1}"),
                             {t, s})
                    : tk::trf(tk::tr("{0}'s join request was denied"), {t});
+    case A::AvatarChanged:
+        return tk::trf(tk::tr("{0} changed their avatar"), {t});
+    case A::AvatarRemoved:
+        return tk::trf(tk::tr("{0} removed their avatar"), {t});
+    case A::DisplayNameChanged:
+        // The old name isn't known here; the Matrix ID names who it was.
+        return tk::trf(tk::tr("{0} changed their display name to {1}"),
+                       {m.membership_target_user_id, t});
+    case A::DisplayNameRemoved:
+        return tk::trf(tk::tr("{0} removed their display name"), {t});
+    case A::ProfileChanged:
+        return tk::trf(tk::tr("{0} changed their display name and avatar"), {t});
     }
     return t;
 }
@@ -1177,6 +1189,26 @@ std::string membership_summary_phrase(tesseract::MembershipAction action,
         return tk::trf(tk::trn("{0}'s request to join was denied",
                               "{0}'s requests to join were denied", n),
                        {label});
+    case A::AvatarChanged:
+        return tk::trf(tk::trn("{0} updated their avatar",
+                              "{0} updated their avatars", n),
+                       {label});
+    case A::AvatarRemoved:
+        return tk::trf(tk::trn("{0} cleared their avatar",
+                              "{0} cleared their avatars", n),
+                       {label});
+    case A::DisplayNameChanged:
+        return tk::trf(tk::trn("{0} updated their display name",
+                              "{0} updated their display names", n),
+                       {label});
+    case A::DisplayNameRemoved:
+        return tk::trf(tk::trn("{0} cleared their display name",
+                              "{0} cleared their display names", n),
+                       {label});
+    case A::ProfileChanged:
+        return tk::trf(tk::trn("{0} updated their display name and avatar",
+                              "{0} updated their display names and avatars", n),
+                       {label});
     }
     return label;
 }
@@ -1187,23 +1219,38 @@ std::string membership_target_label(const MessageRowData& m)
                                             : m.membership_target_name;
 }
 
-// One collapsed-summary line: the phrase for every row of `run`. A
-// single-member line keeps the target's pronoun and the event's reason.
+} // namespace
+
+// One collapsed-summary line: the phrase for every row of `run`. People are
+// counted once however many rows they have (John changing his avatar twice
+// reads "John changed their avatar", not "John and John …"). A line about a
+// single row keeps the target's pronoun and the event's reason; one person
+// with several rows keeps the pronoun but no reason (it belongs to one event).
 std::string membership_run_phrase(const std::vector<MessageRowData>& msgs,
                                   const MembershipActionRun& run)
 {
     std::vector<std::string> names;
+    std::vector<std::string> seen_ids;
     names.reserve(run.rows.size());
     for (std::size_t i : run.rows)
-        names.push_back(membership_target_label(msgs[i]));
-    if (run.rows.size() != 1)
-        return membership_summary_phrase(run.action, names, "their");
-    const MessageRowData& only = msgs[run.rows.front()];
-    return with_membership_reason(
-        membership_summary_phrase(run.action, names, only.target_pronoun), only);
+    {
+        const MessageRowData& m = msgs[i];
+        const std::string& id = m.membership_target_user_id;
+        // Rows without a target id (shouldn't happen) are never merged.
+        if (!id.empty() &&
+            std::find(seen_ids.begin(), seen_ids.end(), id) != seen_ids.end())
+            continue;
+        seen_ids.push_back(id);
+        names.push_back(membership_target_label(m));
+    }
+    const MessageRowData& first = msgs[run.rows.front()];
+    if (run.rows.size() == 1)
+        return with_membership_reason(
+            membership_summary_phrase(run.action, names, first.target_pronoun), first);
+    if (names.size() == 1)
+        return membership_summary_phrase(run.action, names, first.target_pronoun);
+    return membership_summary_phrase(run.action, names, "their");
 }
-
-} // namespace
 
 static bool is_virtual_event(MessageRowData::Kind k)
 {
@@ -8279,6 +8326,47 @@ void MessageListView::update_member_pronoun(const std::string& user_id,
                 invalidate_row(start);
         }
     });
+}
+
+void MessageListView::update_member_profile(
+    const std::string& user_id, const std::optional<std::string>& display_name,
+    const std::optional<std::string>& avatar_url)
+{
+    std::vector<std::size_t> matched;
+    for (std::size_t i = 0; i < messages_.size(); ++i)
+    {
+        auto& m = messages_[i];
+        if (m.sender != user_id)
+            continue;
+        bool changed = false;
+        if (display_name && m.sender_name != *display_name)
+        {
+            m.sender_name = *display_name;
+            changed = true;
+        }
+        if (avatar_url && m.sender_avatar_url != *avatar_url)
+        {
+            m.sender_avatar_url = *avatar_url;
+            changed = true;
+        }
+        if (changed)
+            matched.push_back(i);
+    }
+    if (matched.empty())
+        return;
+    // The visible-range diff would otherwise see an unchanged row set and
+    // never request the new avatar.
+    reset_visible_avatar_tracking();
+    if (display_name)
+    {
+        preserve_top_through([&]
+        {
+            for (std::size_t i : matched)
+                invalidate_row(i);
+        });
+    }
+    if (request_repaint_)
+        request_repaint_();
 }
 
 void MessageListView::set_audio_player(std::unique_ptr<tk::AudioPlayer> player)

@@ -1827,8 +1827,8 @@ msgid "Set your display name in this room"
 msgstr "Deinen Anzeigenamen in diesem Chat festlegen"
 
 #: ui/shared/app/SlashCommands.cpp:140
-msgid "Set your avatar in this room"
-msgstr "Dein Profilbild in diesem Chat festlegen"
+msgid "Set or reset your avatar in this room"
+msgstr "Dein Profilbild in diesem Chat festlegen oder zurücksetzen"
 
 #: ui/shared/app/SlashCommands.cpp:141
 msgid "Join a room by alias or ID"
@@ -3533,8 +3533,8 @@ msgid "no image URL provided; use /myroomavatar alone to open the image picker"
 msgstr "keine Bild-URL angegeben; verwende /myroomavatar ohne Argument, um die Bildauswahl zu öffnen"
 
 #: ui/shared/app/SlashCommands.cpp:330
-msgid "expected an mxc:// or http(s) image URL"
-msgstr "mxc://- oder http(s)-Bild-URL erwartet"
+msgid "expected an mxc:// or http(s) image URL, or \"reset\""
+msgstr "mxc://- oder http(s)-Bild-URL oder „reset“ erwartet"
 
 #: ui/shared/tk/i18n.cpp:633
 msgid "Jan"
@@ -5359,3 +5359,82 @@ msgstr "Sicherung wird ausgeschaltet…"
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Backup is off. Your encrypted messages are kept only on your devices."
 msgstr "Die Sicherung ist aus. Deine verschlüsselten Nachrichten liegen nur noch auf deinen Geräten."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Avatar updated for this room"
+msgstr "Profilbild für diesen Chat aktualisiert"
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Avatar reset for this room"
+msgstr "Profilbild für diesen Chat zurückgesetzt"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Failed to upload avatar: {0}"
+msgstr "Hochladen des Profilbilds fehlgeschlagen: {0}"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Failed to set room avatar: {0}"
+msgstr "Profilbild für diesen Chat konnte nicht gesetzt werden: {0}"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their avatar"
+msgstr "{0} hat das Profilbild geändert"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} removed their avatar"
+msgstr "{0} hat das Profilbild entfernt"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their display name to {1}"
+msgstr "{0} hat den Anzeigenamen zu {1} geändert"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} removed their display name"
+msgstr "{0} hat den Anzeigenamen entfernt"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their display name and avatar"
+msgstr "{0} hat Anzeigenamen und Profilbild geändert"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their avatar"
+msgid_plural "{0} updated their avatars"
+msgstr[0] "{0} hat das Profilbild aktualisiert"
+msgstr[1] "{0} haben ihre Profilbilder aktualisiert"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} cleared their avatar"
+msgid_plural "{0} cleared their avatars"
+msgstr[0] "{0} hat das Profilbild entfernt"
+msgstr[1] "{0} haben ihre Profilbilder entfernt"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their display name"
+msgid_plural "{0} updated their display names"
+msgstr[0] "{0} hat den Anzeigenamen aktualisiert"
+msgstr[1] "{0} haben ihre Anzeigenamen aktualisiert"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} cleared their display name"
+msgid_plural "{0} cleared their display names"
+msgstr[0] "{0} hat den Anzeigenamen entfernt"
+msgstr[1] "{0} haben ihre Anzeigenamen entfernt"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their display name and avatar"
+msgid_plural "{0} updated their display names and avatars"
+msgstr[0] "{0} hat Anzeigenamen und Profilbild aktualisiert"
+msgstr[1] "{0} haben ihre Anzeigenamen und Profilbilder aktualisiert"
+

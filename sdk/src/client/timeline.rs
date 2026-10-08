@@ -297,8 +297,20 @@ pub(super) fn filter_for_channel(
 // `show` is a fresh snapshot of ClientFfi::show_membership_events, read once
 // per collect_timeline_ops/refresh_receipts call by the caller.
 #[cfg(not(test))]
-fn filter_membership(ev: Option<TimelineEvent>, show: bool) -> Option<TimelineEvent> {
-    ev.filter(|e| show || e.msg_type != "m.room.member")
+fn filter_membership(
+    ev: Option<TimelineEvent>,
+    show: bool,
+    me: Option<&UserId>,
+) -> Option<TimelineEvent> {
+    ev.filter(|e| {
+        super::timeline_convert::membership_event_visible(
+            &e.msg_type,
+            &e.membership_action,
+            &e.membership_target_user_id,
+            show,
+            me.map(|u| u.as_str()),
+        )
+    })
 }
 
 // Cheap, synchronous Image/Video check on a raw matrix-sdk-ui timeline item —
@@ -365,6 +377,7 @@ pub(super) async fn collect_timeline_ops(
                         channel,
                     ),
                     show_membership,
+                    me,
                 );
                 if let Some(ev) = ev {
                     visible.push(true);
@@ -392,6 +405,7 @@ pub(super) async fn collect_timeline_ops(
                     channel,
                 ),
                 show_membership,
+                me,
             );
             if let Some(ev) = ev {
                 visible.push(true);
@@ -415,6 +429,7 @@ pub(super) async fn collect_timeline_ops(
                     channel,
                 ),
                 show_membership,
+                me,
             );
             if let Some(ev) = ev {
                 visible.insert(0, true);
@@ -444,6 +459,7 @@ pub(super) async fn collect_timeline_ops(
                     channel,
                 ),
                 show_membership,
+                me,
             );
             if let Some(ev) = ev {
                 let v_idx = visible_index_of(visible, index);
@@ -489,6 +505,7 @@ pub(super) async fn collect_timeline_ops(
                     channel,
                 ),
                 show_membership,
+                me,
             );
             let was_visible = visible.get(index).copied().unwrap_or(false);
             match (was_visible, new_ev) {
@@ -617,6 +634,7 @@ pub(super) async fn collect_timeline_ops(
                         channel,
                     ),
                     show_membership,
+                    me,
                 );
                 if let Some(ev) = ev {
                     visible.push(true);
@@ -687,6 +705,7 @@ async fn refresh_receipts(
         let ev = filter_membership(
             filter_for_channel(timeline_item_to_ffi(item, room_id, room, me).await, channel),
             show_membership,
+            me,
         );
         let was_visible_in_shadow = visible[slot_idx];
         let is_visible_now = ev.is_some();
@@ -810,6 +829,7 @@ impl ClientFfi {
                             &ch,
                         ),
                         show_membership,
+                        me.as_deref(),
                     );
                     if let Some(ev) = ev {
                         visible.push(true);

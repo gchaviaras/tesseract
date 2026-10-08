@@ -4503,9 +4503,11 @@ protected:
     // one-shot async lookup on a miss or when the active room changed.
     std::string strip_avatar_url_();
     void request_own_room_avatar_(const std::string& room_id);
-    // Drops the cached own-room avatar when `ev` is the user's own membership
-    // event (join / profile change) so the strip re-reads it.
-    void note_own_membership_event_(const std::string& room_id, const tesseract::Event& ev);
+    // Reacts to a live m.room.member row: re-reads the user's own avatar for
+    // the strip, and for a profile-only change (display name / avatar) patches
+    // that sender's existing rows in every window showing the room and
+    // refreshes the member list behind the room info panel.
+    void note_member_event_(const std::string& room_id, const tesseract::Event& ev);
     /// Re-reads display prefs in every message list (main, thread, popouts).
     void refresh_all_message_lists_display_prefs_();
 

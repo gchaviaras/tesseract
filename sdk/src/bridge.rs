@@ -605,7 +605,10 @@ pub mod ffi {
         /// "banned" | "unbanned" | "kicked" | "invited" |
         /// "kicked_and_banned" | "invitation_accepted" |
         /// "invitation_rejected" | "invitation_revoked" | "knocked" |
-        /// "knock_accepted" | "knock_retracted" | "knock_denied". Never
+        /// "knock_accepted" | "knock_retracted" | "knock_denied", or a profile
+        /// change by an already-joined member: "avatar_changed" |
+        /// "avatar_removed" | "display_name_changed" | "display_name_removed" |
+        /// "profile_changed" (both). Never
         /// English prose — the C++ layer maps this to a tk::tr()/tk::trf()
         /// phrase (see CLAUDE.md's i18n rule). Empty for all other msg_types.
         membership_action: String,
@@ -3601,6 +3604,8 @@ pub mod ffi {
         /// Set the current user's avatar in a specific room
         /// (m.room.member state event). Blocks — worker thread.
         fn set_user_room_avatar(self: &ClientFfi, room_id: &str, mxc_uri: &str) -> OpResult;
+        /// Reset the own avatar in `room_id` to the account (profile) avatar.
+        fn reset_user_room_avatar(self: &ClientFfi, room_id: &str) -> OpResult;
         fn set_user_room_avatar_from_url(self: &ClientFfi, room_id: &str, url: &str) -> OpResult;
         /// The user's own avatar mxc in `room_id` from the local store; empty if none.
         fn own_room_avatar(self: &ClientFfi, room_id: &str) -> String;

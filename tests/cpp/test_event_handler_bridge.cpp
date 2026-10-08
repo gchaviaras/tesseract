@@ -279,6 +279,13 @@ TEST_CASE("parse_membership_action round-trips every known discriminant",
           MembershipAction::KnockRetracted);
     CHECK(tesseract::parse_membership_action("knock_denied") ==
           MembershipAction::KnockDenied);
+    CHECK(tesseract::parse_membership_action("avatar_changed") == MembershipAction::AvatarChanged);
+    CHECK(tesseract::parse_membership_action("avatar_removed") == MembershipAction::AvatarRemoved);
+    CHECK(tesseract::parse_membership_action("display_name_changed") ==
+          MembershipAction::DisplayNameChanged);
+    CHECK(tesseract::parse_membership_action("display_name_removed") ==
+          MembershipAction::DisplayNameRemoved);
+    CHECK(tesseract::parse_membership_action("profile_changed") == MembershipAction::ProfileChanged);
     // Unreachable in practice (Rust only ever emits a known discriminant);
     // must not crash on garbage input.
     CHECK(tesseract::parse_membership_action("garbage") == MembershipAction::Joined);

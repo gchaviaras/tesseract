@@ -2671,10 +2671,40 @@ impl ClientFfi {
     /// event). Preserves all other existing member event fields. Blocks — worker thread.
     #[cfg(not(test))]
     pub fn set_user_room_avatar(&self, room_id: &str, mxc_uri: &str) -> OpResult {
-        use matrix_sdk::ruma::{
-            events::room::member::{MembershipState, RoomMemberEventContent},
-            OwnedMxcUri,
+        use matrix_sdk::ruma::OwnedMxcUri;
+
+        let mxc: OwnedMxcUri = match mxc_uri.try_into() {
+            Ok(u) => u,
+            Err(_) => return err("invalid mxc URI"),
         };
+        self.send_own_member_avatar(room_id, Some(mxc), "room_list/set_avatar")
+    }
+
+    /// Reset the current user's avatar in `room_id` to their account (profile)
+    /// avatar — what the room shows when no room-specific avatar was ever set.
+    /// An account without an avatar clears the room avatar. Blocks — worker thread.
+    #[cfg(not(test))]
+    pub fn reset_user_room_avatar(&self, room_id: &str) -> OpResult {
+        let Some(client) = self.client.as_ref() else {
+            return err("not logged in");
+        };
+        let account_avatar = match self.rt.block_on(client.account().get_avatar_url()) {
+            Ok(a) => a,
+            Err(e) => return err(e.to_string()),
+        };
+        self.send_own_member_avatar(room_id, account_avatar, "room_list/reset_avatar")
+    }
+
+    /// Shared body of set/reset: rewrite the own `m.room.member` content with
+    /// `avatar_url` (None clears it), keeping every other field.
+    #[cfg(not(test))]
+    fn send_own_member_avatar(
+        &self,
+        room_id: &str,
+        avatar: Option<matrix_sdk::ruma::OwnedMxcUri>,
+        label: &str,
+    ) -> OpResult {
+        use matrix_sdk::ruma::events::room::member::{MembershipState, RoomMemberEventContent};
 
         let Some(client) = self.client.as_ref() else {
             return err("not logged in");
@@ -2683,19 +2713,16 @@ impl ClientFfi {
             return err("not logged in");
         };
         let (_, room) = try_op!(require_room(client, room_id));
-
-        let mxc: OwnedMxcUri = match mxc_uri.try_into() {
-            Ok(u) => u,
-            Err(_) => return err("invalid mxc URI"),
-        };
         let _guard = super::InFlightGuard::new(
             &self.in_flight,
             &self.handler,
             #[cfg(debug_assertions)]
             &self.in_flight_urls,
             #[cfg(debug_assertions)]
-            "room_list/set_avatar".to_string(),
+            label.to_string(),
         );
+        #[cfg(not(debug_assertions))]
+        let _ = label;
 
         let mut content = match self.rt.block_on(room.get_member(user_id)) {
             Ok(Some(m)) => match m.event().as_sync() {
@@ -2706,7 +2733,7 @@ impl ClientFfi {
             _ => RoomMemberEventContent::new(MembershipState::Join),
         };
 
-        content.avatar_url = Some(mxc);
+        content.avatar_url = avatar;
 
         match self
             .rt
@@ -2719,6 +2746,11 @@ impl ClientFfi {
 
     #[cfg(test)]
     pub fn set_user_room_avatar(&self, _room_id: &str, _mxc_uri: &str) -> OpResult {
+        err("not logged in")
+    }
+
+    #[cfg(test)]
+    pub fn reset_user_room_avatar(&self, _room_id: &str) -> OpResult {
         err("not logged in")
     }
 

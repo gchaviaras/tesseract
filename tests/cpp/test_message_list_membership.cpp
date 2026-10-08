@@ -259,3 +259,87 @@ TEST_CASE("make_row_data keeps a sender status only when its emoji is pure emoji
         CHECK(r.sender_status_text.empty());
     }
 }
+
+TEST_CASE("update_member_profile patches only that sender's rows", "[message_list][membership]")
+{
+    using tesseract::views::MessageListView;
+    MessageListView view;
+    auto text = [](const std::string& id, const std::string& sender, const std::string& name,
+                   const std::string& avatar)
+    {
+        MessageRowData r = text_row(id);
+        r.sender = sender;
+        r.sender_name = name;
+        r.sender_avatar_url = avatar;
+        return r;
+    };
+    view.set_messages({text("$1", "@me:x", "Me", "mxc://x/old"),
+                       text("$2", "@bob:x", "Bob", "mxc://x/bob"),
+                       text("$3", "@me:x", "Me", "mxc://x/old")});
+
+    // Avatar only: name untouched, other senders untouched.
+    view.update_member_profile("@me:x", std::nullopt, std::string("mxc://x/new"));
+    CHECK(view.messages()[0].sender_avatar_url == "mxc://x/new");
+    CHECK(view.messages()[2].sender_avatar_url == "mxc://x/new");
+    CHECK(view.messages()[0].sender_name == "Me");
+    CHECK(view.messages()[1].sender_avatar_url == "mxc://x/bob");
+
+    // Name only.
+    view.update_member_profile("@me:x", std::string("Me!"), std::nullopt);
+    CHECK(view.messages()[0].sender_name == "Me!");
+    CHECK(view.messages()[0].sender_avatar_url == "mxc://x/new");
+    CHECK(view.messages()[1].sender_name == "Bob");
+
+    // Removed avatar = empty url.
+    view.update_member_profile("@me:x", std::nullopt, std::string());
+    CHECK(view.messages()[2].sender_avatar_url.empty());
+
+    // Unknown sender: no-op.
+    view.update_member_profile("@nobody:x", std::string("X"), std::string("mxc://x/x"));
+    CHECK(view.messages()[1].sender_name == "Bob");
+}
+
+TEST_CASE("membership_run_phrase counts each person once", "[message_list][membership]")
+{
+    using tesseract::views::MembershipActionRun;
+    using tesseract::views::membership_run_phrase;
+
+    auto row = [](const std::string& id, const std::string& user, const std::string& name)
+    {
+        MessageRowData r = membership_row(id, MembershipAction::AvatarChanged);
+        r.membership_target_user_id = user;
+        r.membership_target_name = name;
+        return r;
+    };
+
+    SECTION("one person twice reads as one person")
+    {
+        std::vector<MessageRowData> msgs = {row("$1", "@john:x", "John"), row("$2", "@john:x", "John")};
+        MembershipActionRun run{MembershipAction::AvatarChanged, {0, 1}};
+        CHECK(membership_run_phrase(msgs, run) == "John updated their avatar");
+    }
+    SECTION("two people, one of them twice")
+    {
+        std::vector<MessageRowData> msgs = {row("$1", "@john:x", "John"), row("$2", "@bob:x", "Bob"),
+                                            row("$3", "@john:x", "John")};
+        MembershipActionRun run{MembershipAction::AvatarChanged, {0, 1, 2}};
+        CHECK(membership_run_phrase(msgs, run) == "John and Bob updated their avatars");
+    }
+    SECTION("three distinct people keep first-appearance order")
+    {
+        std::vector<MessageRowData> msgs = {row("$1", "@a:x", "Ann"), row("$2", "@b:x", "Bob"),
+                                            row("$3", "@c:x", "Cy"), row("$4", "@a:x", "Ann")};
+        MembershipActionRun run{MembershipAction::AvatarChanged, {0, 1, 2, 3}};
+        CHECK(membership_run_phrase(msgs, run) == "Ann, Bob and 1 other updated their avatars");
+    }
+    SECTION("a single row keeps its reason")
+    {
+        MessageRowData k = membership_row("$k", MembershipAction::Kicked);
+        k.membership_target_user_id = "@bob:x";
+        k.membership_target_name = "Bob";
+        k.membership_reason = "spam";
+        std::vector<MessageRowData> msgs = {k};
+        MembershipActionRun run{MembershipAction::Kicked, {0}};
+        CHECK(membership_run_phrase(msgs, run).find("Reason: spam") != std::string::npos);
+    }
+}

@@ -60,6 +60,12 @@ struct SpoilerMessage
 // (clearing the composer) like an empty `/me `. Exposed for unit testing.
 std::optional<SpoilerMessage> build_spoiler_message(std::string_view args);
 
+// One-line confirmation to show after the slash command in `body` succeeded,
+// for commands whose only visible effect would otherwise be silent
+// (`/myroomavatar <arg>` → "Room avatar updated", `/myroomavatar reset` →
+// "Room avatar reset"). nullopt for anything else (including plain messages).
+std::optional<std::string> slash_success_message(const std::string& body);
+
 // Dispatch a composer send to the SDK. If `body` matches a recognized slash
 // command, routes to the corresponding `Client` method; otherwise it is sent
 // as a normal `m.text` message.

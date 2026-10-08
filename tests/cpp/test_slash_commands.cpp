@@ -143,7 +143,7 @@ TEST_CASE("/myroomavatar routes by argument scheme", "[slash][myroomavatar]")
     {
         auto r = tesseract::dispatch_compose_send(client, "!r:x", "/myroomavatar nonsense", "");
         REQUIRE_FALSE(r.ok);
-        REQUIRE(r.message == "expected an mxc:// or http(s) image URL");
+        REQUIRE(r.message == "expected an mxc:// or http(s) image URL, or \"reset\"");
     }
     SECTION("no argument is an error")
     {
@@ -167,4 +167,30 @@ TEST_CASE("/myroomavatar routes by argument scheme", "[slash][myroomavatar]")
         REQUIRE_FALSE(r.ok);
         REQUIRE(r.message == "not logged in");
     }
+}
+
+TEST_CASE("/myroomavatar reset reaches the client; other args keep their routes", "[slash][myroomavatar]")
+{
+    tesseract::Client client; // not logged in: SDK calls fail with "not logged in"
+    for (const char* body : {"/myroomavatar reset", "/myroomavatar RESET  ", "/myroomavatar Reset"})
+    {
+        auto r = tesseract::dispatch_compose_send(client, "!r:x", body, "");
+        REQUIRE_FALSE(r.ok);
+        CHECK(r.message == "not logged in"); // the reset path, not "expected an mxc..."
+    }
+    // "reset" must be the whole argument.
+    auto r = tesseract::dispatch_compose_send(client, "!r:x", "/myroomavatar resets", "");
+    REQUIRE_FALSE(r.ok);
+    CHECK(r.message.find("expected an mxc://") == 0);
+}
+
+TEST_CASE("slash_success_message confirms only /myroomavatar", "[slash][myroomavatar]")
+{
+    CHECK(tesseract::slash_success_message("/myroomavatar https://x/a.png") == "Avatar updated for this room");
+    CHECK(tesseract::slash_success_message("/myroomavatar mxc://x/y") == "Avatar updated for this room");
+    CHECK(tesseract::slash_success_message("/myroomavatar reset") == "Avatar reset for this room");
+    CHECK(tesseract::slash_success_message("/myroomavatar  RESET") == "Avatar reset for this room");
+    CHECK_FALSE(tesseract::slash_success_message("/myroomavatar").has_value());
+    CHECK_FALSE(tesseract::slash_success_message("/me waves").has_value());
+    CHECK_FALSE(tesseract::slash_success_message("hello").has_value());
 }

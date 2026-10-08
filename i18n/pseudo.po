@@ -1177,8 +1177,8 @@ msgid "Set your display name in this room"
 msgstr "[Sét yöùr dïsplày ñàmé ïñ thïs röömxxxxxx]"
 
 #: ui/shared/app/SlashCommands.cpp:193
-msgid "Set your avatar in this room"
-msgstr "[Sét yöùr àvàtàr ïñ thïs röömxxxxx]"
+msgid "Set or reset your avatar in this room"
+msgstr "[Sét ör rését yöùr àvàtàr ïñ thïs röömxxxxxxxxx]"
 
 #: ui/shared/app/SlashCommands.cpp:194
 msgid "Join a room by alias or ID"
@@ -1214,8 +1214,8 @@ msgid "no image URL provided; use /myroomavatar alone to open the image picker"
 msgstr "[ñö ïmàgé ÙRL prövïdéd; ùsé /myröömàvàtàr àlöñé tö öpéñ thé ïmàgé pïçkérxxxxxxxxxxxxx]"
 
 #: ui/shared/app/SlashCommands.cpp:330
-msgid "expected an mxc:// or http(s) image URL"
-msgstr "[éxpéçtéd àñ mxç:// ör http(s) ïmàgé ÙRLxxxxxxxxx]"
+msgid "expected an mxc:// or http(s) image URL, or \"reset\""
+msgstr "[éxpéçtéd àñ mxç:// ör http(s) ïmàgé ÙRL, ör \"reset\"xxxxxxxxx]"
 
 #: ui/shared/app/SlashCommands.cpp:529 ui/shared/app/SlashCommands.cpp:536
 #: ui/shared/app/SlashCommands.cpp:553 ui/shared/app/SlashCommands.cpp:556
@@ -6046,3 +6046,82 @@ msgstr "[Tùrñïñg öff bàçkùp…xxx]"
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Backup is off. Your encrypted messages are kept only on your devices."
 msgstr "[Bàçkùp ïs öff. Yöùr éñçryptéd méssàgés àré képt öñly öñ yöùr dévïçés.xxxxxxxxxxxxx]"
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Avatar updated for this room"
+msgstr "[Àvàtàr ùpdàtéd för thïs röömxxxxx]"
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Avatar reset for this room"
+msgstr "[Àvàtàr rését för thïs röömxxxxx]"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Failed to upload avatar: {0}"
+msgstr "[Fàïléd tö ùplöàd àvàtàr: {0}xxxxx]"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Failed to set room avatar: {0}"
+msgstr "[Fàïléd tö sét rööm àvàtàr: {0}xxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their avatar"
+msgstr "[{0} çhàñgéd théïr àvàtàrxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} removed their avatar"
+msgstr "[{0} rémövéd théïr àvàtàrxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their display name to {1}"
+msgstr "[{0} çhàñgéd théïr dïsplày ñàmé tö {1}xxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} removed their display name"
+msgstr "[{0} rémövéd théïr dïsplày ñàméxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their display name and avatar"
+msgstr "[{0} çhàñgéd théïr dïsplày ñàmé àñd àvàtàrxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their avatar"
+msgid_plural "{0} updated their avatars"
+msgstr[0] "[{0} ùpdàtéd théïr àvàtàrxxxxx]"
+msgstr[1] "[{0} ùpdàtéd théïr àvàtàrsxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} cleared their avatar"
+msgid_plural "{0} cleared their avatars"
+msgstr[0] "[{0} çléàréd théïr àvàtàrxxxxx]"
+msgstr[1] "[{0} çléàréd théïr àvàtàrsxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their display name"
+msgid_plural "{0} updated their display names"
+msgstr[0] "[{0} ùpdàtéd théïr dïsplày ñàméxxxxx]"
+msgstr[1] "[{0} ùpdàtéd théïr dïsplày ñàmésxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} cleared their display name"
+msgid_plural "{0} cleared their display names"
+msgstr[0] "[{0} çléàréd théïr dïsplày ñàméxxxxx]"
+msgstr[1] "[{0} çléàréd théïr dïsplày ñàmésxxxxx]"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their display name and avatar"
+msgid_plural "{0} updated their display names and avatars"
+msgstr[0] "[{0} ùpdàtéd théïr dïsplày ñàmé àñd àvàtàrxxxxx]"
+msgstr[1] "[{0} ùpdàtéd théïr dïsplày ñàmés àñd àvàtàrsxxxxx]"
+

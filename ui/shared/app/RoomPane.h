@@ -202,6 +202,10 @@ public:
     void stash_unsent_draft_(const std::string& room_id, const std::string& text);
 
     const std::string& room_id() const { return room_id_; }
+
+    // A member's profile (display name / avatar) changed in this pane's room:
+    // re-read the member list so the room info panel and mention pills show it.
+    void refresh_room_members_();
     views::RoomView* room_view() const { return room_view_; }
 
     // Number of rows currently withheld from room_view_ by the

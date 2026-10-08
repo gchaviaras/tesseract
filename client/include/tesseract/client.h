@@ -1638,6 +1638,10 @@ public:
     Result set_user_room_avatar_from_url(const std::string& room_id,
                                          const std::string& url);
 
+    /// Reset the current user's avatar in `room_id` to their account
+    /// (profile) avatar. Blocks the calling thread — call from a worker thread.
+    Result reset_user_room_avatar(const std::string& room_id);
+
     /// The current user's own avatar (mxc://) in `room_id`, read from the
     /// local store without network I/O; empty when none/unknown.
     std::string own_room_avatar(const std::string& room_id);

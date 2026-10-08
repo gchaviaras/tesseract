@@ -604,7 +604,7 @@ inline void assign_base(Event& ev, const tesseract_ffi::TimelineEvent& e)
 /// Map the stable discriminant produced by Rust's `membership_action_str`
 /// (see sdk/src/client/timeline_convert.rs) to `MembershipAction`. The
 /// fallback (unreachable in practice, since Rust only ever emits one of the
-/// 14 known strings) is `Joined` — a safe default rather than a crash.
+/// 19 known strings) is `Joined` — a safe default rather than a crash.
 inline MembershipAction parse_membership_action(const std::string& s)
 {
     if (s == "joined") return MembershipAction::Joined;
@@ -621,6 +621,11 @@ inline MembershipAction parse_membership_action(const std::string& s)
     if (s == "knock_accepted") return MembershipAction::KnockAccepted;
     if (s == "knock_retracted") return MembershipAction::KnockRetracted;
     if (s == "knock_denied") return MembershipAction::KnockDenied;
+    if (s == "avatar_changed") return MembershipAction::AvatarChanged;
+    if (s == "avatar_removed") return MembershipAction::AvatarRemoved;
+    if (s == "display_name_changed") return MembershipAction::DisplayNameChanged;
+    if (s == "display_name_removed") return MembershipAction::DisplayNameRemoved;
+    if (s == "profile_changed") return MembershipAction::ProfileChanged;
     return MembershipAction::Joined;
 }
 

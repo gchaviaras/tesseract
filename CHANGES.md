@@ -5,6 +5,11 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-08
+
+- feat(timeline): display-name and avatar changes by a joined member show as "X changed their avatar / display name" lines (your own always, others' with "Show room join/leave events"); the sender's existing messages, the sidebar strip and the room info panel update at once. Qt6 build + ctest 2312/2312 + cargo 791
+- feat(slash): `/myroomavatar reset` restores your account avatar in the room, and `/myroomavatar` (URL, mxc:// or file picker) now confirms success or reports the failure. Qt6 build + ctest 2312/2312 + cargo 791
+
 ### 2026-10-07
 
 - fix(security): link previews bundled into a message by the sender only open if they are http(s) links, and Tesseract never hands any other kind of link (`file:`, `search-ms:`, …) or one starting with `-` to the system browser launcher. Qt6 build + ctest 2309/2309 + cargo 788

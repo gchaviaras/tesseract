@@ -523,6 +523,54 @@ pub(crate) fn membership_action_str(
     })
 }
 
+/// Discriminant for a profile-only `m.room.member` change (the user was already
+/// joined; display name and/or avatar changed). Each argument is `None` when
+/// that field did not change, else whether the NEW value is set (`false` =
+/// removed). Both changing yields `profile_changed`. Stable, English-free, like
+/// `membership_action_str`; the C++ side owns the user-facing phrases.
+pub(crate) fn profile_change_action(
+    avatar_new_is_set: Option<bool>,
+    name_new_is_set: Option<bool>,
+) -> Option<&'static str> {
+    match (avatar_new_is_set, name_new_is_set) {
+        (None, None) => None,
+        (Some(_), Some(_)) => Some("profile_changed"),
+        (Some(true), None) => Some("avatar_changed"),
+        (Some(false), None) => Some("avatar_removed"),
+        (None, Some(true)) => Some("display_name_changed"),
+        (None, Some(false)) => Some("display_name_removed"),
+    }
+}
+
+/// Whether an `m.room.member` row reaches the UI. Membership transitions are
+/// gated by "Show room join/leave events" (`show`); the user's own profile
+/// changes (display name / avatar) are always shown so a command like
+/// `/myroomavatar` gives visible confirmation. Everything that is not an
+/// `m.room.member` row is unaffected.
+pub(crate) fn membership_event_visible(
+    msg_type: &str,
+    action: &str,
+    target_user_id: &str,
+    show: bool,
+    me: Option<&str>,
+) -> bool {
+    show
+        || msg_type != "m.room.member"
+        || (is_profile_action(action) && me.is_some_and(|m| m == target_user_id))
+}
+
+/// True for the actions `profile_change_action` produces.
+pub(crate) fn is_profile_action(action: &str) -> bool {
+    matches!(
+        action,
+        "avatar_changed"
+            | "avatar_removed"
+            | "display_name_changed"
+            | "display_name_removed"
+            | "profile_changed"
+    )
+}
+
 /// Shared so the in-reply-to quote block and the thread latest-event preview
 /// emit identical snippet text.
 #[cfg(not(test))]
@@ -786,8 +834,56 @@ pub(super) async fn timeline_item_to_ffi(
     // the caller (see `filter_membership` in timeline.rs) — this conversion
     // is unconditional, matching the m.room.pinned_events precedent above.
     // Profile-only changes while already joined are
-    // TimelineItemContent::ProfileChange — a distinct variant never matched
-    // here; it falls through to the catch-all `None` below, by design.
+    // TimelineItemContent::ProfileChange — handled just below.
+    // Profile-only changes (display name / avatar while joined) become the same
+    // `m.room.member` event shape so the timeline can show "X changed their
+    // avatar"; visibility is gated by `membership_event_visible` (own changes
+    // always, others' only with "Show room join/leave events").
+    if let TimelineItemContent::ProfileChange(p) = event_item.content() {
+        let avatar = p.avatar_url_change();
+        let name = p.displayname_change();
+        let Some(action) = profile_change_action(
+            avatar.map(|c| c.new.is_some()),
+            name.map(|c| c.new.as_ref().is_some_and(|n| !n.is_empty())),
+        ) else {
+            return None;
+        };
+        let SenderProfileFfi {
+            sender_name,
+            sender_avatar_url,
+            sender_status_emoji,
+            sender_status_text,
+        } = sender_profile_ffi(event_item.sender_profile());
+        // Display-name changes carry the NEW name; for an avatar-only change
+        // the target's name is the member's current display name.
+        let target_name = match name {
+            Some(c) => c.new.clone().unwrap_or_default(),
+            None => sender_name.clone(),
+        };
+        return Some(TimelineEvent {
+            room_id: room_id.to_owned(),
+            msg_type: "m.room.member".to_owned(),
+            event_id: event_item
+                .event_id()
+                .map(|id| id.to_string())
+                .unwrap_or_default(),
+            sender: event_item.sender().to_string(),
+            sender_name,
+            sender_avatar_url,
+            sender_status_emoji,
+            sender_status_text,
+            membership_action: action.to_owned(),
+            membership_target_user_id: p.user_id().to_string(),
+            membership_target_name: target_name,
+            membership_target_avatar_url: avatar
+                .and_then(|c| c.new.as_ref())
+                .map(|u| u.to_string())
+                .unwrap_or_default(),
+            timestamp: event_item.timestamp().get().into(),
+            ..ffi_event_defaults()
+        });
+    }
+
     if let TimelineItemContent::MembershipChange(change) = event_item.content() {
         let Some(action) = change.change().and_then(membership_action_str) else {
             // None/Error/NotImplemented, or a redacted state event whose
@@ -1536,6 +1632,55 @@ mod pinned_action_tests {
             pinned_events_action(&["$a"], &["$a"]),
             "changed the pinned messages"
         );
+    }
+}
+
+#[cfg(test)]
+mod profile_change_tests {
+    use super::{is_profile_action, membership_event_visible, profile_change_action};
+
+    #[test]
+    fn maps_each_combination() {
+        assert_eq!(profile_change_action(None, None), None);
+        assert_eq!(profile_change_action(Some(true), None), Some("avatar_changed"));
+        assert_eq!(profile_change_action(Some(false), None), Some("avatar_removed"));
+        assert_eq!(profile_change_action(None, Some(true)), Some("display_name_changed"));
+        assert_eq!(profile_change_action(None, Some(false)), Some("display_name_removed"));
+        assert_eq!(profile_change_action(Some(true), Some(false)), Some("profile_changed"));
+        assert_eq!(profile_change_action(Some(false), Some(true)), Some("profile_changed"));
+    }
+
+    #[test]
+    fn own_profile_changes_are_always_visible() {
+        let me = Some("@me:x");
+        // Hidden membership events stay hidden...
+        assert!(!membership_event_visible("m.room.member", "joined", "@me:x", false, me));
+        assert!(!membership_event_visible("m.room.member", "left", "@other:x", false, me));
+        // ...others' profile changes too...
+        assert!(!membership_event_visible("m.room.member", "avatar_changed", "@other:x", false, me));
+        // ...but your own profile changes show regardless of the setting.
+        for a in ["avatar_changed", "avatar_removed", "display_name_changed",
+                  "display_name_removed", "profile_changed"] {
+            assert!(membership_event_visible("m.room.member", a, "@me:x", false, me), "{a}");
+        }
+        // No known user: nothing is "own".
+        assert!(!membership_event_visible("m.room.member", "avatar_changed", "@me:x", false, None));
+        // The setting shows everything; other event types are unaffected.
+        assert!(membership_event_visible("m.room.member", "joined", "@o:x", true, me));
+        assert!(membership_event_visible("m.room.message", "", "", false, me));
+    }
+
+    #[test]
+    fn every_produced_action_is_a_profile_action() {
+        for a in [Some(true), Some(false), None] {
+            for n in [Some(true), Some(false), None] {
+                if let Some(action) = profile_change_action(a, n) {
+                    assert!(is_profile_action(action), "{action}");
+                }
+            }
+        }
+        assert!(!is_profile_action("joined"));
+        assert!(!is_profile_action(""));
     }
 }
 

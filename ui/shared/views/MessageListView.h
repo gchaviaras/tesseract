@@ -298,6 +298,9 @@ bool membership_group_expandable(const std::vector<MessageRowData>& msgs,
 // ban / kick-and-ban), e.g. "Bob was removed by Alice. Reason: spam". Other
 // actions, and rows without a reason, pass through unchanged.
 std::string with_membership_reason(std::string phrase, const MessageRowData& m);
+// The collapsed-summary line for `run` (people counted once, however many rows).
+std::string membership_run_phrase(const std::vector<MessageRowData>& msgs,
+                                  const MembershipActionRun& run);
 
 // Screen-reader description of a message's content (media kind / caption,
 // file name, deleted / undecryptable, or the body) — see MessageListView.cpp.
@@ -468,6 +471,15 @@ public:
     // every Membership row targeting that user and repaints (targeted
     // invalidate_row, no full re-measure).
     void update_member_pronoun(const std::string& user_id, std::string pronoun);
+
+    // A member changed their display name and/or avatar in this room: patch
+    // every row that user sent (nullopt = unchanged; an empty avatar_url means
+    // "removed") so existing messages show the new profile without waiting for
+    // the SDK to re-resolve sender profiles. Re-requests avatars and repaints;
+    // rows are re-measured only when the name changed.
+    void update_member_profile(const std::string& user_id,
+                               const std::optional<std::string>& display_name,
+                               const std::optional<std::string>& avatar_url);
 
     // Voice-message playback (MSC3245). Shells wire all three after
     // construction; the view stays inert (clicks become no-ops) when any

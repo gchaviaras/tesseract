@@ -3433,6 +3433,12 @@ bool RoomPane::handle_forward_failed_(std::uint64_t request_id,
     return true;
 }
 
+void RoomPane::refresh_room_members_()
+{
+    if (room_view_ && room_view_->on_fetch_room_members && !room_id_.empty())
+        room_view_->on_fetch_room_members(room_id_);
+}
+
 const tk::Image* RoomPane::shell_avatar_(const std::string& mxc) const
 {
     return shell_->avatar_image_(mxc);

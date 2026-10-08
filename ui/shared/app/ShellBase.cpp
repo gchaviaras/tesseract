@@ -1363,19 +1363,63 @@ void ShellBase::request_own_room_avatar_(const std::string& room_id)
         });
 }
 
-void ShellBase::note_own_membership_event_(const std::string& room_id,
-                                           const tesseract::Event& ev)
+void ShellBase::note_member_event_(const std::string& room_id, const tesseract::Event& ev)
 {
-    if (ev.type != tesseract::EventType::Membership || my_user_id_.empty())
+    if (ev.type != tesseract::EventType::Membership)
         return;
     const auto& m = static_cast<const tesseract::MembershipStateEvent&>(ev);
-    // Only the active room's avatar is shown; any other room is re-read when
-    // it becomes active (strip_avatar_url_), so don't pay a store read for the
-    // own join / profile events a sync or back-pagination replays.
-    if (m.target_user_id != my_user_id_ || room_id != current_room_id_)
+
+    // The strip shows only the active room's own avatar; any other room is
+    // re-read when it becomes active (strip_avatar_url_), so don't pay a store
+    // read for the own join / profile events a sync or back-pagination
+    // replays. Keep showing the old value until the re-read lands.
+    if (!my_user_id_.empty() && m.target_user_id == my_user_id_ &&
+        room_id == current_room_id_)
+        request_own_room_avatar_(room_id);
+
+    // Profile-only changes (display name / avatar by an already-joined member).
+    using A = tesseract::MembershipAction;
+    std::optional<std::string> name, avatar;
+    switch (m.action)
+    {
+    case A::AvatarChanged:      avatar = m.target_avatar_url; break;
+    case A::AvatarRemoved:      avatar = std::string{}; break;
+    case A::DisplayNameChanged: name = m.target_display_name; break;
+    case A::DisplayNameRemoved: name = std::string{}; break;
+    case A::ProfileChanged:
+        name = m.target_display_name;
+        avatar = m.target_avatar_url;
+        break;
+    default:
         return;
-    // Keep showing the old value until the re-read lands (no flicker).
-    request_own_room_avatar_(room_id);
+    }
+    // Existing rows keep the sender's old profile, so patch them (main list,
+    // thread panel, pop-outs) instead of waiting for the SDK to re-resolve it,
+    // and refresh the cached member list behind the room info panel.
+    auto patch = [&](views::RoomView* rv)
+    {
+        if (!rv)
+            return;
+        if (auto* ml = rv->message_list())
+            ml->update_member_profile(m.target_user_id, name, avatar);
+        if (auto* tv = rv->thread_view())
+            if (auto* tml = tv->message_list())
+                tml->update_member_profile(m.target_user_id, name, avatar);
+    };
+    if (main_window_shows_(room_id))
+    {
+        patch(room_view_);
+        if (main_room_pane_)
+            main_room_pane_->refresh_room_members_();
+    }
+    dispatch_to_secondary_windows_(room_id,
+        [&](RoomWindowBase* w)
+        {
+            patch(w->room_view());
+            if (w->pane())
+                w->pane()->refresh_room_members_();
+        });
+    request_repaint_();
 }
 
 void ShellBase::handle_animate_avatars_toggle_(bool enabled)
@@ -5076,10 +5120,16 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
     submit_room_send_(sess, rid, body,
                       [this, sess, rid, body_copy, fmt_copy](const std::string& previews) mutable {
         if (!sess || !sess->client) return;
-        report_unsent_message_(
-            sess->user_id, rid, body_copy,
-            tesseract::dispatch_compose_send(*sess->client, rid, body_copy,
-                                             fmt_copy, previews));
+        const auto result = tesseract::dispatch_compose_send(
+            *sess->client, rid, body_copy, fmt_copy, previews);
+        report_unsent_message_(sess->user_id, rid, body_copy, result);
+        // Commands with no visible echo of their own confirm success here.
+        if (result.ok)
+        {
+            if (auto msg = tesseract::slash_success_message(body_copy))
+                post_to_ui_alive_([this, m = std::move(*msg)]
+                                  { show_status_message_(m, 4000); });
+        }
     });
     out.send_result = tesseract::Result{true, ""};
     return out;
@@ -10744,7 +10794,7 @@ void ShellBase::handle_message_inserted_ui_(std::string room_id,
     {
         return;
     }
-    note_own_membership_event_(room_id, *ev);
+    note_member_event_(room_id, *ev);
     // In-thread replies belong to a thread, not the main timeline. The main
     // window's list excludes them; pop-out main lists must do the same, or
     // their rows diverge from the main window and later update/remove indices
@@ -10817,7 +10867,7 @@ void ShellBase::handle_message_updated_ui_(std::string room_id,
     {
         return;
     }
-    note_own_membership_event_(room_id, *ev);
+    note_member_event_(room_id, *ev);
     // See handle_message_inserted_ui_: in-thread replies are excluded from the
     // main timeline on both the main window and pop-outs, keeping their rows
     // aligned with the main-timeline indices used by updates/removals.
@@ -10991,6 +11041,9 @@ void ShellBase::handle_messages_prepended_ui_(std::string room_id,
 void ShellBase::handle_messages_appended_ui_(std::string room_id,
                                              EventList events)
 {
+    for (const auto& e : events)
+        if (e)
+            note_member_event_(room_id, *e);
     const bool in_thread = !events.empty() && events.front() &&
                            !events.front()->thread_root_id.empty();
     if (main_window_shows_(room_id) && !in_thread && room_view_)
@@ -11033,6 +11086,9 @@ void ShellBase::handle_messages_updated_batch_ui_(std::string room_id,
                                                   std::vector<std::size_t> indices,
                                                   EventList events)
 {
+    for (const auto& e : events)
+        if (e)
+            note_member_event_(room_id, *e);
     const bool in_thread = !events.empty() && events.front() &&
                            !events.front()->thread_root_id.empty();
     // See handle_message_inserted_ui_ for the withheld-region index
@@ -14220,16 +14276,29 @@ void ShellBase::pick_and_set_room_avatar_(const std::string& room_id,
             if (!sess || sess->client.get() != c)
                 return; // logged out between pick and callback
             run_async_mut_(
-                [sess, room_id,
+                [this, sess, room_id,
                  bytes = std::move(bytes),
                  mime  = std::move(mime)]() mutable
                 {
                     if (!sess || !sess->client)
                         return;
                     auto upload = sess->client->upload_media(bytes, mime);
+                    std::string status;
                     if (!upload.ok)
-                        return;
-                    sess->client->set_user_room_avatar(room_id, upload.message);
+                    {
+                        status = tk::trf(tk::tr("Failed to upload avatar: {0}"), {upload.message});
+                    }
+                    else if (auto set = sess->client->set_user_room_avatar(room_id, upload.message);
+                             !set.ok)
+                    {
+                        status = tk::trf(tk::tr("Failed to set room avatar: {0}"), {set.message});
+                    }
+                    else
+                    {
+                        status = tk::tr("Avatar updated for this room");
+                    }
+                    post_to_ui_alive_([this, status = std::move(status)]
+                                      { show_status_message_(status, 4000); });
                 });
         });
 }

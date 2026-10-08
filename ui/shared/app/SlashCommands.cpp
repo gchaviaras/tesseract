@@ -191,7 +191,7 @@ const std::vector<SlashCommandDescriptor>& available_commands()
         {"slap",         "<target>",          tk::tr("Slap someone with a large trout")},
         {"spoiler",      "[(reason)] <text>", tk::tr("Send a hidden spoiler message")},
         {"myroomnick",   "<name>",            tk::tr("Set your display name in this room")},
-        {"myroomavatar", "[mxc_uri|url]",    tk::tr("Set your avatar in this room")},
+        {"myroomavatar", "[mxc_uri|url|reset]", tk::tr("Set or reset your avatar in this room")},
         {"join",         "<#room:server>",    tk::tr("Join a room by alias or ID")},
         {"leave",        "",                  tk::tr("Leave the current room")},
         {"invite",       "<@user:server> [reason]", tk::tr("Invite a user to the current room")},
@@ -200,6 +200,17 @@ const std::vector<SlashCommandDescriptor>& available_commands()
         {"location",     "",                  tk::tr("Share your current location")},
     };
     return kCommands;
+}
+
+std::optional<std::string> slash_success_message(const std::string& body)
+{
+    const auto arg = parse_slash_arg(body, "myroomavatar");
+    if (!arg)
+        return std::nullopt;
+    std::string lower = *arg;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return lower == "reset" ? tk::tr("Avatar reset for this room") : tk::tr("Avatar updated for this room");
 }
 
 Result dispatch_compose_send(Client& client,
@@ -327,11 +338,13 @@ Result dispatch_compose_send(Client& client,
                                              std::tolower(static_cast<unsigned char>(b));
                                   });
             };
+            if (arg.size() == 5 && starts_with_ci("reset"))
+                return client.reset_user_room_avatar(room_id);
             if (starts_with_ci("mxc://"))
                 return client.set_user_room_avatar(room_id, arg);
             if (starts_with_ci("http://") || starts_with_ci("https://"))
                 return client.set_user_room_avatar_from_url(room_id, arg);
-            return Result{false, tk::tr("expected an mxc:// or http(s) image URL")};
+            return Result{false, tk::tr("expected an mxc:// or http(s) image URL, or \"reset\"")};
         }
     }
 

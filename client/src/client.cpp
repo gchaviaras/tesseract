@@ -2194,6 +2194,12 @@ Result Client::set_user_room_avatar_from_url(const std::string& room_id,
     return from_ffi(impl_->ffi->set_user_room_avatar_from_url(room_id, url));
 }
 
+Result Client::reset_user_room_avatar(const std::string& room_id)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->reset_user_room_avatar(room_id));
+}
+
 std::string Client::own_room_avatar(const std::string& room_id)
 {
     SH_FFI;

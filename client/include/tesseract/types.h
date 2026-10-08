@@ -56,6 +56,12 @@ enum class MembershipAction
     KnockAccepted,
     KnockRetracted,
     KnockDenied,
+    // Profile-only changes by an already-joined member (display name / avatar).
+    AvatarChanged,
+    AvatarRemoved,
+    DisplayNameChanged,
+    DisplayNameRemoved,
+    ProfileChanged, ///< display name and avatar changed together
 };
 
 /// User presence state. Wire encoding (matches sdk/src/bridge.rs on_presence_changed):

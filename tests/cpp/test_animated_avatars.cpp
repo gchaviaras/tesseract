@@ -87,7 +87,7 @@ struct AvatarShell : AvatarAccountManager, ShellBase
     using ShellBase::animate_avatars_effective_;
     using ShellBase::deliver_animated_avatar_;
     using ShellBase::handle_animate_avatars_toggle_;
-    using ShellBase::note_own_membership_event_;
+    using ShellBase::note_member_event_;
     using ShellBase::avatar_mxcs_;
     using ShellBase::avatar_mode_gen_;
     using ShellBase::on_avatar_animation_mode_changed_;

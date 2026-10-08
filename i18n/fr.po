@@ -1827,8 +1827,8 @@ msgid "Set your display name in this room"
 msgstr "Définir votre nom d'affichage dans ce salon"
 
 #: ui/shared/app/SlashCommands.cpp:140
-msgid "Set your avatar in this room"
-msgstr "Définir votre avatar dans ce salon"
+msgid "Set or reset your avatar in this room"
+msgstr "Définir ou réinitialiser votre avatar dans ce salon"
 
 #: ui/shared/app/SlashCommands.cpp:141
 msgid "Join a room by alias or ID"
@@ -3533,8 +3533,8 @@ msgid "no image URL provided; use /myroomavatar alone to open the image picker"
 msgstr "aucune URL d'image fournie ; utilisez /myroomavatar seul pour ouvrir le sélecteur d'image"
 
 #: ui/shared/app/SlashCommands.cpp:330
-msgid "expected an mxc:// or http(s) image URL"
-msgstr "URL d'image mxc:// ou http(s) attendue"
+msgid "expected an mxc:// or http(s) image URL, or \"reset\""
+msgstr "URL d'image mxc:// ou http(s), ou « reset », attendue"
 
 #: ui/shared/tk/i18n.cpp:633
 msgid "Jan"
@@ -5361,3 +5361,82 @@ msgstr "Désactivation de la sauvegarde…"
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Backup is off. Your encrypted messages are kept only on your devices."
 msgstr "La sauvegarde est désactivée. Vos messages chiffrés ne sont conservés que sur vos appareils."
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Avatar updated for this room"
+msgstr "Avatar mis à jour pour ce salon"
+
+#: ui/shared/app/ShellBase.cpp
+msgid "Avatar reset for this room"
+msgstr "Avatar réinitialisé pour ce salon"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Failed to upload avatar: {0}"
+msgstr "Échec de l'envoi de l'avatar : {0}"
+
+#: ui/shared/app/ShellBase.cpp
+#, c++-format
+msgid "Failed to set room avatar: {0}"
+msgstr "Impossible de définir l'avatar du salon : {0}"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their avatar"
+msgstr "{0} a changé son avatar"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} removed their avatar"
+msgstr "{0} a supprimé son avatar"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their display name to {1}"
+msgstr "{0} a changé son nom d'affichage en {1}"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} removed their display name"
+msgstr "{0} a supprimé son nom d'affichage"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} changed their display name and avatar"
+msgstr "{0} a changé son nom d'affichage et son avatar"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their avatar"
+msgid_plural "{0} updated their avatars"
+msgstr[0] "{0} a mis à jour son avatar"
+msgstr[1] "{0} ont mis à jour leurs avatars"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} cleared their avatar"
+msgid_plural "{0} cleared their avatars"
+msgstr[0] "{0} a supprimé son avatar"
+msgstr[1] "{0} ont supprimé leurs avatars"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their display name"
+msgid_plural "{0} updated their display names"
+msgstr[0] "{0} a mis à jour son nom d'affichage"
+msgstr[1] "{0} ont mis à jour leurs noms d'affichage"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} cleared their display name"
+msgid_plural "{0} cleared their display names"
+msgstr[0] "{0} a supprimé son nom d'affichage"
+msgstr[1] "{0} ont supprimé leurs noms d'affichage"
+
+#: ui/shared/views/MessageListView.cpp
+#, c++-format
+msgid "{0} updated their display name and avatar"
+msgid_plural "{0} updated their display names and avatars"
+msgstr[0] "{0} a mis à jour son nom d'affichage et son avatar"
+msgstr[1] "{0} ont mis à jour leurs noms d'affichage et avatars"
+

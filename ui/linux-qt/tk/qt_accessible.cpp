@@ -467,8 +467,10 @@ class NodeAccessible : public QAccessibleInterface,
                        public QAccessibleActionInterface,
                        public QAccessibleValueInterface,
                        public QAccessibleTableInterface,
-                       public QAccessibleTableCellInterface,
-                       public QAccessibleAttributesInterface
+                       public QAccessibleTableCellInterface
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+                     , public QAccessibleAttributesInterface
+#endif
 {
 public:
     NodeAccessible(AccessBridge* bridge, AccessKey key) : bridge_(bridge), key_(key) {}
@@ -598,12 +600,15 @@ public:
             return static_cast<QAccessibleTableInterface*>(this);
         if (t == QAccessible::TableCellInterface && n && n->grid_row >= 0)
             return static_cast<QAccessibleTableCellInterface*>(this);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
         if (t == QAccessible::AttributesInterface && n && !n->language.empty())
             return static_cast<QAccessibleAttributesInterface*>(this);
+#endif
         return nullptr;
     }
 
-    // ---- QAccessibleAttributesInterface (content language) ----
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // ---- QAccessibleAttributesInterface (content language; Qt 6.8+) ----
     QList<QAccessible::Attribute> attributeKeys() const override
     {
         return {QAccessible::Attribute::Locale};
@@ -615,6 +620,7 @@ public:
             return QVariant::fromValue(QLocale(QString::fromStdString(n->language)));
         return {};
     }
+#endif
 
     // ---- QAccessibleValueInterface (Role::ProgressBar) ----
     QVariant currentValue() const override

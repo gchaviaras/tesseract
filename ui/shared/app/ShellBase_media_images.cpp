@@ -485,6 +485,15 @@ const tk::Image* ShellBase::viewer_image_lookup_(const std::string& mxc)
     return account_manager_.thumbnail_cache().peek(mem_key);
 }
 
+// Fetch + decode the full-resolution image for the lightbox viewer into
+// viewer_fullres_ (keyed by the plain source token / avatar mxc), then
+// relayout the main surface and every pop-out. Guards on empty / already
+// cached / animated (animated falls back to ensure_media_image_ so the GIF
+// keeps animating from anim_cache_) / known-decode-failed / in-flight — the
+// latter three keyed by fullres_key_(). Uses a DISTINCT disk + in-flight key
+// namespace (fullres_key_) from the inline ensure_media_image_ path so the
+// 320px inline entry can never pre-empt the full-res decode. group 0 so a
+// room switch does not cancel an open lightbox load.
 void ShellBase::ensure_viewer_fullres_(const std::string& url)
 {
     const std::string fkey = fullres_key_(url);
@@ -755,6 +764,12 @@ void ShellBase::extract_video_first_frame_jpeg_(
         req_id, src, tesseract::visual::kVideoThumbnailPrefixBytes);
 }
 
+// Deliver a dropped file's extracted MediaInfo to the right compose bar.
+// Safe to call from ANY thread (typically the probe's worker, or the UI
+// thread for Qt's async probes): it marshals via post_to_ui_. `target` (a
+// pop-out window's compose bar, guarded by `alive`) takes precedence;
+// otherwise the main window's room_view_ compose bar, resolved at run time
+// to avoid a dangling pointer and guarded on this shell's lifetime.
 void ShellBase::post_pending_attachment_(views::MediaInfo info,
                                           views::ComposeBar* target,
                                           std::shared_ptr<bool> alive)
@@ -903,6 +918,13 @@ void ShellBase::decode_and_finalize_picker_(std::string url, bool is_sticker,
         });
 }
 
+// Shared async picker-image path. Idempotent: no-op if already in
+// tk_images_ / anim_cache_ / in-flight. Dedups via
+// emoji_fetches_in_flight_ (is_sticker == false) or
+// sticker_fetches_in_flight_ (true). io pool reads media_disk_cache_; on a
+// miss the network download runs as a non-blocking fetch_media_async (bulk
+// lane, group 0) so it never pins a pool thread. The decode runs on the io
+// pool via decode_and_finalize_picker_ → finalize_picker_image_ (UI).
 void ShellBase::ensure_picker_image_(const std::string& url, bool is_sticker)
 {
     const tk::CacheKey mem_key = tk::CacheKey::media(url);
@@ -1569,6 +1591,12 @@ std::vector<std::uint64_t> ShellBase::resolve_visible_request_ids_(
     return ids;
 }
 
+// The timeline's visible rows changed (scroll / room enter / data update):
+// raise the priority of the still-pending media fetches backing the now-
+// visible rows so they download ahead of the off-screen backlog. `keys` are
+// the visible rows' media fetch tokens (what the view's image_provider looks
+// up), as reported by MessageListView::on_visible_range_changed. Keys with
+// no in-flight fetch (already cached, or never requested) are skipped.
 void ShellBase::on_visible_rows_changed_(const std::vector<std::string>& keys)
 {
     if (client_ && active_media_group_ != 0 && !keys.empty() &&
@@ -1850,6 +1878,15 @@ void ShellBase::apply_media_preview_config_(
     request_relayout_();
 }
 
+// Called once, on the UI thread, after a successful Accept commit whose
+// RoomSettingsChanges.media_override was populated (see
+// apply_room_settings_, which performs the actual server write on the
+// worker thread). Optimistically updates room_preview_overrides_ (so
+// effective_preview_mode_ reflects the new value immediately), re-fetches
+// any media that just became allowed in the open room, and repaints.
+// Each of the five on_accept completion callbacks calls this — never
+// called on every combo pick (that would violate the "nothing applies
+// until Accept" contract every other room-settings field follows).
 void ShellBase::commit_room_media_preview_override_(
     const std::string& room_id, bool has_override,
     tesseract::MediaPreviewConfig::Mode mode)
@@ -1891,6 +1928,14 @@ void ShellBase::commit_room_media_preview_override_(
     request_relayout_();
 }
 
+// Push the effective per-room override (from room_preview_overrides_,
+// defaulting to "no override" on a cache miss) into RoomSettingsView's
+// Media tab, if that view is currently open and showing `room_id`. Called
+// right after RoomSettingsView::open() (see each shell's
+// on_room_settings_opened wiring) and again from
+// handle_room_preview_override_ready_ui_, so a fetch that resolves after
+// the dialog is already open still updates the combo instead of leaving
+// it stuck on open()'s "Use global default" placeholder.
 void ShellBase::seed_room_media_section_(const std::string& room_id)
 {
     if (!room_view_)
@@ -1907,6 +1952,13 @@ void ShellBase::seed_room_media_section_(const std::string& room_id)
     v->set_media_override(it->second.has_media_previews, it->second.media_previews);
 }
 
+// Kick an async GET /state fetch (Client::fetch_room_security_state_
+// async) for the four Security & Privacy tab fields and track its
+// request_id in pending_security_state_requests_. No-op if not logged
+// in. Called from each on_room_settings_opened handler, right after
+// set_security_field_permissions/seed_room_media_section_ — the result
+// lands in handle_room_security_state_ready_ui_, which pushes it into
+// RoomSettingsView via set_security_state if the dialog is still open.
 void ShellBase::fetch_room_security_state_(const std::string& room_id,
     const std::shared_ptr<AccountSession>& on_behalf_of)
 {

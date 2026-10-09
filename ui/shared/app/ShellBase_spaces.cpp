@@ -158,6 +158,14 @@ void ShellBase::update_space_children_cache_()
         });
 }
 
+// Every space (direct and ancestor) containing `room_id`, derived by
+// repeatedly inverting space_children_cache_ (space_id -> joined
+// children): find room_id's direct parent space(s), then treat each as
+// a "room" and find *their* parent space(s), and so on, so a Space
+// nested inside another Space is included too. A visited-set guards
+// against a cyclical (misconfigured) space hierarchy. Empty if room_id
+// is empty or in no cached space's children. Synchronous, no I/O — safe
+// to call from the UI thread.
 std::vector<std::string>
 ShellBase::parent_spaces_for_room_(const std::string& room_id) const
 {
@@ -375,6 +383,15 @@ void ShellBase::show_space_root_(const std::string& space_id)
     request_relayout_();
 }
 
+// Rebuilds the room-management section's data (SpaceAddRoomList's
+// exclusion set + SpaceChildRoomGrid's children) from the current
+// space_children_cache_/unjoined_space_children_cache_/rooms_ and pushes
+// it into main_app_->space_root(). No-op if that space isn't the one
+// currently shown. Called after show_space_root_() itself, after
+// space_children_cache_/unjoined summaries refresh, after rooms_
+// changes, and — optimistically — immediately by
+// request_add/remove_room_to/from_space_ before their async result
+// even returns.
 void ShellBase::refresh_space_root_children_(const std::string& space_id)
 {
     if (!main_app_ || !main_app_->space_root() || space_id.empty() ||

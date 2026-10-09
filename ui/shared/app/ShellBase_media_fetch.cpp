@@ -187,6 +187,13 @@ void ShellBase::note_media_fetch_ok_(const std::string& key)
     });
 }
 
+// Compressed-bytes cache (L1) in front of media_disk_cache_ (L2), keyed by
+// the same disk-cache key. Safe to call from the media io pool
+// (compressed_cache() is internally synchronised; each media_disk_cache_ op
+// is filesystem-atomic on a distinct key). Every media fetch/decode path
+// goes through these instead of touching media_disk_cache_ directly.
+//   load: L1 hit → return it; else disk read, populating L1 on a disk hit.
+//   store: write both tiers.  evict: drop from both tiers.
 std::vector<std::uint8_t>
 ShellBase::load_media_bytes_(const tk::CacheKey& key) const
 {
@@ -676,6 +683,19 @@ void ShellBase::run_media_prefetch_()
                               media_prefetch_max_items_);
 }
 
+// Shared async media pipeline used by the ensure_* helpers. The network
+// download runs as a non-blocking tokio task (fetch_media_async) so it does
+// NOT pin a worker thread; only the small disk-cache read/write and the
+// decode (inside on_media_bytes_ready_) touch the io pool. Steps:
+//   1. io pool: read the C++ disk cache for `disk_key`.
+//   2. UI: on a hit, deliver immediately; on a miss, register a pending
+//      request and issue client_->fetch_media_async (returns at once).
+//   3. UI (on_media_ready): persist to disk off-thread, then deliver via
+//      on_media_bytes_ready_(cache_key, out_kind, bytes).
+// Clears `inflight_key` from media_fetches_in_flight_ and runs the
+// failure/ok backoff bookkeeping on `cache_key`. The caller must have
+// already done the in-memory cache check and inserted `inflight_key`.
+// `group_id` is the cancellation group (0 = never cancelled).
 void ShellBase::fetch_media_pipeline_(
     std::string cache_key, tk::CacheKey disk_key, std::string inflight_key,
     std::uint64_t group_id, tesseract::Client::MediaReqKind kind,
@@ -752,6 +772,12 @@ void ShellBase::fetch_media_pipeline_(
     run_media_fetch_(std::move(spec));
 }
 
+// Non-blocking voice/audio byte provider for the playback path. Returns the
+// clip's bytes if already warmed (moving them out of voice_bytes_cache_),
+// otherwise kicks a one-shot async download (fetch_media_async) and returns
+// empty; `on_ready` fires on the UI thread when the download lands so the
+// caller can repaint and the user can replay. Replaces the blocking
+// fetch_source_bytes that previously froze the UI on an uncached clip.
 std::vector<std::uint8_t>
 ShellBase::voice_bytes_or_fetch_(const std::string& token,
                                 std::function<void()> on_ready)
@@ -796,6 +822,14 @@ ShellBase::voice_bytes_or_fetch_(const std::string& token,
     return {};
 }
 
+// Estimate how many trailing rows of a freshly-loaded snapshot could
+// plausibly be on screen, for build_rows_()'s synchronous media-prefetch
+// window. Real per-row heights (text wrap, inline images) aren't known
+// until the new rows are laid out, so this uses the message list's
+// current (stable, content-independent) viewport height divided by a
+// deliberately small per-row estimate — biased to overestimate rather
+// than under-fetch. Any row this window misses still gets its media via
+// on_visible_rows_changed_ once the real layout runs.
 std::size_t ShellBase::media_prefetch_window_() const
 {
     // Deliberately small: shorter than any real row (which always has at
@@ -982,6 +1016,12 @@ void ShellBase::compute_cache_sizes_(
     });
 }
 
+// Async: delete all on-disk caches best-effort (media files, waveform DB),
+// clear in-memory image maps, reinit the waveform store, then hand off to
+// restart_sdk_begin_() for the full SDK wipe + in-place re-restore and UI
+// rebuild, which calls recompute_callback with fresh sizes when it lands.
+// Refuses (status message, no-op) while a call or device-verification is in
+// flight. No-op when not signed in.
 void ShellBase::clear_all_caches_(
     std::function<void(uint64_t, uint64_t, uint64_t,
                        uint64_t, uint64_t, uint64_t, uint64_t)> recompute_callback)

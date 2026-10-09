@@ -86,6 +86,12 @@ bool ShellBase::read_have_cross_signing_keys_() const
     return client_ ? client_->have_cross_signing_keys() : false;
 }
 
+// True when a cross-signing identity exists for our user but its private
+// keys are NOT held locally — i.e. the identity was created on another
+// device and this one must verify/recover against it (vs. a fresh first
+// device whose own login-time bootstrap holds the keys). Shared by
+// check_encryption_setup_ (Fresh vs Recover) and the verification-banner
+// gating in the platform shells.
 bool ShellBase::foreign_cross_signing_identity_() const
 {
     // An identity exists (public part synced) but we don't hold its private
@@ -454,6 +460,13 @@ bool ShellBase::silent_recovery_pending_(const std::string& uid) const
     return r != silent_recovery_retry_after_.end() && wall_clock_s_() < r->second;
 }
 
+// A brand-new account (recovery Disabled, no identity made elsewhere)
+// never sees the setup dialog: Tesseract enables recovery itself, keeps
+// the generated key in the OS keychain and flags it in
+// Settings::recovery_key_unsaved until the user saves it from the
+// SaveKey reminder. Returns false when setup should fall back to the
+// dialog (no session, or silent attempts keep failing); true when it
+// started or is waiting out its retry backoff.
 bool ShellBase::begin_silent_recovery_setup_(const std::shared_ptr<AccountSession>& sess)
 {
     if (!silent_recovery_setup_enabled_ || !sess || !sess->client) return false;
@@ -1223,6 +1236,13 @@ void ShellBase::handle_verification_state_ui_(bool is_verified)
     refresh_encryption_reminder_(is_verified);
 }
 
+// Callback for build_user_menu_items_'s verify_session parameter above:
+// null when the active account is already verified (the item is then
+// omitted), otherwise reopens the same encryption-setup dialog shown
+// right after login (recovery-key entry, or Fresh bootstrap — whichever
+// check_encryption_setup_ picks; it doesn't require another device).
+// Every shell wants the exact same condition and action here, so it's
+// consolidated instead of duplicated four times.
 std::function<void()> ShellBase::verify_session_menu_callback_()
 {
     // Deliberately reads read_device_verified_() live instead of

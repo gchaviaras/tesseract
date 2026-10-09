@@ -64,6 +64,17 @@
 namespace tesseract
 {
 
+// placement — see RoomSettingsView::set_image_pack_*. This view has no
+// Client dependency, so ShellBase fetches and pushes data in, mirroring
+// seed_room_media_section_'s shape. list_image_packs()/list_pack_images()
+// are cached local reads (no network round-trip), so unlike
+// fetch_room_security_state_ these are synchronous — no request_id
+// bookkeeping needed. Called from each shell's on_room_settings_opened
+// handler, right after fetch_room_security_state_. `target` is whichever
+// RoomSettingsView instance is asking — room_view_->room_settings_view()
+// for a normal room, or main_app_->space_root()->settings_view() for a
+// space root; image packs are ordinary room state, so a space's own
+// packs are seeded the same way.
 void ShellBase::seed_image_pack_tab_(const std::string& room_id,
                                      views::RoomSettingsView* target,
     const std::shared_ptr<AccountSession>& on_behalf_of)
@@ -391,6 +402,13 @@ void ShellBase::handle_image_packs_updated_ui_()
     }
 }
 
+// Fired via IEventHandler::on_bot_commands_updated when the cached set
+// of MSC4391 bot commands for `room_id` changes. Concrete: no-op unless
+// `room_id` is the active room, in which case it calls
+// `on_active_room_bot_commands_changed_ui_()` — each shell overrides
+// that no-op to refresh its own SlashCommandController's popup, since
+// (unlike ComposeBar/RoomView) that controller is shell-owned, not
+// shared — see SlashCommandController.h's doc comment.
 void ShellBase::handle_bot_commands_updated_ui_(std::string room_id)
 {
     if (!main_window_shows_(room_id))
@@ -792,6 +810,17 @@ void ShellBase::resolve_presence_polling_()
         });
 }
 
+// Apply the persisted "Use historical MSC2545 compatibility" preference
+// to a freshly-restored account's Rust client. Called right after
+// restore_session/start_sync so the first image-pack rebuild already
+// reflects the setting instead of defaulting to the Rust-side AtomicBool's
+// on default (harmless when the setting is already on, but needed for a
+// session where the user previously turned it off). NOT non-blocking:
+// Client::set_msc2545_legacy_compat() synchronously rebuilds the image-pack
+// cache (a per-room network-bound fetch) before returning, so this must
+// only ever be called from a background thread (restore_all_accounts_
+// blocking_ / finalize_login_blocking_), never the UI thread — confirmed
+// by a ~2.6s stall measured on the UI thread before this was moved.
 void ShellBase::apply_msc2545_legacy_compat_pref_(tesseract::Client& client)
 {
     // Unlike show_room_join_leave_events, the Rust-side AtomicBool already
@@ -859,6 +888,17 @@ void ShellBase::apply_theme_to_secondary_windows_(const tk::Theme& t)
     }
 }
 
+// Called by each shell once at startup (with a freshly-queried native
+// scale) and again from the main surface's set_on_scale_changed()
+// callback whenever the display's scale changes live. A changed scale
+// invalidates every cached thumbnail/avatar — they were fetched from
+// the server at the old pixel size — so this clears both in-memory
+// caches rather than leaving stale, wrong-size entries to linger
+// indefinitely (thumbnail_cache()/image_cache() key purely by mxc/url,
+// no size encoded, so a stale small entry would otherwise satisfy
+// every future contains() check forever). DPI changes are rare, so a
+// full flush + natural re-fetch on next paint is the simple, safe
+// choice over rekeying every cache entry by requested size.
 void ShellBase::set_current_scale_(float scale)
 {
     if (std::abs(scale - current_scale_) < 0.01f)
@@ -898,6 +938,18 @@ void ShellBase::set_theme_accent_(tesseract::Settings::ThemeAccent accent)
     apply_current_theme_();
 }
 
+// Mark the account-data-backed prefs (currently just the room layout —
+// active room + open tabs — but this debounce+dirty-flag machinery is
+// generic, so future im.gnomos.tesseract fields can reuse it) as changed
+// and (re)start the debounced save timer — see persist_room_layout_pref_().
+// Called from after_active_room_changed_() so every tab_open/tab_select/
+// tab_close (and the account-switch path, which clears current_room_id_/
+// tabs_ without calling after_active_room_changed_, and so correctly does
+// NOT re-save the outgoing account's layout as empty) schedules a save.
+// try_restore_tab_session_() also runs through after_active_room_changed_(),
+// which re-schedules a save of the layout it just loaded — harmless (same
+// content, coalesced by the debounce like any other save) rather than
+// worth special-casing out.
 void ShellBase::schedule_account_data_save_()
 {
     if (tearing_down_ || !client_)
@@ -911,6 +963,12 @@ void ShellBase::schedule_account_data_save_()
               [this]() { persist_room_layout_pref_(); });
 }
 
+// (Re)construct settings_controller_ with the three standard callbacks
+// (forwarding to post_to_ui_ / run_async_ / pick_image_file_) and wire its
+// UnifiedPush up-connector from the active account (nullptr on platforms
+// without UnifiedPush — a no-op there). Then calls bind_settings_controller_
+// for the native widget + dialog-hook binding. Rebuilds on every call to
+// match the per-login / per-account-switch behavior of the old inline sites.
 void ShellBase::ensure_settings_controller_()
 {
     settings_controller_ = std::make_unique<tesseract::SettingsController>(
@@ -935,6 +993,12 @@ void ShellBase::ensure_settings_controller_()
     bind_settings_controller_();
 }
 
+// (Re)construct history_export_controller_ with the two standard
+// callbacks (post_to_ui_ / run_async_). Unlike
+// ensure_settings_controller_, there is no matching bind_*_ pure
+// virtual: show_save_folder_dialog stays unset (begin() is then a
+// no-op) until a shell explicitly wires it, so all four shells compile
+// untouched until they add the "Export History" trigger.
 void ShellBase::ensure_history_export_controller_()
 {
     history_export_controller_ = std::make_unique<tesseract::HistoryExportController>(
@@ -1086,6 +1150,16 @@ void ShellBase::pick_and_set_room_avatar_(const std::string& room_id,
         });
 }
 
+// Open a file picker, upload the selected image as raw media (never
+// committing it to any room/profile state), and stage the resulting
+// mxc:// URI into `target` via set_staged_avatar(). The room-level
+// m.room.avatar state event is only sent when the user clicks Accept
+// (see apply_room_settings_). No-op if not logged in or `target` is
+// null. Call from the UI thread. `target` is whichever RoomSettingsView
+// instance requested the upload — room_view_->room_settings_view() for
+// a normal room, or main_app_->space_root()->settings_view() for a
+// space root — both operate on room ids generically, so this one
+// implementation serves both without duplicating the upload/retry logic.
 void ShellBase::stage_room_settings_avatar_upload_(const std::string& room_id,
                                                    views::RoomSettingsView* target,
     const std::shared_ptr<AccountSession>& on_behalf_of)
@@ -1212,6 +1286,17 @@ std::vector<std::string> ShellBase::apply_image_pack_changes_(
     return errors;
 }
 
+// Send a state event for each populated optional field in `changes`,
+// attempting every one even if an earlier call fails so a partial
+// success (e.g. topic saved, avatar denied) isn't silently lost. The
+// media-override write (personal account data, not a state event) is
+// fire-and-forget and never contributes to the joined error string —
+// its optimistic cache update happens separately, in
+// commit_room_media_preview_override_, called by the caller only after
+// this function reports success. Takes the whole RoomSettingsChanges
+// (rather than exploding it into one param per field) since it's
+// already the exact aggregate RoomSettingsView produces from Accept.
+// Blocks — call from a worker thread (run_async_mut_).
 ShellBase::RoomSettingsCommitOutcome ShellBase::apply_room_settings_(
     tesseract::Client* client, const std::string& room_id,
     const views::RoomSettingsChanges& changes)

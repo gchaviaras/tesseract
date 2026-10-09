@@ -423,6 +423,14 @@ views::CallOverlayWidget::Mode ShellBase::overlay_mode_from_settings_() const
     }
 }
 
+// start_call creates a CallSession, wires audio (and video if a camera is
+// available) capture routing, and calls rtc_start_call on the client.
+// No-op when a call is already active. start_audio_muted mutes the mic
+// immediately after joining — the lobby's mic toggle feeds this.
+// start_video_muted joins as a video call with the camera off (video
+// button still available) — used when the lobby's camera failed, so the
+// user can retry once the device is free instead of being stuck in an
+// audio-only call.
 void ShellBase::start_call(const std::string& room_id, const std::string& slot_id,
                            bool audio_only, bool start_audio_muted,
                            bool start_video_muted)
@@ -513,6 +521,13 @@ CallRoomAction decide_call_room_action(bool has_active_call,
     return overlay_is_docked ? CallRoomAction::AutoFloat : CallRoomAction::NoOp;
 }
 
+// Opens room_id's pre-call lobby (camera preview + mic/cam toggles +
+// Join/Cancel) instead of joining directly — the single seam every
+// "start a call" entry point (auto-join, the call banner, the header
+// call button, LeaveAndJoin) now goes through. Wires the lobby's
+// on_join to start_call() and falls back to start_call() directly if
+// room_id isn't currently displayed in any window (defensive; shouldn't
+// happen since callers only ever target the room being viewed).
 void ShellBase::request_call_(const std::string& room_id, const std::string& slot_id,
                               bool audio_only)
 {
@@ -764,6 +779,14 @@ views::CallOverlayWidget* ShellBase::active_call_overlay_() const
     return nullptr;
 }
 
+// Tear down the current overlay, switch to the requested mode, remount,
+// rewire all callbacks, and persist the new mode to Settings. Docked/
+// DockedExpanded are clamped to Floating if the call's room isn't
+// current_room_id_ (the UI already hides those mode options in that
+// state, but the state machine doesn't rely on that). Pass persist=false
+// for transitions Tesseract itself drives (auto-float on room-leave,
+// auto-restore on room-return) so they don't clobber the user's actual
+// CallOverlayMode preference in Settings.
 void ShellBase::on_call_overlay_mode_requested_(views::CallOverlayWidget::Mode m,
                                                 bool persist)
 {

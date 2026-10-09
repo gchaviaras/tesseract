@@ -498,6 +498,13 @@ void ShellBase::on_unpin_requested(const std::string& event_id)
     }
 }
 
+// Compute and apply calls-button visibility for one room header:
+// requires server support, a non-bridged room, and either the current
+// user's PL permitting org.matrix.msc3401.call.member, or the user
+// already being in a call for that room (so they can still hang up if
+// their permission was revoked mid-call). Called for room_view_ and
+// every secondary window's header whenever room state, server info, or
+// the active room changes.
 void ShellBase::update_call_btn_visibility_(views::RoomHeader* header,
                                              const std::string& room_id)
 {
@@ -716,6 +723,16 @@ void ShellBase::after_active_room_changed_()
     ensure_room_preview_override_(current_room_id_);
 }
 
+// Drive the SDK subscription for a room switch. subscribe_room runs on the
+// single-thread mut pool (fast for a warm room — the SDK reuses the live
+// timeline; either way it emits the reset that repopulates the just-cleared
+// view and cancels the loading state). The initial back-pagination then runs
+// on the SHARED pool so its blocking network round-trip never holds the one
+// mut thread — otherwise the next switch's subscribe/reset would queue behind
+// it and the loading spinner would flash on rapid A<->B switching. subscribe
+// is dispatched on every switch (not gated by in_flight) so the reset always
+// arrives; only the network paginate is deduplicated per room. Shared by all
+// four shells. `visible_ids` seeds the background unread prefetch.
 void ShellBase::start_room_subscription_(const std::string&       room_id,
                                          std::vector<std::string> visible_ids)
 {
@@ -817,6 +834,21 @@ void ShellBase::start_room_subscription_(const std::string&       room_id,
         });
 }
 
+// Persist the current room-layout prefs (active room + open tabs) for the
+// logged-in account. Builds the layout fresh from current_room_id_ + tabs_
+// (PrefsData carries only these). Two calling contexts:
+//  - via the DebounceSlot::AccountDataSave timer armed by
+//    schedule_account_data_save_() — fire-and-forget (Client::
+//    save_prefs_json), so routine mid-session saves never block the UI
+//    thread.
+//  - from on_window_closing_(), which passes `blocking=true` only when
+//    this is the last open window (about to end the process — see its
+//    doc comment for why). blocking=true cancels any still-pending
+//    debounce and, if the layout was dirty, calls Client::
+//    save_prefs_json_blocking() so the write is confirmed sent (or
+//    definitively times out) before shutdown proceeds — closing the gap
+//    where save_prefs's untracked spawned task could lose a race against
+//    process exit and silently drop the last-open-room save.
 void ShellBase::persist_room_layout_pref_(bool blocking)
 {
     if (blocking)
@@ -1029,6 +1061,17 @@ void ShellBase::on_room_selected_(const std::string& room_id)
     start_room_subscription_(current_room_id_, std::move(visible_ids));
 }
 
+// Called after tabs_ and current_room_id_ have been updated. The shell must:
+//   1. Sync the TabBar widget (add/remove/set_active).
+//   2. Show/hide TabBar; set RoomHeader condensed mode.
+//   3. Restore compose_draft for the newly active tab.
+// main_room_pane_->retarget(current_room_id_) (called at each tab_* site
+// that updates current_room_id_, before this hook runs) plus the next
+// handle_timeline_reset_ui_ call handle the room-switch display gate —
+// no action needed here.
+// Default: rebuild the TabBar in tabs_ order (names + avatars), mark the
+// active tab, navigate to its room via on_room_selected_(), then relayout.
+// A shell with extra platform work overrides this and calls the base first.
 void ShellBase::on_tab_state_changed_ui_()
 {
     if (!main_app_)
@@ -1210,6 +1253,12 @@ ShellBase::select_idle_thread_evictions_(
     return evicted;
 }
 
+// Builds the currently-visible room/thread sets, calls the two selection
+// functions above, unsubscribes every evicted room/thread, and erases
+// their bookkeeping state (pagination_, last_sent_receipt_,
+// room_last_active_ / thread_last_active_). Called from the existing
+// presence tick — see notify_presence_tick_ — so it needs no timer of
+// its own.
 void ShellBase::sweep_idle_timelines_()
 {
     auto activity_scope = activity_.begin("idle-timeline-eviction", "UI housekeeping", "periodic");

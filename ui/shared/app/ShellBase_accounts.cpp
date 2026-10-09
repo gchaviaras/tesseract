@@ -64,6 +64,16 @@
 namespace tesseract
 {
 
+// Arm the pending-login OAuth flow's temp directory. Installed (via a
+// shell-native one-liner lambda) as the LoginView's on-begin-oauth
+// callback: the user_id isn't known until await_oauth completes, so the
+// OAuth round-trip runs against a per-attempt "pending-<ms>" directory
+// that finalize-login later renames to accounts/<sanitized-uid>/.
+//
+// Idempotent: returns immediately if pending_login_temp_dir_ is already
+// set. Computes a unique "pending-<ms>" dir under SessionStore::account_dir,
+// creates it, and points pending_login_client_'s data dir at its
+// "matrix-store" subdir. Operates on the ShellBase pending_login_* members.
 void ShellBase::arm_pending_login_()
 {
     if (!pending_login_temp_dir_.empty())
@@ -84,6 +94,28 @@ void ShellBase::arm_pending_login_()
         (pending_login_temp_dir_ / "matrix-store").string());
 }
 
+// Blocking half of restore: legacy-layout migration, index load, and per-
+// account Client construction / restore_session / identity+prefs fetch,
+// plus make_account_bridge_ + start_sync (both confirmed background-safe
+// — see RestoredAccountIO). Calls the virtual make_account_bridge_ hook
+// (so it can't be static), but otherwise touches only SessionStore
+// statics and locally-owned objects — no mutable ShellBase state — so
+// it's safe to call from any thread, including mut_pool_'s worker
+// thread. This is deliberately where the expensive per-account work
+// lives: restore_session and start_sync both block on real Rust-side
+// I/O/setup, so keeping them off the UI thread is the whole point of the
+// async entry point below.
+//
+// `network_available` is a pre-computed, UI-thread result of
+// tk::Host::is_network_available() (Host isn't reachable from this
+// worker-thread-safe method itself — see restore_all_accounts_async_'s
+// doc comment). When false, every stored account is short-circuited
+// straight to a failed/network_unavailable result without attempting
+// the always-network-bound Client::restore_session() call (see
+// sdk/src/oauth.rs's build_configured_client(), which performs
+// well-known discovery unconditionally). Defaults to true so existing
+// callers (tests, restore_all_accounts_()) keep today's always-attempt
+// behavior.
 ShellBase::RestoreIOResult ShellBase::restore_all_accounts_blocking_(bool network_available)
 {
     RestoreIOResult io;
@@ -178,6 +210,13 @@ ShellBase::RestoreIOResult ShellBase::restore_all_accounts_blocking_(bool networ
     return io;
 }
 
+// UI-thread finish half: consumes a RestoreIOResult and does the
+// remaining, genuinely UI-thread-affine steps — the pref-apply calls,
+// install_account_notifier_ / install_account_up_connector_, and
+// account_manager_.add_account. (Bridge construction and start_sync
+// already happened in restore_all_accounts_blocking_(), off the UI
+// thread.) Mutates account_manager_ and other shell state; UI-thread
+// only.
 ShellBase::RestoreResult
 ShellBase::finish_restore_accounts_ui_(RestoreIOResult&& io)
 {
@@ -227,6 +266,20 @@ ShellBase::finish_restore_accounts_ui_(RestoreIOResult&& io)
     return result;
 }
 
+// Platform-agnostic startup restore loop, shared by every shell's primary-
+// window startup entry (doLogin / do_login / start_login / beginLogin) AFTER
+// the is_secondary_window_startup_ gate. Runs the legacy-layout migration,
+// loads the account index, and for each stored uid: restores the session
+// (skipping + recording failures), caches display name / avatar / prefs,
+// builds the per-account event bridge (make_account_bridge_) and starts
+// sync, then installs the native per-account notifier
+// (install_account_notifier_) and the Linux-only UnifiedPush connector
+// (install_account_up_connector_), and adds the account to the manager.
+// Returns a RestoreResult; the caller does the native empty-fallback /
+// finish-login decision. UI-thread only. Implemented as a composition of
+// restore_all_accounts_blocking_() + finish_restore_accounts_ui_() — kept
+// as a synchronous single-call entry point for callers (e.g. tests) that
+// don't need the async form below.
 ShellBase::RestoreResult ShellBase::restore_all_accounts_()
 {
     return finish_restore_accounts_ui_(restore_all_accounts_blocking_());
@@ -433,6 +486,23 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     return io;
 }
 
+// Async, platform-agnostic core of each shell's on_login_succeeded, run
+// after OAuth completes for a NEWLY added account on
+// pending_login_client_. On the UI thread: fetches the user_id and
+// rejects (rejected_duplicate) if account_manager_.find(uid) — resolving
+// `done` synchronously in both the empty-client and duplicate cases, no
+// worker hop needed. Otherwise moves pending_login_client_ /
+// pending_login_temp_dir_ out and dispatches finalize_login_blocking_()
+// onto mut_pool_; the post_to_ui_alive_-guarded continuation installs the
+// native notifier (install_account_notifier_) and Linux-only UnifiedPush
+// connector (install_account_up_connector_), adds the account, updates
+// the on-disk index (active = the new uid), and invokes `done`. Does NOT
+// touch native widgets (login-view dismiss, surface switch, status bar)
+// — the shell does the native finish using the result passed to `done`.
+// The shell must call set_client(nullptr) on its login view BEFORE
+// calling this when it owns a raw alias to pending_login_client_ (it is
+// moved out here). UI-thread only to call; `done` itself runs on the UI
+// thread.
 void ShellBase::finalize_login_async_(std::function<void(FinalizeLoginResult)> done)
 {
     if (!pending_login_client_)
@@ -525,6 +595,12 @@ void ShellBase::finalize_login_async_(std::function<void(FinalizeLoginResult)> d
         });
 }
 
+// Called by each shell right after it activates the newly-added account
+// (switchActiveAccount / equivalent) inside its finalize_login_async_
+// `done` callback. A no-op unless `fin.needs_encryption_setup` is set, in
+// which case it raises the encryption-setup overlay in the right mode and
+// remembers the session so release_pending_sync_gate_() can start its
+// sync once the user is done with the overlay.
 void ShellBase::begin_gated_encryption_setup_if_needed_(const FinalizeLoginResult& fin)
 {
     if (!fin.needs_encryption_setup)
@@ -574,6 +650,29 @@ void ShellBase::release_pending_sync_gate_()
     });
 }
 
+// Platform-agnostic account-switch bookkeeping, shared by every shell's
+// switchActiveAccount / switch_active_account / _switchActiveAccount:. Looks
+// up the target AccountSession; returns false (no-op) if it isn't found or is
+// already active with a bound client. Otherwise it:
+//   - unsubscribes the previous account's open room when not pinned
+//     (room_subscription_refs_.count(current_room_id_) == 0) so the old
+//     account's timeline stops streaming after the surface swap — folded in
+//     from the Phase-1.2 fix so ALL shells get it;
+//   - clears per-account, room-id-keyed state (current_room_id_, tabs_,
+//     active_tab_idx_, space_stack_, pagination_, reply_details_requested_)
+//     so it can't bleed into the incoming account;
+//   - forgets any in-progress interactive verification, resets server
+//     info, swaps active_account_ + the client_ / event_handler_ aliases and
+//     the my_user_id_ / my_display_name_ / my_avatar_url_ identity;
+//   - computes pending_restore_rooms_ from open_rooms / last_room (rotating
+//     last_room to [0]) and populate_pending_restore_popouts_();
+//   - rebinds settings_controller_ (client + up_connector) when present;
+//   - swaps the per_account_rooms_ / per_account_invites_ snapshots into
+//     rooms_ / invites_, fires on_invites_updated_(), drops current_invite_;
+//   - persists the on-disk index (active = the new uid).
+// It does NOT touch native widgets (user strip, room-list view, message
+// surface, status bar, tray) — the shell does that in
+// refresh_account_ui_after_switch_(). UI-thread only.
 bool ShellBase::switch_active_account_impl_(const std::string& user_id)
 {
     auto new_session = account_manager_.find(user_id);
@@ -884,6 +983,14 @@ void ShellBase::seed_account_caches_from_(ShellBase* src, const std::string& uid
         per_account_invites_[uid] = i->second;
 }
 
+// Shared spawn wiring: hand ownership of `session`'s account to a freshly
+// constructed window `win` (whose set_initial_account() has already run, but
+// whose deferred doLogin() has NOT). Called from spawn_main_window_() on the
+// spawning window. It (1) re-points the account's sole event bridge at `win`
+// so every SDK callback now reaches it, (2) seeds `win`'s room/invite caches
+// from this window so its list paints immediately instead of waiting for the
+// next sync push, (3) marks `win` pinned, and (4) registers `win` as the
+// dedicated window for the account.
 void ShellBase::hand_account_to_spawned_window_(
     ShellBase* win, const std::shared_ptr<tesseract::AccountSession>& session)
 {
@@ -975,6 +1082,49 @@ void ShellBase::on_window_closing_()
     account_manager_.release_tray_owner(this);
 }
 
+// Platform-agnostic teardown for each shell's logoutActiveAccount /
+// logout_active_account / _logoutActiveAccount. Run on the active account; a
+// no-op (logged_out=false) when there is none. It:
+//   - captures the active uid;
+//   - calls client_->request_stop() FIRST, so any run_async_mut_ worker
+//     already queued or mid-flight against this client (a cancellable
+//     block_on — poll_presence_now, subscribe_room, send_message, ...)
+//     unblocks immediately instead of running its own HTTP timeout/retry
+//     budget while the drain below waits on it;
+//   - unsubscribes the current open room when not pinned by a pop-out
+//     (room_subscription_refs_.count(current_room_id_) == 0) — same guard as
+//     switch_active_account_impl_, folded in so Qt/Win get it too;
+//   - logs out the UnifiedPush connector (when present) and presence;
+//   - calls client_->logout() and SURFACES a failure via show_status_message_
+//     ("Sign out failed: <msg>") — converged so every shell reports it;
+//   - stop_sync() (BEFORE remove_account, per Phase-1 lifetime ordering);
+//   - clears the on-disk account (SessionStore::clear_account) and the
+//     per_account_rooms_ / per_account_invites_ snapshots;
+//   - refreshes the tray aggregate (notify_tray_unread_) so a stale unread dot
+//     clears — converged so every shell does it;
+//   - marks the uid draining (AccountManager::mark_draining) BEFORE removing
+//     it from AccountManager, so there is no window where it's neither
+//     findable nor flagged; removes the account, resets active_account_ / the
+//     client_ / event_handler_ aliases, and the agnostic visible state
+//     (rooms_/invites_/current_invite_/space_stack_/identity/pagination/…);
+//   - posts a barrier task to mut_pool_ (via run_async_mut_) that drops the
+//     session's last reference and clears the draining flag — mut_pool_ is a
+//     strict single-thread FIFO, so this is guaranteed to run only after every
+//     earlier-queued-or-in-flight task that captured the session has finished
+//     — then bound-waits on it (AccountManager::wait_until_drained,
+//     kAccountDrainTimeout) so the old session's SQLite-backed store is either
+//     fully closed, or the wait has at least given request_stop() a fair
+//     chance to unblock it, before this function returns;
+//   - updates the on-disk index (removes the logged-out uid; clears
+//     active_user_id when none remain);
+//   - BRANCHES: if other accounts remain it switches to accounts().front()
+//     via switch_active_account_impl_ + refresh_account_ui_after_switch_ (the
+//     shared Task-3.3 path) and returns has_remaining=true / next_uid set;
+//     otherwise returns has_remaining=false and leaves the native login-view
+//     swap to the shell.
+// Does NOT touch native widgets in the empty-accounts branch (login view,
+// surface visibility) — the shell does that using the returned result.
+// UI-thread only.
 ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
 {
     LogoutResult out;
@@ -1255,6 +1405,15 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     return out;
 }
 
+// The sign-out sequence shared by every shell's entry point
+// (logoutActiveAccount / logout_active_account / _logoutActiveAccount):
+// offer to save an unsaved recovery key first (`retry` re-enters the shell's
+// own sign-out once the user has decided), run logout_active_account_impl_(),
+// and — when no accounts remain — clear the native-widget-free main UI.
+// `on_signed_out` then runs only when an account was actually signed out and
+// carries the shell's native follow-up (room-list refresh, relayout, status
+// text, login-view swap). login_view_ is native per shell, so it is never
+// touched here. UI-thread only.
 void ShellBase::sign_out_active_account_(std::function<void()> retry,
                                          const std::function<void(const LogoutResult&)>& on_signed_out)
 {
@@ -1497,6 +1656,14 @@ void ShellBase::set_initial_account(std::shared_ptr<AccountSession> account)
     active_account_ = std::move(account);
 }
 
+// True when this window's startup should reuse the already-restored,
+// already-syncing accounts from the shared AccountManager instead of
+// re-restoring from disk. A spawned (secondary) window finds the manager
+// already populated, has a pinned active_account_ (via set_initial_account),
+// and has not bound a client yet. The first (primary) window finds the
+// manager empty; the primary re-login path runs with client_ already set.
+// Platform startup entries (doLogin / do_login / start_login / beginLogin)
+// check this first and, if true, bind the pinned account without restoring.
 bool ShellBase::is_secondary_window_startup_() const
 {
     return !account_manager_.accounts().empty() && active_account_ && !client_;
@@ -1560,6 +1727,19 @@ void ShellBase::schedule_sync_restart_(const std::string& user_id, int delay_ms)
                       });
 }
 
+// Agnostic sync-error state machine, shared by every shell. Reacts to the
+// SDK sync-error callback's three contexts:
+//   - "sync_reconnect"   (transient): stop the affected account's sync and
+//     schedule a delayed restart via schedule_sync_restart_().
+//   - "sync_auth_error"  + soft_logout: restore the soft-logged-out session
+//     (refresh-token flow), re-fetch display_name / avatar_url onto the
+//     AccountSession, re-bind this window's identity strip when the affected
+//     account is the active one, and restart sync. If the session can't be
+//     restored (or this isn't a soft logout), clear the stored account, stop
+//     sync, and ask the shell to relogin via request_relogin_().
+//   - else: surface `description` in the status bar.
+// Centralizing this fixes prior per-shell drift (notably macOS, which
+// skipped the post-refresh display-name/avatar re-fetch + strip re-bind).
 void ShellBase::handle_sync_error_impl_(std::string context,
                                         std::string user_id,
                                         std::string description,

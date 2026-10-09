@@ -402,6 +402,13 @@ void ShellBase::fetch_user_extended_profile_async_(const std::string& user_id,
     client_->get_extended_profile_async(req_id, user_id);
 }
 
+/// Resolve user_id's grammatical-gender pronoun word for gendered
+/// membership-narration text (see the member_gender_cache_ comment
+/// above). No-op if already cached or a fetch is already in flight for
+/// this user_id — callers (MessageListView, via the shell) should call
+/// this only from a currently-visible row that actually needs a pronoun,
+/// never as a bulk/room-wide prefetch. Result arrives via
+/// on_member_pronoun_ready_ui_(user_id).
 void ShellBase::request_member_pronoun_ui_(const std::string& user_id)
 {
     if (!client_ || user_id.empty())
@@ -1019,6 +1026,16 @@ ShellBase::build_tray_items_()
     return items;
 }
 
+// Build the canonical user-strip context-menu item list. The order and
+// Log Out label are defined here; platform shells supply the action
+// callbacks and iterate the result to build their native menu. The QR
+// item is omitted automatically when server_info_.supports_qr_grant is
+// false. show_qr_grant may be a null std::function even when QR is
+// supported — the item will still be omitted. Likewise, verify_session
+// is omitted when null — pass it only when the active session is
+// currently unverified (mirrors UserInfo's warning-dot condition), so
+// the item lets the user restart verification mid-session and
+// disappears once verified.
 std::vector<ShellBase::UserMenuItem> ShellBase::build_user_menu_items_(
     std::function<void()> open_settings,
     std::function<void()> add_account,

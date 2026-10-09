@@ -230,6 +230,25 @@ void ShellBase::handle_paginate_result_ui_(std::uint64_t request_id, bool ok,
     }
 }
 
+// The gallery reuses the room's already-active Timeline subscription
+// (no dedicated Rust/FFI surface) and filters raw pagination batches to
+// Image/Video client-side, so a single scroll-to-top gesture may need
+// several backend round-trips in a media-sparse room. Opening/closing,
+// pagination, and retry/accumulate state all live on RoomPane now
+// (RoomPane::open_room_media_view_ etc.) — used identically by the main
+// window's main_room_pane_ and every pop-out's own pane_, so this class
+// only needs the one thing a per-pane object structurally can't provide
+// itself: routing IEventHandler::on_media_view_paginate_result (which
+// has no per-window addressing of its own) back to whichever RoomPane
+// actually issued the request.
+//
+// Completion callback for paginate_media_view_back_async. Looks up
+// media_view_paginate_owners_ and forwards to the owning RoomPane's
+// handle_media_view_paginate_result_, which decides whether to fire
+// another round based on an authoritative Image/Video count read
+// directly from the SDK's timeline — see RoomPane.cpp and
+// paginate_media_view_back_async's doc comment for why this replaced an
+// earlier design that raced against the separate diff-streaming task.
 void ShellBase::handle_media_view_paginate_result_ui_(
     std::uint64_t request_id, bool ok, bool reached_start,
     std::uint64_t media_count, std::string /*message*/)
@@ -617,6 +636,14 @@ bool ShellBase::inflight_tick_()
     return true;
 }
 
+// Coalescing relayout. Instead of running a synchronous measure+arrange of
+// the whole widget tree on every call (which a sync burst does N times),
+// this posts a single deferred flush to the UI thread; further calls before
+// that flush runs are folded into it. The flush still calls the synchronous
+// request_relayout_() exactly once, so native-overlay positioning timing is
+// unchanged — only the redundant per-message passes are eliminated. Use for
+// hot, high-frequency paths (incoming-message handlers); keep
+// request_relayout_() where a later step in the same turn reads geometry.
 void ShellBase::schedule_relayout_()
 {
     if (relayout_scheduled_)

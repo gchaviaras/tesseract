@@ -64,6 +64,13 @@
 namespace tesseract
 {
 
+// Wire MainAppWidget-level + RoomListView/RoomView/UserInfo providers
+// that read from tk_avatars_, tk_images_, anim_cache_, and
+// url_preview_data_. Each shell calls this once during construction after
+// creating its MainAppWidget. Does NOT touch image_viewer/video_viewer
+// (RoomPane::wire_room_view_ owns those, via main_room_pane_) nor
+// non-provider callbacks (on_room_selected, on_scroll, on_search_clear,
+// etc.) — those touch shell-specific state and stay in the per-shell ctor.
 void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
 {
     auto avatar_lookup = [this](const std::string& mxc) -> const tk::Image*
@@ -867,6 +874,14 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
     media_sweep_timer_.start();
 }
 
+// Wire every SettingsView callback whose body is pure Settings
+// persistence or a forward into an existing ShellBase handler — i.e.
+// everything that does NOT need a Surface/Host/native dialog. Each shell
+// calls this once, right after constructing its SettingsView, then wires
+// only what's left: on_close/on_logout/on_reset_identity (differ in how
+// the settings surface is dismissed), on_tab_changed (needs the shell's
+// Surface), and audio/camera/mic device enumeration (needs tk::Host —
+// though the *_changed callbacks themselves are wired here).
 void ShellBase::wire_settings_view_(views::SettingsView* view)
 {
     if (!view)
@@ -1116,6 +1131,13 @@ void ShellBase::wire_settings_controller_common_(
     };
 }
 
+// Wire voice-capture callbacks onto rv. Call once per shell after capture_
+// is initialised (not from RoomWindowBase::wire_room_view_() — pop-out
+// windows hide the mic button instead). `request_repaint` is called each
+// time an amplitude sample arrives. `get_room_id` is invoked when the user
+// starts recording so the message targets the room active at that moment,
+// not when the callback was registered. `clear_text_fn` clears the compose
+// field (and any native text widget) after a successful voice send.
 void ShellBase::wire_voice_capture_(
     views::RoomView*             rv,
     std::function<void()>        request_repaint,

@@ -132,6 +132,14 @@ ShellBase::parse_status_message_(const std::string& msg) const
     return {{msg, std::string{}}}; // plain: never linkify un-opted-in text
 }
 
+// Show `msg` in the platform status bar for `auto_clear_ms` milliseconds,
+// then restore the sync-status text. `auto_clear_ms <= 0` → the message
+// persists until the next status change (e.g. an update notification).
+// `allow_links` opts into markdown-style "[label](url)" hyperlink parsing
+// (see app/status_links.h) — pass it ONLY for app-authored text. It defaults
+// to false so server/error-sourced messages (subscribe / sync / sign-out
+// failures whose tail is a homeserver string) can never inject a clickable
+// link. Safe to call from any thread.
 void ShellBase::show_status_message_(std::string msg, int auto_clear_ms,
                                      bool allow_links)
 {

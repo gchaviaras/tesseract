@@ -815,6 +815,12 @@ void ShellBase::thread_search_clear_()
     thread_search_current_ = -1;
 }
 
+// Each shell points `settings_view_` at its shared SettingsView once, and
+// calls start_/stop_ when its Settings panel opens/closes. The refresh
+// fetches stats from the active account's client and pushes them to the
+// view, re-arming a slow poll while the history backfill runs.
+// The same start_/stop_ pair also drives the About tab's live cache-size
+// refresh (refresh_cache_sizes_poll_()).
 void ShellBase::start_search_index_stats_poll_()
 {
     search_stats_panel_open_ = true;

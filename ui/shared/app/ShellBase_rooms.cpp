@@ -574,6 +574,12 @@ void ShellBase::leave_room_command_(const std::string& room_id,
     acting_client->leave_room_async(req_id, room_id);
 }
 
+// Shared "step back out" navigation once a Leave completes for a room
+// that was a space: pops space_stack_/space_nav_frames_ and hides the
+// space-root/room-preview panels exactly like the room list's own back
+// button (see each shell's on_space_back), so leaving doesn't strand the
+// UI on the now-gone space's summary. Safe to call even if space_id
+// wasn't actually the current stack top / active room.
 void ShellBase::leave_space_navigate_back_(const std::string& space_id)
 {
     if (!space_stack_.empty() && space_stack_.back() == space_id)
@@ -598,6 +604,14 @@ void ShellBase::leave_space_navigate_back_(const std::string& space_id)
     }
 }
 
+// The room list's own "back" button: exits one level of the sidebar's
+// "drilled into a space" browsing (space_stack_/space_nav_frames_).
+// Purely a sidebar action — current_room_id_ (the main pane's active
+// room) is untouched, so if it's still a space (e.g. that's what's
+// actually open in the main pane), the space-root view is re-asserted
+// rather than being blindly hidden, which would otherwise reveal
+// RoomView underneath showing that space's own (effectively empty)
+// room instead. Every shell's on_space_back delegates here.
 void ShellBase::space_back_command_()
 {
     if (!space_stack_.empty())
@@ -975,6 +989,20 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
     return out;
 }
 
+// Unified slash-command dispatch ladder shared by every composer send path
+// (the four shells' on_send handlers and RoomWindowBase::send_message_).
+// Recognizes the no-arg /myroomavatar (native file picker via
+// pick_and_set_room_avatar_), /leave, /join <room>, /invite <user>; any
+// other input falls through to dispatch_compose_send (which itself handles
+// /me, /shrug, /myroomnick, /myroomavatar <uri>, /spoiler and normal text).
+// Must be called on the UI thread; the command branches enqueue async work
+// via the existing ShellBase helpers.
+// Called from a send worker with the result of a send that was already
+// cleared from the composer. On a failure (other than cancellation) it
+// shows the error and puts `body` back into that room's composer, or
+// into its saved draft when the composer isn't on screen or already has
+// new text. The SDK's retry row only exists for messages that reached
+// the send queue, so without this an early failure lost the text.
 void ShellBase::report_unsent_message_(const std::string& user_id,
                                        const std::string& room_id,
                                        const std::string& body,
@@ -1007,6 +1035,22 @@ void ShellBase::report_unsent_message_(const std::string& user_id,
         });
 }
 
+// Called by a platform notifier's activation/response callback when the
+// user submitted inline reply text from an OS notification. Resolves the
+// AccountSession that owns `user_id` via account_manager_ (does NOT touch
+// active_account_ or navigate — a background reply must not disturb
+// whatever account/room is currently showing, matching macOS's
+// non-foregrounding action and KDE's own reply UX). Sends as a threaded
+// reply when `event_id` is non-empty, else falls back to a plain
+// message. Failures are reported via a follow-up notification (see
+// notify_reply_failed_), not show_status_message_, since the triggering
+// notification may belong to a different account/window than whichever
+// one is currently focused.
+// Queue a text send for `room_id` through send_pipeline_. When bundled
+// URL previews are enabled and `preview_body` may contain a link, the
+// previews are generated on the read pool first and handed to `send` as
+// JSON; otherwise `send` gets an empty string. Sends for one room keep
+// their submission order either way. UI thread only.
 void ShellBase::submit_room_send_(const std::shared_ptr<AccountSession>& sess,
                                   const std::string& room_id,
                                   const std::string& preview_body,
@@ -1352,6 +1396,13 @@ void ShellBase::handle_room_action_complete_ui_(std::uint64_t request_id,
     }
 }
 
+// Called after handle_room_action_complete_ui_() processes a Join action.
+// ok=true means the join succeeded; room_id is the canonical joined room
+// ID; message is the SDK failure message (empty on success). Resets
+// RoomPreviewView's Join button on failure and — if AddRoomView's Join
+// tab triggered this action — closes the dialog on success or surfaces
+// the failure in JoinRoomView on failure. No shell needs to override
+// this; it's virtual only so a shell could extend it if ever needed.
 void ShellBase::on_join_room_outcome_ui_(bool ok, const std::string& room_id,
                                          const std::string& message)
 {
@@ -1459,6 +1510,12 @@ void ShellBase::handle_knock_requests_updated_ui_(std::string room_id)
     on_knock_requests_panel_updated_();
 }
 
+// Called after current_room_knock_requests_ changes — either a fresh
+// pull from Client::list_knock_requests (handle_knock_requests_updated_ui_)
+// or a local optimistic edit (decline_knock_request_async_ et al).
+// Implemented directly in ShellBase.cpp (not per-shell like
+// on_invites_updated_) since it only needs main_app_, which every shell
+// already exposes uniformly.
 void ShellBase::on_knock_requests_panel_updated_()
 {
     if (!main_app_)

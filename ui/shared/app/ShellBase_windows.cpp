@@ -275,6 +275,12 @@ void ShellBase::close_popouts_for_account_(const std::string& user_id)
         release_owned_window_(w);
 }
 
+// Subscription ref-counting for secondary windows. acquire_() starts an
+// async subscribe_room when the ref goes from 0→1 (unless the main window
+// already holds the subscription). release_() unsubscribes when the ref
+// goes from 1→0 and the main window is not showing that room.
+// `sess` is the pop-out's own account: the subscription is made on its
+// client, whether or not that account is the active one.
 void ShellBase::acquire_room_subscription_(
     const std::shared_ptr<AccountSession>& sess, const std::string& room_id)
 {
@@ -516,6 +522,14 @@ bool ShellBase::any_window_visible_() const
     return false;
 }
 
+// Edge-detects the main window's visibility (keyed off
+// is_main_window_visible_(), NOT any_window_visible_() — pop-out windows
+// don't report their own visibility yet, so any_window_visible_() would
+// never see the "hidden" edge while one is open) and pauses/resumes the
+// main room view's inline autoplay video accordingly. No-op if the
+// visibility state hasn't changed since the last call. Each shell calls
+// this from every native show/hide/minimize/restore hook it has (see
+// start_anim_tick_() call sites for the existing resume-side equivalents).
 void ShellBase::update_video_playback_suspension_()
 {
     const bool should_suspend = !is_main_window_visible_();

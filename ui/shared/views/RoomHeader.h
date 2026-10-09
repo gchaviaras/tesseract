@@ -148,6 +148,10 @@ public:
     // Applies immediately if the picker is open.
     void set_jump_to_date_max_ts(std::uint64_t ts_ms);
 
+    // On a room switch: drops the previous room's cap and the picker's shown
+    // month, so the next open lands on this room's most recent day.
+    void reset_jump_to_date();
+
     // Fired when the user clicks the threads button.
     std::function<void()> on_threads_requested;
 

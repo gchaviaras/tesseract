@@ -82,9 +82,10 @@ void RoomPane::retarget(const std::string& new_room_id)
     if (room_view_)
     {
         room_view_->set_identity_warnings({});
-        // Another room's last-content day must not cap this room's picker.
+        // Another room's last-content day and shown month must not carry
+        // over into this room's picker.
         if (auto* h = room_view_->header())
-            h->set_jump_to_date_max_ts(0);
+            h->reset_jump_to_date();
     }
     room_id_ = new_room_id;
     // The send-button spinner tracks the room this pane shows, not the

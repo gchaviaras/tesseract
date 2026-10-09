@@ -740,3 +740,25 @@ TEST_CASE("DatePickerView: a past max date caps the shown month and cursor",
     CHECK(picker->view_month() == 11);
     CHECK(picker->cursor_day() == 2);
 }
+
+TEST_CASE("DatePickerView: reset_view reopens on a later max date",
+          "[tk][datepicker]")
+{
+    auto picker = std::make_unique<DatePickerView>();
+    picker->set_max_date(2019, 11, 2);
+    picker->open_at({0, 0, DatePickerView::kWidth, DatePickerView::kHeight});
+    REQUIRE(picker->view_month() == 11);
+
+    // Without a reset, a later cap leaves the earlier month showing.
+    picker->set_max_date(2021, 6, 20);
+    picker->open_at({0, 0, DatePickerView::kWidth, DatePickerView::kHeight});
+    CHECK(picker->view_year() == 2019);
+
+    picker->reset_view();
+    picker->open_at({0, 0, DatePickerView::kWidth, DatePickerView::kHeight});
+    CHECK(picker->view_year() == 2021);
+    CHECK(picker->view_month() == 6);
+    CHECK(picker->cursor_year() == 2021);
+    CHECK(picker->cursor_month() == 6);
+    CHECK(picker->cursor_day() == 20);
+}

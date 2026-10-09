@@ -1106,6 +1106,13 @@ void RoomHeader::set_jump_to_date_max_ts(std::uint64_t ts_ms)
         apply_picker_max_();
 }
 
+void RoomHeader::reset_jump_to_date()
+{
+    jump_max_ts_ = 0;
+    if (date_picker_)
+        date_picker_->reset_view();
+}
+
 void RoomHeader::apply_picker_max_()
 {
     int y, m, d;

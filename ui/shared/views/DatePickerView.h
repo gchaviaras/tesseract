@@ -46,6 +46,10 @@ public:
     // Re-clamps the shown month and keyboard cursor into the new range.
     void set_max_date(int year, int month, int day);
 
+    // Forget the shown month and cursor so the next open_at() starts on
+    // today, clamped to the max date (e.g. when the header switches rooms).
+    void reset_view();
+
     // Get today's local date — exposed so callers (RoomHeader) can pass it
     // to set_max_date without duplicating the platform-agnostic logic.
     static void today(int& year, int& month, int& day);

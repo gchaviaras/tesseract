@@ -81,6 +81,12 @@ void DatePickerView::set_max_date(int year, int month, int day)
         set_cursor_(cursor_year_, cursor_month_, cursor_day_);
 }
 
+void DatePickerView::reset_view()
+{
+    view_year_ = view_month_ = 0;
+    cursor_year_ = cursor_month_ = cursor_day_ = 0;
+}
+
 void DatePickerView::open_at(tk::Rect world_rect)
 {
     bounds_ = world_rect;

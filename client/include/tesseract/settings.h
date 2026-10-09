@@ -222,6 +222,20 @@ public:
     // takes effect after restart.
     bool exclude_insecure_devices = false;
 
+    // ── Network proxy ─────────────────────────────────────────────────
+    // System → OS/environment proxy (default); None → never use a proxy;
+    // Manual → proxy_url (`http(s)://[user:pass@]host:port`). Applied via
+    // Client::set_proxy at launch; a change takes effect after restart.
+    // Credentials in proxy_url are stored in plain text in app_settings.json.
+    enum class ProxyMode
+    {
+        System,
+        None,
+        Manual
+    };
+    ProxyMode proxy_mode = ProxyMode::System;
+    std::string proxy_url;
+
     // ── MSC4278 media-preview controls ────────────────────────────────
     // In-memory mirror of the active account's global `m.media_preview_config`
     // account-data event. NOT persisted to app_settings.json — account_data is

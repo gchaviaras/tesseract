@@ -1,6 +1,7 @@
 #include "SettingsView.h"
 
 #include "views/settings/LanguageSection.h"
+#include "views/settings/NetworkSection.h"
 #include "views/settings/PronounsEditor.h"
 #include "views/settings/StatusEditor.h"
 #include "views/settings/TimezonePicker.h"
@@ -289,6 +290,22 @@ SettingsView::SettingsView()
             on_user_pack_pending_image_added(local_id, bytes, mime);
     };
 
+    // Network section.
+    auto network = std::make_unique<NetworkSection>();
+    network->on_proxy_changed = [this](tesseract::Settings::ProxyMode mode, std::string url)
+    {
+        if (on_proxy_changed)
+        {
+            on_proxy_changed(mode, std::move(url));
+        }
+    };
+    network->on_restart_requested = [this]
+    {
+        if (on_restart_requested)
+            on_restart_requested();
+    };
+    network_ = network.get();
+
     // Language section.
     auto language = std::make_unique<LanguageSection>();
     language->on_language_changed = [this](std::string code)
@@ -315,6 +332,7 @@ SettingsView::SettingsView()
     tabs->add_tab(tk::tr("Notifications"), std::move(notifications));
     tabs->add_tab(tk::tr("Media"), std::move(media));
     tabs->add_tab(tk::tr("Privacy"), std::move(privacy));
+    tabs->add_tab(tk::tr("Network"), std::move(network));
     tabs->add_tab(tk::tr("Server"), std::move(server));
     tabs->add_tab(tk::tr("Emojis & Stickers"), std::move(image_packs));
     tabs->add_tab(tk::tr("Language"), std::move(language));
@@ -616,6 +634,22 @@ void SettingsView::set_exclude_insecure_devices_pref(bool enabled)
     }
 }
 
+void SettingsView::set_proxy_restart_pending(bool pending)
+{
+    if (network_)
+    {
+        network_->set_restart_pending(pending);
+    }
+}
+
+void SettingsView::set_proxy_pref(tesseract::Settings::ProxyMode mode, const std::string& url)
+{
+    if (network_)
+    {
+        network_->set_proxy(mode, url);
+    }
+}
+
 void SettingsView::set_send_maps_urls_as_location_pref(bool enabled)
 {
     if (privacy_)
@@ -792,6 +826,7 @@ void SettingsView::load_persisted_settings()
     set_prefetch_enabled(s.prefetch_full_media);
     set_send_maps_urls_as_location_pref(s.send_maps_urls_as_location);
     set_exclude_insecure_devices_pref(s.exclude_insecure_devices);
+    set_proxy_pref(s.proxy_mode, s.proxy_url);
     set_bundled_url_previews_pref(s.send_bundled_url_previews, s.fetch_url_previews_directly);
     set_group_inactive_pref(s.group_inactive_rooms);
     set_group_unread_pref(s.group_unread_rooms);

@@ -1513,7 +1513,7 @@ impl ClientFfi {
             "account/discover_homeserver".to_string(),
         );
         self.rt.block_on(async move {
-            let http = match reqwest::Client::builder()
+            let http = match crate::net_proxy::apply(reqwest::Client::builder())
                 .timeout(std::time::Duration::from_secs(5))
                 .build()
             {

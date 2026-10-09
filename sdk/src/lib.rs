@@ -21,6 +21,7 @@ mod markdown;
 mod matrix_uri;
 mod media_preview;
 mod net_guard;
+mod net_proxy;
 mod oauth;
 #[cfg(feature = "legacy_login")]
 mod password_login;

@@ -5,6 +5,10 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-09
+
+- feat(settings): new Settings › Network › Proxy picks the system proxy (default), no proxy, or a manual `http(s)://[user:pass@]host:port` proxy for all HTTP traffic, including matrix-sdk, link previews and call signalling (call audio/video can't use an HTTP proxy); takes effect after restart. macOS x86_64 Release build + ctest 2314/2314 + cargo 799, user-verified macOS against a local squid proxy
+
 ### 2026-10-08
 
 - feat(rooms): Jump to Date stops at the day of the room's newest content event (messages, edits, stickers, undecryptable messages) instead of today, and opens on that month. Qt6 build + ctest 2331/2331 + cargo 798, user-verified Qt6

@@ -70,6 +70,13 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
     send_bundled_url_previews    = j.value("send_bundled_url_previews",    true);
     fetch_url_previews_directly  = j.value("fetch_url_previews_directly",  false);
     exclude_insecure_devices     = j.value("exclude_insecure_devices",     false);
+    {
+        auto pm = j.value("proxy_mode", std::string("system"));
+        proxy_mode = pm == "none"   ? ProxyMode::None
+                   : pm == "manual" ? ProxyMode::Manual
+                                    : ProxyMode::System;
+        proxy_url = j.value("proxy_url", std::string());
+    }
     group_inactive_rooms         = j.value("group_inactive_rooms",         false);
     group_unread_rooms            = j.value("group_unread_rooms",            false);
     inactive_room_threshold_days = j.value("inactive_room_threshold_days", 30);
@@ -262,6 +269,10 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         {"send_bundled_url_previews",        send_bundled_url_previews},
         {"fetch_url_previews_directly",      fetch_url_previews_directly},
         {"exclude_insecure_devices",         exclude_insecure_devices},
+        {"proxy_mode",                       proxy_mode == ProxyMode::None   ? "none"
+                                           : proxy_mode == ProxyMode::Manual ? "manual"
+                                                                             : "system"},
+        {"proxy_url",                        proxy_url},
         {"group_inactive_rooms",             group_inactive_rooms},
         {"group_unread_rooms",            group_unread_rooms},
         {"inactive_room_threshold_days",     inactive_room_threshold_days},

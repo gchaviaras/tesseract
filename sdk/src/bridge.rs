@@ -41,6 +41,16 @@ pub fn set_exclude_insecure_devices(enabled: bool) {
     super::client::identity::set_exclude_insecure_devices(enabled);
 }
 
+/// Process-wide HTTP proxy (0 = system, 1 = none, 2 = manual). Call before
+/// any client is built and before runtime threads start.
+pub fn set_proxy(mode: u8, url: &str) -> bool {
+    super::net_proxy::set_proxy(mode, url)
+}
+
+pub fn validate_proxy_url(url: &str) -> bool {
+    super::net_proxy::validate_proxy_url(url)
+}
+
 pub fn compute_waveform_from_ogg(bytes: &[u8]) -> Vec<u16> {
     super::waveform::compute_waveform_from_ogg(bytes)
 }
@@ -1968,6 +1978,15 @@ pub mod ffi {
         /// from devices that aren't. Process-wide, read when a client is
         /// built: call before `restore_session` / `oauth_begin`.
         fn set_exclude_insecure_devices(enabled: bool);
+
+        // ----- Network proxy -----
+
+        /// Process-wide HTTP proxy: mode 0 = system, 1 = none, 2 = manual
+        /// (`url` is `http(s)://[user:pass@]host:port`). Returns false and
+        /// falls back to system if the mode/URL is invalid. Call at launch
+        /// before any client is built.
+        fn set_proxy(mode: u8, url: &str) -> bool;
+        fn validate_proxy_url(url: &str) -> bool;
 
         // ----- Local waveform generation -----
 

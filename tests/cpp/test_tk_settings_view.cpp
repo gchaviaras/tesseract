@@ -3,6 +3,9 @@
 #include "views/SettingsView.h"
 #include "views/settings/AppearanceSection.h"
 #include "views/settings/LanguageSection.h"
+#include "views/settings/NetworkSection.h"
+#include "tk/combobox.h"
+#include "tk/text_field.h"
 #include "views/settings/UserPackEditor.h"
 #include "tk/controls.h"
 #include "tk/side_tab_view.h"
@@ -37,15 +40,15 @@ struct TkSettingsViewStage
     }
 };
 
-// The hidden Advanced tab is index 11 in tab-registration order (see
-// SettingsView::kAdvancedTabIdx: 10 top tabs [0-9], bottom tabs About=10,
-// Advanced=11).
-constexpr int kAdvancedTabIdx = 11;
+// The hidden Advanced tab is index 12 in tab-registration order (see
+// SettingsView::kAdvancedTabIdx: 11 top tabs [0-10], bottom tabs About=11,
+// Advanced=12).
+constexpr int kAdvancedTabIdx = 12;
 
-// The "Emojis & Stickers" tab is index 8 in tab-registration order:
+// The "Emojis & Stickers" tab is index 9 in tab-registration order:
 // Account=0, Sessions=1, General=2, Appearance=3, Notifications=4, Media=5,
-// Privacy=6, Server=7, Emojis & Stickers=8.
-constexpr int kUserPackTabIdx = 8;
+// Privacy=6, Network=7, Server=8, Emojis & Stickers=9.
+constexpr int kUserPackTabIdx = 9;
 
 tk::SideTabView* find_tabs(SettingsView& view)
 {
@@ -121,6 +124,57 @@ TEST_CASE("LanguageSection: Restart now shows only while a restart is pending",
 
     section.set_restart_pending(false);
     CHECK_FALSE(restart->visible());
+}
+
+namespace
+{
+template <typename T>
+T* find_widget(tk::Widget& root)
+{
+    for (auto& c : root.children())
+    {
+        if (auto* w = dynamic_cast<T*>(c.get()))
+            return w;
+        if (auto* w = find_widget<T>(*c))
+            return w;
+    }
+    return nullptr;
+}
+} // namespace
+
+TEST_CASE("NetworkSection: URL field is enabled only for Manual and invalid URLs do not fire",
+          "[settings-view]")
+{
+    using PM = tesseract::Settings::ProxyMode;
+    tesseract::views::NetworkSection section;
+    auto* combo = find_widget<tk::ComboBox>(section);
+    auto* field = find_widget<tk::TextField>(section);
+    REQUIRE(combo);
+    REQUIRE(field);
+
+    std::vector<std::pair<PM, std::string>> fired;
+    section.on_proxy_changed = [&](PM m, std::string u) { fired.emplace_back(m, std::move(u)); };
+
+    section.set_proxy(PM::System, "");
+    CHECK_FALSE(field->enabled());
+    CHECK(fired.empty());
+
+    section.set_proxy(PM::Manual, "ftp://bad");
+    CHECK(field->enabled());
+    combo->on_changed("manual");
+    CHECK(fired.empty());
+
+    section.set_proxy(PM::Manual, "http://proxy.example.com:8080");
+    combo->on_changed("manual");
+    REQUIRE(fired.size() == 1);
+    CHECK(fired[0].first == PM::Manual);
+    CHECK(fired[0].second == "http://proxy.example.com:8080");
+
+    combo->set_selected_value("none");
+    combo->on_changed("none");
+    CHECK_FALSE(field->enabled());
+    REQUIRE(fired.size() == 2);
+    CHECK(fired[1].first == PM::None);
 }
 
 TEST_CASE("SettingsView::show_account_section selects the Account tab",

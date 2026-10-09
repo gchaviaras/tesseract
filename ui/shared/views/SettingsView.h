@@ -29,6 +29,7 @@
 #include "views/settings/GeneralSection.h"
 #include "views/settings/ImagePacksSection.h"
 #include "views/settings/LanguageSection.h"
+#include "views/settings/NetworkSection.h"
 #include "views/settings/MediaSection.h"
 #include "views/settings/NotificationsSection.h"
 #include "views/settings/PrivacySection.h"
@@ -431,6 +432,14 @@ public:
     // Fired when the user toggles "Exclude insecure devices" (MSC4153).
     std::function<void(bool)> on_exclude_insecure_devices_changed;
 
+    // Fired when the user changes the network proxy (mode + URL; the URL is
+    // only ever valid when mode is Manual). Applied after restart.
+    std::function<void(tesseract::Settings::ProxyMode, std::string)> on_proxy_changed;
+
+    // Show / hide the network section's "Restart now" row.
+    void set_proxy_restart_pending(bool pending);
+    void set_proxy_pref(tesseract::Settings::ProxyMode mode, const std::string& url);
+
     // Fired when the user toggles either "Include link previews in messages I
     // send" or "Fetch link previews directly…". The shell persists both and
     // calls Client::set_bundled_url_previews() on every account.
@@ -525,12 +534,12 @@ private:
     void hide_status_emoji_picker_();
 
     // Index of the hidden "Advanced" bottom tab in tabs_ — computed from the
-    // final tab registration order in the constructor (10 top tabs, indices
-    // 0-9; bottom tabs About=10, Advanced=11). Kept hidden via
+    // final tab registration order in the constructor (11 top tabs, indices
+    // 0-10; bottom tabs About=11, Advanced=12). Kept hidden via
     // tabs_->set_tab_visible(kAdvancedTabIdx, false) until the About tab's
     // "Advanced" button reveals it.
-    static constexpr int kAdvancedTabIdx = 11;
-    static constexpr int kAboutTabIdx = 10;
+    static constexpr int kAdvancedTabIdx = 12;
+    static constexpr int kAboutTabIdx = 11;
     // Account is the first tab added (see the constructor) and hence index 0.
     static constexpr int kAccountTabIdx = 0;
 
@@ -549,6 +558,7 @@ private:
     AdvancedSection* advanced_       = nullptr;
     ConfirmDialog*   confirm_dialog_ = nullptr;
     LanguageSection* language_       = nullptr;
+    NetworkSection*  network_        = nullptr;
     ImagePacksSection* image_packs_  = nullptr;
 
     std::unique_ptr<EmojiPicker> status_emoji_picker_;

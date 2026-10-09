@@ -1241,7 +1241,7 @@ impl ClientFfi {
             account_data_lock: Arc::new(tokio::sync::Mutex::new(())),
             data_dir: default_data_dir(),
             store_key: None,
-            http_client: reqwest::Client::builder()
+            http_client: crate::net_proxy::apply(reqwest::Client::builder())
                 .user_agent(oauth::build_user_agent())
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .timeout(std::time::Duration::from_secs(60))

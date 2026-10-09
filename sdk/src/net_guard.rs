@@ -10,6 +10,8 @@
 //! - [`guarded_client`]: a `reqwest::Client` whose DNS resolver ([`SafeResolver`])
 //!   refuses to hand out any disallowed address, so the address that was
 //!   checked is the address actually connected to (no DNS-rebinding window).
+//!   This holds only for direct connections: behind a proxy the proxy resolves
+//!   the name, so that protection is lost (see [`guarded_client`]).
 //!   The resolver never sees IP-literal hosts, so callers must still run
 //!   [`url_is_fetchable`] on every hop.
 
@@ -176,14 +178,20 @@ impl reqwest::dns::Resolve for SafeResolver {
 pub(crate) const GUARDED_MAX_REDIRECTS: u8 = 5;
 
 /// A `reqwest::Client` for fetching arbitrary third-party URLs:
-/// [`SafeResolver`] for DNS, no proxy (a proxy would resolve the target
-/// itself, bypassing the resolver), no automatic redirects (callers walk them
+/// [`SafeResolver`] for DNS, the configured proxy (see [`crate::net_proxy`]),
+/// no automatic redirects (callers walk them
 /// with [`url_is_fetchable`] on each hop), and tight timeouts.
+///
+/// Tradeoff: when a proxy is in use (Manual, or a System/env proxy) the proxy
+/// resolves the target name, so [`SafeResolver`] never runs and DNS-rebinding
+/// protection is lost. The URL-literal checks ([`url_is_fetchable`]) still
+/// apply to every hop. The peer-address check in [`guarded_get`] is skipped
+/// only for a Manual proxy (the peer is then the proxy, not the target); an
+/// OS/env proxy on a private address makes guarded fetches fail closed.
 pub(crate) fn guarded_client(total_timeout: Duration) -> Option<reqwest::Client> {
-    reqwest::Client::builder()
+    crate::net_proxy::apply(reqwest::Client::builder())
         .user_agent(crate::oauth::build_user_agent())
         .dns_resolver(std::sync::Arc::new(SafeResolver))
-        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(10))
         .timeout(total_timeout)
@@ -202,7 +210,13 @@ pub(crate) async fn guarded_get(http: &reqwest::Client, url: Url) -> Option<(req
             return None;
         }
         let resp = http.get(current.clone()).send().await.ok()?;
-        if resp.remote_addr().is_some_and(|a| is_disallowed_ip(a.ip())) {
+        // Behind the user's Manual proxy the peer is that proxy, not the
+        // target, so the check is skipped. Under System it still runs: an
+        // OS/env proxy on a private address fails closed (the caller falls
+        // back to the homeserver) rather than weakening the guard.
+        if !crate::net_proxy::is_manual()
+            && resp.remote_addr().is_some_and(|a| is_disallowed_ip(a.ip()))
+        {
             return None;
         }
         if resp.status().is_redirection() {

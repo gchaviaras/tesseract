@@ -18,6 +18,8 @@ namespace
 {
 
 std::string g_launch_language;
+Settings::ProxyMode g_launch_proxy_mode = Settings::ProxyMode::System;
+std::string g_launch_proxy_url;
 
 std::string help_for(std::string_view id)
 {
@@ -151,6 +153,13 @@ LaunchPlan prepare_launch(const std::vector<std::string>& args,
     install_crash_handler(Settings::instance().crash_reporting_enabled);
     // Before any account restores: the mode is read when each client is built.
     Client::set_exclude_insecure_devices(Settings::instance().exclude_insecure_devices);
+    // Also before any runtime threads: it edits the process environment.
+    {
+        const auto& s = Settings::instance();
+        const bool ok = Client::set_proxy(s.proxy_mode, s.proxy_url);
+        g_launch_proxy_mode = ok ? s.proxy_mode : Settings::ProxyMode::System;
+        g_launch_proxy_url = ok ? s.proxy_url : std::string();
+    }
     {
         std::string lang = Settings::instance().language;
         g_launch_language = lang;
@@ -199,6 +208,15 @@ LaunchPlan prepare_launch(const std::vector<std::string>& args,
 const std::string& launch_language()
 {
     return g_launch_language;
+}
+
+bool proxy_changed_since_launch(Settings::ProxyMode mode, const std::string& url)
+{
+    if (mode != g_launch_proxy_mode)
+    {
+        return true;
+    }
+    return mode == Settings::ProxyMode::Manual && url != g_launch_proxy_url;
 }
 
 std::vector<std::string> relaunch_args()

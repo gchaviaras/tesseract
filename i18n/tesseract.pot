@@ -6500,3 +6500,39 @@ msgstr ""
 #: client/src/emoji.cpp:191
 msgid "Flags"
 msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Network"
+msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Proxy"
+msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Use system proxy"
+msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "No proxy"
+msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Proxy URL:"
+msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Manual"
+msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "http://proxy.example.com:8080"
+msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "HTTP and HTTPS proxies. Calls' audio/video can't go through an HTTP proxy."
+msgstr ""
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Enter a valid http:// or https:// proxy URL."
+msgstr ""

@@ -341,6 +341,8 @@ set(_tk_sources
     views/settings/MessageLayoutPreview.cpp
     views/settings/LanguageSection.h
     views/settings/LanguageSection.cpp
+    views/settings/NetworkSection.h
+    views/settings/NetworkSection.cpp
     views/settings/NotificationsSection.h
     views/settings/NotificationsSection.cpp
     views/settings/MediaSection.h

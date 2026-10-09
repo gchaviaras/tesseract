@@ -119,6 +119,11 @@ std::string launch_help_text(std::string_view program_name);
 /// the UI compares against this to know whether one is pending.
 const std::string& launch_language();
 
+/// True if the given proxy setting differs from the one this process applied
+/// at startup (the proxy only takes effect after a restart). The URL is
+/// compared only in Manual mode.
+bool proxy_changed_since_launch(Settings::ProxyMode mode, const std::string& url);
+
 /// Arguments for a process that replaces this one: the active --profile
 /// plus --relaunch (see LaunchArgs::relaunch).
 std::vector<std::string> relaunch_args();

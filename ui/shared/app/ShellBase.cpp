@@ -5712,6 +5712,20 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
         s.exclude_insecure_devices = enabled;
         s.save_to_disk(tesseract::config_dir());
     };
+    view->set_proxy_restart_pending(tesseract::proxy_changed_since_launch(
+        tesseract::Settings::instance().proxy_mode,
+        tesseract::Settings::instance().proxy_url));
+    view->on_proxy_changed = [view](tesseract::Settings::ProxyMode mode, std::string url)
+    {
+        // Persist only: the proxy is applied at launch, so it takes effect
+        // after a restart.
+        auto& s = tesseract::Settings::instance();
+        s.proxy_mode = mode;
+        s.proxy_url = std::move(url);
+        s.save_to_disk(tesseract::config_dir());
+        view->set_proxy_restart_pending(
+            tesseract::proxy_changed_since_launch(s.proxy_mode, s.proxy_url));
+    };
     view->on_bundled_url_previews_changed = [this](bool enabled, bool direct)
     {
         handle_bundled_url_previews_toggle_(enabled, direct);

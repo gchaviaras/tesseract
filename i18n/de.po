@@ -5686,3 +5686,39 @@ msgstr "Durch einen neueren Raum ersetzt"
 #: ui/shared/views
 msgid "Switch to this account to open this room."
 msgstr "Wechsle zu diesem Konto, um diesen Raum zu öffnen."
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Network"
+msgstr "Netzwerk"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Proxy"
+msgstr "Proxy"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Use system proxy"
+msgstr "Systemproxy verwenden"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "No proxy"
+msgstr "Kein Proxy"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Proxy URL:"
+msgstr "Proxy-URL:"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Manual"
+msgstr "Manuell"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "http://proxy.example.com:8080"
+msgstr "http://proxy.example.com:8080"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "HTTP and HTTPS proxies. Calls' audio/video can't go through an HTTP proxy."
+msgstr "HTTP- und HTTPS-Proxys. Audio und Video von Anrufen können nicht über einen HTTP-Proxy laufen."
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Enter a valid http:// or https:// proxy URL."
+msgstr "Gib eine gültige http://- oder https://-Proxy-URL ein."

@@ -176,7 +176,7 @@ pub(crate) fn build_user_agent() -> String {
 /// the re-export from within matrix-sdk, not an independently constructed
 /// `reqwest::Client`, even though both resolve to the same crate version.
 pub(crate) fn build_sdk_http_client() -> matrix_sdk::reqwest::Client {
-    matrix_sdk::reqwest::Client::builder()
+    crate::net_proxy::apply(matrix_sdk::reqwest::Client::builder())
         .user_agent(build_user_agent())
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(60))

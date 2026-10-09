@@ -6373,3 +6373,39 @@ msgstr "[Réplàçéd by à ñéwér röömxxxx]"
 #: ui/shared/views
 msgid "Switch to this account to open this room."
 msgstr "[Swïtçh tö thïs àççöùñt tö öpéñ thïs rööm.xxxxxxxx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Network"
+msgstr "[Ñétwörkx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Proxy"
+msgstr "[Pröxyx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Use system proxy"
+msgstr "[Ùsé systém pröxyxxx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "No proxy"
+msgstr "[Ñö pröxyx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Proxy URL:"
+msgstr "[Pröxy ÙRL:xx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Manual"
+msgstr "[Màñùàlx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "http://proxy.example.com:8080"
+msgstr "[http://pröxy.éxàmplé.çöm:8080xxxxx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "HTTP and HTTPS proxies. Calls' audio/video can't go through an HTTP proxy."
+msgstr "[HTTP àñd HTTPS pröxïés. Çàlls' àùdïö/vïdéö çàñ't gö thröùgh àñ HTTP pröxy.xxxxxxxxxxxxxx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Enter a valid http:// or https:// proxy URL."
+msgstr "[Éñtér à vàlïd http:// ör https:// pröxy ÙRL.xxxxxxxx]"

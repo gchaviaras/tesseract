@@ -182,7 +182,7 @@ impl ShortlinkFetcher for ReqwestShortlinkFetcher {
         timeout: Duration,
     ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'a>> {
         Box::pin(async move {
-            let client = reqwest::Client::builder()
+            let client = crate::net_proxy::apply(reqwest::Client::builder())
                 .timeout(timeout)
                 .redirect(reqwest::redirect::Policy::none())
                 .build()

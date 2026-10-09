@@ -3,6 +3,7 @@
 #include "event_handler.h"
 #include "image_pack.h"
 #include "maps_link.h"
+#include "settings.h"
 #include "types.h"
 
 #include <cstdint>
@@ -305,6 +306,16 @@ public:
     /// that aren't. Read when a client restores or logs in, so set it from
     /// the persisted setting before any account starts.
     static void set_exclude_insecure_devices(bool enabled);
+
+    /// Process-wide HTTP proxy for every outgoing request (Matrix, media,
+    /// previews, LiveKit signalling; call media over UDP is unaffected).
+    /// Call once at launch, before any account starts and before worker
+    /// threads exist. Returns false (and uses the system proxy) if `url` is
+    /// not a valid http(s) proxy URL in Manual mode.
+    static bool set_proxy(Settings::ProxyMode mode, const std::string& url);
+
+    /// True if `url` is an `http(s)://[user:pass@]host:port` proxy URL.
+    static bool is_valid_proxy_url(const std::string& url);
 
     /// Parsed representation of a `https://matrix.to/#/…` URL or a
     /// `matrix:` URI (MSC2312).  `kind == Unknown` for unrecognised input.

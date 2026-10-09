@@ -77,6 +77,38 @@ TEST_CASE("Settings animate_avatars defaults on and round-trips")
     fs::remove_all(dir);
 }
 
+TEST_CASE("Settings proxy_mode and proxy_url round-trip")
+{
+    using PM = tesseract::Settings::ProxyMode;
+    reset_settings();
+    auto dir = make_tmp_dir("proxy");
+
+    auto& s = tesseract::Settings::instance();
+    s.load_from_disk(dir); // no file → defaults
+    CHECK(s.proxy_mode == PM::System);
+    CHECK(s.proxy_url.empty());
+
+    s.proxy_mode = PM::Manual;
+    s.proxy_url = "http://u:p@proxy.example.com:3128";
+    s.save_to_disk(dir);
+    s.proxy_mode = PM::System;
+    s.proxy_url.clear();
+    s.load_from_disk(dir);
+    CHECK(s.proxy_mode == PM::Manual);
+    CHECK(s.proxy_url == "http://u:p@proxy.example.com:3128");
+
+    s.proxy_mode = PM::None;
+    s.save_to_disk(dir);
+    s.proxy_mode = PM::System;
+    s.load_from_disk(dir);
+    CHECK(s.proxy_mode == PM::None);
+
+    s.proxy_mode = PM::System;
+    s.proxy_url.clear();
+    reset_settings();
+    fs::remove_all(dir);
+}
+
 TEST_CASE("Settings round-trip: Dark")
 {
     reset_settings();

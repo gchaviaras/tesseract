@@ -13,11 +13,13 @@
 #include <tesseract/types.h>
 #include <tesseract/visual.h>
 #include <tesseract/waveform_cache.h>
+#include "app/AccountLifecycleTypes.h"
 #include "app/AccountManager.h"
 #include "app/ActivityRegistry.h"
 #include "app/AurUpdateChecker.h"
 #include "app/GithubUpdateChecker.h"
 #include "app/PresenceTracker.h"
+#include "app/MediaTypes.h"
 #include "app/PowerPolicy.h"
 #include "app/HistoryExportController.h"
 #include "app/SettingsController.h"
@@ -25,6 +27,7 @@
 #include "app/EncryptionFlowController.h"
 #include "app/ThreadPanelController.h"
 #include "app/UpdateChecker.h"
+#include "app/WorkerPool.h"
 #include "tk/anim_decode_session.h"
 #include "tk/audio_capture.h"
 #include "tk/audio_playback.h"
@@ -918,11 +921,7 @@ protected:
     // growing cooldown throttles re-requests so a dead-homeserver avatar stops
     // hammering on every sync tick, but a recovered server reloads after the
     // window. Keyed by the same mxc/url the ensure_* guards already use.
-    struct MediaFetchBackoff
-    {
-        std::uint32_t attempts = 0;
-        std::chrono::steady_clock::time_point retry_after{};
-    };
+    using MediaFetchBackoff = tesseract::MediaFetchBackoff;
     std::unordered_map<std::string, MediaFetchBackoff> media_fetch_failed_;
 
     bool media_fetch_backed_off_(const std::string& key) const
@@ -942,21 +941,7 @@ protected:
     // late callback a no-op. group_id (a non-zero hash of the originating room,
     // or 0 for never-cancelled requests like map tiles) lets cancel_media_group_
     // drop a room's pending requests in bulk and abort their Rust tasks.
-    struct PendingMediaReq
-    {
-        std::uint64_t group_id = 0;
-        // Exactly one is set, matching the request type.
-        std::function<void(std::vector<std::uint8_t>&&)> on_bytes;
-        std::function<void(std::string&&)>               on_preview;
-        // Run when the request is cancelled (room switch) instead of completing.
-        // Clears the caller's dedup-set key so the media can be re-requested on
-        // re-entry; without this the key would stay stuck in-flight forever.
-        std::function<void()>                            on_cancel;
-        // Display/cache key this request feeds (the row's media fetch_token), or
-        // empty for requests not tied to a visible row. Used to drop the
-        // media_key_to_req_ reverse-map entry when the request ends.
-        std::string                                      priority_key;
-    };
+    using PendingMediaReq = tesseract::PendingMediaReq;
     std::unordered_map<std::uint64_t, PendingMediaReq> pending_media_;
     std::uint64_t next_media_req_id_ = 1;
     // Reverse map: a media display/cache key → the request_id currently fetching
@@ -996,10 +981,7 @@ protected:
     // set). 0 is reserved for ungrouped / never-cancelled requests.
     static std::uint64_t media_group_for_room_(const std::string& room_id)
     {
-        if (room_id.empty())
-            return 0;
-        std::uint64_t h = std::hash<std::string>{}(room_id);
-        return h == 0 ? 1 : h;
+        return media_group_for_room(room_id);
     }
 
     // Hand out a fresh non-zero group id for a caller that needs one
@@ -1053,17 +1035,7 @@ protected:
     // the request is cancelled (cancel_media_group_ below erases it with
     // neither running, same "late callback is a no-op" contract as
     // pending_media_).
-    struct PendingMediaStream
-    {
-        std::uint64_t group_id = 0;
-        // total_size is the declared HTTP Content-Length (0 if unknown) —
-        // see IEventHandler::on_media_chunk's doc comment.
-        std::function<void(std::vector<std::uint8_t>&&, std::uint64_t)> on_chunk;
-        std::function<void()> on_done;
-        // status is 2 (STREAM_FAILED) or 3 (STREAM_FAILED_HASH) — see
-        // IEventHandler::on_media_chunk's doc comment.
-        std::function<void(std::uint8_t)> on_failed;
-    };
+    using PendingMediaStream = tesseract::PendingMediaStream;
     std::unordered_map<std::uint64_t, PendingMediaStream> pending_media_streams_;
 
     // Allocate a request_id and register a streaming completion. Returns the
@@ -1582,57 +1554,7 @@ protected:
     //               already on disk, near-instant — never sits queued behind
     //               a slow network-bound media fetch or other run_async_ work
     //               on pool_'s single shared FIFO queue.
-    struct WorkerPool
-    {
-        explicit WorkerPool(int threads);
-        ~WorkerPool();
-
-        // Enqueue fn for execution on the next free thread.
-        void post(std::function<void()> fn);
-
-        // Stop accepting new work, drop pending tasks, and join all threads.
-        // Safe to call multiple times (no-op after the first call).
-        void drain();
-
-        // Block up to `timeout` for every currently-queued-or-executing task
-        // to finish, without stopping the pool or joining its threads (unlike
-        // drain(), new work posted afterward — e.g. a re-login in the same
-        // process — still runs normally). Returns true if the pool went idle
-        // in time, false on timeout (a genuinely stuck task just means the
-        // caller proceeds anyway, same bounded-wait philosophy as
-        // AccountManager::wait_until_drained).
-        bool wait_idle(std::chrono::milliseconds timeout)
-        {
-            std::unique_lock<std::mutex> lk(mu_);
-            return cv_.wait_for(lk, timeout, [this]
-            {
-                return in_flight_.load(std::memory_order_relaxed) == 0;
-            });
-        }
-
-        // Number of tasks waiting in the queue (not yet executing).
-        // Lock-free read; acceptable to see a slightly stale count for display.
-        size_t pending_count() const
-        {
-            return pending_.load(std::memory_order_relaxed);
-        }
-
-        std::deque<std::function<void()>> queue_;
-        std::mutex                        mu_;
-        std::condition_variable           cv_;
-        bool                              stop_ = false;
-        std::vector<std::thread>          threads_;
-        // Tracks tasks waiting in queue_. Mutated under mu_; readable lock-free.
-        std::atomic<size_t>               pending_{0};
-        // Tracks tasks that are queued OR currently executing — unlike
-        // pending_, only reaches 0 once a task has actually finished running
-        // (see the worker loop), which is what wait_idle() needs: a task can
-        // hold a stray shared_ptr<AccountSession> for as long as it's
-        // executing, well after it left the queue.
-        std::atomic<size_t>               in_flight_{0};
-        // Posted outside mu_ whenever pending_ changes. Cleared in drain().
-        std::function<void()>             on_change_;
-    };
+    using WorkerPool = tesseract::WorkerPool;
     // std::thread::hardware_concurrency() can report 0 (some sandboxes/
     // platforms don't know); clamp into [2, 8] so a many-core machine
     // doesn't over-thread this light, bursty decode/IO work, and a
@@ -1670,54 +1592,12 @@ public:
     // ── Media kind tag ────────────────────────────────────────────────────────
     using MediaKind = tk::MediaKind;
 
-    // Result of a worker-thread decode. Exactly one of `still` /
-    // `frames` is populated (frames non-empty ⇒ animated).
-    struct DecodedImage
-    {
-        std::unique_ptr<tk::Image> still;
-        std::vector<std::unique_ptr<tk::Image>> frames;
-        std::vector<int> delays_ms;
-        bool empty() const
-        {
-            return !still && frames.empty();
-        }
-    };
+    using DecodedImage = tesseract::DecodedImage;
 
     using MediaPrefetchKey = tk::MediaPrefetchKey;
 
 protected:
-    // ── Unified raw-bytes media-fetch pipeline ────────────────────────────────
-    // The variable bits of the disk-load → UI hop → hit-deliver / miss-fetch →
-    // persist → deliver async dance shared by fetch_media_pipeline_ and
-    // ensure_tile_async. Each callback runs on the thread noted below; the
-    // worker-thread ones (load_disk_/store_disk_) execute on the io pool, the
-    // rest on the UI thread (already guarded by post_to_ui_alive_). The helper
-    // owns the alive_-token lifetime guarding for every UI-thread continuation.
-    struct MediaFetchSpec
-    {
-        // Worker thread: read the backing cache for this entry. Empty ⇒ miss.
-        std::function<std::vector<std::uint8_t>()> load_disk_;
-        // Worker thread: persist freshly-fetched bytes before delivery.
-        std::function<void(const std::vector<std::uint8_t>&)> store_disk_;
-        // UI thread: clear the caller's in-flight/dedup key.
-        std::function<void()> erase_inflight_;
-        // UI thread: the cancellation group for this request (0 = never cancel).
-        std::uint64_t group_id = 0;
-        // UI thread: still want this delivery? Returns false ⇒ suppress (stale).
-        // Defaults to always-deliver; only the room-scoped pipeline overrides it.
-        std::function<bool()> should_deliver_;
-        // UI thread: issue the SDK fetch for the allocated request id.
-        std::function<void(std::uint64_t /*req_id*/)> start_fetch_;
-        // UI thread: a miss-fetch returned empty bytes (network failure).
-        std::function<void()> on_empty_;
-        // UI thread: deliver final bytes (hit or post-fetch). The helper has
-        // already erased the in-flight key before calling this.
-        std::function<void(std::vector<std::uint8_t>&&)> deliver_;
-        // UI thread: the row display/cache key this fetch feeds, registered in
-        // media_key_to_req_ so a visible-row scroll can re-prioritize it. Empty
-        // for fetches not tied to a visible row (e.g. map tiles).
-        std::string priority_key;
-    };
+    using MediaFetchSpec = tesseract::MediaFetchSpec;
 
     // Run the shared disk-load → UI hop → hit-deliver / miss-fetch → persist →
     // deliver state machine described by `spec`. Preserves the Phase-1
@@ -1754,37 +1634,7 @@ protected:
     // lazy-fetch behavior unchanged until a follow-up extracts its decode
     // path too.
 
-    // Shared state for one frame's prefetch batch. Lives only for the
-    // duration of run_media_prefetch_impl_(), held alive by shared_ptr in
-    // every task posted to pool_ so a straggler task that outlives the
-    // UI-thread wait is still safe to complete into.
-    struct MediaPrefetchBatch
-    {
-        std::mutex mu;
-        std::condition_variable cv;
-        std::atomic<int> remaining{0};
-        // Set by the UI thread iff its wait_until() timed out (did NOT see
-        // remaining reach 0 in time) — i.e. "I have already stopped
-        // draining this batch, any task that finishes from here on must
-        // drain-and-store for itself". Without this, a task that finishes
-        // within budget could still race its own post_to_ui_ dispatch
-        // against the UI thread's synchronous drain, sometimes "winning"
-        // and deferring an on-time result to a later UI-thread turn for no
-        // reason (harmless, but pointless) — or, worse, the UI thread could
-        // observe remaining==0 and return before that same straggler
-        // dispatch has actually run store_decoded_media_, making a result
-        // that decoded in time still miss this frame's paint. Gating the
-        // straggler dispatch on this flag makes exactly one of the two
-        // drains responsible for any given entry, deterministically.
-        std::atomic<bool> deadline_passed{false};
-        // Decoded results not yet applied to a cache. Populated by worker
-        // tasks under mu; drained by whichever of (a) the UI-thread bounded
-        // wait in run_media_prefetch_impl_ (only when it did NOT time out),
-        // (b) a straggler task's own post_to_ui_ callback (only when
-        // deadline_passed is set) — never both, so every entry is drained
-        // exactly once.
-        std::vector<std::tuple<tk::CacheKey, MediaKind, DecodedImage, std::uint64_t>> ready;
-    };
+    using MediaPrefetchBatch = tesseract::MediaPrefetchBatch;
 
     static constexpr std::chrono::microseconds kMediaPrefetchBudget{2000};
     // Max decode tasks dispatched per frame. Bounds pool_ contention / (on
@@ -2171,64 +2021,14 @@ protected:
     void on_account_picker_select_(const std::string& uid);
 
     // ── Startup account restore ───────────────────────────────────────────────
-    // Outcome of restore_all_accounts_(): lets each shell decide between the
-    // empty-accounts login fallback and finishing login on the active account
-    // (that decision touches native login_view_ widgets, so it stays in the
-    // shell).
-    struct RestoreResult
-    {
-        bool        any_accounts       = false; // at least one account restored
-        bool        any_restore_failed = false; // ≥1 stored account failed restore
-        std::string restore_error;              // last restore failure message
-        // True when any_restore_failed is true *because* the cold-start
-        // pre-flight tk::Host::is_network_available() check reported no OS-
-        // level connectivity, rather than a real restore/auth/server error —
-        // lets each shell pick LoginView::show_offline_error() over
-        // show_restore_error() so raw backend detail isn't shown for a plain
-        // "you're offline" case.
-        bool        network_unavailable = false;
-        std::string active_uid;                 // uid to make active (empty when none)
-    };
+    // Outcome of restore_all_accounts_(); see AccountLifecycleTypes.h.
+    using RestoreResult = tesseract::RestoreResult;
 
-    // One restored account's blocking-I/O output, computed off the UI thread
-    // by restore_all_accounts_blocking_(). Touches no ShellBase state — only a
-    // freshly-restored Client, its native event bridge, and the plain data
-    // read from the client — so it's safe to build on mut_pool_'s worker
-    // thread (bridge construction and start_sync are both confirmed
-    // background-safe: bridges self-marshal callbacks to the UI thread via
-    // post_to_ui_, and start_sync's cost is a blocking Rust-side call, not a
-    // UI-toolkit one). `bridge` is declared before `client` to mirror
-    // AccountSession's destruction-order invariant (the bridge must outlive
-    // the client's tokio runtime teardown). The genuinely UI-thread-affine
-    // remainder (notifier install, pref application, AccountManager mutation)
-    // happens afterwards, on the UI thread, in finish_restore_accounts_ui_().
-    struct RestoredAccountIO
-    {
-        std::unique_ptr<IEventHandler> bridge;
-        std::string                 user_id;
-        std::unique_ptr<Client>     client; // set_data_dir()'d + restore_session()'d
-        std::string                 display_name;
-        std::string                 avatar_url;
-        std::string                 last_room;
-        std::vector<std::string>    open_rooms;
-        std::vector<std::string>    recent_rooms;
-        std::vector<std::string>    bridge_not_bridged_overrides;
-        tesseract::emoji::SkinTone  emoji_skin_tone = tesseract::emoji::SkinTone::None;
-        std::string                 prefs_json = "{}";
-    };
+    // One restored account's blocking-I/O output; see AccountLifecycleTypes.h.
+    using RestoredAccountIO = tesseract::RestoredAccountIO;
 
     // Output of the blocking half of startup restore.
-    struct RestoreIOResult
-    {
-        std::vector<RestoredAccountIO> accounts;
-        bool        any_restore_failed = false;
-        std::string restore_error;
-        // See RestoreResult::network_unavailable above — same meaning,
-        // computed here and copied through by finish_restore_accounts_ui_().
-        bool        network_unavailable = false;
-        std::string active_user_id_hint; // index.active_user_id (may name an
-                                          // account that failed to restore)
-    };
+    using RestoreIOResult = tesseract::RestoreIOResult;
 
     // Blocking half of restore: legacy-layout migration, index load, and per-
     // account Client construction / restore_session / identity+prefs fetch,
@@ -2308,31 +2108,8 @@ protected:
     virtual void on_startup_restore_progress_ui_(const std::string& /*status_text*/) {}
 
     // ── Add-account login finalize ────────────────────────────────────────────
-    // Outcome of finalize_login_async_(): lets each shell run the native finish
-    // (or the native duplicate-reject UI) without re-deriving state. On a
-    // successful add,
-    // `ok` is true and `user_id` names the account that was added + made active;
-    // on a duplicate (already-signed-in) it is rejected with `rejected_duplicate`
-    // true and `user_id` set so the shell can show "Already signed in as <uid>";
-    // on any hard failure (empty user id, empty session, persist/restore error)
-    // `ok` is false and `error` carries a message (empty when the platform path
-    // had nothing to report).
-    struct FinalizeLoginResult
-    {
-        bool        ok                 = false; // account added + made active
-        bool        rejected_duplicate = false; // uid already signed in
-        std::string user_id;                    // the new (or duplicate) uid
-        std::string error;                      // failure detail (when !ok)
-        // True when finalize_login_blocking_ found recovery/cross-signing not
-        // set up (or incomplete on this device) and deliberately skipped
-        // start_sync — the shell must show the encryption-setup overlay
-        // (begin_gated_encryption_setup_if_needed_) instead of assuming sync
-        // is already running. See ShellBase::release_pending_sync_gate_.
-        bool        needs_encryption_setup      = false;
-        // Which EncryptionSetupOverlay::Mode to open when needs_encryption_setup
-        // is true: false = Fresh, true = Recover.
-        bool        encryption_setup_recover_mode = false;
-    };
+    // Outcome of finalize_login_async_(); see AccountLifecycleTypes.h.
+    using FinalizeLoginResult = tesseract::FinalizeLoginResult;
 
     // Blocking half of add-account finalize: exports the pending client's
     // session, drops the pending client (releasing SQLite handles), renames
@@ -2351,11 +2128,7 @@ protected:
     // missing its native notifier / up_connector and not yet added to
     // account_manager_ — the UI half finishes that. On failure, io.session
     // is null and io.result carries the reason.
-    struct FinalizeLoginIO
-    {
-        FinalizeLoginResult                  result;
-        std::unique_ptr<AccountSession>      session; // null unless result.ok
-    };
+    using FinalizeLoginIO = tesseract::FinalizeLoginIO;
     FinalizeLoginIO finalize_login_blocking_(
         std::unique_ptr<Client> pending_client,
         std::filesystem::path   pending_temp_dir);
@@ -2395,28 +2168,8 @@ protected:
     void release_pending_sync_gate_();
 
     // ── Active-account logout ─────────────────────────────────────────────────
-    // Outcome of logout_active_account_impl_(): lets each shell decide between the
-    // empty-accounts native login fallback and the (already-completed) switch to a
-    // surviving account. When `logged_out` is false the call was a no-op (no active
-    // account) and the shell must do nothing. When `has_remaining` is true the impl
-    // has ALREADY switched to `next_uid` (via switch_active_account_impl_ +
-    // refresh_account_ui_after_switch_), so the shell needs no native follow-up
-    // beyond its own status line; when false, no accounts remain and the shell must
-    // show its native login view.
-    struct LogoutResult
-    {
-        bool        logged_out   = false; // an account was actually signed out
-        bool        has_remaining = false; // another account exists + is now active
-        std::string logged_out_uid;        // the uid that was signed out
-        std::string next_uid;              // the surviving uid switched to (if any)
-        // No `ok` field: client_->logout() now runs on mut_pool_ (it can take
-        // several seconds — see the call site's comment), so its result isn't
-        // known by the time this function returns. A failure still surfaces
-        // via show_status_message_ once the background call completes; no
-        // caller across any of the four shells (or the tests) read this
-        // field's old synchronous value, so dropping it is not a behavior
-        // change for any of them.
-    };
+    // Outcome of logout_active_account_impl_(); see AccountLifecycleTypes.h.
+    using LogoutResult = tesseract::LogoutResult;
 
     // Bound on how long logout_active_account_impl_() (and, symmetrically,
     // finalize_login_async_()'s second-line-of-defense check) will block the
@@ -2977,13 +2730,7 @@ protected:
                                       on_frame);
     }
 
-    // The (on_first_frame, on_frame) callback pair make_streamed_decode_callbacks_
-    // builds, ready to hand to decode_image_streamed_.
-    struct StreamedDecodeCallbacks
-    {
-        std::function<void(std::unique_ptr<tk::Image>, int)> on_first;
-        std::function<void(int, std::unique_ptr<tk::Image>, int)> on_extra;
-    };
+    using StreamedDecodeCallbacks = tesseract::StreamedDecodeCallbacks;
 
     // Shared implementation of the streamed-decode wiring every shell's
     // on_media_bytes_ready_ needs: `on_first` boxes frame 0 (tk::Image is
@@ -3058,17 +2805,7 @@ protected:
         return cb;
     }
 
-    // The (on_first, on_extra) pair make_streamed_decode_callbacks_windowed_
-    // builds. on_first's signature matches decode_image_streamed_windowed_'s
-    // on_first_frame parameter (session/total_frames delivered as arguments,
-    // not via an out-param — see that function's doc comment for why).
-    struct WindowedStreamedDecodeCallbacks
-    {
-        std::function<void(std::unique_ptr<tk::Image>, int,
-                           std::shared_ptr<tk::AnimDecodeSession>, std::size_t)>
-            on_first;
-        std::function<void(int, std::unique_ptr<tk::Image>, int)> on_extra;
-    };
+    using WindowedStreamedDecodeCallbacks = tesseract::WindowedStreamedDecodeCallbacks;
 
     // Windowed counterpart to make_streamed_decode_callbacks_, for a shell
     // whose decode_image_streamed_windowed_ override can produce a
@@ -4957,7 +4694,7 @@ protected:
     // the desktop search D-Bus adapters, which aren't ShellBase subclasses).
     static std::string thumb_key(const std::string& key, int w, int h)
     {
-        return tesseract::visual::thumb_key(key, w, h);
+        return media_thumb_key(key, w, h);
     }
 
     // Disk-cache + in-flight key for the full-resolution viewer fetch.
@@ -4965,7 +4702,7 @@ protected:
     // entry (plain url) on media_disk_cache_ or media_fetches_in_flight_.
     static std::string fullres_key_(const std::string& url)
     {
-        return "fullres:" + url;
+        return media_fullres_key(url);
     }
 
     // Disk-cache key for a GIF strip's source bytes (the original MP4/WebP/GIF
@@ -4973,7 +4710,7 @@ protected:
     // collides with an mxc:// media key in the shared media_disk_cache_.
     static std::string gif_src_disk_key_(const std::string& url)
     {
-        return "gifsrc:" + url;
+        return media_gif_src_disk_key(url);
     }
 
     // Prefetch avatars for every entry in invites_ (inviter avatar for DMs,

@@ -8,6 +8,7 @@
 #include "app/RoomWindowBase.h"
 #include "app/SearchBackend.h"
 #include "app/SlashCommands.h"
+#include "app/shell_helpers.h"
 #include "app/UnreadPrefetch.h"
 #include "app/media_preview_policy.h"
 #include "tk/blurhash.h"
@@ -120,48 +121,7 @@ Settings::WindowGeometry ShellBase::clamp_to_screens_(
     int default_h,
     const std::vector<tk::Rect>& screens)
 {
-    if (!saved.valid)
-        return {};
-
-    // Check whether the title-bar strip overlaps any screen work area.
-    const float kTitleH = 50.f;
-    const float sx = static_cast<float>(saved.x);
-    const float sy = static_cast<float>(saved.y);
-    const float sw = static_cast<float>(saved.w);
-    bool on_screen = false;
-    for (const auto& s : screens)
-    {
-        const float ox = std::max(sx, s.x);
-        const float oy = std::max(sy, s.y);
-        const float ow = std::min(sx + sw, s.x + s.w) - ox;
-        const float oh = std::min(sy + kTitleH, s.y + s.h) - oy;
-        if (ow > 0.f && oh > 0.f)
-        {
-            on_screen = true;
-            break;
-        }
-    }
-    if (on_screen)
-        return saved;
-
-    // Re-centre on the first available screen with the saved size.
-    const tk::Rect fallback{0.f, 0.f,
-                            static_cast<float>(default_w),
-                            static_cast<float>(default_h)};
-    const tk::Rect& primary = screens.empty() ? fallback : screens[0];
-    const int w = saved.w > 0
-                      ? std::min(saved.w, static_cast<int>(primary.w * 0.9f))
-                      : std::min(default_w, static_cast<int>(primary.w * 0.9f));
-    const int h = saved.h > 0
-                      ? std::min(saved.h, static_cast<int>(primary.h * 0.9f))
-                      : std::min(default_h, static_cast<int>(primary.h * 0.9f));
-    Settings::WindowGeometry result;
-    result.x     = static_cast<int>(primary.x) + (static_cast<int>(primary.w) - w) / 2;
-    result.y     = static_cast<int>(primary.y) + (static_cast<int>(primary.h) - h) / 2;
-    result.w     = w;
-    result.h     = h;
-    result.valid = true;
-    return result;
+    return shell_helpers::clamp_to_screens(saved, default_w, default_h, screens);
 }
 
 std::vector<tesseract::StatusSegment>
@@ -226,94 +186,6 @@ int ShellBase::pool_thread_count()
         hc = 4; // some platforms/sandboxes can't report this
     }
     return std::clamp<int>(static_cast<int>(hc), 2, 8);
-}
-
-ShellBase::WorkerPool::WorkerPool(int threads)
-{
-    for (int i = 0; i < threads; ++i)
-    {
-        threads_.emplace_back(
-            [this]
-            {
-                for (;;)
-                {
-                    std::function<void()> task;
-                    std::function<void()> notify;
-                    {
-                        std::unique_lock<std::mutex> lk(mu_);
-                        cv_.wait(lk, [this] { return stop_ || !queue_.empty(); });
-                        if (stop_ && queue_.empty())
-                            return;
-                        task = std::move(queue_.front());
-                        queue_.pop_front();
-                        pending_.fetch_sub(1, std::memory_order_relaxed);
-                        notify = on_change_;
-                    }
-                    if (notify)
-                        notify();
-                    task();
-                    // task() may have captured a shared_ptr<AccountSession>
-                    // (or similar) that only releases when it returns here —
-                    // wait_idle() waits on in_flight_, not pending_, exactly
-                    // so it observes that release rather than just "left the
-                    // queue".
-                    if (in_flight_.fetch_sub(1, std::memory_order_relaxed) == 1)
-                    {
-                        std::lock_guard<std::mutex> lk(mu_);
-                        cv_.notify_all();
-                    }
-                }
-            });
-    }
-}
-
-void ShellBase::WorkerPool::drain()
-{
-    {
-        std::lock_guard<std::mutex> lk(mu_);
-        stop_ = true;
-        // Disable change notifications before clearing the queue so no
-        // spurious UI updates fire during or after shutdown.
-        on_change_ = nullptr;
-        // Clear the pending queue so threads don't start new work after the
-        // stop flag is set — matching the previous shutting_down_ guard.
-        // These queued-but-not-started tasks are being dropped, not run, so
-        // their in_flight_ contribution goes with them here; a task already
-        // dequeued and executing on a worker thread is not in queue_ and
-        // decrements in_flight_ itself once it finishes (see the worker
-        // loop), so it must not be touched here.
-        in_flight_.fetch_sub(queue_.size(), std::memory_order_relaxed);
-        queue_.clear();
-        pending_.store(0, std::memory_order_relaxed);
-    }
-    cv_.notify_all();
-    for (auto& t : threads_)
-    {
-        if (t.joinable())
-            t.join();
-    }
-}
-
-ShellBase::WorkerPool::~WorkerPool()
-{
-    drain();
-}
-
-void ShellBase::WorkerPool::post(std::function<void()> fn)
-{
-    std::function<void()> notify;
-    {
-        std::lock_guard<std::mutex> lk(mu_);
-        if (stop_)
-            return;
-        pending_.fetch_add(1, std::memory_order_relaxed);
-        in_flight_.fetch_add(1, std::memory_order_relaxed);
-        queue_.push_back(std::move(fn));
-        notify = on_change_;
-    }
-    cv_.notify_one();
-    if (notify)
-        notify();
 }
 
 void ShellBase::run_async_(std::function<void()> fn)
@@ -3505,26 +3377,6 @@ void ShellBase::on_visible_rows_changed_(const std::vector<std::string>& keys)
     }
 }
 
-namespace
-{
-// Resolve a MediaPreviewConfig::Mode → the Settings mirror enum (identical
-// order, but kept explicit so the two stay decoupled).
-tesseract::Settings::MediaPreviews
-mode_to_settings_(tesseract::MediaPreviewConfig::Mode m)
-{
-    switch (m)
-    {
-    case tesseract::MediaPreviewConfig::Mode::Off:
-        return tesseract::Settings::MediaPreviews::Off;
-    case tesseract::MediaPreviewConfig::Mode::Private:
-        return tesseract::Settings::MediaPreviews::Private;
-    case tesseract::MediaPreviewConfig::Mode::On:
-    default:
-        return tesseract::Settings::MediaPreviews::On;
-    }
-}
-} // namespace
-
 tesseract::Settings::MediaPreviews
 ShellBase::effective_preview_mode_(const std::string& room_id,
                                    std::string& join_rule_out) const
@@ -3539,7 +3391,7 @@ ShellBase::effective_preview_mode_(const std::string& room_id,
         join_rule_out = it->second.join_rule;
         if (it->second.has_media_previews)
         {
-            mode = mode_to_settings_(it->second.media_previews);
+            mode = shell_helpers::mode_to_settings(it->second.media_previews);
         }
     }
     return mode;
@@ -3948,7 +3800,7 @@ void ShellBase::handle_media_preview_config_fetched_ui_(std::uint64_t /*request_
 {
     auto cfg = tesseract::MediaPreviewConfig::from_json(config_json);
     auto& s = tesseract::Settings::instance();
-    s.media_previews = mode_to_settings_(cfg.media_previews);
+    s.media_previews = shell_helpers::mode_to_settings(cfg.media_previews);
     s.invite_avatars = cfg.invite_avatars;
 
     // Fetch media that just became allowed in the open room.
@@ -6077,39 +5929,12 @@ void ShellBase::apply_space_child_counts_(std::vector<RoomInfo>& rooms) const
 std::pair<bool, bool> ShellBase::compute_tray_unread(
     const std::unordered_map<std::string, std::vector<RoomInfo>>& by_account)
 {
-    bool has_unread    = false;
-    bool has_highlight = false;
-    for (const auto& [_uid, rooms] : by_account)
-    {
-        for (const auto& r : rooms)
-        {
-            if (r.notification_count > 0)
-            {
-                has_unread = true;
-            }
-            if (r.highlight_count > 0)
-            {
-                has_highlight = true;
-            }
-            if (has_unread && has_highlight)
-            {
-                return {true, true};
-            }
-        }
-    }
-    return {has_unread, has_highlight};
+    return shell_helpers::compute_tray_unread(by_account);
 }
 
 bool ShellBase::account_has_unread(const std::vector<RoomInfo>& rooms)
 {
-    for (const auto& r : rooms)
-    {
-        if (r.notification_count > 0)
-        {
-            return true;
-        }
-    }
-    return false;
+    return shell_helpers::account_has_unread(rooms);
 }
 
 bool ShellBase::other_accounts_have_unread() const
@@ -6141,18 +5966,7 @@ bool ShellBase::account_has_unread_for(const std::string& user_id) const
 std::string ShellBase::find_existing_dm(const std::vector<RoomInfo>& rooms,
                                         const std::string&           user_id)
 {
-    if (user_id.empty())
-    {
-        return {};
-    }
-    for (const auto& r : rooms)
-    {
-        if (r.is_direct && r.dm_counterpart_user_id == user_id)
-        {
-            return r.id;
-        }
-    }
-    return {};
+    return shell_helpers::find_existing_dm(rooms, user_id);
 }
 
 std::string ShellBase::find_existing_dm_(const std::string& user_id) const
@@ -10364,26 +10178,6 @@ void ShellBase::mark_room_read_(const std::string& room_id)
         });
 }
 
-static std::string format_typing_text(const std::vector<std::string>& names)
-{
-    if (names.empty())
-    {
-        return {};
-    }
-    if (names.size() == 1)
-    {
-        return tk::trf(tk::tr("{0} is typing\xe2\x80\xa6"), {names[0]});
-    }
-    if (names.size() == 2)
-    {
-        return tk::trf(tk::tr("{0} and {1} are typing\xe2\x80\xa6"),
-                       {names[0], names[1]});
-    }
-    const long others = static_cast<long>(names.size() - 2);
-    return tk::trf(tk::trn("{0}, {1} and {2} other are typing\xe2\x80\xa6",
-                           "{0}, {1} and {2} others are typing\xe2\x80\xa6", others),
-                   {names[0], names[1], std::to_string(others)});
-}
 
 void ShellBase::handle_account_prefs_updated_ui_(std::string user_id,
                                                  std::string json)
@@ -11683,7 +11477,7 @@ ShellBase::emoticons_for_room_(const std::string& room_id) const
 void ShellBase::handle_typing_changed_ui_(std::string room_id,
                                           std::vector<std::string> names)
 {
-    const std::string text = format_typing_text(names);
+    const std::string text = shell_helpers::format_typing_text(names);
     const bool visible = !names.empty();
     if (main_window_shows_(room_id))
     {
@@ -11752,23 +11546,6 @@ PresenceState ShellBase::presence_for_(const std::string& user_id) const
 }
 
 // ── Presence (send-side) ──────────────────────────────────────────────────────
-
-namespace
-{
-
-// Map PresenceTracker's enum to the Client::PresenceState the FFI accepts.
-tesseract::PresenceState to_client_presence(PresenceTracker::State s)
-{
-    switch (s)
-    {
-        case PresenceTracker::State::Online:      return PresenceState::Online;
-        case PresenceTracker::State::Unavailable: return PresenceState::Unavailable;
-        case PresenceTracker::State::Offline:     return PresenceState::Offline;
-    }
-    return PresenceState::Offline;
-}
-
-} // namespace
 
 void ShellBase::notify_user_activity_()
 {
@@ -12005,7 +11782,7 @@ void ShellBase::start_presence_tracking_()
         // Capture a strong ref to the account active at dispatch time so the
         // PUT targets that account's Client (and keeps it alive) even if the
         // user logs out / switches before the worker runs.
-        const auto target = to_client_presence(s);
+        const auto target = shell_helpers::to_client_presence(s);
         if (client_)
             client_->set_presence_async(target);
     };
@@ -12408,23 +12185,6 @@ void ShellBase::handle_compose_room_leaving_(const std::string& old_room_id)
     });
 }
 
-namespace
-{
-tk::AccentTheme to_tk_accent_(tesseract::Settings::ThemeAccent accent)
-{
-    using SA = tesseract::Settings::ThemeAccent;
-    switch (accent)
-    {
-    case SA::Forest: return tk::AccentTheme::Forest;
-    case SA::Sunset: return tk::AccentTheme::Sunset;
-    case SA::Violet: return tk::AccentTheme::Violet;
-    case SA::System: return tk::AccentTheme::System;
-    case SA::Blue:   break;
-    }
-    return tk::AccentTheme::Blue;
-}
-} // namespace
-
 void ShellBase::apply_current_theme_()
 {
     auto& s = tesseract::Settings::instance();
@@ -12434,7 +12194,7 @@ void ShellBase::apply_current_theme_()
         : s.theme_pref == tesseract::Settings::ThemePreference::Light
             ? tk::ThemeMode::Light
             : os_color_scheme_(); // System → ask the OS
-    const tk::AccentTheme accent = to_tk_accent_(s.theme_accent);
+    const tk::AccentTheme accent = shell_helpers::to_tk_accent(s.theme_accent);
     current_theme_ = tk::Theme::variant(mode, accent);
     if (accent == tk::AccentTheme::System)
     {
@@ -14707,63 +14467,6 @@ namespace
 {
 // Backstop for the dialog's Confirming step (after "They match").
 constexpr int kConfirmTimeoutMs = 30'000;
-
-// Write `text` (a secret — the recovery key) to the UTF-8 `path`. On POSIX
-// the file is owner-only (0600) from the moment it exists — including when
-// overwriting an existing file — and failing to make it so is an error, not
-// a silently world-readable key. Windows has no mode bits; files in the
-// user's profile already inherit per-user ACLs.
-bool write_private_text_file_(const std::string& path, const std::string& text,
-                              std::string& error)
-{
-#ifdef _WIN32
-    namespace fs = std::filesystem;
-    const fs::path p(reinterpret_cast<const char8_t*>(path.c_str()));
-    std::ofstream f(p, std::ios::binary | std::ios::trunc);
-    if (f) f.write(text.data(), static_cast<std::streamsize>(text.size()));
-    if (f) f.close();
-    if (!f)
-    {
-        error = tk::tr("The file couldn't be written.");
-        return false;
-    }
-    return true;
-#else
-    const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-    if (fd < 0)
-    {
-        error = std::strerror(errno);
-        return false;
-    }
-    auto fail = [&](int err) {
-        error = std::strerror(err);
-        ::close(fd);
-        return false;
-    };
-    // O_CREAT's mode only applies to a new file; tighten an existing one
-    // before any of the secret goes in.
-    if (::fchmod(fd, S_IRUSR | S_IWUSR) != 0) return fail(errno);
-    const char* data = text.data();
-    std::size_t left = text.size();
-    while (left > 0)
-    {
-        const ssize_t n = ::write(fd, data, left);
-        if (n < 0)
-        {
-            if (errno == EINTR) continue;
-            return fail(errno);
-        }
-        data += n;
-        left -= static_cast<std::size_t>(n);
-    }
-    if (::close(fd) != 0)
-    {
-        error = std::strerror(errno);
-        return false;
-    }
-    return true;
-#endif
-}
 } // namespace
 
 void ShellBase::wire_encryption_setup_callbacks_(
@@ -14914,7 +14617,7 @@ void ShellBase::wire_encryption_setup_callbacks_(
                 tk::tr("Save recovery key"), "tesseract-recovery-key.txt",
                 [this, key = std::move(key)](std::string path) {
                     std::string error;
-                    const bool ok = write_private_text_file_(path, key + "\n", error);
+                    const bool ok = shell_helpers::write_private_text_file(path, key + "\n", error);
                     if (auto* o = main_app_ ? main_app_->encryption_setup() : nullptr)
                         o->key_save_result(ok, error);
                     request_relayout_();
@@ -17165,7 +16868,7 @@ bool ShellBase::seed_screenshot_fixture_(tk::CanvasFactory& factory)
         }
     }
     room_view_->set_messages(f.messages);
-    room_view_->set_typing_text(format_typing_text(f.typing_names));
+    room_view_->set_typing_text(shell_helpers::format_typing_text(f.typing_names));
     return true;
 }
 

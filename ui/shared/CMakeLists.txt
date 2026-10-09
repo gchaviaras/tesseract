@@ -13,7 +13,9 @@ set(_tk_sources
     app/ShellBase.h
     app/ShellBase.cpp
     app/DeferredTeardown.h
+    app/AccountLifecycleTypes.h
     app/AccountManager.h
+    app/MediaTypes.h
     app/AccountManager.cpp
     app/Launch.h
     app/Launch.cpp
@@ -45,7 +47,12 @@ set(_tk_sources
     app/MediaPlaybackHub.h
     app/MediaPlaybackHub.cpp
     app/SlashCommands.h
+    app/shell_helpers.h
+    app/shell_helpers.cpp
+    app/SendPipeline.h
     app/SendPipeline.cpp
+    app/WorkerPool.h
+    app/WorkerPool.cpp
     app/SlashCommands.cpp
     app/status_links.h
     app/status_links.cpp

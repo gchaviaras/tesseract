@@ -12,6 +12,20 @@ cmake_minimum_required(VERSION 3.25)
 set(_tk_sources
     app/ShellBase.h
     app/ShellBase.cpp
+    app/ShellBase_accounts.cpp
+    app/ShellBase_calls.cpp
+    app/ShellBase_encryption.cpp
+    app/ShellBase_media_fetch.cpp
+    app/ShellBase_media_images.cpp
+    app/ShellBase_navigation.cpp
+    app/ShellBase_profile.cpp
+    app/ShellBase_rooms.cpp
+    app/ShellBase_search.cpp
+    app/ShellBase_settings.cpp
+    app/ShellBase_spaces.cpp
+    app/ShellBase_timeline.cpp
+    app/ShellBase_windows.cpp
+    app/ShellBase_wiring.cpp
     app/DeferredTeardown.h
     app/AccountLifecycleTypes.h
     app/AccountManager.h

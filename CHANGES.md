@@ -3,14 +3,12 @@
 Newest first. Unreleased work is listed per day, one bullet per change.
 Tagged releases summarize all changes since the previous tag.
 
-## Unreleased
+## v0.9.2 — 2026-10-09
 
-### 2026-10-09
+### Summary
 
+- refactor(app): `ShellBase.cpp` is split into 15 per-subsystem files, its worker pool, account-lifecycle and media types and pure helpers moved to their own headers, and the shell tests share one `TestShellBase` double. No behavior change. Linux Qt6 + GTK4 build (unity on and off) + ctest 2334/2334, cargo 800, Windows and macOS builds user-verified
 - feat(settings): new Settings › Network › Proxy picks the system proxy (default), no proxy, or a manual `http(s)://[user:pass@]host:port` proxy for all HTTP traffic, including matrix-sdk, link previews and call signalling (call audio/video can't use an HTTP proxy); takes effect after restart. macOS x86_64 Release build + ctest 2314/2314 + cargo 799, user-verified macOS against a local squid proxy
-
-### 2026-10-08
-
 - feat(rooms): Jump to Date stops at the day of the room's newest content event (messages, edits, stickers, undecryptable messages) instead of today, and opens on that month. Qt6 build + ctest 2331/2331 + cargo 798, user-verified Qt6
 - feat(rooms): upgraded rooms keep their history reachable. The top of a new room says "This room continues an older conversation" with a **View older messages** button (joins the old room if needed); the old room shows a "replaced" strip with a disabled composer and a **Go to / Join the new room** button, an "X upgraded this room" line in its timeline, and stays in the room list as "Replaced by a newer room" until its successor is joined. Old permalinks into an upgraded room open in place. Qt6 build + ctest 2330/2330 + cargo 794, user-verified Qt6
 - feat(timeline): the mouse cursor turns into an I-beam over selectable message text (line boxes, so it doesn't flicker between characters) in all four shells. Qt6 build + ctest 2321/2321, user-verified Qt6
@@ -18,9 +16,6 @@ Tagged releases summarize all changes since the previous tag.
 - feat(settings): Settings › About refreshes the cache sizes every 5 s while the About tab is open. macOS x86_64 Release build, user-verified macOS
 - feat(timeline): display-name and avatar changes by a joined member show as "X changed their avatar / display name" lines (your own always, others' with "Show room join/leave events"); the sender's existing messages, the sidebar strip and the room info panel update at once. Qt6 build + ctest 2312/2312 + cargo 791
 - feat(slash): `/myroomavatar reset` restores your account avatar in the room, and `/myroomavatar` (URL, mxc:// or file picker) now confirms success or reports the failure. Qt6 build + ctest 2312/2312 + cargo 791
-
-### 2026-10-07
-
 - fix(security): link previews bundled into a message by the sender only open if they are http(s) links, and Tesseract never hands any other kind of link (`file:`, `search-ms:`, …) or one starting with `-` to the system browser launcher. Qt6 build + ctest 2309/2309 + cargo 788
 - fix(windows): the `matrix:` link handler (unpackaged and MSIX) passes `--` before the link, so a crafted link can't add command-line options such as `--logoutall`. Qt6 build + ctest 2309/2309 + cargo 788
 - fix(export): exported HTML keeps no remote image addresses from messages and carries a Content-Security-Policy, so opening an export never loads remote images; export file names avoid Windows device names (CON, NUL, …). Qt6 build + ctest 2309/2309 + cargo 788
@@ -35,9 +30,6 @@ Tagged releases summarize all changes since the previous tag.
 - refactor(shells): room selection, tab bar, sign-out, video thumbnails, attachment delivery and the pop-out composer popups moved from per-shell copies into shared code, as did the Qt6/GTK4 autostart and UnifiedPush logic. Push gateway URLs are validated the same on both Linux shells, and Qt6/GTK4 pop-outs now send typing notices. Qt6 build + ctest 2266/2266
 - fix(macos): one-line elided text with a mention pill no longer measures wider than its max width, and the Keychain secret store keeps its in-memory sessions in step when a save or remove fails to persist. The F1 shortcuts test now expects F1 to be unbound on macOS. macOS x86_64 Release build + ctest 2254/2254
 - feat(threads): bridged rooms show the threads button when the bridge advertises thread support in `com.beeper.room_features` (mautrix bridgev2, e.g. Discord guild channels); support is cached per room alongside the bridge status. macOS x86_64 Release build + ctest 2254/2254, cargo 771
-
-### 2026-10-06
-
 - feat(timeline): consecutive membership events of different kinds (join, leave, invite, accept, …) form one group; collapsed, it shows one line per kind instead of a separate group each time the kind changes. Win32 Release build + ctest 2254/2255 (emoji backend probe failing)
 - build: matrix-rust-sdk updated to 0.19.1 (fork pin `b18166c6`; ruma now from crates.io 0.17, Rust ≥ 1.96 needed). The SDK now provides our status writes, `m.call` mirroring, URL previews, call transport discovery, DM member filtering and presence updates. Qt6 build + ctest 2256/2256, cargo 769
 - feat(timeline): Appearance › Timeline option (off by default) shows each sender's status emoji after their name in Classic and Bubbles; hovering it shows the status text. Statuses come from sync (MSC4262), so servers without the profiles extension show none. Profile-card status now reads through matrix-sdk's typed MSC4426 API, which ignores the stable `m.status` key and drops a status missing its text or emoji. Qt6 build + ctest 2255/2255, cargo 765
@@ -52,9 +44,6 @@ Tagged releases summarize all changes since the previous tag.
 - build(macos): the app icon is rendered with resvg (Homebrew `resvg` or `cargo install resvg`) instead of librsvg's dependency-heavy `rsvg-convert`, which remains a fallback; CI installs resvg. macOS x86_64 Release build, user-verified; CI unrun
 - fix(cmake): macOS configure no longer fails with a dependency cycle on `cargo-build_tesseract_sdk_ffi`; the protoc-object strip step reads the archive path via `TARGET_PROPERTY` instead of `TARGET_FILE`. macOS x86_64 Release build, user-verified
 - fix(roomlist): section-header collapse/expand indicator is a Lucide chevron (down = collapsed, up = expanded) instead of a ▸/▾ glyph that some fonts drew as emoji. Qt6 build + ctest 2200/2200, user-verified Qt6
-
-### 2026-10-05
-
 - fix(emoji): emoji picker search also finds custom emotes from image packs (by shortcode or description), listed after the Unicode matches. Qt6 build + ctest 2200/2200, user-verified Qt6
 - fix(qt): mention pills in reply quotes and message bodies render correctly. The quote line is cut to the card's width using each pill's real width instead of overflowing, pills keep their place after a double space, and a pill wrapped to the next line is no longer also drawn past the previous line's edge. Qt6 build + ctest 2199/2199, user-verified Qt6
 - fix(timeline): selecting text in a list, heading or quote message highlights only the selected lines instead of the same span in every line, copies just the selection instead of the whole message, and double/triple-click picks the right word or line past the first item. Qt6 build + ctest 2196/2196, user-verified Qt6

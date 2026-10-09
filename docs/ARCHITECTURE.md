@@ -62,7 +62,10 @@ The platform shells supply native windows, menus, accessibility, notifications,
 and toolkit backends. Shared views use the toolkit abstractions, while
 `ShellBase` and its controllers coordinate accounts and application behavior.
 The platform shells inherit from `ShellBase`; macOS embeds a derived `MacShell`
-inside its Objective-C++ window controller.
+inside its Objective-C++ window controller. `ShellBase` is implemented across
+`ShellBase_<subsystem>.cpp` files (accounts, calls, encryption, media, navigation,
+rooms, search, settings, spaces, timeline, windows and view wiring); its worker
+pool, account-lifecycle types, media types and pure helpers are separate headers.
 
 Commands cross the C++ client API and the generated `cxx` bridge into Rust.
 Background sync and other asynchronous work run on Tokio workers. Events return
@@ -321,7 +324,7 @@ is an in-process language boundary, not an IPC or network service.
 
 | Component | Entry points |
 | --- | --- |
-| Shared application and callback dispatch | [ShellBase.h](../ui/shared/app/ShellBase.h), [EventHandlerBase.h](../ui/shared/app/EventHandlerBase.h) |
+| Shared application and callback dispatch | [ShellBase.h](../ui/shared/app/ShellBase.h) (implemented in `ShellBase_*.cpp`), [EventHandlerBase.h](../ui/shared/app/EventHandlerBase.h) |
 | Shared views and toolkit | [ui/shared/views](../ui/shared/views/), [ui/shared/tk](../ui/shared/tk/) |
 | Platform shells and backends | [Windows](../ui/windows/), [macOS](../ui/macos/), [Qt6](../ui/linux-qt/), [GTK4](../ui/linux-gtk/) |
 | C++ API and event bridge | [client.h](../client/include/tesseract/client.h), [event_handler_bridge.cpp](../client/src/event_handler_bridge.cpp) |

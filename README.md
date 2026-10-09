@@ -82,7 +82,8 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - Open multiple rooms in tabs and/or separate windows
 - Back / forward room history (Alt+Left / Alt+Right; ⌘[ / ⌘] on macOS)
 - Automatic grouping of inactive rooms (configurable)
-- Jump-to-date with a calendar picker (if supported by server)
+- Jump-to-date with a calendar picker (if supported by server); it stops at the room's newest message
+- Upgraded rooms keep their history reachable: a "View older messages" button in the new room, and a "replaced" strip in the old one
 - Unread indicators and last-message previews (including media)
 - Auto-scroll to the most-recent unread room when new messages arrive (optional)
 - Direct messages
@@ -131,6 +132,8 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - In-flight request indicator in the status bar
 - Low power mode (Auto / On / Off) — pauses background work (backfill, prefetch, cache GC, search indexing) while keeping sync live
 - Light / dark / system themes
+- HTTP proxy: system (default), none or manual, under Settings → Network
+- Animated avatars (GIF, animated WebP, APNG), switchable under Appearance → Timeline
 - Windows: installable via the Microsoft Store, direct sideload (MSIX), NSIS, or `winget install Tesseract.Matrix`; taskbar unread/mention overlays, thumbnail controls, and Jump Lists
 - Linux: system-wide room/contact search via GNOME Shell search and KRunner; MPRIS media controls for voice/audio playback; installable via a self-hosted Flatpak repo (not Flathub — see [packaging/flatpak/README.md](packaging/flatpak/README.md)), plus DEB/RPM/AppImage/AUR
 - macOS: Now Playing integration for voice/audio playback; rooms and contacts indexed for Spotlight search; every keyboard-shortcut action (Settings, Add Room, Find, Search Your Messages, Go Back/Forward, Quick Switcher, Room Info, Cycle Recent Rooms, Keyboard Shortcuts) has an application menu-bar entry

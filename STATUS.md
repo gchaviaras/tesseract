@@ -1,6 +1,46 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-08**. 2331 C++ + 798 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-09**. 2334 C++ + 800 Rust tests.
+
+> **HTTP proxy (2026-10-09, v0.9.2).**
+> Settings › Network › Proxy picks the system proxy (default), no proxy, or a
+> manual `http(s)://[user:pass@]host:port` proxy for all HTTP traffic: matrix-sdk,
+> link previews and call signalling. Call audio/video can't use an HTTP proxy.
+> Takes effect after restart. macOS build + ctest 2314/2314; user-verified macOS.
+
+> **ShellBase split (2026-10-09, v0.9.2).**
+> `ShellBase.cpp` is now 15 per-subsystem files (`ShellBase_<subsystem>.cpp`).
+> `WorkerPool`, the account-lifecycle result types, the media request/fetch types
+> and the pure helpers live in `WorkerPool.h`, `AccountLifecycleTypes.h`,
+> `MediaTypes.h` and `shell_helpers.h`; `ShellBase` keeps nested aliases and
+> forwarding statics so the shells are unchanged. Shell tests derive from
+> `tests/cpp/shell_test_double.h`. No behavior change. Qt6 + GTK4 build, ctest
+> 2334/2334; Windows and macOS builds user-verified.
+
+> **Upgraded rooms and Jump to Date (2026-10-08, v0.9.2).**
+> The top of an upgraded room's successor offers **View older messages**; the old
+> room shows a "replaced" strip and stays listed until the successor is joined.
+> Jump to Date stops at the room's newest content day. Qt6 build + ctest
+> 2331/2331; user-verified Qt6.
+
+> **Room language and member changes (2026-10-08, v0.9.2).**
+> The room info panel shows the MSC4334 language (also set as the language of the
+> room's messages for screen readers, except GTK4), in a wrapping `tk::BadgeFlow`.
+> Display-name and avatar changes by joined members show as timeline lines.
+> Qt6 build + ctest 2320/2320.
+
+> **Animated avatars and `/myroomavatar` (2026-10-07, v0.9.2).**
+> GIF, animated WebP and APNG avatars play everywhere (Appearance › Timeline ›
+> "Animate avatars", frozen in low power mode). `/myroomavatar` takes a URL,
+> `mxc://` or file, crops to at most 512×512, keeps animation, and
+> `/myroomavatar reset` restores the account avatar. Qt6 build + ctest 2284/2284.
+
+> **Security hardening (2026-10-07, v0.9.2).**
+> Bundled link previews and the system browser launcher only accept http(s) links,
+> the Windows `matrix:` handler passes `--` first, exported HTML carries a CSP and
+> no remote images, the single-instance lock moved to the per-user runtime
+> directory, oversized images are refused before decoding, and the session file's
+> temporary copy is owner-only. Qt6 build + ctest 2309/2309.
 
 > **Sender status in the timeline (2026-10-06).** Optional Appearance › Timeline
 > setting shows each sender's MSC4426 status emoji after their name (Classic
@@ -2393,8 +2433,8 @@ For build instructions, architectural overview, and the open-roadmap items, see 
 
 | Suite | Count |
 | ----- | ----- |
-| Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 765 |
-| C++ Catch2 tests via ctest | 2200 |
+| Rust unit tests (`cargo test -p tesseract-sdk-ffi`) | 800 |
+| C++ Catch2 tests via ctest | 2334 |
 
 ## Platforms
 

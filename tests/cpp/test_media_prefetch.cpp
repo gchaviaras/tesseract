@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "app/ShellBase.h"
+#include "shell_test_double.h"
 #include <tesseract/settings.h>
 
 #include <tesseract/visual.h>
@@ -38,12 +39,8 @@ struct MediaPrefetchFakeImage : tk::Image
 // it returns a still image for any non-empty bytes; set `decode_delay` to
 // make it block (simulating a slow/stuck decode) so tests can exercise
 // run_media_prefetch_impl_'s deadline behavior deterministically.
-struct MediaPrefetchWithAccountManager { tesseract::AccountManager am_; };
-
-struct MediaPrefetchTestShell : MediaPrefetchWithAccountManager, ShellBase
+struct MediaPrefetchTestShell : tesseract::test::TestShellBase
 {
-    MediaPrefetchTestShell() : ShellBase(am_) {}
-
     // Workers post into ui_queue_ until they finish, and ui_queue_ is part of
     // this derived object, so let them finish before it goes away.
     ~MediaPrefetchTestShell() override
@@ -93,18 +90,10 @@ struct MediaPrefetchTestShell : MediaPrefetchWithAccountManager, ShellBase
             }
         }
     }
-    void post_to_ui_after_(int, std::function<void()> fn) override
-    {
-        fn();
-    }
-    void request_relayout_() override {}
-    void request_repaint_() override {}
-    void on_rooms_updated_() override {}
     void on_media_bytes_ready_(const tk::CacheKey&, MediaKind,
                                std::vector<uint8_t>) override
     {
     }
-    void on_tab_state_changed_ui_() override {}
     DecodedImage decode_image_(const std::vector<uint8_t>& bytes, int,
                                 int) override
     {
@@ -121,33 +110,14 @@ struct MediaPrefetchTestShell : MediaPrefetchWithAccountManager, ShellBase
         d.still = std::make_unique<MediaPrefetchFakeImage>();
         return d;
     }
-    std::int64_t monotonic_ms_() override
-    {
-        return 1000;
-    }
     void start_anim_tick_() override
     {
         ++anim_tick_starts;
     }
-    void navigate_to_room_(const std::string&) override {}
     void pick_image_file_(
         std::function<void(std::vector<uint8_t>, std::string)>) override
     {
     }
-    void show_encryption_setup_overlay_(
-        tesseract::views::EncryptionSetupOverlay::Mode) override {}
-    void raise_and_activate_() override {}
-    std::unique_ptr<tk::AudioPlayback> make_call_audio_output_() override { return nullptr; }
-    tesseract::CallWindowBase* create_call_window_() override { return nullptr; }
-    bool is_ctrl_held_() const override { return false; }
-    void switch_active_account_(const std::string&) override {}
-    void refresh_account_ui_after_switch_() override {}
-    void bind_settings_controller_() override {}
-    void spawn_main_window_(std::shared_ptr<tesseract::AccountSession>) override {}
-    std::unique_ptr<tesseract::IEventHandler>
-    make_account_bridge_(const std::string&) override { return nullptr; }
-    void install_account_notifier_(tesseract::AccountSession&) override {}
-    void request_relogin_(const std::string&) override {}
 
     int anim_tick_starts = 0;
     std::atomic<int> decode_calls{0};

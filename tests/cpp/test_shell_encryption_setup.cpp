@@ -2,6 +2,7 @@
 
 #include "app/EncryptionFlowController.h"
 #include "app/ShellBase.h"
+#include "shell_test_double.h"
 #include "views/EncryptionSetupOverlay.h"
 
 #include <tesseract/account_session.h>
@@ -21,51 +22,21 @@ using tesseract::views::EncryptionSetupOverlay;
 namespace
 {
 
-struct ShellEncryptionSetupWithAccountManager { tesseract::AccountManager am_; };
-
-struct ShellEncryptionSetupTestShell : ShellEncryptionSetupWithAccountManager, ShellBase
+struct ShellEncryptionSetupTestShell : tesseract::test::TestShellBase
 {
-    ShellEncryptionSetupTestShell() : ShellBase(am_) {}
-
     // ── ShellBase pure virtuals ───────────────────────────────────────────
     void post_to_ui_(std::function<void()> fn) override { fn(); }
-    void post_to_ui_after_(int, std::function<void()> fn) override { fn(); }
-    void request_relayout_() override {}
-    void request_repaint_() override {}
-    void on_rooms_updated_() override {}
-    void on_media_bytes_ready_(const tk::CacheKey&, MediaKind,
-                               std::vector<uint8_t>) override {}
-    void on_tab_state_changed_ui_() override {}
-    DecodedImage decode_image_(const std::vector<uint8_t>&, int, int) override
-    {
-        return {};
-    }
     std::int64_t monotonic_ms_() override { return 0; }
-    void start_anim_tick_() override {}
-    void repaint_pickers_() override {}
-    void navigate_to_room_(const std::string&) override {}
-    void pick_image_file_(
-        std::function<void(std::vector<uint8_t>, std::string)>) override {}
 
     // ── New pure virtuals (Task 11) ───────────────────────────────────────
     int raised_ = 0;
     void raise_and_activate_() override { ++raised_; }
-    std::unique_ptr<tk::AudioPlayback> make_call_audio_output_() override { return nullptr; }
-    tesseract::CallWindowBase* create_call_window_() override { return nullptr; }
-    bool is_ctrl_held_() const override { return false; }
     std::vector<std::string> switched_to_;
     void switch_active_account_(const std::string& uid) override
     {
         switched_to_.push_back(uid);
         active_account_ = am_.find(uid);
     }
-    void refresh_account_ui_after_switch_() override {}
-    void bind_settings_controller_() override {}
-    void spawn_main_window_(std::shared_ptr<tesseract::AccountSession>) override {}
-    std::unique_ptr<tesseract::IEventHandler>
-    make_account_bridge_(const std::string&) override { return nullptr; }
-    void install_account_notifier_(tesseract::AccountSession&) override {}
-    void request_relogin_(const std::string&) override {}
 
     // ── New pure virtual under test ───────────────────────────────────────
     EncryptionSetupOverlay::Mode last_mode_{};

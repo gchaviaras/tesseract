@@ -1183,10 +1183,12 @@ void EventHandlerBase::on_call_audio_frame(std::uint64_t session_id,
                                             std::uint32_t sample_rate,
                                             std::uint32_t num_channels)
 {
-    // AudioPlayback::push_frame() is documented thread-safe (audio_playback.h).
-    // Call it directly on this worker thread — no post_to_ui_() overhead.
-    // The mutex in push_call_audio_bgnd_() ensures the output object is not
-    // destroyed while we are inside push_frame().
+    // AudioPlayback::push_frame() is documented thread-safe (audio_playback.h):
+    // it only writes PCM. Call it directly on this worker thread, no
+    // post_to_ui_() overhead. The mutex in push_call_audio_bgnd_() ensures the
+    // output object is not destroyed while we are inside push_frame(); the
+    // backend confines any device change it decides on (a format switch) to
+    // the UI thread, since a QAudioSink must not be rebuilt from here.
     shell()->push_call_audio_bgnd_(samples, sample_count, sample_rate, num_channels);
     (void)session_id;
 }

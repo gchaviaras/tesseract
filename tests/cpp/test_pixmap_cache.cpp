@@ -322,3 +322,81 @@ TEST_CASE("total_bytes_all_instances sums live caches", "[pixmap-cache]")
     }
     CHECK(PixmapCache::total_bytes_all_instances() == base);
 }
+
+TEST_CASE("retain_recent enforces the budget against memoised growth",
+          "[pixmap-cache]")
+{
+    using namespace std::chrono;
+    steady_clock::time_point now{};
+    PixmapCache c(250, seconds{30});
+    c.set_clock_for_testing([&] { return now; });
+
+    auto g = std::make_unique<GrowingImage>(); // 100 bytes at store()
+    GrowingImage* raw = g.get();
+    c.store(tk::CacheKey::media("old"), std::move(g));
+    now += seconds{1};
+    c.store(tk::CacheKey::media("new"), img(100));
+
+    // Within budget (200 <= 250): nothing shed even once generation-stale.
+    c.advance_generation();
+    c.advance_generation();
+    c.retain_recent(2);
+    CHECK(c.contains(tk::CacheKey::media("old")));
+    CHECK(c.contains(tk::CacheKey::media("new")));
+
+    // "old" memoises scaled copies after store(): 300 + 100 > 250. The GC now
+    // sees it and sheds the LRU unreferenced entry despite the TTL floor.
+    raw->bytes = 300;
+    c.retain_recent(2);
+    CHECK_FALSE(c.contains(tk::CacheKey::media("old")));
+    CHECK(c.contains(tk::CacheKey::media("new")));
+    CHECK(c.current_bytes() == 100);
+}
+
+TEST_CASE("retain_recent budget pass spares pinned and freshly marked entries",
+          "[pixmap-cache]")
+{
+    PixmapCache c(50);
+    tk::ImageRef pinned = c.store(tk::CacheKey::media("pinned"), img(100));
+    c.store(tk::CacheKey::media("fresh"), img(100));
+
+    c.advance_generation();
+    c.peek(tk::CacheKey::media("fresh")); // marked this generation
+    c.retain_recent(2);
+    CHECK(c.contains(tk::CacheKey::media("pinned")));
+    CHECK(c.contains(tk::CacheKey::media("fresh")));
+}
+
+namespace
+{
+struct TrimmableImage : tk::Image
+{
+    int width() const override { return 1; }
+    int height() const override { return 1; }
+    std::size_t memory_bytes() const override { return derived ? 400 : 100; }
+    void trim_derived() const override { derived = false; }
+    mutable bool derived = true;
+};
+} // namespace
+
+TEST_CASE("retain_recent trims derived copies of pinned stale images only",
+          "[pixmap-cache]")
+{
+    PixmapCache c;
+    auto a = std::make_unique<TrimmableImage>();
+    auto b = std::make_unique<TrimmableImage>();
+    const TrimmableImage* pa = a.get();
+    const TrimmableImage* pb = b.get();
+    tk::ImageRef pinned_stale = c.store(tk::CacheKey::media("a"), std::move(a));
+    tk::ImageRef pinned_fresh = c.store(tk::CacheKey::media("b"), std::move(b));
+
+    c.advance_generation();
+    c.advance_generation();
+    c.peek(tk::CacheKey::media("b")); // marked this generation
+    c.retain_recent(2);
+
+    CHECK_FALSE(pa->derived); // stale: derived copies dropped, image kept
+    CHECK(pb->derived);       // marked: left alone
+    CHECK(c.contains(tk::CacheKey::media("a")));
+    CHECK(c.current_bytes() == 500);
+}

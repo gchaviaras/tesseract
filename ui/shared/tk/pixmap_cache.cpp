@@ -179,6 +179,53 @@ void PixmapCache::retain_recent(unsigned keep)
             ++it;
         }
     }
+
+    // Images nothing has painted for `keep` generations (still pinned, so not
+    // evictable above) may carry memoised per-size copies; drop them, they
+    // rebuild on the next paint. Marked (on-screen) entries are left alone so
+    // visible images do not re-scale every cycle.
+    for (auto& [_, e] : entries_)
+    {
+        if (e.img && (gen_ - e.last_peek_gen) >= keep)
+        {
+            e.img->trim_derived();
+        }
+    }
+
+    // Backends memoise pre-scaled / GPU copies as an image is painted at new
+    // sizes, so the figure recorded at store() drifts. Re-measure so the
+    // budget below sees everything resident.
+    refresh_bytes_locked_();
+    if (current_bytes_ <= max_bytes_)
+    {
+        return;
+    }
+
+    // Over the ceiling: shed unreferenced entries that were not marked in the
+    // last `keep` generations, least-recently-used first. The TTL floor is
+    // waived here (the budget is a hard ceiling), but anything marked this
+    // cycle or still held by a widget is kept.
+    std::vector<std::unordered_map<CacheKey, Entry, CacheKeyHash>::iterator> evictable;
+    for (auto it = entries_.begin(); it != entries_.end(); ++it)
+    {
+        if (it->second.img.use_count() == 1 &&
+            (gen_ - it->second.last_peek_gen) >= keep)
+        {
+            evictable.push_back(it);
+        }
+    }
+    std::sort(evictable.begin(), evictable.end(),
+              [](const auto& a, const auto& b)
+              { return a->second.last_use < b->second.last_use; });
+    for (auto it : evictable)
+    {
+        if (current_bytes_ <= max_bytes_)
+        {
+            break;
+        }
+        current_bytes_ -= it->second.bytes;
+        entries_.erase(it);
+    }
 }
 
 void PixmapCache::sweep()

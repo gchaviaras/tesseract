@@ -183,6 +183,10 @@ public:
         }
         return bytes;
     }
+    void trim_derived() const override
+    {
+        cache_.clear();
+    }
     const QImage& image() const
     {
         return image_;

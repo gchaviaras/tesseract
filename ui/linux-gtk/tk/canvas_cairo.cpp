@@ -145,6 +145,15 @@ public:
         return bytes;
     }
 
+    void trim_derived() const override
+    {
+        for (auto& e : scaled_cache_)
+        {
+            cairo_surface_destroy(e.surface);
+        }
+        scaled_cache_.clear();
+    }
+
     cairo_surface_t* surface() const
     {
         return surface_;

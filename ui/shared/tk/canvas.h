@@ -329,6 +329,11 @@ public:
     // allocation via its native API so the image cache's byte budget tracks
     // real memory rather than a w*h*4 guess.
     virtual std::size_t memory_bytes() const = 0;
+    // Drop memoised derived copies (pre-scaled / per-size caches) that can be
+    // rebuilt on the next paint, keeping the base pixels. Called by the image
+    // GC on images nothing has painted recently. UI thread only, never during
+    // paint. Backends without such caches keep the default no-op.
+    virtual void trim_derived() const {}
 };
 
 // Shared handle to a decoded image. The image cache hands these out so many
@@ -384,6 +389,12 @@ public:
         for (const auto& f : frames_)
             total += f->memory_bytes();
         return total;
+    }
+
+    void trim_derived() const
+    {
+        for (const auto& f : frames_)
+            f->trim_derived();
     }
 
 private:

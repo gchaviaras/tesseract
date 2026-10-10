@@ -85,7 +85,9 @@ public:
     // the last `keep` generations, AND has not been touched within the TTL (a
     // wall-clock floor that protects a just-fetched image whose widget has not
     // painted yet). An idle window freezes the generation, so its on-screen
-    // images are never reclaimed.
+    // images are never reclaimed. retain_recent() also re-measures every entry
+    // (memoised scaled copies included) and, if still over max_bytes(), sheds
+    // generation-stale unreferenced entries LRU-first, waiving the TTL floor.
     void advance_generation();
     void retain_recent(unsigned keep);
     std::uint64_t generation() const;

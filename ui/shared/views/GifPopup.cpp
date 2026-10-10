@@ -213,8 +213,9 @@ void GifPopup::paint(tk::PaintCtx& ctx)
                                              dh});
             }
             if (ctx.anim_damage)
-                ctx.anim_damage->note_image(results_[std::size_t(i)].strip_url,
-                                            cell);
+                ctx.anim_damage->note_image(
+                    tk::CacheKey::media(results_[std::size_t(i)].strip_url),
+                    cell);
         }
 
         // Selection border.

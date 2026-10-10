@@ -955,7 +955,7 @@ private:
                              fw, fh};
                 ctx.canvas.draw_image(*thumb, dst);
                 if (ctx.anim_damage)
-                    ctx.anim_damage->note_image(thumb_url, dst);
+                    ctx.anim_damage->note_image(tk::CacheKey::media(thumb_url), dst);
             }
         }
 

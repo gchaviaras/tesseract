@@ -330,7 +330,7 @@ void EmojiPicker::paint_cell(std::size_t index, tk::PaintCtx& ctx,
             ctx.canvas.draw_image(*img, dst);
             if (ctx.anim_damage)
             {
-                ctx.anim_damage->note_image(entry.url, dst);
+                ctx.anim_damage->note_image(tk::CacheKey::media(entry.url), dst);
             }
         }
         else

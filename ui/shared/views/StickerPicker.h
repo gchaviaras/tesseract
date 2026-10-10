@@ -83,6 +83,11 @@ public:
     /// `Client::send_sticker` with these fields.
     std::function<void(const tesseract::ImagePackImage&)> on_selected;
 
+    /// Maps a cell's url to the anim-cache key the image provider resolves it
+    /// under, so animated cells report the right key for partial repaints.
+    /// Unset = the plain media key.
+    std::function<tk::CacheKey(const std::string&)> cache_key_resolver;
+
     // Test introspection.
     const std::vector<tesseract::ImagePack>& packs() const
     {

@@ -2671,9 +2671,9 @@ public:
     // single widget, but invalidating a *different*, small widget doesn't
     // touch the rest of the tree's cached render nodes, which is what this is
     // built on.
-    void note_image(const std::string& key, Rect world) override
+    void note_image(const tk::CacheKey& key, Rect world) override
     {
-        if (!anim_cache_ || !anim_cache_->has(tk::CacheKey::media(key)) || !current_canvas_)
+        if (!anim_cache_ || !anim_cache_->has(key) || !current_canvas_)
         {
             return;
         }
@@ -2700,14 +2700,14 @@ public:
 
     // Public so the free-function draw-func trampoline (anim_overlay_draw_cb,
     // defined after this class) can call it — same reason on_draw() is public.
-    void draw_anim_overlay_(cairo_t* cr, const std::string& key)
+    void draw_anim_overlay_(cairo_t* cr, const tk::CacheKey& key)
     {
         auto it = live_overlays_.find(key);
         if (it == live_overlays_.end() || !anim_cache_)
         {
             return;
         }
-        const tk::Image* frame = anim_cache_->current_frame(tk::CacheKey::media(key));
+        const tk::Image* frame = anim_cache_->current_frame(key);
         if (!frame)
         {
             return;
@@ -3427,7 +3427,8 @@ private:
     // Scratch, rebuilt every on_draw(); consumed and left populated by
     // sync_anim_overlays_() (overwritten wholesale next on_draw(), so it
     // doesn't need clearing there).
-    std::unordered_map<std::string, PaintedAnim> painted_this_pass_;
+    std::unordered_map<tk::CacheKey, PaintedAnim, tk::CacheKeyHash>
+        painted_this_pass_;
 
     struct AnimOverlay
     {
@@ -3438,7 +3439,8 @@ private:
     // Persists across paints — this is the whole point. One entry per
     // currently-animating, currently-visible image; bounded in practice by
     // how many such images can be on screen at once, not by list length.
-    std::unordered_map<std::string, AnimOverlay> live_overlays_;
+    std::unordered_map<tk::CacheKey, AnimOverlay, tk::CacheKeyHash>
+        live_overlays_;
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -3462,7 +3464,7 @@ void draw_cb(GtkDrawingArea*, cairo_t* cr, int w, int h, gpointer p)
 struct AnimOverlayDrawCtx
 {
     Host* host;
-    std::string key;
+    tk::CacheKey key;
 };
 
 void anim_overlay_draw_cb(GtkDrawingArea*, cairo_t* cr, int /*w*/, int /*h*/,

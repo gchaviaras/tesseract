@@ -237,7 +237,7 @@ void ImageViewerPage::paint_content(tk::PaintCtx& ctx)
         cv.pop_clip();
         if (ctx.anim_damage)
         {
-            ctx.anim_damage->note_image(drawn_key, image_rect_);
+            ctx.anim_damage->note_image(tk::CacheKey::media(drawn_key), image_rect_);
         }
     }
     else

@@ -72,9 +72,9 @@ public:
 
     // AnimDamageSink: record the on-screen rect of an animated image drawn
     // during the current paint pass. Static images are ignored.
-    void note_image(const std::string& key, Rect world) override
+    void note_image(const tk::CacheKey& key, Rect world) override
     {
-        if (anim_cache_ && anim_cache_->has(tk::CacheKey::media(key)))
+        if (anim_cache_ && anim_cache_->has(key))
         {
             anim_damage_.push_back(world);
         }

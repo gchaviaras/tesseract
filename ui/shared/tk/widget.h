@@ -6,6 +6,7 @@
 // is the classic two-pass measure-then-arrange model: measure() returns
 // the desired size, arrange() commits the final bounds.
 
+#include "cache_key.h"
 #include "canvas.h"
 #include "drag_drop.h"
 #include "theme.h"
@@ -91,7 +92,7 @@ struct LayoutCtx
 struct AnimDamageSink
 {
     virtual ~AnimDamageSink() = default;
-    virtual void note_image(const std::string& key, Rect world) = 0;
+    virtual void note_image(const CacheKey& key, Rect world) = 0;
 };
 
 // Forward declarations — avoids a circular include (host.h includes widget.h).

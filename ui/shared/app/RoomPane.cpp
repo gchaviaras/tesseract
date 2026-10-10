@@ -1635,6 +1635,10 @@ void RoomPane::wire_room_view_()
     if (rv->sticker_picker())
         rv->sticker_picker()->set_image_provider(
             shell_->make_picker_image_provider_(true));
+    if (rv->sticker_picker())
+        rv->sticker_picker()->cache_key_resolver =
+            [sh = shell_](const std::string& url)
+        { return sh->picker_sticker_key_(url); };
     rv->on_sticker_picked = [this](const tesseract::ImagePackImage& img)
     {
         send_sticker_(img.body.empty() ? img.shortcode : img.body, img.url,

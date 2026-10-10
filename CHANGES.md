@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-10
 
+- fix(stickers): animated stickers in the picker no longer animate erratically while an animated image is in the timeline; partial animation repaints now track the picker's own cache key (`AnimDamageSink::note_image` takes a `CacheKey`). Qt6 + GTK4 build, user-verified Qt6
 - fix(images): the image GC now re-measures decoded-image caches (including per-size scaled copies) and enforces their byte ceilings, and drops scaled copies of images nothing has painted recently (`Image::trim_derived`, Qt6 + GTK4). Qt6 + GTK4 build, pixmap-cache tests, user-verified Qt6
 - fix(calls): remote audio tracks (mic plus screen-share audio, or several speakers) are mixed into one stream instead of interleaving into distorted audio. Cargo 990, Windows build
 - feat(gallery): multi-attachment gallery messages (MSC4274) send and display; the room list shows "sent a gallery". Clicking a gallery item opens the media viewer, which steps through the whole gallery (prev/next buttons, "3 / 7" counter, PageUp/PageDown, Left/Right) across images, videos, audio and files. Qt6 build, user-verified Qt6

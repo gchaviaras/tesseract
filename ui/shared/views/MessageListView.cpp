@@ -6867,7 +6867,7 @@ private:
             ctx.canvas.pop_clip();
             if (ctx.anim_damage)
             {
-                ctx.anim_damage->note_image(display_key, dst);
+                ctx.anim_damage->note_image(tk::CacheKey::media(display_key), dst);
             }
         }
         else

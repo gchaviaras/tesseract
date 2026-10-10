@@ -32,7 +32,11 @@ struct TestShellBase : AccountManagerHolder, tesseract::ShellBase
     TestShellBase() : ShellBase(am_) {}
 
     // Workers post back into derived state; let them finish before it goes away.
-    ~TestShellBase() override
+    ~TestShellBase() override { drain_workers(); }
+
+    // Fixtures that own widgets the workers post into call this before those
+    // widgets are destroyed (their members go before the shell's destructor).
+    void drain_workers()
     {
         const auto t = std::chrono::seconds(5);
         pool_.wait_idle(t);

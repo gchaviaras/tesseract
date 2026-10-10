@@ -176,6 +176,9 @@ struct RaAppFx : RaFx
     std::unique_ptr<tesseract::views::MainAppWidget> app =
         tk::create_root_widget<tesseract::views::MainAppWidget>(nullptr);
     RaAppFx() { s.main_app_ = app.get(); }
+    // Workers post back into main_app_ inline (TestShellBase::post_to_ui_), and
+    // `app` is destroyed before the base's shell: drain them first.
+    ~RaAppFx() { s.drain_workers(); }
 };
 
 } // namespace

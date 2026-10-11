@@ -82,6 +82,18 @@ const EXEC_MIMES: &[&str] = &[
     "text/x-sh",
     "text/x-python",
     "application/x-python-code",
+    "application/javascript",
+    "application/x-javascript",
+    "application/ecmascript",
+    "text/javascript",
+    "text/ecmascript",
+    "text/vbscript",
+    "application/x-httpd-php",
+    "text/x-php",
+    "text/x-perl",
+    "text/x-ruby",
+    "application/x-ruby",
+    "application/x-perl",
     "text/html",
     "application/xhtml+xml",
     "image/svg+xml",
@@ -347,6 +359,13 @@ pub fn check(filename: &str, declared_mime: &str, head: &[u8]) -> MediaTypeCheck
     } else {
         String::new()
     };
+    // A rename must never produce a launchable extension (a declared
+    // "application/javascript" would otherwise offer "Rename to .js").
+    let suggested_ext = if EXEC_EXTS.contains(&suggested_ext.as_str()) {
+        String::new()
+    } else {
+        suggested_ext
+    };
     let renamed_filename = if suggested_ext.is_empty() {
         safe_filename.clone()
     } else {
@@ -420,7 +439,12 @@ pub fn check(filename: &str, declared_mime: &str, head: &[u8]) -> MediaTypeCheck
         }
     }
 
-    if !is_safe_media(&effective_mime) {
+    // The OS picks the app from the extension, not from what the sender claims
+    // or what the bytes look like, so the extension itself must be a known-safe
+    // media type. An extension mime_guess has never heard of (".rdp", ".iso")
+    // can't be vouched for, however convincing the declared type and contents.
+    let ext_is_safe = ext.is_empty() || ext_mimes.iter().any(|m| is_safe_media(m));
+    if !ext_is_safe || !is_safe_media(&effective_mime) {
         return make(Verdict::NotMedia);
     }
     make(Verdict::Ok)
@@ -542,6 +566,28 @@ mod tests {
         ] {
             assert_eq!(check(name, mime, head).verdict, Verdict::Executable, "{name}");
         }
+    }
+
+    #[test]
+    fn unknown_extension_cannot_be_vouched_for() {
+        // Declared type and contents are a perfect PNG, but ".rdp" / ".iso" are
+        // what the OS acts on.
+        for name in ["a.rdp", "a.reg2", "a.unknownext"] {
+            assert_eq!(check(name, "image/png", PNG).verdict, Verdict::NotMedia, "{name}");
+        }
+        // Known-but-not-media extensions never open silently either.
+        for name in ["a.iso", "a.vhd", "a.img"] {
+            assert_ne!(check(name, "image/png", PNG).verdict, Verdict::Ok, "{name}");
+        }
+    }
+
+    #[test]
+    fn rename_never_offers_a_launchable_extension() {
+        let r = check("a.png", "application/javascript", b"");
+        assert_eq!(r.verdict, Verdict::Executable);
+        let r = check("a.png", "application/x-futuristic-script", b"");
+        assert!(!["js", "vbs", "exe"].contains(&r.suggested_ext.as_str()));
+        assert_eq!(check("photo", "text/javascript", b"").verdict, Verdict::Executable);
     }
 
     #[test]

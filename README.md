@@ -12,6 +12,69 @@ A full featured desktop multiplatform (Linux, Windows, Mac) Matrix client built 
 
 ---
 
+## Installing
+
+Grab whichever fits your system. Every release, with all the installers attached, lives on the [GitHub Releases page](https://github.com/surakin/tesseract/releases/latest); the [website](https://surakin.github.io/tesseract/) has the same links as buttons.
+
+### Linux
+
+**Flatpak** (updates through GNOME Software / KDE Discover once installed). Tesseract is served from its own repo rather than Flathub, but one command sets everything up, including the remote and the KDE runtime from Flathub:
+
+```bash
+flatpak install --user https://surakin.github.io/tesseract/io.github.surakin.Tesseract.flatpakref
+flatpak run io.github.surakin.Tesseract
+```
+
+Drop `--user` to install system-wide. If you'd rather not add a remote, each release also has a single `.flatpak` file you can install with `flatpak install ./tesseract-vX.Y.Z.flatpak`, though that one won't auto-update.
+
+**Other options:**
+
+- **Arch Linux** — [`tesseract-matrix`](https://aur.archlinux.org/packages/tesseract-matrix) on the AUR for releases, or [`tesseract-matrix-git`](https://aur.archlinux.org/packages/tesseract-matrix-git) to always track the latest changes.
+- **Debian / Ubuntu** — `.deb` from the Releases page.
+- **Fedora / RHEL** — `.rpm` from the Releases page.
+- **AppImage** — portable, also on the Releases page. `chmod +x` it and run.
+
+### Windows
+
+- [Microsoft Store](https://apps.microsoft.com/detail/9nz8v8tcnvjw), or
+- the NSIS installer (`.exe`) from the Releases page.
+
+The NSIS installer isn't code-signed, so SmartScreen will likely show "Windows protected your PC". Click **More info**, then **Run anyway**. The Store version is signed and doesn't have this problem.
+
+### macOS
+
+Download the `.dmg` for your CPU (Apple Silicon or Intel) from the Releases page and drag Tesseract into Applications.
+
+The app isn't signed or notarized, so Gatekeeper will refuse to open it at first ("Tesseract is damaged" or "can't be opened because the developer cannot be verified"). Clear the quarantine flag once and it opens normally:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Tesseract.app
+```
+
+On recent macOS versions, right-click → Open no longer bypasses this, though **System Settings → Privacy & Security → Open Anyway** also works after a first failed launch.
+
+### Building from source
+
+If you'd rather build it yourself (or there's no package for your distro), you need a C++20 compiler, CMake, Ninja, a Rust toolchain (via [rustup](https://rustup.rs)), and the UI toolkit's dev packages. [docs/BUILD.md](docs/BUILD.md) has the exact package lists per platform. Then, on Linux:
+
+```bash
+git clone https://github.com/surakin/tesseract
+cd tesseract
+cmake --preset linux-release
+cmake --build build/linux-release
+
+./build/linux-release/ui/linux-qt/tesseract    # Qt6 UI
+./build/linux-release/ui/linux-gtk/tesseract   # GTK4 UI
+```
+
+Qt6 is the main Linux UI and the one that gets the most development and testing. The GTK4 port is kept working but is not the primary target, so expect the odd rough edge there.
+
+The preset builds both UIs; if you only have one toolkit installed, pass `-DTESSERACT_UI=` to pick (see BUILD.md). The first build compiles the whole Matrix SDK, so expect it to take a while. Other platforms use their own presets, also listed in BUILD.md.
+
+Planning to hack on Tesseract rather than just run it? Use `linux-debug` instead (same commands, `build/linux-debug` output) and see [Contributing](#contributing).
+
+---
+
 ## Why Tesseract?
 
 - **Truly native client on four platforms: Linux (Qt6 & GTK4), Windows and macOS.**
@@ -134,7 +197,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - Light / dark / system themes
 - HTTP proxy: system (default), none or manual, under Settings → Network
 - Animated avatars (GIF, animated WebP, APNG), switchable under Appearance → Timeline
-- Windows: installable via the Microsoft Store, direct sideload (MSIX), NSIS, or `winget install Tesseract.Matrix`; taskbar unread/mention overlays, thumbnail controls, and Jump Lists
+- Windows: installable via the Microsoft Store or an NSIS installer; taskbar unread/mention overlays, thumbnail controls, and Jump Lists
 - Linux: system-wide room/contact search via GNOME Shell search and KRunner; MPRIS media controls for voice/audio playback; installable via a self-hosted Flatpak repo (not Flathub — see [packaging/flatpak/README.md](packaging/flatpak/README.md)), plus DEB/RPM/AppImage/AUR
 - macOS: Now Playing integration for voice/audio playback; rooms and contacts indexed for Spotlight search; every keyboard-shortcut action (Settings, Add Room, Find, Search Your Messages, Go Back/Forward, Quick Switcher, Room Info, Cycle Recent Rooms, Keyboard Shortcuts) has an application menu-bar entry
 
@@ -319,5 +382,5 @@ Tesseract is licensed under the [GNU General Public License v3](./LICENSE)
   GTK 4 is available from Debian 12 / Ubuntu 22.04 onward.
 - **Building from source** requires Rust ≥ 1.75 on every platform (install
   via `rustup` on distros that ship an older toolchain). See
-  [PACKAGING.md](PACKAGING.md) for the full
-  build and packaging instructions.
+  [docs/BUILD.md](docs/BUILD.md) for build setup and
+  [PACKAGING.md](PACKAGING.md) for building installers.

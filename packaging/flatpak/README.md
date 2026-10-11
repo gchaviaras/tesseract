@@ -89,6 +89,17 @@ Cloudflare (free CDN over Pages) or move it to Cloudflare R2 if that
 happens. The OSTree repo is host-agnostic static content, so migrating is a
 copy, no manifest change.
 
+### Installing (for users)
+
+```bash
+flatpak install --user https://surakin.github.io/tesseract/io.github.surakin.Tesseract.flatpakref
+```
+
+That adds the remote and pulls in the runtime. To add only the remote and
+install later: `flatpak remote-add --user tesseract
+https://surakin.github.io/tesseract/tesseract.flatpakrepo`, then
+`flatpak install --user tesseract io.github.surakin.Tesseract`.
+
 ### User-facing files
 
 `tesseract.flatpakrepo` and `io.github.surakin.Tesseract.flatpakref`, both

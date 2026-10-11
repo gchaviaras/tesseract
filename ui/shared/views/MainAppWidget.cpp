@@ -20,6 +20,16 @@
 namespace tesseract::views
 {
 
+float MainAppWidget::user_strip_height()
+{
+    // The strip holds a name line and a status/ID line (UserInfo).
+    const float scale =
+        std::max(tk::font_height_scale(tk::FontRole::SidebarName),
+                 tk::font_height_scale(tk::FontRole::SidebarPreview));
+    return std::ceil(kUserStripBaseH * scale);
+}
+
+
 namespace
 {
 
@@ -297,9 +307,9 @@ public:
             content_y = bounds.y + kSpaceNavH;
         }
 
-        const float user_strip_y = bounds.y + bounds.h - kUserStripH;
+        const float user_strip_y = bounds.y + bounds.h - MainAppWidget::user_strip_height();
         if (user_info_)
-            user_info_->arrange(ctx, {bounds.x, user_strip_y, bounds.w, kUserStripH});
+            user_info_->arrange(ctx, {bounds.x, user_strip_y, bounds.w, MainAppWidget::user_strip_height()});
 
         if (room_list_view_)
         {
@@ -314,8 +324,8 @@ public:
         const auto& pal = ctx.theme.palette;
         ctx.canvas.fill_rect(bounds_, pal.sidebar_bg);
 
-        const float strip_y = bounds_.y + bounds_.h - kUserStripH;
-        ctx.canvas.fill_rect({bounds_.x, strip_y, bounds_.w, kUserStripH},
+        const float strip_y = bounds_.y + bounds_.h - MainAppWidget::user_strip_height();
+        ctx.canvas.fill_rect({bounds_.x, strip_y, bounds_.w, MainAppWidget::user_strip_height()},
                              pal.sidebar_bg);
         ctx.canvas.fill_rect({bounds_.x, strip_y, bounds_.w, 1.0f},
                              pal.separator);
@@ -326,7 +336,6 @@ public:
 private:
     static constexpr float kSidebarW = MainAppWidget::kSidebarW;
     static constexpr float kSpaceNavH = MainAppWidget::kSpaceNavH;
-    static constexpr float kUserStripH = MainAppWidget::kUserStripH;
 
     SpaceNavWidget* space_nav_ = nullptr;
     RoomListView* room_list_view_ = nullptr;
@@ -793,7 +802,6 @@ private:
     static constexpr float kSidebarMinExpandedW = MainAppWidget::kSidebarMinExpandedW;
     static constexpr float kSepW = MainAppWidget::kSepW;
     static constexpr float kNarrowBreakpoint = MainAppWidget::kNarrowBreakpoint;
-    static constexpr float kUserStripH = MainAppWidget::kUserStripH;
     static constexpr float kHandleHalfW = 3.0f; // 6 px total drag band
     static constexpr float kGripR = 9.0f;
 
@@ -816,7 +824,7 @@ private:
     tk::Rect grip_rect_() const
     {
         const float sx = bounds_.x + eff_sidebar_w_();
-        const float cy = bounds_.y + bounds_.h - kUserStripH;
+        const float cy = bounds_.y + bounds_.h - MainAppWidget::user_strip_height();
         return {sx - kGripR, cy - kGripR, kGripR * 2.0f, kGripR * 2.0f};
     }
 

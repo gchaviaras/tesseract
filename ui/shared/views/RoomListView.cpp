@@ -36,9 +36,13 @@ constexpr float kRoomListPadY = 4.0f; // halved from kSpaceSM (8)
 constexpr float kRoomRowOuterPadX = tesseract::visual::kSpaceSM; // 8
 constexpr float kRoomListAvatarGap = tesseract::visual::kSpaceMD;             // 12
 constexpr float kBadgeMinW = tesseract::visual::kUnreadBadgeMinWidth; // 20
-constexpr float kBadgeH = tesseract::visual::kUnreadBadgeHeight;      // 18
+constexpr float kBadgeBaseH = tesseract::visual::kUnreadBadgeHeight; // 18
+// Sized for the default fonts; grown with the user's font config.
+inline float badge_h()
+{
+    return std::ceil(kBadgeBaseH * tk::font_height_scale(tk::FontRole::UnreadBadge));
+}
 constexpr float kBadgePadX = 6.0f;
-constexpr float kBadgeRadius = kBadgeH * 0.5f;
 // Quiet-unread dot (rooms with unread messages but no notification).
 constexpr float kDotSize = 8.0f;
 
@@ -593,15 +597,15 @@ private:
             tk::Size ts2    = cache.badge_layout->measure();
             float    pill_w = std::max(kBadgeMinW, ts2.w + kBadgePadX * 2);
             tk::Rect pill{chevron_x - kBadgePadX - pill_w,
-                          bounds.y + (bounds.h - kBadgeH) * 0.5f,
-                          pill_w, kBadgeH};
+                          bounds.y + (bounds.h - badge_h()) * 0.5f,
+                          pill_w, badge_h()};
             const tk::Color sec_pill_bg   = section_mention
                                               ? ctx.theme.palette.accent
                                               : ctx.theme.palette.unread_bg;
             const tk::Color sec_pill_text = section_mention
                                               ? ctx.theme.palette.text_on_accent
                                               : ctx.theme.palette.unread_text;
-            ctx.canvas.fill_rounded_rect(pill, kBadgeRadius, sec_pill_bg);
+            ctx.canvas.fill_rounded_rect(pill, (badge_h() * 0.5f), sec_pill_bg);
             ctx.canvas.draw_text(*cache.badge_layout,
                                  {pill.x + (pill.w - ts2.w) * 0.5f,
                                   pill.y + (pill.h - ts2.h) * 0.5f},
@@ -1003,15 +1007,15 @@ private:
             tk::Size badge_sz = cache.badge_layout->measure();
             float    pill_w   = std::max(kBadgeMinW, badge_sz.w + kBadgePadX * 2);
             tk::Rect pill{bounds.x + bounds.w - kRoomListPadX - call_icon_w - pill_w,
-                          bounds.y + (bounds.h - kBadgeH) * 0.5f,
-                          pill_w, kBadgeH};
+                          bounds.y + (bounds.h - badge_h()) * 0.5f,
+                          pill_w, badge_h()};
             const bool      is_mention = room.highlight_count > 0;
             const tk::Color pill_bg    = is_mention ? ctx.theme.palette.accent
                                                     : ctx.theme.palette.unread_bg;
             const tk::Color pill_text  = is_mention
                                              ? ctx.theme.palette.text_on_accent
                                              : ctx.theme.palette.unread_text;
-            ctx.canvas.fill_rounded_rect(pill, kBadgeRadius, pill_bg);
+            ctx.canvas.fill_rounded_rect(pill, (badge_h() * 0.5f), pill_bg);
             ctx.canvas.draw_text(*cache.badge_layout,
                                  {pill.x + (pill.w - badge_sz.w) * 0.5f,
                                   pill.y + (pill.h - badge_sz.h) * 0.5f},

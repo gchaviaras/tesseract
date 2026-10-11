@@ -7,6 +7,7 @@
 #include <tesseract/visual.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace tesseract::views
 {
@@ -195,15 +196,19 @@ tk::Size UserInfo::measure(tk::LayoutCtx&, tk::Size constraints)
     // backends actually emit for SidebarName (≈18 px) and SidebarPreview
     // (≈14 px); paint() doesn't depend on these — they just feed the
     // natural-height calculation.
-    constexpr float kNameH = 18.0f;
-    constexpr float kIdH = 14.0f;
+    // Grown with the user's font config (sized here for the default fonts).
+    const float name_scale = tk::font_height_scale(tk::FontRole::SidebarName);
+    const float small_scale = tk::font_height_scale(tk::FontRole::SidebarPreview);
+    const float kNameH = std::ceil(18.0f * name_scale);
+    const float kIdH = std::ceil(14.0f * small_scale);
+    const float status_row_h = std::ceil(kUserInfoStatusRowH * small_scale);
 
     float text_col_h = 0.0f;
     if (!icon_only_)
     {
         text_col_h = kNameH + kUserInfoLineGap + kIdH;
         if (status_line_enabled_)
-            text_col_h += kUserInfoLineGap + kUserInfoStatusRowH;
+            text_col_h += kUserInfoLineGap + status_row_h;
     }
     const float h = std::max(shown_avatar_(), text_col_h) + 2 * kUserInfoPadY;
     return {w, h};

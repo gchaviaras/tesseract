@@ -7439,7 +7439,8 @@ private:
     // Anchor the popover above the bottom-left of the main app surface (user strip area).
     // TKSurfaceView has isFlipped=YES so y=0 is the top; the strip sits at viewH-stripH.
     NSView* mainAppView = (__bridge NSView*)_mainAppSurface->view_handle();
-    CGFloat stripH = static_cast<CGFloat>(tesseract::visual::kUserStripHeight);
+    CGFloat stripH = static_cast<CGFloat>(
+        tesseract::views::MainAppWidget::user_strip_height());
     CGFloat viewH  = mainAppView.bounds.size.height;
     NSRect stripRect = NSMakeRect(
         0, viewH - stripH,

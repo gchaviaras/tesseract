@@ -1435,7 +1435,9 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             using namespace tesseract::visual;
             const bool in_user_strip =
                 pos.x() < kSidebarWidth &&
-                pos.y() >= mainAppSurface_->height() - kUserStripHeight;
+                pos.y() >= mainAppSurface_->height() -
+                               static_cast<int>(tesseract::views::MainAppWidget::
+                                                    user_strip_height());
             if (in_user_strip)
             {
                 onUserStripContextMenu(mainAppSurface_->mapToGlobal(pos));

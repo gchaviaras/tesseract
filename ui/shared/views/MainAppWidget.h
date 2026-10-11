@@ -8,7 +8,7 @@
 //   Sidebar (kSidebarW fixed)
 //     Space-nav bar (kSpaceNavH, hidden until navigating a space)
 //     RoomListView (flex)
-//     UserInfo (kUserStripH)
+//     UserInfo (user_strip_height())
 //   1px Separator
 //   Chat panel (flex)
 //     EncryptionReminderBanner (48px, hidden by default)
@@ -81,6 +81,11 @@ protected:
     TK_WIDGET_FACTORY_FRIEND(MainAppWidget)
 
 public:
+    // Height of the user strip at the bottom of the sidebar: 64 px at the
+    // default fonts, growing with the user's font config. Shells use this for
+    // right-click hit tests and popover anchoring.
+    static float user_strip_height();
+
     ~MainAppWidget() override = default;
 
     // ── Space navigation bar ──────────────────────────────────────────────
@@ -420,7 +425,7 @@ private:
         static_cast<float>(tesseract::visual::kSidebarMinExpandedWidth);
     static constexpr float kSepW = 1.0f;
     static constexpr float kSpaceNavH = 36.0f;
-    static constexpr float kUserStripH =
+    static constexpr float kUserStripBaseH =
         static_cast<float>(tesseract::visual::kUserStripHeight);
     static constexpr float kNarrowBreakpoint =
         static_cast<float>(tesseract::visual::kNarrowBreakpointWidth);

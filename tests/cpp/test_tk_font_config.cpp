@@ -152,3 +152,18 @@ TEST_CASE("font_height_scale grows with larger fonts and never shrinks",
     set_font_config(c);
     CHECK(font_height_scale(FontRole::SenderName) == 1.0f);
 }
+
+#include "views/MainAppWidget.h"
+
+TEST_CASE("user strip height is 64 at default fonts and grows with them",
+          "[font]")
+{
+    ConfigGuard g;
+    (void)font_role_pt(FontRole::Body, 11); // teaches the system base
+    CHECK(tesseract::views::MainAppWidget::user_strip_height() == 64.0f);
+
+    FontConfig c;
+    c.base_pt = 22;
+    set_font_config(c);
+    CHECK(tesseract::views::MainAppWidget::user_strip_height() > 64.0f);
+}

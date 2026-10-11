@@ -5580,7 +5580,7 @@ void MainWindow::on_msg_right_click_(GtkGestureClick* gesture, int /*n_press*/,
         const int surf_h =
             gtk_widget_get_height(self->main_app_surface_->widget());
         if (x < tesseract::visual::kSidebarWidth &&
-            y >= surf_h - tesseract::visual::kUserStripHeight)
+            y >= surf_h - tesseract::views::MainAppWidget::user_strip_height())
         {
             gtk_gesture_set_state(GTK_GESTURE(gesture),
                                   GTK_EVENT_SEQUENCE_CLAIMED);

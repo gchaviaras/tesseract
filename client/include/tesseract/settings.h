@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Runtime-mutable application settings. Today every field is hardcoded to
 // the historical visual default; a future settings dialog will mutate this

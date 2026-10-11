@@ -6000,3 +6000,15 @@ msgstr "« {0} » ne ressemble pas à ce qu'il prétend être."
 #: ui/shared/app/RoomPane.cpp
 msgid "“{0}” has a file extension that doesn't match its type."
 msgstr "« {0} » a une extension qui ne correspond pas à son type."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Open this file?"
+msgstr "Ouvrir ce fichier ?"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "unknown type"
+msgstr "type inconnu"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” isn't an image, video, audio or text file ({1}). Files like this can contain macros or run code in the app that opens them. Only open it if you trust the sender."
+msgstr "« {0} » n'est pas une image, une vidéo, un fichier audio ou texte ({1}). Ce type de fichier peut contenir des macros ou exécuter du code dans l'application qui l'ouvre. Ne l'ouvrez que si vous faites confiance à l'expéditeur."

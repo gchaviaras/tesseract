@@ -60,6 +60,7 @@ pub fn check_media_file(filename: &str, declared_mime: &str, head: &[u8]) -> ffi
             Verdict::ExtMimeMismatch => 1,
             Verdict::ContentMismatch => 2,
             Verdict::Executable => 3,
+            Verdict::NotMedia => 4,
         },
         ext: r.ext,
         declared_mime: r.declared_mime,
@@ -67,6 +68,7 @@ pub fn check_media_file(filename: &str, declared_mime: &str, head: &[u8]) -> ffi
         suggested_ext: r.suggested_ext,
         safe_filename: r.safe_filename,
         renamed_filename: r.renamed_filename,
+        effective_mime: r.effective_mime,
     }
 }
 
@@ -1387,7 +1389,8 @@ pub mod ffi {
     /// Returned by `markdown_to_html`. `formatted_body` is empty when the
     /// input contains no markdown syntax (caller should use the plain body).
     /// Result of `check_media_file`. `verdict`: 0 = ok, 1 = extension/mime
-    /// mismatch, 2 = content contradicts mime/extension, 3 = executable.
+    /// mismatch, 2 = content contradicts mime/extension, 3 = executable,
+    /// 4 = consistent but not a known-safe media type (ask before opening).
     struct MediaTypeCheckFfi {
         verdict: u8,
         ext: String,
@@ -1396,6 +1399,7 @@ pub mod ffi {
         suggested_ext: String,
         safe_filename: String,
         renamed_filename: String,
+        effective_mime: String,
     }
 
     struct MarkdownFfiResult {

@@ -308,6 +308,7 @@ public:
         ExtMimeMismatch = 1, ///< extension does not belong to the declared mime
         ContentMismatch = 2, ///< recognised contents contradict mime / extension
         Executable = 3,      ///< can run code; never hand to the OS launcher
+        NotMedia = 4,        ///< consistent, but not image/audio/video/PDF/text: ask first
     };
     struct MediaTypeCheck
     {
@@ -318,6 +319,7 @@ public:
         std::string suggested_ext;    ///< best-matching extension, no dot; may be empty
         std::string safe_filename;    ///< filesystem-safe form of the sender's name
         std::string renamed_filename; ///< safe_filename with suggested_ext applied
+        std::string effective_mime;   ///< best guess at the file's type; may be empty
     };
 
     /// Compares a received file's name, declared mime and leading bytes (pass

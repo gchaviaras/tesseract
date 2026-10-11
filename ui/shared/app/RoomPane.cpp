@@ -4034,6 +4034,16 @@ void RoomPane::prompt_save_(const views::MediaViewerItem& item)
                          }));
 }
 
+namespace
+{
+// Mirrors the Rust check's "opens silently" set: image, audio, video, PDF, text.
+bool is_safe_media_mime_(const std::string& m)
+{
+    return m.rfind("image/", 0) == 0 || m.rfind("audio/", 0) == 0 ||
+           m.rfind("video/", 0) == 0 || m == "application/pdf" || m == "text/plain";
+}
+} // namespace
+
 void RoomPane::open_media_externally_(const views::MediaViewerItem& item)
 {
     if (!pane_client_() || item.source.empty())
@@ -4091,14 +4101,21 @@ void RoomPane::open_media_externally_(const views::MediaViewerItem& item)
 
             // No file name from the sender: name it after what it is, so the
             // OS has an extension to pick a viewer by.
-            if (!had_name && (chk.verdict == V::Ok || chk.verdict == V::ExtMimeMismatch))
+            const std::string open_name =
+                had_name ? chk.safe_filename : chk.renamed_filename;
+            if (!had_name && chk.verdict == V::ExtMimeMismatch)
             {
-                launch(chk.renamed_filename);
-                return;
+                // Nothing to contradict; the type check above found no other
+                // concern, so it falls through to the not-media prompt below.
+                if (is_safe_media_mime_(chk.effective_mime))
+                {
+                    launch(chk.renamed_filename);
+                    return;
+                }
             }
             if (chk.verdict == V::Ok)
             {
-                launch(chk.safe_filename);
+                launch(open_name);
                 return;
             }
             if (!room_view_)
@@ -4107,6 +4124,23 @@ void RoomPane::open_media_externally_(const views::MediaViewerItem& item)
             }
 
             views::ConfirmDialog::Options opts;
+            if (chk.verdict == V::NotMedia ||
+                (!had_name && chk.verdict == V::ExtMimeMismatch))
+            {
+                opts.title = tk::tr("Open this file?");
+                opts.body = tk::trf(
+                    tk::tr("“{0}” isn't an image, video, audio or text file ({1}). "
+                           "Files like this can contain macros or run code in the app "
+                           "that opens them. Only open it if you trust the sender."),
+                    {open_name, chk.effective_mime.empty() ? tk::tr("unknown type")
+                                                           : chk.effective_mime});
+                opts.confirm_label = tk::tr("Open");
+                opts.destructive = true;
+                room_view_->request_confirm(
+                    std::move(opts),
+                    [launch, name = open_name]() { launch(name); });
+                return;
+            }
             if (chk.verdict == V::Executable)
             {
                 opts.title = tk::tr("Can't open this file");

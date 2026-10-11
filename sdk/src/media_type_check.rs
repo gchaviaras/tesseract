@@ -16,6 +16,9 @@ pub enum Verdict {
     ContentMismatch,
     /// The file can run code; never launched.
     Executable,
+    /// Consistent, but not a known-safe media type (image, audio, video, PDF,
+    /// plain text): other formats can carry macros or links, so ask first.
+    NotMedia,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +36,9 @@ pub struct MediaTypeCheck {
     pub safe_filename: String,
     /// `safe_filename` with its extension replaced by `suggested_ext`.
     pub renamed_filename: String,
+    /// Best guess at the file's type (contents, else declared, else extension);
+    /// empty when nothing is known.
+    pub effective_mime: String,
 }
 
 const EXEC_EXTS: &[&str] = &[
@@ -348,8 +354,25 @@ pub fn check(filename: &str, declared_mime: &str, head: &[u8]) -> MediaTypeCheck
         format!("{stem}.{suggested_ext}")
     };
 
+    let ext_first_mime = if ext.is_empty() {
+        String::new()
+    } else {
+        mime_guess::from_ext(&ext)
+            .first()
+            .map(|m| normalize_mime(m.essence_str()))
+            .unwrap_or_default()
+    };
+    let effective_mime = if !sniffed.is_empty() {
+        sniffed.clone()
+    } else if declared_known {
+        declared.clone()
+    } else {
+        ext_first_mime
+    };
+
     let make = |verdict| MediaTypeCheck {
         verdict,
+        effective_mime: effective_mime.clone(),
         ext: ext.clone(),
         declared_mime: declared.clone(),
         sniffed_mime: sniffed.clone(),
@@ -397,7 +420,20 @@ pub fn check(filename: &str, declared_mime: &str, head: &[u8]) -> MediaTypeCheck
         }
     }
 
+    if !is_safe_media(&effective_mime) {
+        return make(Verdict::NotMedia);
+    }
     make(Verdict::Ok)
+}
+
+/// Types that open in a viewer without scripting or macros: raster/vector-free
+/// images, audio, video, PDF and plain text. (SVG is already refused as code.)
+fn is_safe_media(mime: &str) -> bool {
+    mime.starts_with("image/")
+        || mime.starts_with("audio/")
+        || mime.starts_with("video/")
+        || mime == "application/pdf"
+        || mime == "text/plain"
 }
 
 #[cfg(test)]
@@ -465,14 +501,14 @@ mod tests {
     #[test]
     fn unrecognised_content_trusts_the_claims() {
         assert_eq!(check("notes.txt", "text/plain", b"hello world\n").verdict, Verdict::Ok);
-        assert_eq!(check("data.csv", "text/csv", b"a,b\n1,2\n").verdict, Verdict::Ok);
+        assert_eq!(check("data.csv", "text/csv", b"a,b\n1,2\n").verdict, Verdict::NotMedia);
     }
 
     #[test]
     fn generic_declared_mime_defers_to_extension_and_content() {
         assert_eq!(check("cat.png", "application/octet-stream", PNG).verdict, Verdict::Ok);
         assert_eq!(check("cat.png", "", JPEG).verdict, Verdict::ContentMismatch);
-        assert_eq!(check("x.unknownext", "", b"abc").verdict, Verdict::Ok);
+        assert_eq!(check("x.unknownext", "", b"abc").verdict, Verdict::NotMedia);
     }
 
     #[test]
@@ -487,8 +523,8 @@ mod tests {
     fn zip_based_office_documents_are_compatible() {
         let zip = b"PK\x03\x04\x14\0\0\0\x08\0";
         let docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-        assert_eq!(check("r.docx", docx, zip).verdict, Verdict::Ok);
-        assert_eq!(check("r.zip", "application/zip", zip).verdict, Verdict::Ok);
+        assert_eq!(check("r.docx", docx, zip).verdict, Verdict::NotMedia);
+        assert_eq!(check("r.zip", "application/zip", zip).verdict, Verdict::NotMedia);
     }
 
     #[test]
@@ -506,6 +542,17 @@ mod tests {
         ] {
             assert_eq!(check(name, mime, head).verdict, Verdict::Executable, "{name}");
         }
+    }
+
+    #[test]
+    fn only_known_safe_media_opens_silently() {
+        assert_eq!(check("a.pdf", "application/pdf", PDF).verdict, Verdict::Ok);
+        assert_eq!(check("a.mp4", "video/mp4", b"").verdict, Verdict::Ok);
+        assert_eq!(check("a.mp3", "audio/mpeg", b"").verdict, Verdict::Ok);
+        assert_eq!(check("a.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", b"").verdict, Verdict::NotMedia);
+        assert_eq!(check("a.7z", "application/x-7z-compressed", b"").verdict, Verdict::NotMedia);
+        assert_eq!(check("a.xlsx", "", b"").verdict, Verdict::NotMedia);
+        assert_eq!(check("a.png", "image/png", PNG).effective_mime, "image/png");
     }
 
     #[test]

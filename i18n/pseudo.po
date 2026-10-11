@@ -6692,3 +6692,15 @@ msgstr "[“{0}” döésñ't löök lïké whàt ït çlàïms tö bé.xxxxxxxx
 #: ui/shared/app/RoomPane.cpp
 msgid "“{0}” has a file extension that doesn't match its type."
 msgstr "[“{0}” hàs à fïlé éxtéñsïöñ thàt döésñ't màtçh ïts typé.xxxxxxxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Open this file?"
+msgstr "[Öpéñ thïs fïlé?xxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "unknown type"
+msgstr "[ùñkñöwñ typéxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” isn't an image, video, audio or text file ({1}). Files like this can contain macros or run code in the app that opens them. Only open it if you trust the sender."
+msgstr "[“{0}” ïsñ't àñ ïmàgé, vïdéö, àùdïö ör téxt fïlé ({1}). Fïlés lïké thïs çàñ çöñtàïñ màçrös ör rùñ çödé ïñ thé àpp thàt öpéñs thém. Öñly öpéñ ït ïf yöù trùst thé séñdér.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"

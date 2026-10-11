@@ -306,6 +306,7 @@ Client::MediaTypeCheck Client::check_media_file(
     out.suggested_ext = std::string(r.suggested_ext);
     out.safe_filename = std::string(r.safe_filename);
     out.renamed_filename = std::string(r.renamed_filename);
+    out.effective_mime = std::string(r.effective_mime);
     return out;
 }
 

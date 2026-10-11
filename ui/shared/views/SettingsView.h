@@ -393,6 +393,7 @@ public:
 
     // Fired when the user picks a layout in Appearance → Layout.
     std::function<void(tesseract::Settings::MessageLayout)> on_message_layout_changed;
+    std::function<void(tesseract::Settings::RoomListDensity)> on_room_list_density_changed;
 
     // Fired when the user toggles "Launch Tesseract when you log in".
     std::function<void(bool)> on_launch_at_login_changed;
@@ -414,6 +415,7 @@ public:
 
     // Fired when the user toggles full-media pre-fetch.
     std::function<void(bool)> on_prefetch_changed;
+    std::function<void(bool)> on_open_external_changed;
 
     // Fired when the user changes the MSC4278 media-preview mode.
     std::function<void(tesseract::Settings::MediaPreviews)>

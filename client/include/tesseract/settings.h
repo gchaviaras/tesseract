@@ -86,6 +86,17 @@ public:
     };
     MessageLayout message_layout = MessageLayout::Classic;
 
+    // ── Room list density ───────────────────────────────────────────
+    // Normal  → avatar, name and last-message preview per row (default).
+    // Compact → name only, with an avatar the height of the name text.
+    // Live-applied.
+    enum class RoomListDensity
+    {
+        Normal,
+        Compact
+    };
+    RoomListDensity room_list_density = RoomListDensity::Normal;
+
     // ── Read state ───────────────────────────────────────────────────
     // Delay (ms) after selecting a room before it is marked as read.
     // Prevents spurious receipts when flipping through rooms quickly.
@@ -191,6 +202,12 @@ public:
     // scroll into view so the media viewer opens instantly. When false (the
     // default), full media is fetched on demand when the viewer is opened.
     bool prefetch_full_media = false;
+
+    // When true, clicking an image / video / audio / file saves it to a
+    // private temp file and opens it in the OS default app instead of the
+    // in-app viewer. The in-app viewer also offers a one-off "open in default
+    // app" button regardless of this setting.
+    bool open_media_externally = false;
 
     // When true, sending a composed message that consists ONLY of a
     // recognized Google Maps / OpenStreetMap URL (direct-coordinate or

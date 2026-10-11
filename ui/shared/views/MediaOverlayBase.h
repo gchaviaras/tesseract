@@ -45,6 +45,7 @@ public:
     tk::Button* close_btn_for_test() const { return close_btn_; }
     tk::Button* save_btn_for_test() const { return save_btn_; }
     tk::Button* copy_btn_for_test() const { return copy_btn_; }
+    tk::Button* external_btn_for_test() const { return external_btn_; }
 
     // Fires when the overlay should be dismissed (× button, outside click).
     std::function<void()> on_close;
@@ -144,8 +145,14 @@ protected:
     tk::Button* close_btn_ = nullptr;
     tk::Button* save_btn_ = nullptr;
     tk::Button* copy_btn_ = nullptr;
+    // Only shown when wants_external_button_() returns true.
+    tk::Button* external_btn_ = nullptr;
 
     bool is_open_ = false;
+
+    // Shows `b`'s accessible name as a hover tooltip. Reads the name at hover
+    // time, so buttons that rename themselves (play/pause, full screen) stay right.
+    void add_tooltip_(tk::Button* b);
 
     // ── subclass hooks ──────────────────────────────────────────────────
 
@@ -201,6 +208,16 @@ protected:
     // true; default no-op.
     virtual void fire_copy_() {}
 
+    // Opt-in flag for the "open in the system's default app" chrome button.
+    virtual bool wants_external_button_() const
+    {
+        return false;
+    }
+
+    // The external-open button was clicked. Only called while
+    // wants_external_button_() is true; default no-op.
+    virtual void fire_external_() {}
+
     // Called by paint_chrome_buttons_ when the canvas DPI scale changes, so
     // subclasses can invalidate their own cached icons (e.g. play_icon_).
     virtual void on_icon_scale_changed_() {}
@@ -244,6 +261,7 @@ private:
     std::unique_ptr<tk::Image> close_icon_;
     std::unique_ptr<tk::Image> save_icon_;
     std::unique_ptr<tk::Image> copy_icon_;
+    std::unique_ptr<tk::Image> external_icon_;
     std::unique_ptr<tk::Image> fullscreen_icon_;
 
     // Full-screen toggle (⤢ / ⤡). Real tk::Button child, left of the copy /

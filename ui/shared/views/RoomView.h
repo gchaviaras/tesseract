@@ -96,6 +96,10 @@ public:
     using ConfirmProvider = std::function<void(ConfirmDialog::Options,
                                                 std::function<void()>)>;
     void set_confirm_provider(ConfirmProvider p);
+    // Opens the shared confirmation dialog. Returns false (nothing shown,
+    // `on_confirm` never runs) when no provider is installed.
+    bool request_confirm(ConfirmDialog::Options opts,
+                         std::function<void()> on_confirm);
 
     // Closure that opens the shared history-export overlay for a room. Set
     // by MainAppWidget to route through its ExportHistoryDialog; unset

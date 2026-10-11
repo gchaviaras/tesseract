@@ -1,6 +1,7 @@
 #include "MediaOverlayBase.h"
 #include "icons.h"
 
+#include "tk/host.h"
 #include "tk/i18n.h"
 #include "tk/svg.h"
 
@@ -30,6 +31,20 @@ static constexpr tk::Color kDarkPillFillPressed = tk::Color::rgba(95, 95, 95, 20
 
 // ── construction ─────────────────────────────────────────────────────────
 
+void MediaOverlayBase::add_tooltip_(tk::Button* b)
+{
+    b->on_hover_enter = [this, b]
+    {
+        if (host())
+            host()->show_tooltip(b, b->access_name(), b->bounds());
+    };
+    b->on_hover_leave = [this, b]
+    {
+        if (host())
+            host()->hide_tooltip(b);
+    };
+}
+
 MediaOverlayBase::MediaOverlayBase()
 {
     // label_ is empty on all three (the icon is drawn separately via
@@ -39,6 +54,7 @@ MediaOverlayBase::MediaOverlayBase()
                                                tk::Button::Variant::Icon);
     close->set_accessible_name(tk::tr("Close"));
     close_btn_ = add_child(std::move(close));
+    add_tooltip_(close_btn_);
     close_btn_->set_on_click([this] { dismiss_(); });
     close_btn_->set_fill_override(tk::Button::FillOverride{
         kCloseFillRest, kCloseFillHover, kCloseFillPressed});
@@ -47,6 +63,7 @@ MediaOverlayBase::MediaOverlayBase()
                                               tk::Button::Variant::Icon);
     save->set_accessible_name(tk::tr("Save"));
     save_btn_ = add_child(std::move(save));
+    add_tooltip_(save_btn_);
     save_btn_->set_on_click([this] { fire_save_(); });
     save_btn_->set_fill_override(tk::Button::FillOverride{
         kDarkPillFillRest, kDarkPillFillHover, kDarkPillFillPressed});
@@ -55,14 +72,26 @@ MediaOverlayBase::MediaOverlayBase()
                                               tk::Button::Variant::Icon);
     copy->set_accessible_name(tk::tr("Copy"));
     copy_btn_ = add_child(std::move(copy));
+    add_tooltip_(copy_btn_);
     copy_btn_->set_on_click([this] { if (wants_copy_button_()) fire_copy_(); });
     copy_btn_->set_fill_override(tk::Button::FillOverride{
+        kDarkPillFillRest, kDarkPillFillHover, kDarkPillFillPressed});
+
+    auto ext = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
+                                             tk::Button::Variant::Icon);
+    ext->set_accessible_name(tk::tr("Open in default viewer"));
+    external_btn_ = add_child(std::move(ext));
+    add_tooltip_(external_btn_);
+    external_btn_->set_on_click(
+        [this] { if (wants_external_button_()) fire_external_(); });
+    external_btn_->set_fill_override(tk::Button::FillOverride{
         kDarkPillFillRest, kDarkPillFillHover, kDarkPillFillPressed});
 
     auto fs = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
                                             tk::Button::Variant::Icon);
     fs->set_accessible_name(tk::tr("Full screen"));
     fullscreen_btn_ = add_child(std::move(fs));
+    add_tooltip_(fullscreen_btn_);
     fullscreen_btn_->set_on_click([this] { toggle_fullscreen_(); });
     fullscreen_btn_->set_fill_override(tk::Button::FillOverride{
         kDarkPillFillRest, kDarkPillFillHover, kDarkPillFillPressed});
@@ -130,6 +159,7 @@ bool MediaOverlayBase::any_chrome_hovered_() const
     return (close_btn_ && close_btn_->hovered()) ||
            (save_btn_ && save_btn_->hovered()) ||
            (copy_btn_ && copy_btn_->hovered()) ||
+           (external_btn_ && external_btn_->hovered()) ||
            (fullscreen_btn_ && fullscreen_btn_->hovered()) ||
            extra_chrome_hovered_();
 }
@@ -172,6 +202,13 @@ void MediaOverlayBase::layout_chrome_(tk::LayoutCtx& lc, tk::Rect b)
                                 b.y + 8.0f, kCloseBtnS, kCloseBtnS});
         next_x = copy_btn_->bounds().x;
     }
+    const bool want_external = wants_external_button_();
+    if (want_external)
+    {
+        external_btn_->arrange(lc, {next_x - kCloseBtnS - 4.0f,
+                                    b.y + 8.0f, kCloseBtnS, kCloseBtnS});
+        next_x = external_btn_->bounds().x;
+    }
     fullscreen_btn_->arrange(lc, {next_x - kCloseBtnS - 4.0f, b.y + 8.0f,
                                   kCloseBtnS, kCloseBtnS});
 
@@ -179,6 +216,7 @@ void MediaOverlayBase::layout_chrome_(tk::LayoutCtx& lc, tk::Rect b)
     close_btn_->set_visible(show);
     save_btn_->set_visible(show);
     copy_btn_->set_visible(show && want_copy);
+    external_btn_->set_visible(show && want_external);
     fullscreen_btn_->set_visible(show);
 }
 
@@ -217,6 +255,7 @@ void MediaOverlayBase::sync_icon_scale_(tk::PaintCtx& ctx)
         close_icon_.reset();
         save_icon_.reset();
         copy_icon_.reset();
+        external_icon_.reset();
         fullscreen_icon_.reset();
         on_icon_scale_changed_();
     }
@@ -250,6 +289,15 @@ void MediaOverlayBase::paint_chrome_buttons_(tk::PaintCtx& ctx)
         copy_btn_->paint(ctx);
         cv.pop_clip();
         draw_icon_(ctx, copy_btn_->bounds(), kMediaOverlayBtnIconPx, copy_icon_, kCopySvg, icon_tint);
+    }
+
+    // ↗ open in the system's default app
+    if (wants_external_button_())
+    {
+        cv.push_clip_rounded_rect(external_btn_->bounds(), kCloseBtnS * 0.5f);
+        external_btn_->paint(ctx);
+        cv.pop_clip();
+        draw_icon_(ctx, external_btn_->bounds(), kMediaOverlayBtnIconPx, external_icon_, kOpenInTabSvg, icon_tint);
     }
 
     // ⤢ / ⤡ full-screen toggle

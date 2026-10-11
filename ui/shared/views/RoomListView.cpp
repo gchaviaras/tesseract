@@ -230,10 +230,10 @@ public:
     {
         if (index >= owner_.items_.size())
         {
-            return kRoomListRowH;
+            return owner_.row_h_();
         }
         return owner_.items_[index].kind == Item::Kind::Header ? kRoomListHeaderH
-                                                               : kRoomListRowH;
+                                                               : owner_.row_h_();
     }
 
     void paint_row(std::size_t index, tk::PaintCtx& ctx, tk::Rect bounds,
@@ -613,9 +613,41 @@ private:
         }
     }
 
+    // Compact rows drop the last-message preview, so show it (under the room
+    // name) as a tooltip while the row is hovered. Re-asserted every frame the
+    // row paints hovered (a repeat with unchanged text is a no-op); hidden the
+    // first frame it paints un-hovered.
+    void update_compact_tooltip_(const tesseract::RoomInfo& room, tk::PaintCtx& ctx,
+                                 tk::Rect bounds, bool hovered)
+    {
+        tk::Host* h = ctx.host ? ctx.host : owner_.host();
+        if (!h)
+            return;
+        if (owner_.compact_ && hovered)
+        {
+            const std::string preview = preview_text_for(room);
+            if (!preview.empty())
+            {
+                const std::string name = room.name.empty() ? room.id : room.name;
+                h->show_tooltip(&owner_, name + "\n" + preview, bounds);
+                tooltip_room_id_ = room.id;
+                return;
+            }
+        }
+        if (tooltip_room_id_ == room.id)
+        {
+            h->hide_tooltip(&owner_);
+            tooltip_room_id_.clear();
+        }
+    }
+
+    std::string tooltip_room_id_;
+
     void paint_room(const tesseract::RoomInfo& room, tk::PaintCtx& ctx,
                     tk::Rect bounds, bool selected, bool hovered)
     {
+        update_compact_tooltip_(room, ctx, bounds, hovered);
+
         // Row background — selection > hover > base sidebar fill. Inset a
         // few px from the row's left/right edges and round the corners so
         // the highlight floats within the row rather than touching the
@@ -676,7 +708,7 @@ private:
         }
 
         // Avatar circle (left-aligned, vertically centred).
-        float avatar_cx = bounds.x + kRoomListPadX + kRoomListAvatarSize * 0.5f;
+        float avatar_cx = bounds.x + kRoomListPadX + owner_.avatar_size_() * 0.5f;
         float avatar_cy = bounds.y + bounds.h * 0.5f;
 
         const tk::Image* avatar = nullptr;
@@ -691,7 +723,7 @@ private:
                 owner_.on_room_avatar_needed(room);
         }
 
-        draw_avatar(ctx.canvas, avatar, {avatar_cx, avatar_cy}, kRoomListAvatarSize,
+        draw_avatar(ctx.canvas, avatar, {avatar_cx, avatar_cy}, owner_.avatar_size_(),
                     room.name, ctx.theme.palette.avatar_initials_bg,
                     ctx.theme.palette.avatar_initials_text);
 
@@ -718,8 +750,8 @@ private:
                 constexpr float kDotD = 8.0f;
                 constexpr float kRing = 2.0f;
                 const float outer_d   = kDotD + kRing * 2.0f;
-                const float dot_cx    = avatar_cx + kRoomListAvatarSize * 0.5f;
-                const float dot_cy    = avatar_cy + kRoomListAvatarSize * 0.5f;
+                const float dot_cx    = avatar_cx + owner_.avatar_size_() * 0.5f;
+                const float dot_cy    = avatar_cy + owner_.avatar_size_() * 0.5f;
                 const tk::Color ring_col = selected ? ctx.theme.palette.sidebar_selected
                                          : hovered  ? ctx.theme.palette.sidebar_hover
                                                     : ctx.theme.palette.sidebar_bg;
@@ -734,7 +766,7 @@ private:
         }
 
         // Text column geometry.
-        float text_x = bounds.x + kRoomListPadX + kRoomListAvatarSize + kRoomListAvatarGap;
+        float text_x = bounds.x + kRoomListPadX + owner_.avatar_size_() + kRoomListAvatarGap;
         float text_w = bounds.w - (text_x - bounds.x) - kRoomListPadX;
 
         // Reserve space for the badge (heuristic width keeps text_w stable
@@ -775,7 +807,8 @@ private:
             text_w = 0;
         }
 
-        bool has_preview = !room.last_message_kind.empty();
+        const bool compact = owner_.compact_;
+        bool has_preview = !compact && !room.last_message_kind.empty();
 
         // Thumbnail lookup.
         const tk::Image* thumb     = nullptr;
@@ -783,8 +816,8 @@ private:
         const bool is_own_sender = room.last_message_sender_name.empty();
         const bool media_ok      = !owner_.media_allowed_provider_
                                    || owner_.media_allowed_provider_(room.id, is_own_sender);
-        if (!room.is_space && room.successor_room_id.empty() && has_preview &&
-            owner_.sticker_provider_ && media_ok)
+        if (!compact && !room.is_space && room.successor_room_id.empty() &&
+            has_preview && owner_.sticker_provider_ && media_ok)
         {
             const std::string& kind = room.last_message_kind;
             thumb_url = kind == "sticker" ? room.last_message_sticker_url
@@ -799,7 +832,7 @@ private:
 
         if (thumb)
         {
-            text_w -= (kThumb + kThumbGap);
+            text_w -= (owner_.thumb_() + kThumbGap);
             if (text_w < 0)
             {
                 text_w = 0;
@@ -812,8 +845,8 @@ private:
         // last_message_kind" value for non-space rows (drives the thumbnail
         // path + name centring even for a kind we render no text for); only
         // spaces recompute it from the topic string.
-        std::string preview = preview_text_for(room);
-        if (room.is_space || !room.successor_room_id.empty())
+        std::string preview = compact ? std::string{} : preview_text_for(room);
+        if (!compact && (room.is_space || !room.successor_room_id.empty()))
         {
             has_preview = !preview.empty();
         }
@@ -945,12 +978,12 @@ private:
             {
                 float thumb_right = bounds.x + bounds.w - kRoomListPadX - call_icon_w -
                                     (badge_width > 0 ? badge_width + kRoomListPadX : 0.0f);
-                float iw = thumb->width()  > 0 ? static_cast<float>(thumb->width())  : kThumb;
-                float ih = thumb->height() > 0 ? static_cast<float>(thumb->height()) : kThumb;
-                float s  = std::min(kThumb / iw, kThumb / ih);
+                float iw = thumb->width()  > 0 ? static_cast<float>(thumb->width())  : owner_.thumb_();
+                float ih = thumb->height() > 0 ? static_cast<float>(thumb->height()) : owner_.thumb_();
+                float s  = std::min(owner_.thumb_() / iw, owner_.thumb_() / ih);
                 float fw = iw * s;
                 float fh = ih * s;
-                tk::Rect dst{thumb_right - kThumb + (kThumb - fw) * 0.5f,
+                tk::Rect dst{thumb_right - owner_.thumb_() + (owner_.thumb_() - fw) * 0.5f,
                              bounds.y + (bounds.h - fh) * 0.5f,
                              fw, fh};
                 ctx.canvas.draw_image(*thumb, dst);
@@ -1008,7 +1041,7 @@ private:
                               tk::Rect bounds, bool selected, bool hovered)
     {
         const auto& pal = ctx.theme.palette;
-        const float av = kRoomListAvatarSize; // 36
+        const float av = owner_.avatar_size_(); // 36
         const float cx = bounds.x + bounds.w * 0.5f;
         const float cy = bounds.y + bounds.h * 0.5f;
 
@@ -1069,6 +1102,11 @@ private:
     }
 
 public:
+    void clear_row_caches()
+    {
+        room_cache_.clear();
+    }
+
     // Width (row-local, includes the outer inset) needed to render `room`'s
     // name + last-message preview with no ellipsis. Used by
     // RoomListView::longest_visible_row_width() and the icon-only hover flyout.
@@ -1086,7 +1124,8 @@ public:
         auto  nl      = factory.build_text(name, ns);
         float content = nl ? nl->measure().w : 0.0f;
 
-        const std::string preview = preview_text_for(room);
+        const std::string preview =
+            owner_.compact_ ? std::string{} : preview_text_for(room);
         if (!preview.empty())
         {
             tk::TextStyle ps{};
@@ -1099,7 +1138,7 @@ public:
                 content = std::max(content, pl->measure().w);
         }
 
-        return 2.0f * kRoomRowOuterPadX + kRoomListPadX + kRoomListAvatarSize +
+        return 2.0f * kRoomRowOuterPadX + kRoomListPadX + owner_.avatar_size_() +
                kRoomListAvatarGap + std::ceil(content) + kRoomListPadX +
                kBadgeMinW + kRoomListPadX;
     }
@@ -1144,7 +1183,7 @@ private:
         }
 
         // Avatar circle (left-aligned, vertically centred).
-        float avatar_cx = bounds.x + kRoomListPadX + kRoomListAvatarSize * 0.5f;
+        float avatar_cx = bounds.x + kRoomListPadX + owner_.avatar_size_() * 0.5f;
         float avatar_cy = bounds.y + bounds.h * 0.5f;
 
         // DM invite: show inviter avatar. Group invite: show room avatar.
@@ -1165,12 +1204,12 @@ private:
             avatar = owner_.avatar_provider_(av_mxc);
         }
 
-        draw_avatar(ctx.canvas, avatar, {avatar_cx, avatar_cy}, kRoomListAvatarSize,
+        draw_avatar(ctx.canvas, avatar, {avatar_cx, avatar_cy}, owner_.avatar_size_(),
                     initials_name, ctx.theme.palette.avatar_initials_bg,
                     ctx.theme.palette.avatar_initials_text);
 
         // Text column geometry (no badge reserved).
-        float text_x = bounds.x + kRoomListPadX + kRoomListAvatarSize + kRoomListAvatarGap;
+        float text_x = bounds.x + kRoomListPadX + owner_.avatar_size_() + kRoomListAvatarGap;
         float text_w = bounds.w - (text_x - bounds.x) - kRoomListPadX;
         if (text_w < 0)
         {
@@ -1221,7 +1260,8 @@ private:
 
         if (cache.name_layout)
         {
-            const tk::Rect name_band{text_x, bounds.y, text_w, bounds.h * 0.5f};
+            const tk::Rect name_band{text_x, bounds.y, text_w,
+                                       owner_.compact_ ? bounds.h : bounds.h * 0.5f};
             float name_y =
                 bounds.y +
                 (name_band.h - cache.name_layout->measure().h) * 0.5f;
@@ -1230,7 +1270,7 @@ private:
                                  ctx.theme.palette.text_primary);
             ctx.canvas.pop_clip();
         }
-        if (cache.preview_layout)
+        if (cache.preview_layout && !owner_.compact_)
         {
             float prev_y =
                 bounds.y + bounds.h * 0.5f +
@@ -1264,7 +1304,7 @@ private:
             }
         }
 
-        float avatar_cx = bounds.x + kRoomListPadX + kRoomListAvatarSize * 0.5f;
+        float avatar_cx = bounds.x + kRoomListPadX + owner_.avatar_size_() * 0.5f;
         float avatar_cy = bounds.y + bounds.h * 0.5f;
 
         const std::string& initials_name =
@@ -1276,11 +1316,11 @@ private:
             avatar = owner_.avatar_provider_(k.room_avatar_url);
         }
 
-        draw_avatar(ctx.canvas, avatar, {avatar_cx, avatar_cy}, kRoomListAvatarSize,
+        draw_avatar(ctx.canvas, avatar, {avatar_cx, avatar_cy}, owner_.avatar_size_(),
                     initials_name, ctx.theme.palette.avatar_initials_bg,
                     ctx.theme.palette.avatar_initials_text);
 
-        float text_x = bounds.x + kRoomListPadX + kRoomListAvatarSize + kRoomListAvatarGap;
+        float text_x = bounds.x + kRoomListPadX + owner_.avatar_size_() + kRoomListAvatarGap;
         float text_w = bounds.w - (text_x - bounds.x) - kRoomListPadX;
         if (text_w < 0)
         {
@@ -1319,7 +1359,8 @@ private:
 
         if (cache.name_layout)
         {
-            const tk::Rect name_band{text_x, bounds.y, text_w, bounds.h * 0.5f};
+            const tk::Rect name_band{text_x, bounds.y, text_w,
+                                       owner_.compact_ ? bounds.h : bounds.h * 0.5f};
             float name_y =
                 bounds.y +
                 (name_band.h - cache.name_layout->measure().h) * 0.5f;
@@ -1328,7 +1369,7 @@ private:
                                  ctx.theme.palette.text_primary);
             ctx.canvas.pop_clip();
         }
-        if (cache.preview_layout)
+        if (cache.preview_layout && !owner_.compact_)
         {
             float prev_y =
                 bounds.y + bounds.h * 0.5f +
@@ -1364,7 +1405,7 @@ private:
             }
         }
 
-        float avatar_cx = bounds.x + kRoomListPadX + kRoomListAvatarSize * 0.5f;
+        float avatar_cx = bounds.x + kRoomListPadX + owner_.avatar_size_() * 0.5f;
         float avatar_cy = bounds.y + bounds.h * 0.5f;
 
         const bool loading = s.name.empty();
@@ -1383,10 +1424,10 @@ private:
         // Use room_id for the initials disc even while loading so each row has a
         // distinct placeholder colour.
         const std::string& initials_src = loading ? s.room_id : s.name;
-        draw_avatar(ctx.canvas, avatar, {avatar_cx, avatar_cy}, kRoomListAvatarSize,
+        draw_avatar(ctx.canvas, avatar, {avatar_cx, avatar_cy}, owner_.avatar_size_(),
                     initials_src, pal.avatar_initials_bg, pal.avatar_initials_text);
 
-        float text_x = bounds.x + kRoomListPadX + kRoomListAvatarSize + kRoomListAvatarGap;
+        float text_x = bounds.x + kRoomListPadX + owner_.avatar_size_() + kRoomListAvatarGap;
         float text_w = bounds.w - (text_x - bounds.x) - kRoomListPadX;
         if (text_w < 0) text_w = 0;
 
@@ -1433,7 +1474,8 @@ private:
 
         if (cache.name_layout)
         {
-            const tk::Rect name_band{text_x, bounds.y, text_w, bounds.h * 0.5f};
+            const tk::Rect name_band{text_x, bounds.y, text_w,
+                                       owner_.compact_ ? bounds.h : bounds.h * 0.5f};
             float name_y = bounds.y +
                            (name_band.h - cache.name_layout->measure().h) * 0.5f;
             ctx.canvas.push_clip_rect(name_band);
@@ -1441,7 +1483,7 @@ private:
                                  pal.text_primary.with_alpha(kAlpha));
             ctx.canvas.pop_clip();
         }
-        if (cache.preview_layout)
+        if (cache.preview_layout && !owner_.compact_)
         {
             float prev_y = bounds.y + bounds.h * 0.5f +
                            (bounds.h * 0.5f - cache.preview_layout->measure().h) * 0.5f;
@@ -1693,6 +1735,44 @@ float RoomListView::longest_visible_row_width(tk::CanvasFactory& factory,
     longest_row_cache_first_   = first;
     longest_row_cache_last_    = last;
     return widest;
+}
+
+void RoomListView::set_compact(bool on)
+{
+    if (compact_ == on)
+        return;
+    compact_ = on;
+    if (adapter_)
+        adapter_->clear_row_caches();
+    ++layout_epoch_;
+    if (list_)
+        list_->invalidate_data();
+    if (auto* h = host())
+    {
+        h->request_relayout();
+        h->request_repaint();
+    }
+}
+
+float RoomListView::avatar_size_() const
+{
+    if (!compact_)
+        return kRoomListAvatarSize;
+    // A little bigger than the name's glyph height so the avatar reads as
+    // inline with the text.
+    return std::round(
+        static_cast<float>(tesseract::Settings::instance().font_sidebar_name) *
+        1.75f);
+}
+
+float RoomListView::row_h_() const
+{
+    return compact_ ? avatar_size_() + kRoomListPadY * 2.0f : kRoomListRowH;
+}
+
+float RoomListView::thumb_() const
+{
+    return row_h_() - kRoomListPadY * 2.0f;
 }
 
 void RoomListView::set_icon_only(bool on)
@@ -2235,7 +2315,7 @@ void RoomListView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     }
 
     // Icon-only mode hides the search field, the + button and the × button.
-    bool wants_search = !icon_only_;
+    bool wants_search = !icon_only_ && !search_hidden_;
     search_field_visible_ = wants_search;
 
     if (wants_search)

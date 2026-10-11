@@ -1,10 +1,12 @@
 #include "AppearanceSection.h"
 
 #include "MessageLayoutPreview.h"
+#include "RoomListPreview.h"
 #include "SettingsGroup.h"
 
 #include "tesseract/settings.h"
 #include "tk/i18n.h"
+#include "tk/radio.h"
 #include "tk/theme.h"
 #include "tk/widget.h"
 
@@ -100,309 +102,31 @@ const char* accent_theme_value(tk::AccentTheme accent)
     return "system";
 }
 
-// Visual constants — the picker no longer paints the "Theme" header itself
-// (the enclosing SettingsGroup provides it), so kPadY / kHeaderH / kHeaderGap
-// drop out compared with the pre-refactor section.
-constexpr float kAppearanceBtnHPad = 20.0f;      // text → button-edge horizontal inset
-constexpr float kBtnVPad = 8.0f;       // text → button-edge vertical inset
-constexpr float kBtnSpacing = 8.0f;    // gap between adjacent buttons
-constexpr float kBtnMinHeight = 36.0f; // minimum button height
-constexpr float kAppearanceBtnRadius = tesseract::visual::kRadiusSM;     // corner radius
 constexpr float kLayoutRowGap = 16.0f; // gap between the combo/desc column and the preview
 constexpr float kLayoutColumnGap = 6.0f; // matches SettingsGroup's own inter-row spacing
-constexpr float kGlyphH = 16.0f;       // approximate UiSemibold glyph height
-constexpr float kFocusRingInset = 4.0f; // ring spacing outside the three buttons
+
+const char* theme_value(tesseract::Settings::ThemePreference pref)
+{
+    using TP = tesseract::Settings::ThemePreference;
+    switch (pref)
+    {
+    case TP::Light: return "light";
+    case TP::Dark:  return "dark";
+    case TP::System: break;
+    }
+    return "system";
+}
+
+tesseract::Settings::ThemePreference theme_from_value(const std::string& v)
+{
+    using TP = tesseract::Settings::ThemePreference;
+    if (v == "light") return TP::Light;
+    if (v == "dark")  return TP::Dark;
+    return TP::System;
+}
 
 } // namespace
 
-// ---------------------------------------------------------------------------
-// ThemePicker — the three-radio row that drives theme selection.
-// ---------------------------------------------------------------------------
-
-class AppearanceSection::ThemePicker : public tk::Widget
-{
-public:
-    static constexpr int kButtonCount = 3;
-
-    void set_selected(tesseract::Settings::ThemePreference pref)
-    {
-        selected_ = pref;
-    }
-
-    std::function<void(tesseract::Settings::ThemePreference)> on_theme_changed;
-
-    tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override;
-    void arrange(tk::LayoutCtx&, tk::Rect bounds) override;
-    void paint(tk::PaintCtx&) override;
-
-    bool on_pointer_down(tk::Point local) override;
-    void on_pointer_up(tk::Point local, bool inside_self) override;
-    bool on_pointer_move(tk::Point local) override;
-    void on_pointer_leave() override;
-
-    // Never overridden before this widget's other Tab stops (Button,
-    // CheckButton, ComboBox, ...) all opt into the keyboard-focus system via
-    // focusable()/on_key_down — this hand-rolled three-segment radio row
-    // simply never did, so Tab silently skipped over it entirely. Always
-    // focusable: unlike TabBar's "more than one tab" condition, the three
-    // theme options are always all present.
-    bool focusable() const override
-    {
-        return true;
-    }
-    // Left/Right cycles the selection and commits immediately, mirroring
-    // on_pointer_up's own selected_/on_theme_changed update — same
-    // immediate-commit convention as TabBar/SideTabView's arrow-key
-    // handling. Gated on has_focus() so an unfocused instance (there's only
-    // ever one, but matching the convention elsewhere in the widget
-    // library) can't react to a stray Left/Right via Host's root-broadcast
-    // fallback.
-    bool on_key_down(const tk::KeyEvent& e) override
-    {
-        if (!has_focus()) return false;
-        if (e.key != tk::Key::Left && e.key != tk::Key::Right) return false;
-        int idx = 0;
-        for (int i = 0; i < kButtonCount; ++i)
-        {
-            if (buttons_[i].pref == selected_)
-            {
-                idx = i;
-                break;
-            }
-        }
-        idx = (idx + (e.key == tk::Key::Right ? 1 : -1) + kButtonCount) %
-              kButtonCount;
-        if (buttons_[idx].pref != selected_)
-        {
-            selected_ = buttons_[idx].pref;
-            if (on_theme_changed)
-            {
-                on_theme_changed(selected_);
-            }
-        }
-        return true;
-    }
-
-    // Default paint_own_focus_ring() would ring bounds_ — the whole row,
-    // including whatever extra layout width arrange() was given beyond the
-    // three buttons' own combined width. Trace a tight box around just the
-    // buttons themselves instead, padded out by kFocusRingInset. Buttons
-    // are laid out left-to-right by index (see arrange()), so the first
-    // and last entries alone give the combined span.
-    void paint_own_focus_ring(tk::PaintCtx& ctx) override
-    {
-        const tk::Rect& first = buttons_[0].bounds;
-        const tk::Rect& last = buttons_[kButtonCount - 1].bounds;
-        const tk::Rect ring{
-            first.x - kFocusRingInset,
-            first.y - kFocusRingInset,
-            (last.x + last.w - first.x) + kFocusRingInset * 2.0f,
-            first.h + kFocusRingInset * 2.0f,
-        };
-        tk::paint_focus_ring(ctx, ring);
-    }
-
-private:
-    struct RadioButton
-    {
-        const char* label;
-        tesseract::Settings::ThemePreference pref;
-        tk::Rect bounds;
-        std::unique_ptr<tk::TextLayout> layout;
-    };
-
-    RadioButton buttons_[kButtonCount] = {
-        {tk::N_("Light"), tesseract::Settings::ThemePreference::Light, {}, nullptr},
-        {tk::N_("Dark"), tesseract::Settings::ThemePreference::Dark, {}, nullptr},
-        {tk::N_("System"), tesseract::Settings::ThemePreference::System, {}, nullptr},
-    };
-
-    tesseract::Settings::ThemePreference selected_ =
-        tesseract::Settings::instance().theme_pref;
-
-    int hovered_idx_ = -1;
-    int pressed_idx_ = -1;
-
-    int hit_button(tk::Point local) const;
-};
-
-tk::Size AppearanceSection::ThemePicker::measure(tk::LayoutCtx&,
-                                                 tk::Size constraints)
-{
-    const float w = constraints.w > 0 ? constraints.w : 0;
-    const float btn_h = std::max(kGlyphH + kBtnVPad * 2.0f, kBtnMinHeight);
-    return {w, btn_h};
-}
-
-void AppearanceSection::ThemePicker::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
-{
-    bounds_ = bounds;
-
-    // Measure button labels to give all three the same natural width.
-    float max_text_w = 0;
-    for (int i = 0; i < kButtonCount; ++i)
-    {
-        tk::TextStyle st;
-        st.role = tk::FontRole::UiSemibold;
-        st.max_width = -1.0f;
-        if (auto lay = ctx.factory.build_text(buttons_[i].label, st))
-        {
-            max_text_w = std::max(max_text_w, lay->measure().w);
-        }
-    }
-    const float btn_w = max_text_w + kAppearanceBtnHPad * 2.0f;
-    const float btn_h = std::max(kGlyphH + kBtnVPad * 2.0f, kBtnMinHeight);
-
-    for (int i = 0; i < kButtonCount; ++i)
-    {
-        buttons_[i].bounds = {
-            bounds.x + (btn_w + kBtnSpacing) * i,
-            bounds.y,
-            btn_w,
-            btn_h,
-        };
-        buttons_[i].layout.reset();
-    }
-}
-
-void AppearanceSection::ThemePicker::paint(tk::PaintCtx& ctx)
-{
-    const auto& pal = ctx.theme.palette;
-
-    for (int i = 0; i < kButtonCount; ++i)
-    {
-        const auto& btn = buttons_[i];
-        const bool is_selected = (btn.pref == selected_);
-        const bool is_hovered = (i == hovered_idx_);
-        const bool is_pressed = (i == pressed_idx_);
-
-        tk::Color fill;
-        if (is_selected)
-        {
-            if (is_pressed)
-            {
-                fill = pal.accent_pressed;
-            }
-            else if (is_hovered)
-            {
-                fill = pal.accent_hover;
-            }
-            else
-            {
-                fill = pal.accent;
-            }
-        }
-        else
-        {
-            if (is_pressed)
-            {
-                fill = pal.subtle_pressed;
-            }
-            else if (is_hovered)
-            {
-                fill = pal.subtle_hover;
-            }
-            else
-            {
-                fill = tk::Color::rgba(0, 0, 0, 0);
-            }
-        }
-
-        ctx.canvas.fill_rounded_rect(btn.bounds, kAppearanceBtnRadius, fill);
-
-        if (!is_selected)
-        {
-            ctx.canvas.stroke_rounded_rect(btn.bounds, kAppearanceBtnRadius, pal.border);
-        }
-
-        if (!buttons_[i].layout)
-        {
-            tk::TextStyle st;
-            st.role = tk::FontRole::UiSemibold;
-            st.halign = tk::TextHAlign::Leading;
-            st.valign = tk::TextVAlign::Top;
-            st.trim = tk::TextTrim::None;
-            st.max_width = -1.0f;
-            buttons_[i].layout = ctx.factory.build_text(tk::tr(btn.label), st);
-        }
-
-        if (buttons_[i].layout)
-        {
-            const tk::Size sz = buttons_[i].layout->measure();
-            const float tx = btn.bounds.x + (btn.bounds.w - sz.w) * 0.5f;
-            const float ty = btn.bounds.y + (btn.bounds.h - sz.h) * 0.5f;
-            const tk::Color ink =
-                is_selected ? pal.text_on_accent : pal.text_primary;
-            ctx.canvas.draw_text(*buttons_[i].layout, {tx, ty}, ink);
-        }
-    }
-}
-
-int AppearanceSection::ThemePicker::hit_button(tk::Point local) const
-{
-    const tk::Point world{local.x + bounds_.x, local.y + bounds_.y};
-    for (int i = 0; i < kButtonCount; ++i)
-    {
-        const tk::Rect& r = buttons_[i].bounds;
-        if (world.x >= r.x && world.x < r.x + r.w && world.y >= r.y &&
-            world.y < r.y + r.h)
-        {
-            return i;
-        }
-    }
-    return -1;
-}
-
-bool AppearanceSection::ThemePicker::on_pointer_down(tk::Point local)
-{
-    int idx = hit_button(local);
-    if (idx < 0)
-    {
-        return false;
-    }
-    pressed_idx_ = idx;
-    return true;
-}
-
-void AppearanceSection::ThemePicker::on_pointer_up(tk::Point local,
-                                                   bool inside_self)
-{
-    const int was_pressed = pressed_idx_;
-    pressed_idx_ = -1;
-
-    if (!inside_self || was_pressed < 0)
-    {
-        return;
-    }
-
-    int idx = hit_button(local);
-    if (idx != was_pressed)
-    {
-        return;
-    }
-
-    if (buttons_[idx].pref != selected_)
-    {
-        selected_ = buttons_[idx].pref;
-        if (on_theme_changed)
-        {
-            on_theme_changed(selected_);
-        }
-    }
-}
-
-bool AppearanceSection::ThemePicker::on_pointer_move(tk::Point local)
-{
-    int prev = hovered_idx_;
-    hovered_idx_ = hit_button(local);
-    return hovered_idx_ != prev;
-}
-
-void AppearanceSection::ThemePicker::on_pointer_leave()
-{
-    hovered_idx_ = -1;
-    pressed_idx_ = -1;
-}
 
 // ---------------------------------------------------------------------------
 // AppearanceSection — thin SettingsPage with one "Theme" group.
@@ -411,10 +135,19 @@ void AppearanceSection::ThemePicker::on_pointer_leave()
 AppearanceSection::AppearanceSection()
 {
     auto* group = add_group(tk::tr("Theme"));
-    auto picker = std::make_unique<ThemePicker>();
-    picker->on_theme_changed = [this](tesseract::Settings::ThemePreference pref)
+    auto picker = tk::create_widget<tk::RadioGroup>(
+        this, tk::FlexBox::Axis::Horizontal);
+    picker->set_spacing(kLayoutRowGap);
+    picker->set_options({
+        {tk::tr("Light"), "light"},
+        {tk::tr("Dark"), "dark"},
+        {tk::tr("System"), "system"},
+    });
+    picker->set_selected_value(
+        theme_value(tesseract::Settings::instance().theme_pref));
+    picker->on_changed = [this](std::string v)
     {
-        if (on_theme_changed) on_theme_changed(pref);
+        if (on_theme_changed) on_theme_changed(theme_from_value(v));
     };
     picker_ = group->add_widget(std::move(picker));
 
@@ -481,6 +214,56 @@ AppearanceSection::AppearanceSection()
                 on_message_layout_changed(layout);
             if (message_layout_preview_)
                 message_layout_preview_->refresh_layout();
+        };
+
+        // Room list density: radio group + description on the left, live
+        // preview on the right.
+        layout_group->add_widget(tk::create_widget<tk::Label>(
+            this, tk::tr("Room list")));
+
+        auto density_row = tk::create_widget<tk::HBox>(this);
+        density_row->set_spacing(kLayoutRowGap);
+        density_row->set_cross(tk::Cross::Start);
+
+        auto density_col = tk::create_widget<tk::VBox>(this);
+        density_col->set_layout_hints({.fill_main = true});
+        density_col->set_spacing(kLayoutColumnGap);
+
+        auto density = tk::create_widget<tk::RadioGroup>(
+            this, tk::FlexBox::Axis::Vertical);
+        density->set_options({
+            {tk::tr("Normal"), "normal"},
+            {tk::tr("Compact"), "compact"},
+        });
+        density->set_selected_value(
+            s.room_list_density == tesseract::Settings::RoomListDensity::Compact
+                ? "compact"
+                : "normal");
+        room_list_density_group_ = density_col->add_child(std::move(density));
+
+        auto density_desc = tk::create_widget<tk::Label>(
+            this,
+            tk::tr("Compact shows only room names, with smaller avatars."),
+            tk::FontRole::Small);
+        density_desc->set_wrap(true);
+        density_col->add_child(std::move(density_desc));
+
+        density_row->add_child(std::move(density_col));
+        room_list_preview_ = density_row->add_child(
+            std::make_unique<RoomListPreview>());
+        room_list_preview_->set_compact(
+            s.room_list_density == tesseract::Settings::RoomListDensity::Compact);
+        layout_group->add_widget(std::move(density_row));
+
+        room_list_density_group_->on_changed = [this](std::string v)
+        {
+            const bool compact = v == "compact";
+            if (on_room_list_density_changed)
+                on_room_list_density_changed(
+                    compact ? tesseract::Settings::RoomListDensity::Compact
+                            : tesseract::Settings::RoomListDensity::Normal);
+            if (room_list_preview_)
+                room_list_preview_->set_compact(compact);
         };
     }
 
@@ -567,7 +350,7 @@ AppearanceSection::~AppearanceSection() = default;
 
 void AppearanceSection::set_selected(tesseract::Settings::ThemePreference pref)
 {
-    picker_->set_selected(pref);
+    picker_->set_selected_value(theme_value(pref));
 }
 
 void AppearanceSection::set_selected_accent(tesseract::Settings::ThemeAccent accent)

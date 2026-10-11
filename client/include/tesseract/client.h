@@ -301,6 +301,31 @@ public:
     /// scheme or as a command-line option.
     static bool is_launchable_url(std::string_view url);
 
+    /// Verdict of check_media_file().
+    enum class MediaTypeVerdict : std::uint8_t
+    {
+        Ok = 0,
+        ExtMimeMismatch = 1, ///< extension does not belong to the declared mime
+        ContentMismatch = 2, ///< recognised contents contradict mime / extension
+        Executable = 3,      ///< can run code; never hand to the OS launcher
+    };
+    struct MediaTypeCheck
+    {
+        MediaTypeVerdict verdict = MediaTypeVerdict::Ok;
+        std::string ext;              ///< lower-case, no dot
+        std::string declared_mime;    ///< normalised `type/subtype`
+        std::string sniffed_mime;     ///< empty when the contents are unrecognised
+        std::string suggested_ext;    ///< best-matching extension, no dot; may be empty
+        std::string safe_filename;    ///< filesystem-safe form of the sender's name
+        std::string renamed_filename; ///< safe_filename with suggested_ext applied
+    };
+
+    /// Compares a received file's name, declared mime and leading bytes (pass
+    /// the first ~8 KiB) before it is opened in an external application.
+    static MediaTypeCheck check_media_file(const std::string& filename,
+                                           const std::string& declared_mime,
+                                           const std::vector<std::uint8_t>& head);
+
     /// MSC4153 "exclude insecure devices" mode, process-wide: share room
     /// keys only with cross-signed devices and hide messages from devices
     /// that aren't. Read when a client restores or logs in, so set it from

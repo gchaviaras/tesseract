@@ -3655,35 +3655,6 @@ private:
         // above, [view.window makeFirstResponder:view]) in place of the
         // direct call this window used to make.
 
-        _mainApp->room_view()->on_file_clicked =
-            [weakSelf](const tesseract::views::MessageListView::FileHit& hit)
-        {
-            MainWindowController* s = weakSelf;
-            if (!s || !s->_mainApp || !s->_mainAppSurface)
-                return;
-            NSSavePanel* panel = [NSSavePanel savePanel];
-            NSString* suggested = hit.file_name.empty()
-                ? @"download"
-                : [NSString stringWithUTF8String:hit.file_name.c_str()];
-            panel.nameFieldStringValue = suggested;
-            NSModalResponse resp = [panel runModal];
-            if (resp != NSModalResponseOK || !panel.URL)
-                return;
-            std::string dest = panel.URL.path.UTF8String;
-            std::string url  = hit.source ? hit.source->fetch_token() : std::string{};
-            if (s->_shell->client_)
-            {
-                auto req_id = s->_shell->begin_media_req_(0,
-                    [dest](std::vector<uint8_t> bytes) mutable
-                    {
-                        if (bytes.empty()) return;
-                        std::ofstream f(dest, std::ios::binary);
-                        f.write(reinterpret_cast<const char*>(bytes.data()),
-                                static_cast<std::streamsize>(bytes.size()));
-                    });
-                s->_shell->client_->fetch_source_bytes_async(req_id, url);
-            }
-        };
         _shell->setup_link_clicked_(_mainApp->room_view());
         {
             __weak MainWindowController* weakSelf = self;

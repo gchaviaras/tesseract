@@ -5890,3 +5890,111 @@ msgstr "Audio kann nicht abgespielt werden"
 #: ui/shared/views/FileViewerPage.cpp
 msgid "No preview available"
 msgstr "Keine Vorschau verfügbar"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Can't open this file"
+msgstr "Diese Datei kann nicht geöffnet werden"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Compact"
+msgstr "Kompakt"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Compact shows only room names, with smaller avatars."
+msgstr "Kompakt zeigt nur Raumnamen, mit kleineren Avataren."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't download the file"
+msgstr "Die Datei konnte nicht heruntergeladen werden"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't open the file"
+msgstr "Die Datei konnte nicht geöffnet werden"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Declared by the sender: {0}"
+msgstr "Vom Absender angegeben: {0}"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Design"
+msgstr "Design"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Detected from its contents: {0}"
+msgstr "Anhand des Inhalts erkannt: {0}"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File contents don't match"
+msgstr "Dateiinhalt passt nicht"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File name extension: {0}"
+msgstr "Dateiendung: {0}"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File type doesn't match its name"
+msgstr "Dateityp passt nicht zum Namen"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Jordan"
+msgstr "Jordan"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Normal"
+msgstr "Normal"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Only open it if you trust the sender."
+msgstr "Öffne sie nur, wenn du dem Absender vertraust."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Open anyway"
+msgstr "Trotzdem öffnen"
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Open images, videos and files in the system's default viewer"
+msgstr "Bilder, Videos und Dateien im Standard-Viewer des Systems öffnen"
+
+#: ui/shared/views/MediaOverlayBase.cpp
+msgid "Open in default viewer"
+msgstr "Im Standard-Viewer öffnen"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Rename to .{0} and open"
+msgstr "In .{0} umbenennen und öffnen"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Sam"
+msgstr "Sam"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Save as…"
+msgstr "Speichern unter…"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "See you tomorrow"
+msgstr "Bis morgen"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "The new icons look great"
+msgstr "Die neuen Symbole sehen großartig aus"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "none"
+msgstr "keine"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "unknown"
+msgstr "unbekannt"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” can run programs on your computer, so Tesseract won't open it. You can save it instead."
+msgstr "„{0}“ kann Programme auf deinem Computer ausführen, daher öffnet Tesseract sie nicht. Du kannst sie stattdessen speichern."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” doesn't look like what it claims to be."
+msgstr "„{0}“ sieht nicht so aus, wie es vorgibt."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” has a file extension that doesn't match its type."
+msgstr "„{0}“ hat eine Dateiendung, die nicht zum Dateityp passt."

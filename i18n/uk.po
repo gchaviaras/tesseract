@@ -6800,3 +6800,111 @@ msgstr "Наступний елемент галереї"
 #: ui/shared/views/shortcut_registry.cpp:244
 msgid "Media viewer"
 msgstr "Переглядач медіа"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Can't open this file"
+msgstr "Не вдається відкрити цей файл"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Compact"
+msgstr "Компактний"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Compact shows only room names, with smaller avatars."
+msgstr "Компактний вигляд показує лише назви кімнат, із меншими аватарами."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't download the file"
+msgstr "Не вдалося завантажити файл"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't open the file"
+msgstr "Не вдалося відкрити файл"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Declared by the sender: {0}"
+msgstr "Вказано відправником: {0}"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Design"
+msgstr "Дизайн"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Detected from its contents: {0}"
+msgstr "Визначено за вмістом: {0}"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File contents don't match"
+msgstr "Вміст файлу не збігається"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File name extension: {0}"
+msgstr "Розширення файлу: {0}"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File type doesn't match its name"
+msgstr "Тип файлу не відповідає його назві"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Jordan"
+msgstr "Джордан"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Normal"
+msgstr "Звичайний"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Only open it if you trust the sender."
+msgstr "Відкривайте його, лише якщо довіряєте відправнику."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Open anyway"
+msgstr "Усе одно відкрити"
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Open images, videos and files in the system's default viewer"
+msgstr "Відкривати зображення, відео та файли у засобі перегляду за замовчуванням"
+
+#: ui/shared/views/MediaOverlayBase.cpp
+msgid "Open in default viewer"
+msgstr "Відкрити у засобі перегляду за замовчуванням"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Rename to .{0} and open"
+msgstr "Перейменувати на .{0} і відкрити"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Sam"
+msgstr "Сем"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Save as…"
+msgstr "Зберегти як…"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "See you tomorrow"
+msgstr "До завтра"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "The new icons look great"
+msgstr "Нові значки виглядають чудово"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "none"
+msgstr "немає"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "unknown"
+msgstr "невідомо"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” can run programs on your computer, so Tesseract won't open it. You can save it instead."
+msgstr "«{0}» може запускати програми на вашому комп'ютері, тому Tesseract його не відкриє. Натомість його можна зберегти."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” doesn't look like what it claims to be."
+msgstr "«{0}» не схожий на те, за що себе видає."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” has a file extension that doesn't match its type."
+msgstr "«{0}» має розширення, що не відповідає його типу."

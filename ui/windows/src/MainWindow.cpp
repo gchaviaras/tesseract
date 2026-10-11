@@ -3139,34 +3139,6 @@ void MainWindow::on_create(HWND hwnd)
         // room_media_view()->on_image_clicked/on_video_clicked to the same
         // handlers it installs on room_view()).
 
-        room_view_->on_file_clicked =
-            [this](const tesseract::views::MessageListView::FileHit& hit)
-        {
-            std::wstring suggested(hit.file_name.begin(), hit.file_name.end());
-            if (suggested.empty())
-                suggested = L"download";
-            std::wstring path = show_save_dialog_(suggested,
-                                                  file_filter({{tk::tr("All files"), L"*.*"}}).c_str());
-            if (path.empty())
-                return;
-            std::string url = hit.source ? hit.source->fetch_token() : std::string{};
-            if (client_)
-            {
-                auto req_id = begin_media_req_(0,
-                    [path](std::vector<std::uint8_t> bytes) mutable
-                    {
-                        if (!bytes.empty())
-                        {
-                            std::ofstream f(wstr_to_utf8(path.c_str()),
-                                            std::ios::binary);
-                            f.write(reinterpret_cast<const char*>(bytes.data()),
-                                    static_cast<std::streamsize>(bytes.size()));
-                        }
-                    });
-                client_->fetch_source_bytes_async(req_id, url);
-            }
-        };
-
         room_view_->set_video_player_factory(
             [this]()
             {

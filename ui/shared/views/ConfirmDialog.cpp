@@ -22,6 +22,16 @@ ConfirmDialog::ConfirmDialog()
         tk::create_widget<tk::Button>(this, "", std::function<void()>{},
                                      tk::Button::Variant::Subtle));
 
+    secondary_btn_ = add_child(
+        tk::create_widget<tk::Button>(this, "", std::function<void()>{},
+                                     tk::Button::Variant::Subtle));
+    secondary_btn_->set_visible(false);
+    secondary_btn_->set_on_click([this]() {
+        auto cb = std::move(opts_.on_secondary);
+        close();
+        if (cb) cb();
+    });
+
     confirm_btn_->set_on_click([this]() {
         // Capture the callbacks locally before close() so re-entrant open()
         // calls inside on_confirm_ see the new state, not the previous one.
@@ -76,6 +86,8 @@ void ConfirmDialog::open(Options opts, std::function<void()> on_confirm)
                                   ? tk::Button::Variant::Destructive
                                   : tk::Button::Variant::Primary);
     cancel_btn_->set_label(opts_.cancel_label);
+    secondary_btn_->set_label(opts_.secondary_label);
+    secondary_btn_->set_visible(!opts_.secondary_label.empty());
 
     title_layout_.reset();
     body_layout_.reset();
@@ -108,6 +120,7 @@ void ConfirmDialog::close()
     set_visible(false);
     on_confirm_ = nullptr;
     opts_.on_reason = nullptr;
+    opts_.on_secondary = nullptr;
     press_backdrop_ = false;
     if (reason_field_)
     {
@@ -130,7 +143,8 @@ void ConfirmDialog::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
 
     backdrop_rect_ = bounds;
 
-    const float card_w = std::min(kCardW, bounds.w);
+    const bool has_secondary = !opts_.secondary_label.empty();
+    const float card_w = std::min(has_secondary ? kCardWWide : kCardW, bounds.w);
     const float text_w = card_w - kCardPad * 2.0f;
 
     // Build the text layouts here (not lazily in paint) so the card height
@@ -189,8 +203,21 @@ void ConfirmDialog::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
         card_rect_.x + card_rect_.w - kCardPad - confirm_w;
     const float cancel_x = confirm_x - kBtnGap - cancel_w;
 
+    // Order, left to right: Cancel, [secondary], Confirm. Without a
+    // secondary button the row is unchanged.
+    float secondary_w = 0.0f;
+    if (has_secondary && secondary_btn_)
+    {
+        secondary_w = std::max(
+            secondary_btn_->measure(lc, {-1.0f, kBtnH}).w, btn_w_min);
+    }
+    const float secondary_x = confirm_x - kBtnGap - secondary_w;
+    const float cancel_left =
+        has_secondary ? secondary_x - kBtnGap - cancel_w : cancel_x;
+    if (has_secondary && secondary_btn_)
+        secondary_btn_->arrange(lc, {secondary_x, btns_y, secondary_w, kBtnH});
     if (cancel_btn_)
-        cancel_btn_->arrange(lc, {cancel_x, btns_y, cancel_w, kBtnH});
+        cancel_btn_->arrange(lc, {cancel_left, btns_y, cancel_w, kBtnH});
     if (confirm_btn_)
         confirm_btn_->arrange(lc, {confirm_x, btns_y, confirm_w, kBtnH});
 

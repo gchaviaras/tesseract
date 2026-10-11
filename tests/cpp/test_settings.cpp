@@ -608,6 +608,24 @@ TEST_CASE("Settings persist message_layout", "[settings]")
     s.message_layout = ML::Classic; // restore default for other tests
 }
 
+TEST_CASE("Settings persist room_list_density", "[settings]")
+{
+    using RD = tesseract::Settings::RoomListDensity;
+    auto dir = std::filesystem::temp_directory_path() /
+               "tess_settings_density_test";
+    std::filesystem::remove_all(dir);
+
+    auto& s = tesseract::Settings::instance();
+    s.room_list_density = RD::Compact; // default is Normal
+    s.save_to_disk(dir);
+    s.room_list_density = RD::Normal;
+    s.load_from_disk(dir);
+    CHECK(s.room_list_density == RD::Compact);
+
+    std::filesystem::remove_all(dir);
+    s.room_list_density = RD::Normal;
+}
+
 TEST_CASE("Settings load wrong-typed field falls back to defaults", "[settings]")
 {
     reset_settings();

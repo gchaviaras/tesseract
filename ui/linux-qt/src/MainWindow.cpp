@@ -712,31 +712,6 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         // room_media_view()->on_image_clicked/on_video_clicked to the same
         // handlers it installs on room_view()).
 
-        mainApp_->room_view()->on_file_clicked =
-            [this](const tesseract::views::MessageListView::FileHit& hit)
-        {
-            std::string suggested = hit.file_name.empty() ? "download" : hit.file_name;
-            QString path = QFileDialog::getSaveFileName(
-                this, QString::fromStdString(tk::tr("Save file")),
-                QString::fromStdString(suggested),
-                QString::fromStdString(tk::tr("All files (*.*)")));
-            if (path.isEmpty())
-                return;
-            std::string url  = hit.source ? hit.source->fetch_token() : std::string{};
-            std::string dest = path.toStdString();
-            if (client_)
-            {
-                auto req_id = begin_media_req_(0,
-                    [dest](std::vector<std::uint8_t> bytes) mutable
-                    {
-                        if (bytes.empty()) return;
-                        std::ofstream f(dest, std::ios::binary);
-                        f.write(reinterpret_cast<const char*>(bytes.data()),
-                                static_cast<std::streamsize>(bytes.size()));
-                    });
-                client_->fetch_source_bytes_async(req_id, url);
-            }
-        };
         // on_fetch_room_members / on_save_topic / on_leave_room /
         // on_room_settings_opened / on_room_settings_avatar_upload_requested
         // / room_settings_view()->on_accept already provided by

@@ -56,6 +56,8 @@ add_executable(tesseract_tests
     cpp/test_banners_accessibility.cpp
     cpp/test_room_list_autoscroll.cpp
     cpp/test_room_list_preview_emoji.cpp
+    cpp/test_room_list_density.cpp
+    cpp/test_open_media.cpp
     cpp/test_room_list_context_menu.cpp
     cpp/test_resizable_sidebar.cpp
     cpp/test_unread_prefetch.cpp
@@ -245,6 +247,7 @@ add_executable(tesseract_tests
     cpp/test_shortcut_registry.cpp
     cpp/test_tk_tooltip.cpp
     cpp/test_tk_combo_controls.cpp
+    cpp/test_tk_radio.cpp
     cpp/test_tk_tab_bar.cpp
     cpp/test_tk_row_cursor.cpp
     cpp/test_tk_blurhash.cpp

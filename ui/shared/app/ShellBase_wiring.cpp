@@ -2,6 +2,7 @@
 #include "app/EventHandlerBase.h"
 #include "app/Launch.h"
 #include <tesseract/crash_handler.h>
+#include <tesseract/open_media.h>
 #include <tesseract/version.h>
 #include "app/MediaPlaybackHub.h"
 #include "app/RoomPane.h"
@@ -73,6 +74,9 @@ namespace tesseract
 // etc.) — those touch shell-specific state and stay in the per-shell ctor.
 void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
 {
+    // Leftovers from a previous session's "open in default app" temp files.
+    tesseract::purge_open_media_dir();
+
     auto avatar_lookup = [this](const std::string& mxc) -> const tk::Image*
     { return avatar_image_(mxc); };
 
@@ -373,6 +377,8 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
                                    ? static_cast<float>(s.sidebar_width)
                                    : static_cast<float>(tesseract::visual::kSidebarWidth));
         app->set_sidebar_collapsed(s.sidebar_collapsed);
+        app->set_room_list_compact(s.room_list_density ==
+                                   tesseract::Settings::RoomListDensity::Compact);
     }
     app->on_sidebar_layout_changed = [this](float width, bool collapsed)
     {
@@ -931,6 +937,12 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
         s.prefetch_full_media = enabled;
         s.save_to_disk(tesseract::config_dir());
     };
+    view->on_open_external_changed = [](bool enabled)
+    {
+        auto& s = tesseract::Settings::instance();
+        s.open_media_externally = enabled;
+        s.save_to_disk(tesseract::config_dir());
+    };
     view->on_autoscroll_unread_changed = [](bool enabled)
     {
         auto& s = tesseract::Settings::instance();
@@ -1009,6 +1021,11 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
         [this](tesseract::Settings::MessageLayout layout)
     {
         handle_message_layout_changed_(layout);
+    };
+    view->on_room_list_density_changed =
+        [this](tesseract::Settings::RoomListDensity density)
+    {
+        handle_room_list_density_changed_(density);
     };
 #ifdef TESSERACT_CRASH_HANDLER_ENABLED
     view->on_crash_reporting_changed = [this](bool enabled)

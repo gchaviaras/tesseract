@@ -110,7 +110,8 @@ MediaViewerItem item_from_image_hit(const MessageListView::ImageHit& hit)
     item.source = hit.source ? hit.source->fetch_token() : std::string{};
     item.thumbnail = hit.thumbnail ? hit.thumbnail->fetch_token() : std::string{};
     item.caption = hit.body;
-    item.filename = hit.body;
+    item.filename = hit.file_name.empty() ? hit.body : hit.file_name;
+    item.mime_type = hit.mime_type;
     item.width = hit.natural_w;
     item.height = hit.natural_h;
     return item;
@@ -124,12 +125,25 @@ MediaViewerItem item_from_video_hit(const MessageListView::VideoHit& hit)
     item.source = hit.source ? hit.source->fetch_token() : std::string{};
     item.thumbnail = hit.thumbnail ? hit.thumbnail->fetch_token() : std::string{};
     item.mime_type = hit.mime_type;
+    item.filename = hit.file_name;
     item.width = hit.natural_w;
     item.height = hit.natural_h;
     item.duration_ms = hit.duration_ms;
     item.loop = hit.loop;
     item.no_audio = hit.no_audio;
     item.hide_controls = hit.hide_controls;
+    return item;
+}
+
+MediaViewerItem item_from_file_hit(const MessageListView::FileHit& hit)
+{
+    MediaViewerItem item;
+    item.kind = MediaViewerItem::Kind::File;
+    item.event_id = hit.event_id;
+    item.source = hit.source ? hit.source->fetch_token() : std::string{};
+    item.filename = hit.file_name;
+    item.mime_type = hit.mime_type;
+    item.file_size = hit.file_size;
     return item;
 }
 

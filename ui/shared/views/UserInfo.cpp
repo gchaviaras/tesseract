@@ -205,7 +205,7 @@ tk::Size UserInfo::measure(tk::LayoutCtx&, tk::Size constraints)
         if (status_line_enabled_)
             text_col_h += kUserInfoLineGap + kUserInfoStatusRowH;
     }
-    const float h = std::max(avatar_size_, text_col_h) + 2 * kUserInfoPadY;
+    const float h = std::max(shown_avatar_(), text_col_h) + 2 * kUserInfoPadY;
     return {w, h};
 }
 
@@ -249,7 +249,7 @@ void UserInfo::paint(tk::PaintCtx& ctx)
     // -------- Avatar (left column, or centred in icon-only mode) --------
     const tk::Point avatar_centre{
         icon_only_ ? bounds_.x + bounds_.w * 0.5f
-                   : bounds_.x + kUserInfoPadX + avatar_size_ * 0.5f,
+                   : bounds_.x + kUserInfoPadX + shown_avatar_() * 0.5f,
         bounds_.y + bounds_.h * 0.5f,
     };
 
@@ -282,7 +282,7 @@ void UserInfo::paint(tk::PaintCtx& ctx)
             name_source.remove_prefix(1);
         }
     }
-    draw_avatar(ctx.canvas, img, avatar_centre, avatar_size_, name_source,
+    draw_avatar(ctx.canvas, img, avatar_centre, shown_avatar_(), name_source,
                 theme.palette.avatar_initials_bg,
                 theme.palette.avatar_initials_text);
 
@@ -295,8 +295,8 @@ void UserInfo::paint(tk::PaintCtx& ctx)
         constexpr float kDotD = 8.0f;
         constexpr float kRing = 2.0f;
         const float outer_d = kDotD + kRing * 2.0f;
-        const float dot_cx = avatar_centre.x + avatar_size_ * 0.5f;
-        const float dot_cy = avatar_centre.y + avatar_size_ * 0.5f;
+        const float dot_cx = avatar_centre.x + shown_avatar_() * 0.5f;
+        const float dot_cy = avatar_centre.y + shown_avatar_() * 0.5f;
         const tk::Color ring_col = pressed_ ? theme.palette.subtle_pressed
                                    : hovered_ ? theme.palette.subtle_hover
                                               : theme.palette.sidebar_bg;
@@ -316,8 +316,8 @@ void UserInfo::paint(tk::PaintCtx& ctx)
         constexpr float kDotD = 8.0f;
         constexpr float kRing = 2.0f;
         const float outer_d = kDotD + kRing * 2.0f;
-        const float dot_cx = avatar_centre.x + avatar_size_ * 0.5f;
-        const float dot_cy = avatar_centre.y - avatar_size_ * 0.5f;
+        const float dot_cx = avatar_centre.x + shown_avatar_() * 0.5f;
+        const float dot_cy = avatar_centre.y - shown_avatar_() * 0.5f;
         const tk::Color ring_col = pressed_ ? theme.palette.subtle_pressed
                                    : hovered_ ? theme.palette.subtle_hover
                                               : theme.palette.sidebar_bg;
@@ -339,7 +339,7 @@ void UserInfo::paint(tk::PaintCtx& ctx)
     }
 
     // -------- Text column --------
-    const float text_x = bounds_.x + kUserInfoPadX + avatar_size_ + kUserInfoAvatarTextGap;
+    const float text_x = bounds_.x + kUserInfoPadX + shown_avatar_() + kUserInfoAvatarTextGap;
     const float text_w =
         std::max(0.0f, bounds_.x + bounds_.w - kUserInfoPadX - text_x);
 

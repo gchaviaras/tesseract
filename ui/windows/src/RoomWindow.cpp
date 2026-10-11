@@ -223,20 +223,6 @@ RoomWindow::RoomWindow(MainWindow* parent, const std::string& room_id)
     const auto set_fs = [this](bool on) { set_window_fullscreen_impl_(on); };
     media_viewer_->on_request_fullscreen = set_fs;
 
-    room_view_->on_file_clicked =
-        [this](tesseract::views::MessageListView::FileHit hit)
-    {
-        std::wstring suggested(hit.file_name.begin(), hit.file_name.end());
-        if (suggested.empty())
-            suggested = L"download";
-        std::wstring path =
-            parent_->show_save_dialog_(suggested, MainWindow::file_filter({{tk::tr("All files"), L"*.*"}}).c_str());
-        if (path.empty())
-            return;
-        std::string url = hit.source ? hit.source->fetch_token() : std::string{};
-        pane_->save_source_to_file_(std::move(url), wstr_to_utf8(path));
-    };
-
     // ── Surface-bound providers (need this shell's own surface_) ─────────
     if (auto player = surface_->host().make_audio_player())
     {

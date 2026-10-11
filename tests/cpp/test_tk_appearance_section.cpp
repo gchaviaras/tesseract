@@ -159,3 +159,22 @@ TEST_CASE("AppearanceSection theme picker: click, hover and arrow keys",
     s.host.dispatch_pointer_leave();
     s.run();
 }
+
+TEST_CASE("AppearanceSection room list density radio fires its callback",
+          "[tk][view][appearance]")
+{
+    AsStage s;
+    std::vector<Settings::RoomListDensity> got;
+    s.sec->on_room_list_density_changed =
+        [&](Settings::RoomListDensity d) { got.push_back(d); };
+    s.run();
+
+    tk::RadioButton* compact = nullptr;
+    for (auto* b : vt::find_all<tk::RadioButton>(*s.sec))
+        if (b->access_name() == "Compact")
+            compact = b;
+    REQUIRE(compact);
+    CHECK(compact->access_default_action());
+    REQUIRE(got.size() == 1);
+    CHECK(got[0] == Settings::RoomListDensity::Compact);
+}

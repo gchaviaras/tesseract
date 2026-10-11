@@ -353,6 +353,9 @@ public:
     // state at startup. Safe to call before the first layout.
     void set_sidebar_width(float w);
     void set_sidebar_collapsed(bool collapsed);
+    // Compact room list: name-only rows, and a slimmer icon-only column with a
+    // smaller user-strip avatar.
+    void set_room_list_compact(bool compact);
 
     // Fires when the user finishes a separator drag or toggles the collapse
     // chevron. `width` is the last expanded width (unchanged while collapsed);

@@ -28,6 +28,15 @@ inline float sidebar_max_width(float window_w, float longest_row_w)
     return std::min(window_term, longest_row_w);
 }
 
+// Width of the collapsed (icon-only) sidebar. `compact_avatar` is the compact
+// room-list avatar size, or 0 for the normal layout (the fixed default).
+inline float sidebar_collapsed_width(float compact_avatar)
+{
+    if (compact_avatar <= 0.0f)
+        return static_cast<float>(tesseract::visual::kSidebarCollapsedWidth);
+    return compact_avatar + 16.0f; // 8px of margin each side of the avatar
+}
+
 struct SidebarDragResult
 {
     float width;      // expanded width to apply (meaningful only when !collapsed)
@@ -38,9 +47,10 @@ struct SidebarDragResult
 // clamped result. A drag that ends below the midpoint between the collapsed
 // width and the minimum expanded width snaps to collapsed; otherwise the width
 // is clamped to [kSidebarMinExpandedWidth, max_w].
-inline SidebarDragResult resolve_sidebar_drag(float raw_w, float max_w)
+inline SidebarDragResult resolve_sidebar_drag(
+    float raw_w, float max_w,
+    float collapsed_w = static_cast<float>(tesseract::visual::kSidebarCollapsedWidth))
 {
-    const float collapsed_w = static_cast<float>(tesseract::visual::kSidebarCollapsedWidth);
     const float min_expanded = static_cast<float>(tesseract::visual::kSidebarMinExpandedWidth);
     const float snap_threshold = (collapsed_w + min_expanded) * 0.5f;
 

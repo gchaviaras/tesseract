@@ -290,6 +290,8 @@ struct ImageEvent : public Event
     /// Non-empty only when the sender supplied an MSC2530 `filename` field.
     /// When set, `body` is a user caption and should be displayed below the image.
     std::string filename;
+    /// Sender-declared `info.mimetype`; empty when absent.
+    std::string mime_type;
     std::string blurhash;  // MSC2448: xyz.amorgan.blurhash; empty when absent
     bool animated = false; // MSC4230: is_animated hint from sender
 
@@ -345,6 +347,8 @@ struct FileEvent : public Event
     /// When set, `body` is a user caption and should be displayed below the card.
     /// When empty, `body` is the fallback display name (legacy behaviour).
     std::string filename;
+    /// Sender-declared `info.mimetype`; empty when absent.
+    std::string mime_type;
 
     FileEvent()
     {

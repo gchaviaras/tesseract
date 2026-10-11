@@ -290,6 +290,25 @@ bool Client::is_launchable_url(std::string_view url)
     return true;
 }
 
+Client::MediaTypeCheck Client::check_media_file(
+    const std::string& filename, const std::string& declared_mime,
+    const std::vector<std::uint8_t>& head)
+{
+    const auto r = tesseract_ffi::check_media_file(
+        rust::Str(filename.data(), filename.size()),
+        rust::Str(declared_mime.data(), declared_mime.size()),
+        rust::Slice<const std::uint8_t>(head.data(), head.size()));
+    MediaTypeCheck out;
+    out.verdict = static_cast<MediaTypeVerdict>(r.verdict);
+    out.ext = std::string(r.ext);
+    out.declared_mime = std::string(r.declared_mime);
+    out.sniffed_mime = std::string(r.sniffed_mime);
+    out.suggested_ext = std::string(r.suggested_ext);
+    out.safe_filename = std::string(r.safe_filename);
+    out.renamed_filename = std::string(r.renamed_filename);
+    return out;
+}
+
 bool Client::open_in_browser(const std::string& url)
 {
     if (!is_launchable_url(url))

@@ -537,6 +537,8 @@ MessageRowData make_row_data(const tesseract::Event& ev,
         row.media_w = static_cast<int>(img.width);
         row.media_h = static_cast<int>(img.height);
         row.has_filename_caption = !img.filename.empty();
+        row.media_filename = img.filename.empty() ? img.body : img.filename;
+        row.media_mime = img.mime_type;
         row.blurhash = img.blurhash;
         row.image_animated = img.animated;
         break;
@@ -562,6 +564,7 @@ MessageRowData make_row_data(const tesseract::Event& ev,
         row.file_name   = f.filename.empty() ? f.body : f.filename;
         row.file_size   = f.file_size;
         row.has_filename_caption = !f.filename.empty();
+        row.media_mime  = f.mime_type;
         break;
     }
     case tesseract::EventType::Audio:
@@ -604,6 +607,7 @@ MessageRowData make_row_data(const tesseract::Event& ev,
         row.media_h = static_cast<int>(vid.height);
         row.duration_ms = vid.duration_ms;
         row.has_filename_caption = !vid.filename.empty();
+        row.media_filename = vid.filename.empty() ? vid.body : vid.filename;
         row.video_autoplay = vid.autoplay;
         row.video_loop = vid.loop;
         row.video_no_audio = vid.no_audio;
@@ -5238,7 +5242,8 @@ private:
                 int ih =
                     (m.media_h > 0) ? m.media_h : (img ? img->height() : 0);
                 owner_.image_geom_[m.event_id] = MessageListView::ImageHit{
-                    m.event_id, m.source, m.thumbnail, m.body, iw, ih, r};
+                    m.event_id, m.source, m.thumbnail, m.body, iw, ih, r,
+                    m.media_filename, m.media_mime};
             }
             float cursor = y + sz.h;
             if (m.has_filename_caption && !m.body.empty())
@@ -5316,7 +5321,8 @@ private:
             {
                 owner_.file_geom_[m.event_id] =
                     MessageListView::FileHit{m.event_id, m.file_source,
-                                              m.file_name, m.file_size, r};
+                                              m.file_name, m.file_size, r,
+                                              m.media_mime};
             }
             float cursor = y + kFileCardH;
             if (m.has_filename_caption && !m.body.empty())
@@ -5388,7 +5394,8 @@ private:
                                               m.video_no_audio,
                                               m.video_hide_controls,
                                               m.video_gif,
-                                              r};
+                                              r,
+                                              m.media_filename};
             }
             float cursor = y + sz.h;
             if (m.has_filename_caption && !m.body.empty())

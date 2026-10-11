@@ -74,6 +74,8 @@ public:
     // Icon-only mode for the collapsed sidebar: renders just the avatar,
     // centred, with no name / Matrix ID / status line.
     void set_icon_only(bool on);
+    // Smaller avatar for the icon-only strip (compact room list); 0 restores the default.
+    void set_icon_avatar_size(float size) { icon_avatar_size_ = size; }
     bool icon_only() const { return icon_only_; }
 
     // Small dot on the avatar's corner, independent of active_indicator_.
@@ -202,6 +204,12 @@ private:
     bool warning_dot_ = false;
     bool icon_only_ = false;
     float avatar_size_ = 44.0f;
+    // Avatar size used in icon-only mode when set (>0); 0 = same as avatar_size_.
+    float icon_avatar_size_ = 0.0f;
+    float shown_avatar_() const
+    {
+        return icon_only_ && icon_avatar_size_ > 0.0f ? icon_avatar_size_ : avatar_size_;
+    }
     ImageProvider image_provider_;
 
     // Cached layouts — rebuilt lazily inside paint() when the content or

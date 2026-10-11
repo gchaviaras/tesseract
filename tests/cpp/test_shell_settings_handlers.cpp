@@ -83,6 +83,7 @@ struct SettingsShell : tesseract::test::TestShellBase
     using ShellBase::handle_developer_mode_toggle_;
     using ShellBase::handle_index_messages_toggle_;
     using ShellBase::handle_message_layout_changed_;
+    using ShellBase::handle_room_list_density_changed_;
     using ShellBase::handle_msc2545_legacy_compat_toggle_;
     using ShellBase::handle_send_maps_urls_as_location_toggle_;
     using ShellBase::handle_send_presence_toggle_;
@@ -194,6 +195,15 @@ TEST_CASE("sender status and layout changes relayout only on a real change",
     s.handle_message_layout_changed_(other);
     CHECK(st.message_layout == other);
     CHECK(s.relayouts == 2);
+
+    using RD = Settings::RoomListDensity;
+    st.room_list_density = RD::Normal;
+    s.handle_room_list_density_changed_(RD::Normal); // unchanged
+    CHECK(s.relayouts == 2);
+    s.handle_room_list_density_changed_(RD::Compact);
+    CHECK(st.room_list_density == RD::Compact);
+    CHECK(s.relayouts == 3);
+    st.room_list_density = RD::Normal;
 }
 
 TEST_CASE("presence toggle persists and resolves polling", "[shell][settings_handlers]")

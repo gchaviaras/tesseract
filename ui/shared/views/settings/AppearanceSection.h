@@ -1,7 +1,7 @@
 #pragma once
 
 // Settings panel section: theme selection + room-list grouping options.
-// A SettingsPage with a "Theme" group (three-radio ThemePicker) and a
+// A SettingsPage with a "Theme" group (Light/Dark/System radio group) and a
 // "Room list" group (checkbox + period combobox).
 
 #include "SettingsPage.h"
@@ -9,6 +9,7 @@
 #include "tesseract/settings.h"
 #include "tk/combobox.h"
 #include "tk/controls.h"
+#include "tk/radio.h"
 
 #include <functional>
 
@@ -16,6 +17,7 @@ namespace tesseract::views
 {
 
 class MessageLayoutPreview;
+class RoomListPreview;
 
 class AppearanceSection : public SettingsPage
 {
@@ -75,9 +77,11 @@ public:
     // Fired when the user picks a layout in the combobox.
     std::function<void(tesseract::Settings::MessageLayout)> on_message_layout_changed;
 
+    // Fired when the user picks Normal / Compact for the room list.
+    std::function<void(tesseract::Settings::RoomListDensity)> on_room_list_density_changed;
+
 private:
-    class ThemePicker; // defined in AppearanceSection.cpp
-    ThemePicker*     picker_             = nullptr;
+    tk::RadioGroup*  picker_             = nullptr;
     tk::ComboBox*    accent_combo_       = nullptr;
     tk::CheckButton* group_unread_cb_    = nullptr;
     tk::CheckButton* group_inactive_cb_  = nullptr;
@@ -89,6 +93,8 @@ private:
     tk::ComboBox*    message_layout_combo_      = nullptr;
     tk::Label*       message_layout_desc_       = nullptr;
     MessageLayoutPreview* message_layout_preview_ = nullptr;
+    tk::RadioGroup*       room_list_density_group_ = nullptr;
+    RoomListPreview*      room_list_preview_       = nullptr;
 };
 
 } // namespace tesseract::views

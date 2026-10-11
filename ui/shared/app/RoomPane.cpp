@@ -10,6 +10,7 @@
 #include "tk/i18n.h"
 #include <tesseract/client.h>
 #include <tesseract/mentions.h>
+#include <tesseract/open_media.h>
 #include <tesseract/settings.h>
 #include <tesseract/visual.h>
 
@@ -1425,6 +1426,11 @@ void RoomPane::wire_room_view_()
         {
             copy_source_to_clipboard_(item.source);
         };
+        media_viewer_->on_open_external =
+            [this](const views::MediaViewerItem& item)
+        {
+            open_media_externally_(item);
+        };
         // The single place a fetch starts: whenever an item becomes current.
         media_viewer_->on_item_shown =
             [this](const views::MediaViewerItem& item, std::uint64_t token)
@@ -1484,6 +1490,22 @@ void RoomPane::wire_room_view_()
             [this](const views::MessageListView::VideoHit& hit)
         {
             open_media_viewer_({views::item_from_video_hit(hit)}, 0);
+        };
+
+        // File cards have no preview: open them in the OS default app when
+        // that setting is on, otherwise ask where to save them.
+        rv->on_file_clicked =
+            [this](const views::MessageListView::FileHit& hit)
+        {
+            const views::MediaViewerItem item = views::item_from_file_hit(hit);
+            if (tesseract::Settings::instance().open_media_externally)
+            {
+                open_media_externally_(item);
+            }
+            else
+            {
+                prompt_save_(item);
+            }
         };
     }
     // The gallery opens the same viewer on click — reuse the exact handlers
@@ -3987,21 +4009,153 @@ void RoomPane::install_media_viewer_save_(MediaSavePathPicker pick)
     {
         return;
     }
-    media_viewer_->on_save =
-        [this, pick = std::move(pick)](const views::MediaViewerItem& item)
+    save_picker_ = std::move(pick);
+    media_viewer_->on_save = [this](const views::MediaViewerItem& item)
     {
-        const views::MediaSaveSpec spec = views::media_save_spec(item);
-        // `done` may run after the dialog closes (async dialogs): guarded()
-        // drops it if the pane has been destroyed meanwhile.
-        pick(spec,
-             guarded([this, source = item.source](std::string dest)
-                     {
-                         if (!dest.empty())
-                         {
-                             save_source_to_file_(source, std::move(dest));
-                         }
-                     }));
+        prompt_save_(item);
     };
+}
+
+void RoomPane::prompt_save_(const views::MediaViewerItem& item)
+{
+    if (!save_picker_)
+    {
+        return;
+    }
+    // `done` may run after the dialog closes (async dialogs): guarded()
+    // drops it if the pane has been destroyed meanwhile.
+    save_picker_(views::media_save_spec(item),
+                 guarded([this, source = item.source](std::string dest)
+                         {
+                             if (!dest.empty())
+                             {
+                                 save_source_to_file_(source, std::move(dest));
+                             }
+                         }));
+}
+
+void RoomPane::open_media_externally_(const views::MediaViewerItem& item)
+{
+    if (!pane_client_() || item.source.empty())
+    {
+        return;
+    }
+    using V = tesseract::Client::MediaTypeVerdict;
+    auto toast = [this](std::string msg)
+    {
+        if (deps_.host)
+        {
+            deps_.host->show_toast(std::move(msg));
+        }
+    };
+
+    fetch_source_bytes_(
+        item.source,
+        [this, item, toast](std::vector<std::uint8_t> fetched) mutable
+        {
+            if (fetched.empty())
+            {
+                // Failed, or over the one-shot download cap (64 MiB): previewable
+                // media falls back to the in-app viewer, which can stream it.
+                if (item.kind != views::MediaViewerItem::Kind::File && media_viewer_)
+                {
+                    force_in_app_viewer_ = true;
+                    open_media_viewer_({item}, 0);
+                    force_in_app_viewer_ = false;
+                    return;
+                }
+                toast(tk::tr("Couldn't download the file"));
+                return;
+            }
+            auto bytes = std::make_shared<std::vector<std::uint8_t>>(std::move(fetched));
+
+            const bool had_name = !item.filename.empty();
+            const std::vector<std::uint8_t> head(
+                bytes->begin(),
+                bytes->begin() + static_cast<std::ptrdiff_t>(
+                                     std::min<std::size_t>(bytes->size(), 8192)));
+            const auto chk = tesseract::Client::check_media_file(
+                had_name ? item.filename : std::string("attachment"),
+                item.mime_type, head);
+
+            // Writes the temp file under `name` and hands it to the OS.
+            const std::function<void(std::string)> launch = guarded(
+                [this, bytes, toast](std::string name)
+                {
+                    const auto path = tesseract::write_open_media_file(name, *bytes);
+                    if (!path || !tesseract::open_local_file(*path))
+                    {
+                        toast(tk::tr("Couldn't open the file"));
+                    }
+                });
+
+            // No file name from the sender: name it after what it is, so the
+            // OS has an extension to pick a viewer by.
+            if (!had_name && (chk.verdict == V::Ok || chk.verdict == V::ExtMimeMismatch))
+            {
+                launch(chk.renamed_filename);
+                return;
+            }
+            if (chk.verdict == V::Ok)
+            {
+                launch(chk.safe_filename);
+                return;
+            }
+            if (!room_view_)
+            {
+                return;
+            }
+
+            views::ConfirmDialog::Options opts;
+            if (chk.verdict == V::Executable)
+            {
+                opts.title = tk::tr("Can't open this file");
+                opts.body = tk::trf(
+                    tk::tr("“{0}” can run programs on your computer, so "
+                           "Tesseract won't open it. You can save it instead."),
+                    {chk.safe_filename});
+                opts.confirm_label = tk::tr("Save as…");
+                room_view_->request_confirm(
+                    std::move(opts),
+                    guarded([this, item]() { prompt_save_(item); }));
+                return;
+            }
+
+            opts.title = chk.verdict == V::ContentMismatch
+                             ? tk::tr("File contents don't match")
+                             : tk::tr("File type doesn't match its name");
+            std::string body = chk.verdict == V::ContentMismatch
+                ? tk::trf(tk::tr("“{0}” doesn't look like what it claims to be."),
+                          {chk.safe_filename})
+                : tk::trf(tk::tr("“{0}” has a file extension that doesn't "
+                                 "match its type."),
+                          {chk.safe_filename});
+            body += "\n\n";
+            if (!chk.sniffed_mime.empty())
+            {
+                body += tk::trf(tk::tr("Detected from its contents: {0}"),
+                                {chk.sniffed_mime}) + "\n";
+            }
+            body += tk::trf(tk::tr("Declared by the sender: {0}"),
+                            {chk.declared_mime.empty() ? tk::tr("unknown")
+                                                       : chk.declared_mime}) + "\n";
+            body += tk::trf(tk::tr("File name extension: {0}"),
+                            {chk.ext.empty() ? tk::tr("none") : "." + chk.ext});
+            body += "\n\n" + tk::tr("Only open it if you trust the sender.");
+            opts.body = std::move(body);
+            opts.confirm_label = tk::tr("Open anyway");
+            opts.destructive = true;
+            if (!chk.suggested_ext.empty() && chk.suggested_ext != chk.ext)
+            {
+                opts.secondary_label = tk::trf(tk::tr("Rename to .{0} and open"),
+                                               {chk.suggested_ext});
+                opts.on_secondary = [launch, name = chk.renamed_filename]()
+                { launch(name); };
+            }
+            room_view_->request_confirm(
+                std::move(opts),
+                [launch, name = chk.safe_filename]() { launch(name); });
+        });
 }
 
 void RoomPane::fetch_source_bytes_(
@@ -4054,6 +4208,14 @@ void RoomPane::open_media_viewer_(std::vector<views::MediaViewerItem> items,
 {
     if (!media_viewer_)
     {
+        return;
+    }
+    // "Open media in the system's default app": message media skips the
+    // lightbox (an avatar has no event id, so it stays in-app).
+    if (tesseract::Settings::instance().open_media_externally &&
+        !force_in_app_viewer_ && index < items.size() && !items[index].event_id.empty())
+    {
+        open_media_externally_(items[index]);
         return;
     }
     // The audio backend is created on first use (most sessions never open an

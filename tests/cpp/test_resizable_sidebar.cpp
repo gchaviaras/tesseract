@@ -260,3 +260,14 @@ TEST_CASE("sidebar band click away from the grip does not toggle", "[sidebar]")
 
     CHECK_FALSE(last_collapsed); // a non-grip click never collapses
 }
+
+TEST_CASE("sidebar_collapsed_width: compact avatar narrows the column", "[sidebar]")
+{
+    CHECK_THAT(sidebar_collapsed_width(0.0f), WithinAbs(kCollapsed, 0.01f));
+    CHECK_THAT(sidebar_collapsed_width(21.0f), WithinAbs(37.0f, 0.01f));
+    // Dragging snaps to collapsed relative to the narrower column.
+    const float collapsed = sidebar_collapsed_width(21.0f);
+    const float midpoint = (collapsed + kMinExpanded) * 0.5f;
+    CHECK(resolve_sidebar_drag(midpoint - 1.0f, kHuge, collapsed).collapsed);
+    CHECK_FALSE(resolve_sidebar_drag(midpoint + 1.0f, kHuge, collapsed).collapsed);
+}

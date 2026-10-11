@@ -138,6 +138,11 @@ SettingsView::SettingsView()
     {
         if (on_message_layout_changed) on_message_layout_changed(l);
     };
+    appearance->on_room_list_density_changed =
+        [this](tesseract::Settings::RoomListDensity d)
+    {
+        if (on_room_list_density_changed) on_room_list_density_changed(d);
+    };
     appearance_ = appearance.get();
 
     // Notifications section.
@@ -177,6 +182,13 @@ SettingsView::SettingsView()
         if (on_prefetch_changed)
         {
             on_prefetch_changed(enabled);
+        }
+    };
+    media->on_open_external_changed = [this](bool enabled)
+    {
+        if (on_open_external_changed)
+        {
+            on_open_external_changed(enabled);
         }
     };
     media->on_media_previews_changed =

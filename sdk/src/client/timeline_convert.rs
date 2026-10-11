@@ -98,6 +98,8 @@ pub(super) fn ffi_event_defaults() -> TimelineEvent {
         file_size: 0,
         file_filename: String::new(),
         image_filename: String::new(),
+        image_mime: String::new(),
+        file_mime: String::new(),
         audio_url: String::new(),
         audio_encrypted_json: String::new(),
         audio_duration_ms: 0,
@@ -1667,6 +1669,11 @@ pub(super) async fn timeline_item_to_ffi(
                 width: w,
                 height: h,
                 image_filename: img_filename,
+                image_mime: i
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.mimetype.clone())
+                    .unwrap_or_default(),
                 ..ffi_event_defaults()
             }
         }
@@ -1695,6 +1702,11 @@ pub(super) async fn timeline_item_to_ffi(
                 file_name: name,
                 file_size: size,
                 file_filename,
+                file_mime: f
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.mimetype.clone())
+                    .unwrap_or_default(),
                 ..ffi_event_defaults()
             }
         }

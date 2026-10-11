@@ -1,6 +1,14 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-10**. 3181 C++ + 987 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-11**. 3198 C++ + 1005 Rust tests.
+
+> **Compact room list and external media viewers (2026-10-11).**
+> Settings → Appearance → Layout offers Normal / Compact room rows (name only,
+> small avatar) with a live preview, using the new `tk::RadioGroup` (also used
+> by the Theme selector). Media can open in the OS default viewer (Settings →
+> Media, or the viewer's ↗ button): saved under its own name to a private temp
+> folder wiped at startup/exit, with an extension/mime/contents check that
+> warns on mismatch and refuses executables. Qt6 build, ctest 3198/3198.
 
 > **Galleries and the unified media viewer (2026-10-10).**
 > MSC4274 gallery messages send (composer takes up to 20 attachments) and

@@ -303,10 +303,27 @@ public:
     void set_icon_only(bool on);
     bool icon_only() const { return icon_only_; }
 
+    // Compact density: name-only rows with a small avatar (no last-message
+    // preview). Independent of icon-only mode.
+    void set_compact(bool on);
+
+    // Hides the search field + join button (used by the settings preview).
+    void set_search_hidden(bool hidden) { search_hidden_ = hidden; }
+    bool compact() const { return compact_; }
+    // Avatar size compact rows use (from the sidebar font size); 0 when not compact.
+    float compact_avatar_size() const { return compact_ ? avatar_size_() : 0.0f; }
+
     void paint_overlay(tk::PaintCtx&) override;
 
 private:
     class Adapter;
+
+    // Row geometry, density-dependent.
+    float row_h_() const;
+    float avatar_size_() const;
+    float thumb_() const;
+    bool compact_ = false;
+    bool search_hidden_ = false;
 
     // Flat item list fed to the inner ListView. Each item is either a
     // collapsible section header, a pointer into section_rooms_[s], or an

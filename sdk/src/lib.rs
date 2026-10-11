@@ -19,6 +19,7 @@ mod image_packs;
 mod maps_link;
 mod markdown;
 mod matrix_uri;
+mod media_type_check;
 mod media_preview;
 mod net_guard;
 mod net_proxy;
@@ -282,6 +283,8 @@ pub mod ffi {
         pub file_size: u64,
         pub file_filename: String,
         pub image_filename: String,
+        pub image_mime: String,
+        pub file_mime: String,
         pub audio_url: String,
         pub audio_encrypted_json: String,
         pub audio_duration_ms: u64,

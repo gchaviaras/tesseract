@@ -35,6 +35,7 @@
 #include "views/map_tiles.h"
 #include "views/pronoun_utils.h"
 #include "views/thread_unread.h"
+#include <tesseract/open_media.h>
 #include <tesseract/paths.h>
 #include <tesseract/session_store.h>
 #include <tesseract/prefs.h>
@@ -285,6 +286,9 @@ ShellBase::~ShellBase()
     // Signal any UI-thread continuations queued via post_to_ui_alive_ that this
     // shell is gone; they will no-op rather than dereference freed members.
     invalidate_weak_self();
+
+    // Decrypted attachments handed to external apps don't outlive the session.
+    tesseract::purge_open_media_dir();
 
     // Stop the media-sweep timer before the derived shell is torn down: a
     // pending tick must not re-arm (post_to_ui_after_ is pure-virtual once the

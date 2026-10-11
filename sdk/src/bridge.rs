@@ -51,6 +51,25 @@ pub fn validate_proxy_url(url: &str) -> bool {
     super::net_proxy::validate_proxy_url(url)
 }
 
+pub fn check_media_file(filename: &str, declared_mime: &str, head: &[u8]) -> ffi::MediaTypeCheckFfi {
+    use super::media_type_check::{check, Verdict};
+    let r = check(filename, declared_mime, head);
+    ffi::MediaTypeCheckFfi {
+        verdict: match r.verdict {
+            Verdict::Ok => 0,
+            Verdict::ExtMimeMismatch => 1,
+            Verdict::ContentMismatch => 2,
+            Verdict::Executable => 3,
+        },
+        ext: r.ext,
+        declared_mime: r.declared_mime,
+        sniffed_mime: r.sniffed_mime,
+        suggested_ext: r.suggested_ext,
+        safe_filename: r.safe_filename,
+        renamed_filename: r.renamed_filename,
+    }
+}
+
 pub fn compute_waveform_from_ogg(bytes: &[u8]) -> Vec<u16> {
     super::waveform::compute_waveform_from_ogg(bytes)
 }
@@ -574,6 +593,10 @@ pub mod ffi {
         /// MSC2530 `filename` field (distinct from `body`).  When set, `body` is a
         /// user-written caption and should be displayed below the image.
         image_filename: String,
+        /// Declared `info.mimetype` of an m.image; empty when absent.
+        image_mime: String,
+        /// Declared `info.mimetype` of an m.file; empty when absent.
+        file_mime: String,
         /// mxc:// URI of the audio/voice clip (m.voice / m.audio).
         audio_url: String,
         /// Non-empty only when the audio source is encrypted.
@@ -1363,6 +1386,18 @@ pub mod ffi {
 
     /// Returned by `markdown_to_html`. `formatted_body` is empty when the
     /// input contains no markdown syntax (caller should use the plain body).
+    /// Result of `check_media_file`. `verdict`: 0 = ok, 1 = extension/mime
+    /// mismatch, 2 = content contradicts mime/extension, 3 = executable.
+    struct MediaTypeCheckFfi {
+        verdict: u8,
+        ext: String,
+        declared_mime: String,
+        sniffed_mime: String,
+        suggested_ext: String,
+        safe_filename: String,
+        renamed_filename: String,
+    }
+
     struct MarkdownFfiResult {
         formatted_body: String,
     }
@@ -2071,6 +2106,14 @@ pub mod ffi {
         /// before any client is built.
         fn set_proxy(mode: u8, url: &str) -> bool;
         fn validate_proxy_url(url: &str) -> bool;
+
+        /// Compare a received file's name, declared mime and leading bytes
+        /// (pass up to ~8 KiB) before handing it to an OS viewer.
+        fn check_media_file(
+            filename: &str,
+            declared_mime: &str,
+            head: &[u8],
+        ) -> MediaTypeCheckFfi;
 
         // ----- Local waveform generation -----
 

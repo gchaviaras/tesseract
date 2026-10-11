@@ -581,6 +581,21 @@ void ShellBase::handle_message_layout_changed_(
     request_relayout_();
 }
 
+void ShellBase::handle_room_list_density_changed_(
+    tesseract::Settings::RoomListDensity density)
+{
+    auto& s = tesseract::Settings::instance();
+    if (s.room_list_density == density)
+        return;
+    s.room_list_density = density;
+    s.save_to_disk(tesseract::config_dir());
+
+    if (main_app_)
+        main_app_->set_room_list_compact(
+            density == tesseract::Settings::RoomListDensity::Compact);
+    request_relayout_();
+}
+
 #ifdef TESSERACT_CRASH_HANDLER_ENABLED
 void ShellBase::handle_crash_reporting_toggle_(bool enabled)
 {

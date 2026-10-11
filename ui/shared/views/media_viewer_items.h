@@ -14,6 +14,7 @@ namespace tesseract::views
 
 MediaViewerItem item_from_image_hit(const MessageListView::ImageHit& hit);
 MediaViewerItem item_from_video_hit(const MessageListView::VideoHit& hit);
+MediaViewerItem item_from_file_hit(const MessageListView::FileHit& hit);
 // An avatar / profile picture: source and display key are the same mxc URL, the
 // size is unknown and `name` doubles as caption and save name.
 MediaViewerItem item_from_avatar(const std::string& url, const std::string& name);

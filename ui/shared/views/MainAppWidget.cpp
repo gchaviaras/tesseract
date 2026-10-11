@@ -532,7 +532,7 @@ public:
             else
             {
                 const float raw = sidebar_w_ + (e.key == tk::Key::Right ? kStep : -kStep);
-                const auto r = resolve_sidebar_drag(raw, max_sidebar_w_);
+                const auto r = resolve_sidebar_drag(raw, max_sidebar_w_, collapsed_w_);
                 collapsed_ = r.collapsed;
                 if (!r.collapsed)
                     sidebar_w_ = r.width;
@@ -576,6 +576,13 @@ public:
         if (host()) host()->mark_needs_relayout();
     }
     float sidebar_width() const { return sidebar_w_; }
+    // Width of the collapsed (icon-only) sidebar; narrower for the compact room list.
+    void set_collapsed_width(float w)
+    {
+        if (collapsed_w_ == w) return;
+        collapsed_w_ = w;
+        if (host()) host()->mark_needs_relayout();
+    }
     bool  collapsed() const { return collapsed_; }
 
     using Cursor = MainAppWidget::SidebarCursor;
@@ -616,7 +623,7 @@ public:
                     std::max(max_sidebar_w_, kSidebarMinExpandedW));
 
             apply_icon_only_();
-            const float eff_w = collapsed_ ? kSidebarCollapsedW : sidebar_w_;
+            const float eff_w = collapsed_ ? collapsed_w_ : sidebar_w_;
 
             if (sidebar_)
             {
@@ -748,7 +755,7 @@ public:
         }
         if (!moved_) return;
         const float raw = drag_start_w_ + (local.x - drag_start_x_);
-        const auto r = resolve_sidebar_drag(raw, max_sidebar_w_);
+        const auto r = resolve_sidebar_drag(raw, max_sidebar_w_, collapsed_w_);
         collapsed_ = r.collapsed;
         if (!r.collapsed)
             sidebar_w_ = r.width;   // keep last expanded width while collapsed
@@ -792,7 +799,7 @@ private:
 
     float eff_sidebar_w_() const
     {
-        return collapsed_ ? kSidebarCollapsedW : sidebar_w_;
+        return collapsed_ ? collapsed_w_ : sidebar_w_;
     }
 
     bool over_handle_band_(tk::Point world) const
@@ -897,6 +904,7 @@ private:
     float max_sidebar_w_ = MainAppWidget::kSidebarW;
     float last_root_w_   = 0.0f;
     bool  collapsed_     = false;
+    float collapsed_w_   = kSidebarCollapsedW;
     bool  dragging_      = false;
     bool  moved_         = false;
     bool  press_on_grip_ = false;
@@ -1307,6 +1315,20 @@ void MainAppWidget::set_sidebar_width(float w)
 {
     if (root_layout_)
         root_layout_->set_sidebar_width(w);
+}
+
+void MainAppWidget::set_room_list_compact(bool compact)
+{
+    if (!sidebar_ || !sidebar_->room_list_view())
+        return;
+    auto* rlv = sidebar_->room_list_view();
+    rlv->set_compact(compact);
+    const float av = rlv->compact_avatar_size();
+    // The user strip's avatar and the collapsed column shrink with the rows.
+    if (sidebar_->user_info())
+        sidebar_->user_info()->set_icon_avatar_size(av);
+    if (root_layout_)
+        root_layout_->set_collapsed_width(sidebar_collapsed_width(av));
 }
 
 void MainAppWidget::set_sidebar_collapsed(bool collapsed)

@@ -112,6 +112,10 @@ public:
     // ⬇ / ⧉ chrome buttons, with the item currently shown.
     std::function<void(const MediaViewerItem&)> on_save;
     std::function<void(const MediaViewerItem&)> on_copy;
+    // Opens the current item in the OS default app. The chrome button only
+    // shows while this is set and the item belongs to a message (an avatar
+    // has no event id, file name or mime type to check).
+    std::function<void(const MediaViewerItem&)> on_open_external;
     // A new item became current (open / sequence step). Start its fetch here and
     // hand the token back with the bytes.
     std::function<void(const MediaViewerItem&, std::uint64_t)> on_item_shown;
@@ -161,6 +165,8 @@ protected:
     void fire_save_() override;
     void fire_copy_() override;
     bool wants_copy_button_() const override;
+    void fire_external_() override;
+    bool wants_external_button_() const override;
     bool extra_chrome_hovered_() const override;
     void dismiss_() override;
     void on_fullscreen_changed_(bool fullscreen) override;

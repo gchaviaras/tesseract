@@ -4523,3 +4523,111 @@ msgstr "Kunne ikke spille av lyden"
 
 msgid "No preview available"
 msgstr "Ingen forhåndsvisning tilgjengelig"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Can't open this file"
+msgstr "Kan ikke åpne denne filen"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Compact"
+msgstr "Kompakt"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Compact shows only room names, with smaller avatars."
+msgstr "Kompakt viser bare romnavn, med mindre avatarer."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't download the file"
+msgstr "Kunne ikke laste ned filen"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't open the file"
+msgstr "Kunne ikke åpne filen"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Declared by the sender: {0}"
+msgstr "Oppgitt av avsender: {0}"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Design"
+msgstr "Design"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Detected from its contents: {0}"
+msgstr "Gjenkjent fra innholdet: {0}"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File contents don't match"
+msgstr "Filinnholdet stemmer ikke"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File name extension: {0}"
+msgstr "Filendelse: {0}"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File type doesn't match its name"
+msgstr "Filtypen stemmer ikke med navnet"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Jordan"
+msgstr "Jordan"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Normal"
+msgstr "Normal"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Only open it if you trust the sender."
+msgstr "Åpne den bare hvis du stoler på avsenderen."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Open anyway"
+msgstr "Åpne likevel"
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Open images, videos and files in the system's default viewer"
+msgstr "Åpne bilder, videoer og filer i systemets standardviser"
+
+#: ui/shared/views/MediaOverlayBase.cpp
+msgid "Open in default viewer"
+msgstr "Åpne i standardviser"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Rename to .{0} and open"
+msgstr "Gi nytt navn til .{0} og åpne"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Sam"
+msgstr "Sam"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Save as…"
+msgstr "Lagre som…"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "See you tomorrow"
+msgstr "Sees i morgen"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "The new icons look great"
+msgstr "De nye ikonene ser flotte ut"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "none"
+msgstr "ingen"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "unknown"
+msgstr "ukjent"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” can run programs on your computer, so Tesseract won't open it. You can save it instead."
+msgstr "«{0}» kan kjøre programmer på datamaskinen din, så Tesseract åpner den ikke. Du kan lagre den i stedet."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” doesn't look like what it claims to be."
+msgstr "«{0}» ser ikke ut som det den utgir seg for å være."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” has a file extension that doesn't match its type."
+msgstr "«{0}» har en filendelse som ikke stemmer med typen."

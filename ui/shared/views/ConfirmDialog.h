@@ -36,6 +36,11 @@ public:
         bool        reason_field  = false;
         std::string reason_placeholder;
         std::function<void(std::string reason)> on_reason;
+        // Optional third button between Cancel and Confirm (shown when
+        // `secondary_label` is non-empty). Dismisses the dialog and fires
+        // `on_secondary`. The card widens to fit three buttons.
+        std::string secondary_label;
+        std::function<void()> on_secondary;
     };
 
     ConfirmDialog();
@@ -91,6 +96,7 @@ private:
     // Child buttons — owned via add_child, raw pointers borrowed back.
     tk::Button* confirm_btn_ = nullptr;
     tk::Button* cancel_btn_  = nullptr;
+    tk::Button* secondary_btn_ = nullptr;
     // Options::reason_field input; null without a Host.
     tk::TextField* reason_field_ = nullptr;
 
@@ -105,6 +111,7 @@ private:
     bool press_backdrop_ = false;
 
     static constexpr float kCardW   = 360.0f;
+    static constexpr float kCardWWide = 520.0f; // with a secondary button
     static constexpr float kCardPad = 20.0f;
     static constexpr float kBtnH    = 36.0f;
     static constexpr float kBtnGap  = 8.0f;

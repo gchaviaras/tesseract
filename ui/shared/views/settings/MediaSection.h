@@ -36,6 +36,7 @@ public:
 
     // Fired with the new state when a row changes.
     std::function<void(bool)> on_prefetch_changed;
+    std::function<void(bool)> on_open_external_changed;
     std::function<void(tesseract::Settings::MediaPreviews)>
         on_media_previews_changed;
     std::function<void(bool)> on_invite_avatars_changed;
@@ -66,6 +67,7 @@ private:
     tk::ComboBox*    previews_combo_    = nullptr;
     tk::CheckButton* invite_avatars_cb_ = nullptr;
     tk::CheckButton* prefetch_cb_       = nullptr;
+    tk::CheckButton* open_external_cb_  = nullptr;
 
     tk::ComboBox* audio_input_combo_  = nullptr;
     tk::ComboBox* audio_output_combo_ = nullptr;

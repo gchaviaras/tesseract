@@ -6584,3 +6584,111 @@ msgstr "[Ùñàblé tö plày àùdïöxxxx]"
 #: ui/shared/views/FileViewerPage.cpp
 msgid "No preview available"
 msgstr "[Ñö prévïéw àvàïlàbléxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Can't open this file"
+msgstr "[Çàñ't öpéñ thïs fïléxxxx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Compact"
+msgstr "[Çömpàçtx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Compact shows only room names, with smaller avatars."
+msgstr "[Çömpàçt shöws öñly rööm ñàmés, wïth smàllér àvàtàrs.xxxxxxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't download the file"
+msgstr "[Çöùldñ't döwñlöàd thé fïléxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Couldn't open the file"
+msgstr "[Çöùldñ't öpéñ thé fïléxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Declared by the sender: {0}"
+msgstr "[Déçlàréd by thé séñdér: {0}xxxxx]"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Design"
+msgstr "[Désïgñx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Detected from its contents: {0}"
+msgstr "[Détéçtéd fröm ïts çöñtéñts: {0}xxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File contents don't match"
+msgstr "[Fïlé çöñtéñts döñ't màtçhxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File name extension: {0}"
+msgstr "[Fïlé ñàmé éxtéñsïöñ: {0}xxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "File type doesn't match its name"
+msgstr "[Fïlé typé döésñ't màtçh ïts ñàméxxxxxx]"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Jordan"
+msgstr "[Jördàñx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Normal"
+msgstr "[Ñörmàlx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Only open it if you trust the sender."
+msgstr "[Öñly öpéñ ït ïf yöù trùst thé séñdér.xxxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Open anyway"
+msgstr "[Öpéñ àñywàyxx]"
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Open images, videos and files in the system's default viewer"
+msgstr "[Öpéñ ïmàgés, vïdéös àñd fïlés ïñ thé systém's défàùlt vïéwérxxxxxxxxxxxx]"
+
+#: ui/shared/views/MediaOverlayBase.cpp
+msgid "Open in default viewer"
+msgstr "[Öpéñ ïñ défàùlt vïéwérxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Rename to .{0} and open"
+msgstr "[Réñàmé tö .{0} àñd öpéñxxxx]"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "Sam"
+msgstr "[Sàmx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Save as…"
+msgstr "[Sàvé às…x]"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "See you tomorrow"
+msgstr "[Séé yöù tömörröwxxx]"
+
+#: ui/shared/views/settings/RoomListPreview.cpp
+msgid "The new icons look great"
+msgstr "[Thé ñéw ïçöñs löök gréàtxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "none"
+msgstr "[ñöñéx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "unknown"
+msgstr "[ùñkñöwñx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” can run programs on your computer, so Tesseract won't open it. You can save it instead."
+msgstr "[“{0}” çàñ rùñ prögràms öñ yöùr çömpùtér, sö Tésséràçt wöñ't öpéñ ït. Yöù çàñ sàvé ït ïñstéàd.xxxxxxxxxxxxxxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” doesn't look like what it claims to be."
+msgstr "[“{0}” döésñ't löök lïké whàt ït çlàïms tö bé.xxxxxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "“{0}” has a file extension that doesn't match its type."
+msgstr "[“{0}” hàs à fïlé éxtéñsïöñ thàt döésñ't màtçh ïts typé.xxxxxxxxxxx]"

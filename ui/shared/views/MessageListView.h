@@ -182,6 +182,10 @@ struct MessageRowData
     tesseract::MediaSourceRef file_source; // file attachment
     std::string file_name;
     std::uint64_t file_size = 0;
+    // Image / file: sender-declared `info.mimetype` (empty when absent).
+    std::string media_mime;
+    // Image / video: the sender's file name (`filename`, else `body`).
+    std::string media_filename;
 
     // Voice (MSC3245) and Audio (plain m.audio).
     // `waveform` is the MSC1767 amplitude list (each 0..=1024); empty for
@@ -853,6 +857,8 @@ public:
         int natural_w = 0;
         int natural_h = 0;
         tk::Rect world_rect;
+        std::string file_name; // sender's file name; empty when unknown
+        std::string mime_type; // sender-declared mime; empty when unknown
     };
     std::optional<ImageHit> image_hit_at(tk::Point world) const;
 
@@ -876,6 +882,7 @@ public:
         bool hide_controls = false;
         bool gif = false;
         tk::Rect world_rect;
+        std::string file_name; // sender's file name; empty when unknown
     };
     std::optional<VideoHit> video_hit_at(tk::Point world) const;
 
@@ -924,6 +931,7 @@ public:
         std::string file_name; // suggested save filename
         uint64_t    file_size = 0;
         tk::Rect    world_rect;
+        std::string mime_type; // sender-declared mime; empty when unknown
     };
     std::optional<FileHit> file_hit_at(tk::Point world) const;
 

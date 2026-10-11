@@ -6,6 +6,7 @@
 #include "icons.h"
 #include "shortcut_registry.h"
 
+#include "tk/host.h"
 #include "tk/i18n.h"
 
 #include <algorithm>
@@ -45,6 +46,7 @@ MediaViewerOverlay::MediaViewerOverlay()
                                               tk::Button::Variant::Icon);
     prev->set_accessible_name(tk::tr("Previous"));
     prev_btn_ = add_child(std::move(prev));
+    add_tooltip_(prev_btn_);
     prev_btn_->set_on_click([this] { step_(-1); });
     prev_btn_->set_fill_override(
         tk::Button::FillOverride{kNavPillRest, kNavPillHover, kNavPillPressed});
@@ -54,6 +56,7 @@ MediaViewerOverlay::MediaViewerOverlay()
                                               tk::Button::Variant::Icon);
     next->set_accessible_name(tk::tr("Next"));
     next_btn_ = add_child(std::move(next));
+    add_tooltip_(next_btn_);
     next_btn_->set_on_click([this] { step_(1); });
     next_btn_->set_fill_override(
         tk::Button::FillOverride{kNavPillRest, kNavPillHover, kNavPillPressed});
@@ -368,7 +371,9 @@ tk::Button* MediaViewerOverlay::host_add_icon_button()
 {
     auto btn = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
                                              tk::Button::Variant::Icon);
-    return add_child(std::move(btn));
+    auto* raw = add_child(std::move(btn));
+    add_tooltip_(raw);
+    return raw;
 }
 
 tk::Button* MediaViewerOverlay::host_add_label_button(std::string label)
@@ -606,6 +611,20 @@ void MediaViewerOverlay::fire_copy_()
     {
         on_copy(items_[index_]);
     }
+}
+
+void MediaViewerOverlay::fire_external_()
+{
+    if (on_open_external && index_ < items_.size())
+    {
+        on_open_external(items_[index_]);
+    }
+}
+
+bool MediaViewerOverlay::wants_external_button_() const
+{
+    return on_open_external && index_ < items_.size() &&
+           !items_[index_].event_id.empty();
 }
 
 bool MediaViewerOverlay::wants_copy_button_() const

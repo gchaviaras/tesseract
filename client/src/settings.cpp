@@ -66,6 +66,7 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
     notification_image_previews  = j.value("notification_image_previews",  true);
     notification_hide_content    = j.value("notification_hide_content",    false);
     prefetch_full_media          = j.value("prefetch_full_media",          false);
+    open_media_externally        = j.value("open_media_externally",        false);
     send_maps_urls_as_location  = j.value("send_maps_urls_as_location",   false);
     send_bundled_url_previews    = j.value("send_bundled_url_previews",    true);
     fetch_url_previews_directly  = j.value("fetch_url_previews_directly",  false);
@@ -223,6 +224,10 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
         message_layout = (layout == "bubbles") ? MessageLayout::Bubbles
                          : (layout == "irc")   ? MessageLayout::Irc
                                                : MessageLayout::Classic;
+        room_list_density =
+            j.value("room_list_density", std::string("normal")) == "compact"
+                ? RoomListDensity::Compact
+                : RoomListDensity::Normal;
     }
 
     } // try (field reading)
@@ -265,6 +270,7 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         {"notification_image_previews",      notification_image_previews},
         {"notification_hide_content",        notification_hide_content},
         {"prefetch_full_media",              prefetch_full_media},
+        {"open_media_externally",            open_media_externally},
         {"send_maps_urls_as_location",       send_maps_urls_as_location},
         {"send_bundled_url_previews",        send_bundled_url_previews},
         {"fetch_url_previews_directly",      fetch_url_previews_directly},
@@ -310,6 +316,8 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         message_layout == MessageLayout::Bubbles ? "bubbles"
         : message_layout == MessageLayout::Irc   ? "irc"
                                                  : "classic";
+    j["room_list_density"] =
+        room_list_density == RoomListDensity::Compact ? "compact" : "normal";
 
     {
         const char* mode_str =

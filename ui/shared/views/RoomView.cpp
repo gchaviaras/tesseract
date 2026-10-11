@@ -1576,6 +1576,15 @@ void RoomView::set_confirm_provider(ConfirmProvider p)
     confirm_provider_ = std::move(p);
 }
 
+bool RoomView::request_confirm(ConfirmDialog::Options opts,
+                               std::function<void()> on_confirm)
+{
+    if (!confirm_provider_)
+        return false;
+    confirm_provider_(std::move(opts), std::move(on_confirm));
+    return true;
+}
+
 void RoomView::set_export_history_provider(ExportHistoryProvider p)
 {
     export_history_provider_ = std::move(p);

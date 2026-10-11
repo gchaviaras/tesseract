@@ -91,6 +91,15 @@ MediaSection::MediaSection()
         if (on_prefetch_changed) on_prefetch_changed(v);
     };
 
+    auto external_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Open images, videos and files in the system's default viewer"),
+        s.open_media_externally);
+    open_external_cb_ = group->add_widget(std::move(external_cb));
+    open_external_cb_->on_change = [this](bool v)
+    {
+        if (on_open_external_changed) on_open_external_changed(v);
+    };
+
     // ── Capture devices ─────────────────────────────────────────────────────
     auto* dev_group = add_group(tk::tr("Capture devices"));
     auto* dev_form  = dev_group->add_widget(tk::create_widget<tk::FormLayout>(this));

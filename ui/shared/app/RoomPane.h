@@ -629,6 +629,17 @@ public:
     // writes the item's original bytes there via save_source_to_file_().
     // Call after attach(). The only per-shell part is `pick`.
     void install_media_viewer_save_(MediaSavePathPicker pick);
+    // Asks the user where to save `item` (via the picker installed above) and
+    // writes it there. No-op before install_media_viewer_save_().
+    void prompt_save_(const views::MediaViewerItem& item);
+    // Downloads `item`, checks its name / declared type / contents agree, and
+    // opens it in the OS default app (or asks the user first when they don't;
+    // executables are never opened). Shared by the viewer's "open in default
+    // app" button, the file card, and the "open media externally" setting.
+    void open_media_externally_(const views::MediaViewerItem& item);
+    MediaSavePathPicker save_picker_;
+    // Set while open_media_externally_ falls back to the in-app viewer.
+    bool force_in_app_viewer_ = false;
     // Fetch source_json bytes and hand them to on_ready.
     void fetch_source_bytes_(
         const std::string& src,

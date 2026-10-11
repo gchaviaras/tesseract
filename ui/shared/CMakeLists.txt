@@ -118,6 +118,8 @@ set(_tk_sources
     tk/searchable_picker.cpp
     tk/controls.h
     tk/controls.cpp
+    tk/radio.h
+    tk/radio.cpp
     tk/group_box.h
     tk/group_box.cpp
     tk/badge_flow.h
@@ -378,6 +380,8 @@ set(_tk_sources
     views/settings/AppearanceSection.cpp
     views/settings/MessageLayoutPreview.h
     views/settings/MessageLayoutPreview.cpp
+    views/settings/RoomListPreview.h
+    views/settings/RoomListPreview.cpp
     views/settings/LanguageSection.h
     views/settings/LanguageSection.cpp
     views/settings/NetworkSection.h

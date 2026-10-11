@@ -1742,61 +1742,6 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
         // room_media_view()->on_image_clicked/on_video_clicked to the same
         // handlers it installs on room_view()).
 
-        room_view_->on_file_clicked =
-            [this](const tesseract::views::MessageListView::FileHit& hit)
-        {
-            std::string suggested =
-                hit.file_name.empty() ? "download" : hit.file_name;
-            GtkFileDialog* dlg = gtk_file_dialog_new();
-            gtk_file_dialog_set_title(dlg, tk::tr("Save file").c_str());
-            gtk_file_dialog_set_initial_name(dlg, suggested.c_str());
-            struct FileSaveCtx
-            {
-                MainWindow* self;
-                std::string fetch_tok;
-            };
-            auto* ctx = new FileSaveCtx{this, hit.source ? hit.source->fetch_token() : std::string{}};
-            gtk_file_dialog_save(dlg,
-                GTK_WINDOW(gtk_widget_get_root(main_app_surface_->widget())),
-                nullptr,
-                +[](GObject* dialog_obj, GAsyncResult* res, gpointer p)
-                {
-                    auto* c = static_cast<FileSaveCtx*>(p);
-                    GError* err = nullptr;
-                    GFile* gf = gtk_file_dialog_save_finish(
-                        GTK_FILE_DIALOG(dialog_obj), res, &err);
-                    if (gf)
-                    {
-                        char* cpath = g_file_get_path(gf);
-                        std::string dest(cpath);
-                        g_free(cpath);
-                        g_object_unref(gf);
-                        std::string url = std::move(c->fetch_tok);
-                        if (c->self->client_)
-                        {
-                            auto req_id = c->self->begin_media_req_(0,
-                                [dest](std::vector<uint8_t> bytes) mutable
-                                {
-                                    if (!bytes.empty())
-                                    {
-                                        std::ofstream f(dest, std::ios::binary);
-                                        f.write(
-                                            reinterpret_cast<const char*>(
-                                                bytes.data()),
-                                            static_cast<std::streamsize>(
-                                                bytes.size()));
-                                    }
-                                });
-                            c->self->client_->fetch_source_bytes_async(req_id, url);
-                        }
-                    }
-                    if (err) g_error_free(err);
-                    delete c;
-                },
-                ctx);
-            g_object_unref(dlg);
-        };
-
         room_view_->set_video_player_factory(
             [this]()
             {

@@ -134,19 +134,6 @@ RoomWindow::RoomWindow(MainWindow* parent_shell, const std::string& room_id)
     };
     media_viewer_->on_request_fullscreen = set_fs;
 
-    room_view_->on_file_clicked =
-        [this](const tesseract::views::MessageListView::FileHit& hit)
-    {
-        std::string suggested = hit.file_name.empty() ? "download" : hit.file_name;
-        QString path = QFileDialog::getSaveFileName(
-            this, QString::fromStdString(tk::tr("Save file")), QString::fromStdString(suggested),
-            QString::fromStdString(tk::tr("All files (*.*)")));
-        if (path.isEmpty())
-            return;
-        std::string url = hit.source ? hit.source->fetch_token() : std::string{};
-        pane_->save_source_to_file_(std::move(url), path.toStdString());
-    };
-
     // ── Surface-bound providers (need this shell's own surface_) ─────────
     if (auto player = surface_->host().make_audio_player())
     {

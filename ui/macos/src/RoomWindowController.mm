@@ -249,22 +249,6 @@ MacRoomWindow::MacRoomWindow(tesseract::ShellBase* shell,
     };
     media_viewer_->on_request_fullscreen = set_fs;
 
-    room_view_->on_file_clicked =
-        [this](const tesseract::views::MessageListView::FileHit& hit)
-    {
-        NSSavePanel* panel = [NSSavePanel savePanel];
-        NSString* suggested = hit.file_name.empty()
-            ? @"download"
-            : [NSString stringWithUTF8String:hit.file_name.c_str()];
-        panel.nameFieldStringValue = suggested;
-        NSModalResponse resp = [panel runModal];
-        if (resp != NSModalResponseOK || !panel.URL)
-            return;
-        std::string url = hit.source ? hit.source->fetch_token() : std::string{};
-        pane_->save_source_to_file_(std::move(url),
-                              std::string(panel.URL.path.UTF8String));
-    };
-
     // ── Surface-bound providers (need this shell's own surface_) ─────────────
     if (auto player = surface_->host().make_audio_player())
     {

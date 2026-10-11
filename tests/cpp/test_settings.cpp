@@ -768,3 +768,40 @@ TEST_CASE("Settings show_sender_status_in_timeline missing key defaults to false
 
     fs::remove_all(dir);
 }
+
+TEST_CASE("Settings fonts default to empty and round-trip by name")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("fonts");
+
+    auto& s = tesseract::Settings::instance();
+    s.load_from_disk(dir); // no file → defaults
+    CHECK(s.fonts == tesseract::Settings::FontPrefs{});
+
+    s.fonts.base_pt = 14;
+    s.fonts.ui_family = "Inter";
+    s.fonts.mono_family = "Fira Code";
+    s.fonts.categories[3].delta_pt = 2;
+    s.fonts.categories[3].family = "Georgia";
+    s.save_to_disk(dir);
+
+    const auto saved = s.fonts;
+    s.fonts = {};
+    s.load_from_disk(dir);
+    CHECK(s.fonts == saved);
+
+    // A file predating the key loads as defaults, not stale values.
+    write_file(dir / "app_settings.json", "{}");
+    s.load_from_disk(dir);
+    CHECK(s.fonts == tesseract::Settings::FontPrefs{});
+
+    // Out-of-range values are clamped on load.
+    write_file(dir / "app_settings.json",
+               R"({"fonts":{"base_pt":999,"categories":{"headings":{"delta":-50}}}})");
+    s.load_from_disk(dir);
+    CHECK(s.fonts.base_pt == 36);
+    CHECK(s.fonts.categories[3].delta_pt == -6);
+
+    s.fonts = {};
+    fs::remove_all(dir);
+}

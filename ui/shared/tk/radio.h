@@ -88,7 +88,7 @@ private:
     bool hovered_ = false;
     bool pressed_ = false;
     bool natural_width_ = false;
-    std::unique_ptr<TextLayout> label_layout_;
+    CachedTextLayout label_layout_;
     float cached_max_w_ = -2.0f;
     Size label_size_{};
 };

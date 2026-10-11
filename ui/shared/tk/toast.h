@@ -39,7 +39,7 @@ public:
 
 private:
     std::string message_;
-    std::unique_ptr<TextLayout> layout_;
+    CachedTextLayout layout_;
     // layout_ is rebuilt only when the message text changes.
     std::string layout_text_cache_;
     // Grow-from-centre entrance reveal, restarted whenever set_message()

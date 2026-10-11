@@ -214,13 +214,13 @@ private:
 
     // Cached layouts — rebuilt lazily inside paint() when the content or
     // surface factory changes.
-    std::unique_ptr<tk::TextLayout> name_layout_;
-    std::unique_ptr<tk::TextLayout> uid_layout_;
+    tk::CachedTextLayout name_layout_;
+    tk::CachedTextLayout uid_layout_;
     // Status line: the emoji is drawn a touch larger than the text run, so
     // it gets its own layout beside status_layout_ (the text, or the whole
     // placeholder string).
-    std::unique_ptr<tk::TextLayout> status_emoji_layout_;
-    std::unique_ptr<tk::TextLayout> status_layout_;
+    tk::CachedTextLayout status_emoji_layout_;
+    tk::CachedTextLayout status_layout_;
 
     // World-space bounds of the drawn status line, cached each paint() for
     // on_pointer_up() hit-testing. Empty when the status line isn't shown.

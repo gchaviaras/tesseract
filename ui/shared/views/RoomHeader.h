@@ -33,6 +33,13 @@ class RoomHeader : public tk::Widget, public tk::WidgetRowAccessibility
 public:
     static constexpr float kHeight = 60.0f;
 
+    // The topic layout is rebuilt only when dirty or the width changes.
+    void on_fonts_changed() override
+    {
+        topic_dirty_ = true;
+        topic_natural_w_ = -1.0f;
+    }
+
     RoomHeader();
     ~RoomHeader() override = default;
 
@@ -292,7 +299,7 @@ private:
     tk::Rect topic_rect_{};
     std::string avatar_url_;
 
-    std::unique_ptr<tk::TextLayout> topic_layout_;
+    tk::CachedTextLayout topic_layout_;
 
     std::function<const tk::Image*(const std::string&)> avatar_provider_;
 };

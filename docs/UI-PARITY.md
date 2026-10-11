@@ -79,7 +79,7 @@ via `WM_GETMINMAXINFO` (Win32), `NSWindow.minSize` (macOS),
   the sender has no avatar URL. `kMsgAvatarGap` (8 px) between avatar
   and the body column.
 - **Sender name** — `kMsgSenderNameHeight` (16 px) row above the body,
-  font size `Settings::font_sender_name` (11 pt). Consecutive messages
+  font size `FontRole::SenderName` (base−1 pt). Consecutive messages
   from the same sender within `Settings::message_group_interval_s`
   (300 s) collapse into continuation rows that suppress the repeated
   avatar and sender name. This grouping lives in shared code
@@ -100,7 +100,7 @@ via `WM_GETMINMAXINFO` (Win32), `NSWindow.minSize` (macOS),
 - **Reaction chips** — `Settings::reaction_chip_height` (28 px) tall
   pill chips with `Settings::reaction_chip_gap` (6 px) between, in a row
   beneath the body.
-- **Timestamp** — `HH:MM`, `Settings::font_timestamp` (9 pt), muted text
+- **Timestamp** — `HH:MM`, `FontRole::Timestamp` (base−3 pt), muted text
   colour, right-aligned in a `kMsgTimestampHeight` (14 px) footer
   beneath the row.
 
@@ -115,12 +115,12 @@ via `WM_GETMINMAXINFO` (Win32), `NSWindow.minSize` (macOS),
 
 - **Avatar** — `kRoomAvatarSize` (36 px) circle, initials fallback when
   the room has no avatar URL.
-- **Name** — `Settings::font_sidebar_name` (12 pt), bold, single line,
+- **Name** — `FontRole::SidebarName` (base pt), bold, single line,
   ellipsised.
-- **Last-message preview** — `Settings::font_sidebar_preview` (10 pt),
+- **Last-message preview** — `FontRole::SidebarPreview` (base−2 pt),
   secondary text colour, single line, ellipsised.
 - **Unread badge** — pill on the right showing the unread notification
-  count, accent background, white text, `Settings::font_unread_badge`
+  count, accent background, white text, `FontRole::UnreadBadge`
   (10 pt), `kUnreadBadgeMinWidth` × `kUnreadBadgeHeight` (20 × 18 px).
   Hidden when count is zero.
 - Row height: `kRoomRowHeight` (48 px).

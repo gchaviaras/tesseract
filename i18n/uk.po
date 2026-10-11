@@ -6924,3 +6924,67 @@ msgstr "невідомий тип"
 #: ui/shared/app/RoomPane.cpp
 msgid "“{0}” isn't an image, video, audio or text file ({1}). Files like this can contain macros or run code in the app that opens them. Only open it if you trust the sender."
 msgstr "«{0}» не є зображенням, відео, аудіо чи текстовим файлом ({1}). Такі файли можуть містити макроси або запускати код у програмі, яка їх відкриває. Відкривайте його, лише якщо довіряєте відправнику."
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Adjust individual text types"
+msgstr "Налаштувати окремі типи тексту"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Base size"
+msgstr "Базовий розмір"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Buttons"
+msgstr "Кнопки"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Font"
+msgstr "Шрифт"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Fonts"
+msgstr "Шрифти"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Headings"
+msgstr "Заголовки"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Monospace font"
+msgstr "Моноширинний шрифт"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Reset to defaults"
+msgstr "Скинути до типових"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Secondary text"
+msgstr "Другорядний текст"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Secondary text and hints"
+msgstr "Другорядний текст і підказки"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "System ({0} pt)"
+msgstr "Система ({0} pt)"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "The quick brown fox jumps over the lazy dog."
+msgstr "Чуєш їх, доцю, га? Кумедна ж ти, прощайся без ґольфів!"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "{0} pt"
+msgstr "{0} pt"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Decrease {0}"
+msgstr "Зменшити: {0}"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Increase {0}"
+msgstr "Збільшити: {0}"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Reset {0}"
+msgstr "Скинути: {0}"

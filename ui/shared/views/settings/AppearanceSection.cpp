@@ -1,5 +1,6 @@
 #include "AppearanceSection.h"
 
+#include "FontsEditor.h"
 #include "MessageLayoutPreview.h"
 #include "RoomListPreview.h"
 #include "SettingsGroup.h"
@@ -268,6 +269,16 @@ AppearanceSection::AppearanceSection()
     }
 
     {
+        auto* fonts_group = add_group(tk::tr("Fonts"));
+        auto editor = tk::create_widget<FontsEditor>(this);
+        editor->on_changed = [this](const tesseract::Settings::FontPrefs& p)
+        {
+            if (on_font_prefs_changed) on_font_prefs_changed(p);
+        };
+        fonts_editor_ = fonts_group->add_widget(std::move(editor));
+    }
+
+    {
         const auto& s = tesseract::Settings::instance();
         auto* rl_group = add_group(tk::tr("Room list"));
 
@@ -376,6 +387,12 @@ void AppearanceSection::set_inactive_period(int days)
 void AppearanceSection::set_autoscroll_unread(bool enabled)
 {
     if (autoscroll_cb_) autoscroll_cb_->set_checked(enabled);
+}
+
+void AppearanceSection::set_fonts(const tesseract::Settings::FontPrefs& prefs)
+{
+    if (fonts_editor_)
+        fonts_editor_->set_prefs(prefs);
 }
 
 void AppearanceSection::set_message_layout(tesseract::Settings::MessageLayout layout)

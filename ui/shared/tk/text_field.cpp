@@ -86,10 +86,17 @@ void TextField::ensure_native_()
     if (pending_.password)    field_->set_password(*pending_.password);
     if (pending_.compact)     field_->set_compact(*pending_.compact);
     if (pending_.text_color)  field_->set_text_color(*pending_.text_color);
+    field_->set_font_role(role());
     if (pending_.enabled)     field_->set_enabled(*pending_.enabled);
     if (pending_.on_changed)  field_->set_on_changed(std::move(pending_.on_changed));
     if (pending_.on_submit)   field_->set_on_submit(std::move(pending_.on_submit));
     pending_ = PendingState{};
+}
+
+void TextField::on_fonts_changed()
+{
+    if (field_) field_->set_font_role(role());
+    Label::on_fonts_changed();
 }
 
 void TextField::set_text(std::string text)

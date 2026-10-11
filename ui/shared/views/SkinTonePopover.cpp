@@ -85,7 +85,7 @@ protected:
 
 private:
     std::string glyph_;
-    std::unique_ptr<tk::TextLayout> layout_;
+    tk::CachedTextLayout layout_;
     bool current_ = false;
 };
 

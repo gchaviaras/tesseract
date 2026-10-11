@@ -538,6 +538,7 @@ private:
         navigate_to_room(room_id);
     }
     void apply_theme_ui_(const tk::Theme& t) override;
+    void apply_fonts_ui_() override;
     tk::ThemeMode os_color_scheme_() const override;
     std::optional<tk::Color> os_accent_color_() const override;
     void post_to_ui_(std::function<void()> fn) override;

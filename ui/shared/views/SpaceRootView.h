@@ -154,10 +154,10 @@ private:
     tk::Rect last_left_rect_{-1, -1, -1, -1};
     tk::Rect last_right_rect_{-1, -1, -1, -1};
 
-    mutable std::unique_ptr<tk::TextLayout> name_layout_;
-    mutable std::unique_ptr<tk::TextLayout> alias_layout_;
-    mutable std::unique_ptr<tk::TextLayout> meta_layout_;
-    mutable std::unique_ptr<tk::TextLayout> hint_layout_;
+    mutable tk::CachedTextLayout name_layout_;
+    mutable tk::CachedTextLayout alias_layout_;
+    mutable tk::CachedTextLayout meta_layout_;
+    mutable tk::CachedTextLayout hint_layout_;
     mutable tk::CanvasFactory* factory_seen_ = nullptr;
 
     static constexpr float kAvatarD = 72.0f;
@@ -183,6 +183,7 @@ private:
     static constexpr float kLeftColumnW = 280.0f;      // candidate list width
 
     void reset_layouts_();
+    void on_fonts_changed() override { factory_seen_ = nullptr; }
     std::string child_count_label_() const;
 };
 

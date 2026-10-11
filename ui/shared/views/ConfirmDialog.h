@@ -105,8 +105,8 @@ private:
     tk::Rect card_rect_{};
 
     // Cached layouts so we don't rebuild every paint.
-    std::unique_ptr<tk::TextLayout> title_layout_;
-    std::unique_ptr<tk::TextLayout> body_layout_;
+    tk::CachedTextLayout title_layout_;
+    tk::CachedTextLayout body_layout_;
 
     bool press_backdrop_ = false;
 

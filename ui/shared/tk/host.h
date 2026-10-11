@@ -95,6 +95,11 @@ public:
     // rely on the system theme for text colour don't need to implement it.
     virtual void set_text_color(Color) {}
 
+    // Font role (family, size, weight) for the field's text, so a user font
+    // change reaches single-line fields too. Re-callable. Default no-op:
+    // backends that haven't implemented it keep the system control font.
+    virtual void set_font_role(FontRole) {}
+
     // What a screen reader should call this control (the owning tk widget's
     // accessible label, else its placeholder) — for a backend whose native
     // control is exposed to the platform AT directly (Win32's BetterText).
@@ -747,6 +752,15 @@ public:
     // not just its visual content. Runs synchronously (immediately, on this
     // call) — see mark_needs_relayout() below for a coalesced alternative.
     virtual void request_relayout() = 0;
+
+    // Installed font families (sorted, de-duplicated by name) for the font
+    // pickers in Settings. May be slow the first time, so backends cache it.
+    // Default empty: a host with no font enumeration shows only "System
+    // default".
+    virtual std::vector<FontFamilyInfo> list_font_families()
+    {
+        return {};
+    }
 
     // Coalesced alternative to request_relayout(): safe to call from a tight
     // loop or repeatedly within one UI-thread turn (e.g. Widget's own

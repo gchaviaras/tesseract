@@ -69,7 +69,7 @@ struct SectionLayout
 // A cached, shaped body layout for one message, keyed by event_id.
 struct LinkLayout
 {
-    std::unique_ptr<tk::TextLayout> layout;
+    tk::CachedTextLayout layout;
     tk::Point origin{};              // world-space draw origin
     std::string plain;               // concatenated span text for clipboard
     std::vector<tk::TextSpan> spans; // rich spans for background drawing

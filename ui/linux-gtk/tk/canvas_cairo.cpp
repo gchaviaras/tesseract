@@ -65,8 +65,13 @@ PangoFontDescription* desc_for(FontRole role, bool monospace = false)
     PangoFontDescription* d = pango_font_description_new();
     // "monospace" is Pango's generic fixed-pitch family alias — the same one
     // the <tt> markup used by `TextSpan::code` resolves to.
-    pango_font_description_set_family(d,
-                                     monospace ? "monospace" : sf.family.c_str());
+    // User families (font_config.h) win over the GTK theme font; the mono one
+    // replaces Pango's generic "monospace" alias.
+    std::string user_family(monospace ? font_mono_family()
+                                      : font_role_family(role));
+    pango_font_description_set_family(
+        d, !user_family.empty() ? user_family.c_str()
+                                : (monospace ? "monospace" : sf.family.c_str()));
     pango_font_description_set_size(d, font_role_pt(role, sf.pt) * PANGO_SCALE);
     pango_font_description_set_weight(d, font_role_is_semibold(role)
                                             ? PANGO_WEIGHT_SEMIBOLD
@@ -1313,7 +1318,19 @@ public:
             }
             if (sp.code)
             {
-                t = "<tt>" + t + "</tt>";
+                const std::string_view mono = font_mono_family();
+                if (mono.empty())
+                {
+                    t = "<tt>" + t + "</tt>";
+                }
+                else
+                {
+                    gchar* fam = g_markup_escape_text(
+                        mono.data(), static_cast<gssize>(mono.size()));
+                    t = "<span font_family=\"" + std::string(fam) + "\">" + t +
+                        "</span>";
+                    g_free(fam);
+                }
             }
             if (sp.strikethrough)
             {

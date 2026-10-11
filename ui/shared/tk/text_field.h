@@ -36,6 +36,7 @@ protected:
     TK_WIDGET_FACTORY_FRIEND(TextField)
 
 public:
+    void on_fonts_changed() override;
     void set_text(std::string text);
     std::string text() const;
     void set_placeholder(std::string text);

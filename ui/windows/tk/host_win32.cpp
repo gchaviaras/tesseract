@@ -51,6 +51,7 @@
 #include <thread>
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -608,14 +609,20 @@ BetterTextTheme bt_theme_from_palette(const tk::Palette& p, tk::Color background
     return theme;
 }
 
-void bt_apply_default_font(HWND hwnd)
+void bt_apply_default_font(HWND hwnd, tk::FontRole role = tk::FontRole::Body)
 {
+    // A user family (font_config.h) replaces the Segoe default. The style
+    // struct only borrows the pointer for the call.
+    const std::string_view user = tk::font_role_family(role);
+    const std::wstring family =
+        user.empty() ? std::wstring(L"Segoe UI Variable Text")
+                     : utf8_to_wide(std::string(user));
     BetterTextTextStyle style{};
-    style.font_family = L"Segoe UI Variable Text";
+    style.font_family = family.c_str();
     style.font_size = static_cast<float>(
-        tk::font_role_pt(tk::FontRole::Body, tk::d2d::win32_system_base_pt())) *
+        tk::font_role_pt(role, tk::d2d::win32_system_base_pt())) *
         (96.f / 72.f);
-    style.font_weight = FW_REGULAR;
+    style.font_weight = tk::font_role_is_semibold(role) ? FW_SEMIBOLD : FW_REGULAR;
     style.italic = FALSE;
     style.underline = FALSE;
     BetterTextSetDefaultTextStyle(hwnd, &style);
@@ -1049,6 +1056,22 @@ public:
         if (hwnd_)
         {
             ShowWindow(hwnd_, visible ? SW_SHOW : SW_HIDE);
+        }
+    }
+    void set_font_role(tk::FontRole role) override
+    {
+        if (!hwnd_)
+            return;
+        bt_apply_default_font(hwnd_, role);
+        BetterTextTextStyle base{};
+        if (BetterTextGetDefaultTextStyle(hwnd_, &base))
+        {
+            // Restyle the existing text too, not just text typed from now on.
+            const int64_t len =
+                static_cast<int64_t>(utf8_to_wide(text()).size());
+            suppress_changed_ = true;
+            BetterTextSetTextStyle(hwnd_, 0, len, &base);
+            suppress_changed_ = false;
         }
     }
     void set_enabled(bool enabled) override
@@ -1790,6 +1813,19 @@ public:
     }
     bool visible() const override { return visible_; }
 
+    void set_font_role(tk::FontRole role) override
+    {
+        if (!hwnd_)
+            return;
+        bt_apply_default_font(hwnd_, role);
+        // reformat_emoji_runs() restyles the whole text with the default style
+        // and re-sizes the emoji runs — the same pass every edit already runs,
+        // so image runs (mention pills, emoticons) are untouched. Forced past
+        // its "no emoji" early-out so plain text picks up the new font too.
+        had_emoji_runs_ = true;
+        reformat_emoji_runs();
+        refresh_height();
+    }
     void set_enabled(bool enabled) override
     {
         if (hwnd_)
@@ -3410,6 +3446,50 @@ public:
           factory_(d2d::make_factory(backend_singleton()))
     {
         watch_ctrl_release_();
+    }
+
+    std::vector<FontFamilyInfo> list_font_families() override
+    {
+        static const std::vector<FontFamilyInfo> cached = []
+        {
+            struct Collect
+            {
+                std::map<std::string, bool> fams;
+            } c;
+            HDC hdc = GetDC(nullptr);
+            LOGFONTW lf{};
+            lf.lfCharSet = DEFAULT_CHARSET;
+            EnumFontFamiliesExW(
+                hdc, &lf,
+                [](const LOGFONTW* f, const TEXTMETRICW*, DWORD, LPARAM lp) -> int
+                {
+                    if (f->lfFaceName[0] == L'@') // vertical-writing duplicates
+                        return 1;
+                    auto& fams = reinterpret_cast<Collect*>(lp)->fams;
+                    const int n = WideCharToMultiByte(
+                        CP_UTF8, 0, f->lfFaceName, -1, nullptr, 0, nullptr, nullptr);
+                    if (n <= 1)
+                        return 1;
+                    std::string name(static_cast<size_t>(n - 1), '\0');
+                    WideCharToMultiByte(CP_UTF8, 0, f->lfFaceName, -1, name.data(),
+                                        n, nullptr, nullptr);
+                    // The classic GDI quirk: FIXED_PITCH in the pitch bits means
+                    // fixed width; the enum's TMPF_FIXED_PITCH flag means the
+                    // opposite, so test the LOGFONT's pitch field instead.
+                    const bool mono =
+                        (f->lfPitchAndFamily & 0x3) == FIXED_PITCH;
+                    bool& slot = fams[name];
+                    slot = slot || mono;
+                    return 1;
+                },
+                reinterpret_cast<LPARAM>(&c), 0);
+            ReleaseDC(nullptr, hdc);
+            std::vector<FontFamilyInfo> out;
+            for (auto& [name, mono] : c.fams)
+                out.push_back({name, mono});
+            return out; // std::map keeps them sorted
+        }();
+        return cached;
     }
 
     // Unlike LoadCursorW's process-shared handles, ibeam_cache_built_'s

@@ -14,7 +14,7 @@ void TabView::set_items(std::vector<std::string> labels)
     items_.reserve(labels.size());
     for (auto& label : labels)
     {
-        items_.push_back(Item{std::move(label), {}, nullptr});
+        items_.push_back(Item{std::move(label), {}, {}});
     }
     const int n = static_cast<int>(items_.size());
     if (n == 0)

@@ -118,6 +118,10 @@ HBRUSH brush(COLORREF);
 // Call from WM_DPICHANGED before any repaint.
 void on_dpi_changed();
 
+// Drop all cached HFONTs so they are rebuilt from the user's font config
+// (tk::font_config) on next use. The caller re-sends WM_SETFONT afterwards.
+void on_fonts_changed();
+
 // Release all cached HFONT/HBRUSH; called from MainWindow::~MainWindow.
 void shutdown();
 

@@ -33,9 +33,9 @@ public:
 
 private:
     std::unique_ptr<tk::Image> icon_;
-    std::unique_ptr<tk::TextLayout> name_layout_;
-    std::unique_ptr<tk::TextLayout> version_layout_;
-    std::unique_ptr<tk::TextLayout> status_layout_;
+    tk::CachedTextLayout name_layout_;
+    tk::CachedTextLayout version_layout_;
+    tk::CachedTextLayout status_layout_;
     std::string status_text_;
     std::chrono::steady_clock::time_point spinner_start_{};
 

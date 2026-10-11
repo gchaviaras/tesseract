@@ -375,7 +375,7 @@ public:
 
 private:
     static constexpr float kHeight = MainAppWidget::kOfflineBannerH;
-    std::unique_ptr<tk::TextLayout> layout_;
+    tk::CachedTextLayout layout_;
 };
 
 class MainAppWidget::ChatContentStack : public tk::Stack

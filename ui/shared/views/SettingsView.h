@@ -395,6 +395,9 @@ public:
     std::function<void(tesseract::Settings::MessageLayout)> on_message_layout_changed;
     std::function<void(tesseract::Settings::RoomListDensity)> on_room_list_density_changed;
 
+    // Fired after every font edit in Appearance → Fonts with the new prefs.
+    std::function<void(const tesseract::Settings::FontPrefs&)> on_font_prefs_changed;
+
     // Fired when the user toggles "Launch Tesseract when you log in".
     std::function<void(bool)> on_launch_at_login_changed;
 

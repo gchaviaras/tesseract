@@ -6016,3 +6016,67 @@ msgstr "type inconnu"
 #: ui/shared/app/RoomPane.cpp
 msgid "“{0}” isn't an image, video, audio or text file ({1}). Files like this can contain macros or run code in the app that opens them. Only open it if you trust the sender."
 msgstr "« {0} » n'est pas une image, une vidéo, un fichier audio ou texte ({1}). Ce type de fichier peut contenir des macros ou exécuter du code dans l'application qui l'ouvre. Ne l'ouvrez que si vous faites confiance à l'expéditeur."
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Adjust individual text types"
+msgstr "Ajuster chaque type de texte"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Base size"
+msgstr "Taille de base"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Buttons"
+msgstr "Boutons"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Font"
+msgstr "Police"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Fonts"
+msgstr "Polices"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Headings"
+msgstr "Titres"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Monospace font"
+msgstr "Police à chasse fixe"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Reset to defaults"
+msgstr "Réinitialiser par défaut"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Secondary text"
+msgstr "Texte secondaire"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Secondary text and hints"
+msgstr "Texte secondaire et indications"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "System ({0} pt)"
+msgstr "Système ({0} pt)"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "The quick brown fox jumps over the lazy dog."
+msgstr "Portez ce vieux whisky au juge blond qui fume."
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "{0} pt"
+msgstr "{0} pt"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Decrease {0}"
+msgstr "Diminuer {0}"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Increase {0}"
+msgstr "Augmenter {0}"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Reset {0}"
+msgstr "Réinitialiser {0}"

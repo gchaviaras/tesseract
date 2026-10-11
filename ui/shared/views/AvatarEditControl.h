@@ -119,7 +119,7 @@ private:
     bool busy_     = false;
     bool hovered_  = false;
     std::string error_;
-    mutable std::unique_ptr<tk::TextLayout> error_layout_;
+    mutable tk::CachedTextLayout error_layout_;
 };
 
 // Mixin for a widget hosting an AvatarEditControl: exposes the control's

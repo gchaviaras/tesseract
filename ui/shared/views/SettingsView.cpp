@@ -143,6 +143,11 @@ SettingsView::SettingsView()
     {
         if (on_room_list_density_changed) on_room_list_density_changed(d);
     };
+    appearance->on_font_prefs_changed =
+        [this](const tesseract::Settings::FontPrefs& p)
+    {
+        if (on_font_prefs_changed) on_font_prefs_changed(p);
+    };
     appearance_ = appearance.get();
 
     // Notifications section.
@@ -848,6 +853,7 @@ void SettingsView::load_persisted_settings()
     set_show_sender_status_pref(s.show_sender_status_in_timeline);
     set_animate_avatars_pref(s.animate_avatars);
     set_message_layout_pref(s.message_layout);
+    if (appearance_) appearance_->set_fonts(s.fonts);
     set_msc2545_legacy_compat_pref(s.msc2545_legacy_compat);
     set_developer_mode_pref(s.developer_mode);
 #ifdef TESSERACT_CRASH_HANDLER_ENABLED

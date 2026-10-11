@@ -125,7 +125,7 @@ public:
 
 private:
     std::string label_text_;
-    std::unique_ptr<tk::TextLayout> label_layout_;
+    tk::CachedTextLayout label_layout_;
     bool cell_hovered_ = false;
 };
 
@@ -199,7 +199,7 @@ public:
 
 private:
     std::string value_text_{"—"};
-    std::unique_ptr<tk::TextLayout> value_layout_;
+    tk::CachedTextLayout value_layout_;
     bool cell_hovered_ = false;
 };
 

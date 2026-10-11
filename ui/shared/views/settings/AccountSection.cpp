@@ -122,9 +122,9 @@ private:
 
     tk::TextField* name_field_ = nullptr; // owned via add_child when host provided
 
-    std::unique_ptr<tk::TextLayout> name_layout_;
-    std::unique_ptr<tk::TextLayout> uid_layout_;
-    std::unique_ptr<tk::TextLayout> name_error_layout_;
+    tk::CachedTextLayout name_layout_;
+    tk::CachedTextLayout uid_layout_;
+    tk::CachedTextLayout name_error_layout_;
 };
 
 AccountSection::Content::Content()
@@ -509,11 +509,11 @@ private:
     StatusEditor* status_editor_ = nullptr; // MSC4426; owned via add_child
 
     // Cached text layouts — reset when content changes
-    mutable std::unique_ptr<tk::TextLayout> pronouns_label_layout_;
-    mutable std::unique_ptr<tk::TextLayout> status_label_layout_;
-    mutable std::unique_ptr<tk::TextLayout> label_layout_[2];
-    mutable std::unique_ptr<tk::TextLayout> value_layout_[2];
-    mutable std::unique_ptr<tk::TextLayout> error_layout_[2];
+    mutable tk::CachedTextLayout pronouns_label_layout_;
+    mutable tk::CachedTextLayout status_label_layout_;
+    mutable tk::CachedTextLayout label_layout_[2];
+    mutable tk::CachedTextLayout value_layout_[2];
+    mutable tk::CachedTextLayout error_layout_[2];
 
     static constexpr const char* kLabels[2] = {tk::N_("Timezone"), tk::N_("Bio")};
 };

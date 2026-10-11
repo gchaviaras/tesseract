@@ -1,4 +1,5 @@
 #include "app/Launch.h"
+#include "app/font_prefs.h"
 
 #include "tk/i18n.h"
 
@@ -150,6 +151,8 @@ LaunchPlan prepare_launch(const std::vector<std::string>& args,
     // Load persisted settings before set_locale so the saved language
     // preference is available when choosing the locale.
     Settings::instance().load_from_disk(config_dir());
+    // Before any surface is built: fonts are read when each is first created.
+    apply_font_prefs(Settings::instance().fonts);
     install_crash_handler(Settings::instance().crash_reporting_enabled);
     // Before any account restores: the mode is read when each client is built.
     Client::set_exclude_insecure_devices(Settings::instance().exclude_insecure_devices);

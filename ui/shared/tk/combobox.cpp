@@ -1,4 +1,5 @@
 #include "combobox.h"
+#include "chevron.h"
 
 #include "access_tree.h"
 #include "host.h"
@@ -48,6 +49,8 @@ public:
         selected_value_ = std::move(selected_value);
         layouts_.clear();
     }
+
+    void on_fonts_changed() override { layouts_.clear(); }
 
     void set_hovered(int row)
     {
@@ -413,21 +416,11 @@ void ComboBox::paint_before_children(PaintCtx& ctx)
                              enabled_ ? pal.text_primary : pal.text_muted);
     }
 
-    // Chevron ▾
-    {
-        TextStyle st{};
-        st.role      = FontRole::Small;
-        st.max_width = kChevronW;
-        auto cv = ctx.factory.build_text("\xE2\x96\xBE", st); // U+25BE ▾
-        if (cv)
-        {
-            const Size  sz  = cv->measure();
-            const float cvx = button_rect_.x + button_rect_.w - kChevronW +
-                              (kChevronW - sz.w) * 0.5f;
-            const float cvy = button_rect_.y + (button_rect_.h - sz.h) * 0.5f;
-            ctx.canvas.draw_text(*cv, {cvx, cvy}, pal.text_secondary);
-        }
-    }
+    // Chevron
+    draw_chevron_down(ctx.canvas,
+                      {button_rect_.x + button_rect_.w - kChevronW,
+                       button_rect_.y, kChevronW, button_rect_.h},
+                      enabled_ ? pal.text_secondary : pal.text_muted);
 
     // Register as the active popup purely for Host's "click outside
     // dismisses" behavior (see this class's doc comment) — the dropdown

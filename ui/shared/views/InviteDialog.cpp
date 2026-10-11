@@ -148,7 +148,7 @@ public:
             break;
         }
         float right_w = kInviteCheckPadR + kCheckCircleSize + kInviteCheckPadR;
-        std::unique_ptr<tk::TextLayout> status_lo;
+        tk::CachedTextLayout status_lo;
         if (!status.empty())
         {
             tk::TextStyle ss{};
@@ -168,7 +168,7 @@ public:
         ns.trim      = tk::TextTrim::Ellipsis;
         ns.max_width = text_w;
         auto name_lo = ctx.factory.build_text(name, ns);
-        std::unique_ptr<tk::TextLayout> id_lo;
+        tk::CachedTextLayout id_lo;
         if (!row.user.display_name.empty())
         {
             tk::TextStyle is{};

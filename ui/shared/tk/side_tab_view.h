@@ -110,7 +110,7 @@ private:
     struct Tab
     {
         std::string label;
-        std::unique_ptr<TextLayout> layout; // built lazily in measure/paint
+        CachedTextLayout layout; // built lazily in measure/paint
         float layout_max_w = -2.0f;
         Widget* content = nullptr; // borrowed; owned via add_child
         bool hovered = false;

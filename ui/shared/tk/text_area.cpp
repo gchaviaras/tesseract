@@ -77,7 +77,8 @@ void TextArea::ensure_native_()
     if (pending_.placeholder)      area_->set_placeholder(std::move(*pending_.placeholder));
     area_->set_accessible_name(accessible_name_.empty() ? placeholder_ : accessible_name_);
     if (pending_.text_color)       area_->set_text_color(*pending_.text_color);
-    if (pending_.font_role)        area_->set_font_role(*pending_.font_role);
+    // Every area follows the user's font config; Body unless a role was set.
+    area_->set_font_role(font_role_.value_or(FontRole::Body));
     if (pending_.enabled)          area_->set_enabled(*pending_.enabled);
     if (pending_.on_changed)       area_->set_on_changed(std::move(pending_.on_changed));
     if (pending_.on_submit)        area_->set_on_submit(std::move(pending_.on_submit));
@@ -136,10 +137,16 @@ void TextArea::set_text_color(Color c)
     else pending_.text_color = c;
 }
 
+void TextArea::on_fonts_changed()
+{
+    if (area_) area_->set_font_role(font_role_.value_or(FontRole::Body));
+    Label::on_fonts_changed();
+}
+
 void TextArea::set_font_role(FontRole role)
 {
+    font_role_ = role;
     if (area_) area_->set_font_role(role);
-    else pending_.font_role = role;
 }
 
 bool TextArea::visible() const

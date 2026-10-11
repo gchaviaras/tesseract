@@ -136,7 +136,7 @@ private:
 
     std::string topic_;
     std::vector<tk::TextSpan> spans_;
-    std::unique_ptr<tk::TextLayout> layout_;
+    tk::CachedTextLayout layout_;
     float cached_w_ = -1.0f;
     tk::Color colour_{};
     std::string press_url_;

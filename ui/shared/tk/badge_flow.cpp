@@ -45,6 +45,12 @@ std::string BadgeFlow::access_name() const
     return out;
 }
 
+void BadgeFlow::on_fonts_changed()
+{
+    layouts_.clear();
+    flow_width_ = -1.0f;
+}
+
 Size BadgeFlow::flow_(CanvasFactory& factory, float width)
 {
     if (flow_width_ == width && layouts_.size() == badges_.size())

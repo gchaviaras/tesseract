@@ -1,6 +1,15 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-11**. 3202 C++ + 1013 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-11**. 3217 C++ + 1013 Rust tests.
+
+> **Configurable fonts (2026-10-11).**
+> Settings → Appearance → Fonts: a base size that scales every text role
+> together, UI and monospace families, per-category size and family overrides
+> (Messages, Secondary text, Room list, Headings, Buttons, Emoji), a live
+> preview and Reset to defaults, applied live to every window. Font pickers are
+> searchable dropdowns listing every installed family in a scrollable,
+> draggable-scrollbar popup; settings sections now have a rule under their
+> titles. Qt6 + GTK4 build, ctest 3217/3217.
 
 > **Compact room list and external media viewers (2026-10-11).**
 > Settings → Appearance → Layout offers Normal / Compact room rows (name only,

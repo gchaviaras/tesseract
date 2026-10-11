@@ -130,7 +130,7 @@ private:
 
     std::string description_;
     std::vector<std::string> keys_;
-    std::unique_ptr<tk::TextLayout> desc_layout_;
+    tk::CachedTextLayout desc_layout_;
     std::vector<std::unique_ptr<tk::TextLayout>> chip_layouts_;
     float laid_out_w_ = -1.0f;
     float chips_w_ = 0.0f;

@@ -48,10 +48,8 @@ TEST_CASE("RoomListView compact density shrinks rows and toggles back",
     st.relayout_paint(view, bounds);
     const float compact_h = view.room_row_rect_for_test("!a:x").h;
     CHECK(compact_h < normal_h);
-    // avatar (~1.75 x font) + 2 x 4px padding
-    const float expected =
-        std::round(tesseract::Settings::instance().font_sidebar_name * 1.75f) +
-        8.0f;
+    // avatar (21px at the default fonts) + 2 x 4px padding
+    const float expected = 21.0f + 8.0f;
     CHECK(compact_h == expected);
 
     view.set_compact(false);

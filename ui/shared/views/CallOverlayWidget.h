@@ -40,6 +40,9 @@ namespace tesseract::views
 class CallOverlayWidget : public tk::Widget
 {
 public:
+    // The duration layout is rebuilt only when its string changes.
+    void on_fonts_changed() override { cached_duration_str_.clear(); }
+
     enum class Mode
     {
         Docked,
@@ -224,7 +227,7 @@ private:
 
     // ── Duration label cache ──────────────────────────────────────────────────
     std::string                     cached_duration_str_;
-    std::unique_ptr<tk::TextLayout> cached_duration_layout_;
+    tk::CachedTextLayout cached_duration_layout_;
 
     // ── Cached layout rects ───────────────────────────────────────────────────
     tk::Rect controls_rect_{};

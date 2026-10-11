@@ -102,11 +102,11 @@ private:
     bool        editable_ = false;
     bool        busy_     = false;
     std::string error_;
-    mutable std::unique_ptr<tk::TextLayout> error_layout_;
+    mutable tk::CachedTextLayout error_layout_;
     // The chosen emoji is hand-drawn over the button at emoji-cell size — the
     // button's own label render is tiny body-font text. Empty emoji falls back
     // to the button's own Lucide icon.
-    mutable std::unique_ptr<tk::TextLayout> emoji_glyph_layout_;
+    mutable tk::CachedTextLayout emoji_glyph_layout_;
 };
 
 } // namespace tesseract::views

@@ -99,6 +99,71 @@ private:
     std::function<std::optional<Rect>()> occlusion_query_;
 };
 
+// GTK theme body size in pt (gtk-font-name) — mirrors gtk_system_font() in
+// canvas_cairo.cpp so native controls match FontRole rendering.
+static int gtk_theme_base_pt()
+{
+    int base_pt = 11;
+    if (GtkSettings* settings = gtk_settings_get_default())
+    {
+        gchar* font_name = nullptr;
+        g_object_get(settings, "gtk-font-name", &font_name, nullptr);
+        if (font_name)
+        {
+            if (PangoFontDescription* d =
+                    pango_font_description_from_string(font_name))
+            {
+                const int sz = pango_font_description_get_size(d);
+                if (sz > 0) base_pt = std::max(sz / PANGO_SCALE, 8);
+                pango_font_description_free(d);
+            }
+            g_free(font_name);
+        }
+    }
+    return base_pt;
+}
+
+// Replaces (creating on first use) a per-instance display-wide CSS provider
+// scoped by `css_class` so `role`'s size, family and weight reach one native
+// control. A bare selector would hit every control; gtk_widget_get_style_context
+// (per-widget scoping) is deprecated in GTK4.
+static void apply_role_font_css(GtkCssProvider*& provider,
+                                const std::string& css_class, FontRole role)
+{
+    std::string rule = "." + css_class + " { font-size: " +
+                       std::to_string(font_role_pt(role, gtk_theme_base_pt())) +
+                       "pt;";
+    const std::string_view family = font_role_family(role);
+    if (!family.empty())
+    {
+        gchar* esc = g_strescape(std::string(family).c_str(), nullptr);
+        rule += " font-family: \"" + std::string(esc) + "\";";
+        g_free(esc);
+    }
+    rule += font_role_is_semibold(role) ? " font-weight: 600; }"
+                                        : " font-weight: 400; }";
+    if (!provider)
+    {
+        provider = gtk_css_provider_new();
+        if (GdkDisplay* dpy = gdk_display_get_default())
+            gtk_style_context_add_provider_for_display(
+                dpy, GTK_STYLE_PROVIDER(provider),
+                GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    }
+    gtk_css_provider_load_from_string(provider, rule.c_str());
+}
+
+static void release_role_font_css(GtkCssProvider*& provider)
+{
+    if (!provider)
+        return;
+    if (GdkDisplay* dpy = gdk_display_get_default())
+        gtk_style_context_remove_provider_for_display(
+            dpy, GTK_STYLE_PROVIDER(provider));
+    g_object_unref(provider);
+    provider = nullptr;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 //  GtkNativeTextField — GtkEntry-backed NativeTextField overlay
 // ─────────────────────────────────────────────────────────────────────────
@@ -209,7 +274,22 @@ public:
         {
             g_signal_handler_disconnect(entry_, activate_id_);
         }
+        release_role_font_css(font_css_);
         gtk_overlay_remove_overlay(GTK_OVERLAY(overlay_), entry_);
+    }
+
+    void set_font_role(FontRole role) override
+    {
+        if (!entry_)
+            return;
+        if (font_css_class_.empty())
+        {
+            font_css_class_ = "tesseract-native-textfield-" +
+                              std::to_string(reinterpret_cast<std::uintptr_t>(this));
+            gtk_widget_add_css_class(entry_, font_css_class_.c_str());
+        }
+        apply_role_font_css(font_css_, font_css_class_, role);
+        refresh_image();
     }
 
     void set_rect(Rect r) override
@@ -695,6 +775,8 @@ private:
     GtkWidget* overlay_;
     GtkWidget* canvas_ = nullptr;
     GtkWidget* entry_ = nullptr;
+    GtkCssProvider* font_css_ = nullptr;
+    std::string font_css_class_; // unique per instance; see set_font_role
     guint blink_timer_id_ = 0;
     gulong changed_id_ = 0;
     gulong activate_id_ = 0;
@@ -862,16 +944,7 @@ public:
             gtk_overlay_remove_overlay(GTK_OVERLAY(overlay_),
                                        placeholder_label_);
         }
-        if (font_css_)
-        {
-            if (GdkDisplay* dpy = gdk_display_get_default())
-            {
-                gtk_style_context_remove_provider_for_display(
-                    dpy, GTK_STYLE_PROVIDER(font_css_));
-            }
-            g_object_unref(font_css_);
-            font_css_ = nullptr;
-        }
+        release_role_font_css(font_css_);
     }
 
     void set_rect(Rect r) override
@@ -1718,46 +1791,8 @@ public:
 
     void set_font_role(FontRole role) override
     {
-        // Read base pt from the GTK system font — mirrors gtk_system_font() in
-        // canvas_cairo.cpp so the NativeTextArea size matches FontRole rendering.
-        int base_pt = 11;
-        GtkSettings* settings = gtk_settings_get_default();
-        if (settings)
-        {
-            gchar* font_name = nullptr;
-            g_object_get(settings, "gtk-font-name", &font_name, nullptr);
-            if (font_name)
-            {
-                PangoFontDescription* d =
-                    pango_font_description_from_string(font_name);
-                g_free(font_name);
-                if (d)
-                {
-                    const int sz = pango_font_description_get_size(d);
-                    if (sz > 0) base_pt = std::max(sz / PANGO_SCALE, 8);
-                    pango_font_description_free(d);
-                }
-            }
-        }
-        const int pt = font_role_pt(role, base_pt);
-        // Scoped by font_css_class_ (unique per instance) rather than a bare
-        // "textview" selector, since gtk_widget_get_style_context() /
-        // gtk_style_context_add_provider() — which used to give this
-        // per-widget scoping for free — are deprecated in GTK4.
-        char buf[128];
-        std::snprintf(buf, sizeof(buf), ".%s { font-size: %dpt; }",
-                      font_css_class_.c_str(), pt);
-        if (!font_css_)
-        {
-            font_css_ = gtk_css_provider_new();
-            if (GdkDisplay* dpy = gdk_display_get_default())
-            {
-                gtk_style_context_add_provider_for_display(
-                    dpy, GTK_STYLE_PROVIDER(font_css_),
-                    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-            }
-        }
-        gtk_css_provider_load_from_string(font_css_, buf);
+        const int base_pt = gtk_theme_base_pt();
+        apply_role_font_css(font_css_, font_css_class_, role);
 
         // Match the canvas's emoji-run size (canvas_cairo build_rich_text) so
         // a composed emoji is the same size in the input as in a message row —
@@ -2661,6 +2696,27 @@ public:
     void set_anim_cache(const tk::AnimImageCache* cache)
     {
         anim_cache_ = cache;
+    }
+
+    std::vector<FontFamilyInfo> list_font_families() override
+    {
+        static const std::vector<FontFamilyInfo> cached = []
+        {
+            std::vector<FontFamilyInfo> out;
+            PangoFontFamily** fams = nullptr;
+            int n = 0;
+            pango_font_map_list_families(pango_cairo_font_map_get_default(),
+                                         &fams, &n);
+            for (int i = 0; i < n; ++i)
+                out.push_back({pango_font_family_get_name(fams[i]),
+                               pango_font_family_is_monospace(fams[i]) != FALSE});
+            g_free(fams);
+            std::sort(out.begin(), out.end(),
+                      [](const FontFamilyInfo& a, const FontFamilyInfo& b)
+                      { return a.name < b.name; });
+            return out;
+        }();
+        return cached;
     }
 
     // AnimDamageSink: record the on-screen rect of every animated image drawn

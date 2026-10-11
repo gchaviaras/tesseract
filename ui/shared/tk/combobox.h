@@ -130,7 +130,7 @@ private:
 
     // Button label layout only now — dropdown row layouts live in
     // DropdownList, inside the popup's own surface.
-    std::unique_ptr<TextLayout> button_label_layout_;
+    CachedTextLayout button_label_layout_;
 
     std::unique_ptr<PopupSurfaceHandle> popup_;
     DropdownList* dropdown_ = nullptr; // borrowed — owned by popup_ once set

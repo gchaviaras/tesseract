@@ -476,7 +476,7 @@ private:
 
     tk::Rect new_pack_name_field_rect_{};
 
-    std::unique_ptr<tk::TextLayout> new_pack_label_layout_;
+    tk::CachedTextLayout new_pack_label_layout_;
 
     static constexpr float kPadX     = 24.0f;
     static constexpr float kPadY     = 16.0f;

@@ -100,8 +100,8 @@ private:
     float scroll_offset_ = 0.0f;
     float content_height_ = 0.0f;
 
-    std::unique_ptr<tk::TextLayout> title_layout_;
-    std::unique_ptr<tk::TextLayout> empty_layout_; // "No pending requests" placeholder
+    tk::CachedTextLayout title_layout_;
+    tk::CachedTextLayout empty_layout_; // "No pending requests" placeholder
 
     bool press_backdrop_ = false;
 

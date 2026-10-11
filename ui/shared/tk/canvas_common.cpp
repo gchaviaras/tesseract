@@ -7,12 +7,59 @@
 // backend's translation unit.
 
 #include "emoji_segmentation.h"
+#include "font_config.h"
 
 #include <cstddef>
 #include <vector>
 
 namespace tk
 {
+
+int font_role_pt(FontRole role, int base_pt)
+{
+    note_system_base_pt(base_pt);
+    return font_role_pt_with(font_config(), role, base_pt);
+}
+
+int font_role_pt_with(const FontConfig& cfg, FontRole role, int base_pt)
+{
+    const int base = cfg.base_pt ? cfg.base_pt : base_pt;
+    const int cat_delta = cfg.delta_pt[static_cast<std::size_t>(font_category(role))];
+    // Emoji inside message text follows the Messages size as well as its own
+    // delta, so emoji grow with the text around them.
+    const int msg_delta =
+        cfg.delta_pt[static_cast<std::size_t>(FontCategory::Messages)];
+    const int inline_base = base + msg_delta + cat_delta;
+
+    int offset = 0;
+    switch (role)
+    {
+    case FontRole::Small:          offset = -4; break;
+    case FontRole::Caption:        offset = -2; break;
+    case FontRole::Body:           offset =  0; break;
+    case FontRole::SenderName:     offset = -1; break;
+    case FontRole::Timestamp:      offset = -3; break;
+    case FontRole::SidebarName:    offset =  0; break;
+    case FontRole::SidebarPreview: offset = -2; break;
+    case FontRole::UnreadBadge:    offset = -2; break;
+    case FontRole::Title:          offset = +2; break;
+    case FontRole::UiSemibold:     offset = -2; break;
+    case FontRole::BigEmoji:       return std::max(inline_base * 2, 6);
+    // Same as Body for now — the emoji-vs-text visual size is being tuned via
+    // the Linux backend comp constants (kQtEmojiStockComp / kGtkEmojiStockComp)
+    // and the shared kEmojiSizeAdjust knob; keeping this at the plain body
+    // size lets that be compared straight across all platforms.
+    case FontRole::InlineEmoji:    return std::max(inline_base, 6);
+    case FontRole::InlineCustomEmoji:
+        return std::max((inline_base + 1) * 5 / 4, 6);
+    case FontRole::EmojiPickerCell:offset = +9; break;
+    case FontRole::ReactionEmoji:  offset = +2; break;
+    case FontRole::ReactionText:
+        return std::max(font_role_pt_with(cfg, FontRole::ReactionEmoji, base_pt) * 4 / 5, 6);
+    }
+    return std::max(base + offset + cat_delta, 6);
+}
+
 
 bool font_role_is_semibold(FontRole role)
 {

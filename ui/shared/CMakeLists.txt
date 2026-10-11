@@ -33,6 +33,8 @@ set(_tk_sources
     app/AccountManager.cpp
     app/Launch.h
     app/Launch.cpp
+    app/font_prefs.h
+    app/font_prefs.cpp
     app/EventHandlerBase.h
     app/EventHandlerBase.cpp
     app/RoomWindowBase.h
@@ -80,6 +82,8 @@ set(_tk_sources
     tk/video.h
     tk/canvas.h
     tk/canvas_common.cpp
+    tk/font_config.h
+    tk/font_config.cpp
     tk/emoji_segmentation.h
     tk/emoji_segmentation.cpp
     tk/image_sniff.h
@@ -368,6 +372,10 @@ set(_tk_sources
     views/settings/AccountSection.cpp
     views/settings/LanguagePicker.h
     views/settings/LanguagePicker.cpp
+    views/settings/FontFamilyPicker.h
+    views/settings/FontFamilyPicker.cpp
+    views/settings/FontsEditor.h
+    views/settings/FontsEditor.cpp
     views/settings/TimezonePicker.h
     views/settings/TimezonePicker.cpp
     views/settings/PronounsEditor.h

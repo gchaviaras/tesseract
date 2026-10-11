@@ -172,9 +172,16 @@ std::wstring initials_upper(std::string_view name, AvatarText text)
 // "Segoe UI" via the system font fallback chain that DWrite already
 // applies when the requested family is unavailable.
 
+// The fixed-pitch family: the user's, else Cascadia Code.
+static std::wstring mono_family_name()
+{
+    const std::string_view user = font_mono_family();
+    return user.empty() ? std::wstring(L"Cascadia Code") : utf8_to_wide(user);
+}
+
 struct FontDesc
 {
-    const wchar_t* family;
+    std::wstring family;
     float size_pt;
     DWRITE_FONT_WEIGHT weight;
 };
@@ -185,11 +192,14 @@ static FontDesc desc_for(FontRole r)
     const DWRITE_FONT_WEIGHT weight = font_role_is_semibold(r)
                                           ? DWRITE_FONT_WEIGHT_SEMI_BOLD
                                           : DWRITE_FONT_WEIGHT_REGULAR;
-    // Title uses the Display optical face; all other roles use Text.
-    const wchar_t* family = (r == FontRole::Title)
-                                ? L"Segoe UI Variable Display"
-                                : L"Segoe UI Variable Text";
-    return {family, pt, weight};
+    // A user family (font_config.h) replaces the Segoe optical-size pair;
+    // otherwise Title uses the Display optical face and all other roles Text.
+    const std::string_view user = font_role_family(r);
+    std::wstring family =
+        !user.empty()            ? utf8_to_wide(user)
+        : (r == FontRole::Title) ? L"Segoe UI Variable Display"
+                                 : L"Segoe UI Variable Text";
+    return {std::move(family), pt, weight};
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -226,6 +236,7 @@ struct Backend::Impl
     bool device_lost_ = false;
 
     std::unordered_map<int, ComPtr<IDWriteTextFormat>> text_formats;
+    std::uint64_t text_format_generation = 0;
     // Same roles, forced onto the fixed-pitch family for TextStyle::monospace
     // (the IRC message layout) — mirrors the per-span `code` face swap.
     std::unordered_map<int, ComPtr<IDWriteTextFormat>> mono_text_formats;
@@ -261,6 +272,14 @@ struct Backend::Impl
 
     IDWriteTextFormat* text_format_for(FontRole role, bool monospace = false)
     {
+        // Cached formats are keyed by role only, so drop them all when the
+        // user's font config moves.
+        if (text_format_generation != font_config_generation())
+        {
+            text_formats.clear();
+            mono_text_formats.clear();
+            text_format_generation = font_config_generation();
+        }
         auto& cache = monospace ? mono_text_formats : text_formats;
         auto it = cache.find(static_cast<int>(role));
         if (it != cache.end())
@@ -274,7 +293,8 @@ struct Backend::Impl
         // so multiply by 96/72 = 4/3 to convert.
         float size_dip = fd.size_pt * (96.0f / 72.0f);
         HRESULT hr = dwrite->CreateTextFormat(
-            monospace ? L"Cascadia Code" : fd.family, nullptr, fd.weight,
+            monospace ? mono_family_name().c_str() : fd.family.c_str(), nullptr,
+            fd.weight,
             DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size_dip, L"",
             tf.GetAddressOf());
         check(hr, "CreateTextFormat");
@@ -2807,7 +2827,7 @@ public:
             }
             if (sp.code)
             {
-                layout->SetFontFamilyName(L"Cascadia Code", tr);
+                layout->SetFontFamilyName(mono_family_name().c_str(), tr);
             }
             if (sp.strikethrough)
             {

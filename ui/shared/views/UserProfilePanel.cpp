@@ -329,8 +329,8 @@ float UserProfilePanel::layout_ext_rows_(tk::LayoutCtx& lc, float max_val_w)
     struct ExtRow {
         std::string                      label;
         std::string                      value;
-        std::unique_ptr<tk::TextLayout>& label_layout;
-        std::unique_ptr<tk::TextLayout>& value_layout;
+        tk::CachedTextLayout& label_layout;
+        tk::CachedTextLayout& value_layout;
     };
     ExtRow ext_rows[] = {
         { tk::tr("Pronouns"), pronouns_display,      pronouns_label_layout_, pronouns_value_layout_ },
@@ -496,8 +496,8 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
     const float ext_max_val_w = kCardW - kPadX * 2.0f - kExtLabelW - kExtFieldGap;
 
     struct ExtRowPaint {
-        std::unique_ptr<tk::TextLayout>& label_layout;
-        std::unique_ptr<tk::TextLayout>& value_layout;
+        tk::CachedTextLayout& label_layout;
+        tk::CachedTextLayout& value_layout;
     };
     ExtRowPaint ext_rows[] = {
         { pronouns_label_layout_, pronouns_value_layout_ },

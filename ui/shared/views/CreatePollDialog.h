@@ -120,7 +120,7 @@ private:
                    ? tk::tr("Create poll")
                    : tk::trf(tk::tr("Create poll in {0}"), {room_name_});
     }
-    std::unique_ptr<tk::TextLayout> title_layout_;
+    tk::CachedTextLayout title_layout_;
     float title_w_ = -1.0f;
     bool press_backdrop_ = false;
 

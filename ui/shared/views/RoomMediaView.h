@@ -168,7 +168,7 @@ private:
         // shaping is not cheap enough to redo that often). Cleared
         // implicitly whenever rebuild_rows_() replaces the whole rows_
         // vector with freshly-default-constructed rows.
-        std::unique_ptr<tk::TextLayout> label_layout;
+        tk::CachedTextLayout label_layout;
     };
 
     // Re-bucket `items_` into `rows_` (month headers + fixed-width strips of
@@ -187,10 +187,10 @@ private:
     bool is_open_ = false;
     std::string room_id_;
     std::string room_name_;
-    std::unique_ptr<tk::TextLayout> title_layout_;
+    tk::CachedTextLayout title_layout_;
     // The video-cell "▶" badge glyph is identical content on every cell —
     // built once and reused, rather than re-shaped per cell per paint.
-    std::unique_ptr<tk::TextLayout> video_badge_glyph_;
+    tk::CachedTextLayout video_badge_glyph_;
 
     // Flat, oldest-first, filtered to Image/Video.
     std::vector<MessageRowData> items_;

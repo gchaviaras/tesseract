@@ -30,6 +30,9 @@ namespace tesseract::views
 class DatePickerView : public tk::Widget, public tk::WidgetRowAccessibility
 {
 public:
+    // Drops every layout (they're rebuilt when the factory looks new).
+    void on_fonts_changed() override { last_factory_ = nullptr; }
+
     // Popup card dimensions (logical px).
     static constexpr float kWidth  = 256.0f;
     static constexpr float kHeight = 296.0f;
@@ -189,8 +192,8 @@ private:
     std::array<std::unique_ptr<tk::TextLayout>, kLayoutSlots> layouts_{};
     // Month name ("June") and year ("2025") drawn separately in the header so
     // wheel-over-year can navigate years independently of wheel-over-month.
-    std::unique_ptr<tk::TextLayout> month_layout_;
-    std::unique_ptr<tk::TextLayout> year_layout_;
+    tk::CachedTextLayout month_layout_;
+    tk::CachedTextLayout year_layout_;
     // World-space rects of the month / year text (updated each
     // paint_overlay call).
     tk::Rect month_label_rect_{};
@@ -198,8 +201,8 @@ private:
     // Per-cell day-number labels — rebuilt by rebuild_cells_() on navigation.
     std::array<std::unique_ptr<tk::TextLayout>, kRows * kCols> cell_layouts_{};
     // Navigation glyph layouts (‹ / ›) — built once, reused.
-    std::unique_ptr<tk::TextLayout> nav_prev_layout_;
-    std::unique_ptr<tk::TextLayout> nav_next_layout_;
+    tk::CachedTextLayout nav_prev_layout_;
+    tk::CachedTextLayout nav_next_layout_;
     // Fractional wheel-scroll accumulator for stepped month/year navigation.
     float wheel_accum_ = 0.0f;
 

@@ -124,6 +124,8 @@ public:
     tk::Button* sticker_button() const { return sticker_btn_; }
 
     void on_theme_changed(const tk::Theme& t) override;
+    // The attachment chip layouts are rebuilt only when their key changes.
+    void on_fonts_changed() override { file_layout_key_.clear(); }
 
     /// Host bridge: integration code pushes the latest natural height of
     /// the NativeTextArea here on every `on_height_changed` callback.
@@ -532,12 +534,12 @@ private:
     static std::string make_filename(const std::string& mime);
     // Cached layout used to paint the filename (and a second line for size or
     // duration) inside file/video/audio chips. Rebuilt lazily in arrange().
-    std::unique_ptr<tk::TextLayout> file_name_layout_;
-    std::unique_ptr<tk::TextLayout> file_size_layout_;
+    tk::CachedTextLayout file_name_layout_;
+    tk::CachedTextLayout file_size_layout_;
     std::string file_layout_key_; // cache key to detect staleness
 
     // ▶ badge painted over the video thumbnail in the preview band.
-    std::unique_ptr<tk::TextLayout> video_badge_layout_;
+    tk::CachedTextLayout video_badge_layout_;
 
     tk::Button* emoji_btn_ = nullptr;   // borrowed (owned by Widget tree)
     tk::Button* sticker_btn_ = nullptr; // borrowed
@@ -633,7 +635,7 @@ private:
     tk::Rect mic_btn_rect_{};
     tk::Rect waveform_strip_rect_{};
     tk::Rect voice_cancel_rect_{};
-    std::unique_ptr<tk::TextLayout> elapsed_layout_;
+    tk::CachedTextLayout elapsed_layout_;
     std::uint64_t recording_start_ms_ = 0;
 };
 

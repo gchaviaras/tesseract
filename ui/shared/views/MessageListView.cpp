@@ -824,8 +824,17 @@ constexpr float kRowHoverFadeMs = 110.0f;
 constexpr float kChipPopMs = 160.0f;
 constexpr float kMsgListAvatarSize = tesseract::visual::kMsgAvatarSize;      // 32
 constexpr float kMsgListAvatarGap = tesseract::visual::kMsgAvatarGap;        // 8
-constexpr float kSenderH = tesseract::visual::kMsgSenderNameHeight;   // 16
-constexpr float kTimestampH = tesseract::visual::kMsgTimestampHeight; // 14
+constexpr float kSenderHBase = tesseract::visual::kMsgSenderNameHeight;   // 16
+constexpr float kTimestampHBase = tesseract::visual::kMsgTimestampHeight; // 14
+// Sized for the default fonts; grown in step with the user's font config.
+inline float sender_h()
+{
+    return std::ceil(kSenderHBase * tk::font_height_scale(tk::FontRole::SenderName));
+}
+inline float timestamp_h()
+{
+    return std::ceil(kTimestampHBase * tk::font_height_scale(tk::FontRole::Timestamp));
+}
 constexpr float kMsgListChipPadX = 10.0f;
 
 // Block-level rendering constants.
@@ -851,8 +860,10 @@ constexpr float kReceiptOverflowGap = 4.0f; // gap between "+N" pill and discs
 // read-receipt "+N" overflow pill below — see kActionToolbarCellSide.
 inline float chip_h()
 {
-    return static_cast<float>(
-        tesseract::Settings::instance().reaction_chip_height);
+    // Sized for the default fonts; grown with the user's reaction emoji size.
+    return std::ceil(
+        static_cast<float>(tesseract::Settings::instance().reaction_chip_height) *
+        tk::font_height_scale(tk::FontRole::ReactionEmoji));
 }
 inline float chip_gap()
 {
@@ -2257,7 +2268,7 @@ public:
                         ctx.theme.palette.avatar_initials_text);
 
             // Sender name — vertically centered against the avatar disc.
-            float sender_y = bounds.y + kMsgListPadY + (kMsgListAvatarSize - kSenderH) * 0.5f;
+            float sender_y = bounds.y + kMsgListPadY + (kMsgListAvatarSize - sender_h()) * 0.5f;
             auto& rc = cache_for(index);
             const std::string skey =
                 m.sender_name.empty() ? m.sender : m.sender_name;
@@ -2306,12 +2317,12 @@ public:
                 const tk::Size nsz = rc.sender->measure();
                 const tk::Size esz = rc.status->measure();
                 const float ex = sender_x + nsz.w + kStatusGap;
-                const float ey = sender_y + (kSenderH - esz.h) * 0.5f;
+                const float ey = sender_y + (sender_h() - esz.h) * 0.5f;
                 ctx.canvas.draw_text(*rc.status, {ex, ey},
                                      sender_color(m.sender, ctx.theme.mode));
                 if (rp.hovered)
                     owner_.hovered_row_geom_.status_emoji =
-                        tk::Rect{ex, sender_y, esz.w, kSenderH};
+                        tk::Rect{ex, sender_y, esz.w, sender_h()};
             }
         }
     }
@@ -10855,14 +10866,14 @@ bool MessageListView::on_pointer_down(tk::Point local)
                                                    kMsgListAvatarSize, kMsgListAvatarSize};
                         const float col_x = rb.x + kMsgListPadX + kMsgListAvatarSize + kMsgListAvatarGap;
                         const float sender_y =
-                            rb.y + kMsgListPadY + (kMsgListAvatarSize - kSenderH) * 0.5f;
+                            rb.y + kMsgListPadY + (kMsgListAvatarSize - sender_h()) * 0.5f;
                         // Cap at 200px so clicking message body doesn't trigger.
                         const float name_max_w =
                             std::min(200.0f, std::max(0.0f, rb.w - kMsgListPadX -
                                                                  kMsgListAvatarSize -
                                                                  kMsgListAvatarGap - kMsgListPadX));
                         const tk::Rect sender_name_rect{col_x, sender_y,
-                                                        name_max_w, kSenderH};
+                                                        name_max_w, sender_h()};
                         if (rect_contains(avatar_rect, world) ||
                             (sender_name_rect.w > 0 &&
                              rect_contains(sender_name_rect, world)))

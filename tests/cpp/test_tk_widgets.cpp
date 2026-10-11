@@ -1040,17 +1040,6 @@ TEST_CASE("Settings has expected defaults", "[settings]")
 {
     const auto& s = tesseract::Settings::instance();
 
-    // Font sizes — one per tk::FontRole.
-    CHECK(s.font_small == 8);
-    CHECK(s.font_body == 12);
-    CHECK(s.font_sender_name == 11);
-    CHECK(s.font_timestamp == 9);
-    CHECK(s.font_sidebar_name == 12);
-    CHECK(s.font_sidebar_preview == 10);
-    CHECK(s.font_unread_badge == 10);
-    CHECK(s.font_title == 14);
-    CHECK(s.font_ui_semibold == 10);
-
     // Reaction chip.
     CHECK(s.reaction_chip_height == 24);
     CHECK(s.reaction_chip_gap == 6);

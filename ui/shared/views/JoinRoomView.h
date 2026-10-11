@@ -224,7 +224,7 @@ private:
     float preview_info_h_ = 0.0f;
 
     // Cached topic layout and its source spans (rebuilt on set_preview).
-    std::unique_ptr<tk::TextLayout>    topic_layout_;
+    tk::CachedTextLayout    topic_layout_;
     std::vector<tk::TextSpan>          topic_spans_;
     // Keyboard stand-in for the preview topic's links (placed in paint(),
     // where topic_rect_ is computed).

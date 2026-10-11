@@ -82,10 +82,10 @@ private:
     tk::Button* block_btn_   = nullptr; // only shown in DM variant
 
     // Cached text layouts (rebuilt lazily in paint when invite changes).
-    mutable std::unique_ptr<tk::TextLayout> name_layout_;
-    mutable std::unique_ptr<tk::TextLayout> secondary_layout_;  // @uid or topic
-    mutable std::unique_ptr<tk::TextLayout> invited_by_layout_; // group variant only
-    mutable std::unique_ptr<tk::TextLayout> reason_layout_;     // shown when non-empty
+    mutable tk::CachedTextLayout name_layout_;
+    mutable tk::CachedTextLayout secondary_layout_;  // @uid or topic
+    mutable tk::CachedTextLayout invited_by_layout_; // group variant only
+    mutable tk::CachedTextLayout reason_layout_;     // shown when non-empty
 
     // Layout constants
     static constexpr float kMinW       = 320.0f;

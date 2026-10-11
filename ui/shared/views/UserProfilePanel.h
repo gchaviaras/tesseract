@@ -136,22 +136,22 @@ private:
     tk::KeyboardTarget* avatar_target_ = nullptr;
 
     // Cached text layouts (rebuilt lazily in paint)
-    std::unique_ptr<tk::TextLayout> name_layout_;
-    std::unique_ptr<tk::TextLayout> uid_layout_;
+    tk::CachedTextLayout name_layout_;
+    tk::CachedTextLayout uid_layout_;
 
     // Extended profile (MSC4133) — set async after open()
     tesseract::ExtendedProfile ext_profile_;
-    std::unique_ptr<tk::TextLayout> pronouns_label_layout_;
-    std::unique_ptr<tk::TextLayout> pronouns_value_layout_;
-    std::unique_ptr<tk::TextLayout> tz_label_layout_;
-    std::unique_ptr<tk::TextLayout> tz_value_layout_;
-    std::unique_ptr<tk::TextLayout> bio_label_layout_;
-    std::unique_ptr<tk::TextLayout> bio_value_layout_;
+    tk::CachedTextLayout pronouns_label_layout_;
+    tk::CachedTextLayout pronouns_value_layout_;
+    tk::CachedTextLayout tz_label_layout_;
+    tk::CachedTextLayout tz_value_layout_;
+    tk::CachedTextLayout bio_label_layout_;
+    tk::CachedTextLayout bio_value_layout_;
     // MSC4426: m.status (emoji + text) and m.call ("in a call") rows.
-    std::unique_ptr<tk::TextLayout> status_label_layout_;
-    std::unique_ptr<tk::TextLayout> status_value_layout_;
-    std::unique_ptr<tk::TextLayout> call_label_layout_;
-    std::unique_ptr<tk::TextLayout> call_value_layout_;
+    tk::CachedTextLayout status_label_layout_;
+    tk::CachedTextLayout status_value_layout_;
+    tk::CachedTextLayout call_label_layout_;
+    tk::CachedTextLayout call_value_layout_;
 
     bool press_backdrop_ = false;
     bool press_avatar_   = false;

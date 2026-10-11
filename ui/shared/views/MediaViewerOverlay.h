@@ -197,7 +197,7 @@ private:
     void paint_nav_(tk::PaintCtx& ctx);
     std::string counter_text_() const;
     // Cached counter-pill layout, rebuilt only when the text changes.
-    std::unique_ptr<tk::TextLayout> counter_layout_;
+    tk::CachedTextLayout counter_layout_;
     std::string counter_layout_text_;
 
     std::unique_ptr<ImageViewerPage> image_page_;

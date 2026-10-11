@@ -30,6 +30,7 @@ public:
     }
 
     void paint_before_children(tk::PaintCtx& ctx) override;
+    void on_fonts_changed() override;
 
     // Accessibility: a named group so a screen reader announces the section
     // header (which is canvas-painted, not a child Label) and scopes its
@@ -38,8 +39,10 @@ public:
     std::string access_name() const override { return header_text_; }
 
 private:
+    void update_header_padding_();
+
     std::string header_text_;
-    std::unique_ptr<tk::TextLayout> header_layout_;
+    tk::CachedTextLayout header_layout_;
 };
 
 } // namespace tesseract::views

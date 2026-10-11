@@ -108,13 +108,13 @@ TEST_CASE("SearchablePicker set_value shows the display text and name",
     CHECK(s.picker->access_role() == Role::ComboBox);
 }
 
-TEST_CASE("SearchablePicker typing filters, ranks and caps the dropdown",
+TEST_CASE("SearchablePicker typing filters and ranks every match",
           "[tk][searchable_picker]")
 {
     SpStage s;
     s.layout();
     s.type("ap");
-    // prefix matches first (apple), then substrings (grape, pineapple), cap 3.
+    // prefix matches first (apple), then substrings (grape, pineapple).
     CHECK(s.rows() == std::vector<std::string>{"apple", "grape", "pineapple"});
     CHECK(s.picker->access_state().expanded);
     CHECK(s.host.popups_created[0]->visible());
@@ -123,8 +123,10 @@ TEST_CASE("SearchablePicker typing filters, ranks and caps the dropdown",
     CHECK_FALSE(s.picker->access_state().expanded);
     CHECK_FALSE(s.host.popups_created[0]->visible());
 
-    s.type("e"); // empty->tier ranking all contain 'e'? apple, cherry, grape, pineapple
-    CHECK(s.rows().size() == 3);
+    // Every match is kept (the popup shows max_rows and scrolls): apple,
+    // cherry, grape, pineapple all contain 'e'.
+    s.type("e");
+    CHECK(s.rows().size() == 4);
 }
 
 TEST_CASE("SearchablePicker keyboard nav wraps and Enter commits the hovered "
@@ -138,17 +140,18 @@ TEST_CASE("SearchablePicker keyboard nav wraps and Enter commits the hovered "
 
     CHECK_FALSE(s.field().on_popup_nav(NavKey::Down)); // closed: not consumed
     s.type("an"); // banana only
-    s.type("a");  // apple, banana, grape (cap 3) via prefix then substring
-    REQUIRE(s.rows().size() == 3);
+    s.type("a");  // apple, banana, grape, pineapple: prefix then substring
+    REQUIRE(s.rows().size() == 4);
     CHECK(s.field().on_popup_nav(NavKey::Down)); // hovered 1
     CHECK(s.field().on_popup_nav(NavKey::Down)); // 2
+    CHECK(s.field().on_popup_nav(NavKey::Down)); // 3
     CHECK(s.field().on_popup_nav(NavKey::Down)); // wraps to 0
-    CHECK(s.field().on_popup_nav(NavKey::Up));   // wraps to 2
+    CHECK(s.field().on_popup_nav(NavKey::Up));   // wraps to 3
     CHECK_FALSE(s.field().on_popup_nav(NavKey::Left));
     s.field().on_submit();
-    CHECK(committed == "k-grape");
-    CHECK(s.picker->value() == "k-grape");
-    CHECK(s.field().text() == "Fruit grape");
+    CHECK(committed == "k-pineapple");
+    CHECK(s.picker->value() == "k-pineapple");
+    CHECK(s.field().text() == "Fruit pineapple");
     CHECK_FALSE(s.picker->access_state().expanded);
 }
 
@@ -205,7 +208,7 @@ TEST_CASE("SearchablePicker dropdown rows commit via pointer and a11y",
 
     LayoutCtx lc{s.surface->factory(), Theme::light()};
     Size sz = list->measure(lc, {200, 0});
-    CHECK(sz.h == 3 * 24);
+    CHECK(sz.h == 4 * 24); // measure() is the full list; the popup scrolls
     CHECK(list->measure(lc, {0, 0}).w == 200);
     list->arrange(lc, {0, 0, 200, 72});
     PaintCtx pc{s.surface->canvas(), s.surface->factory(), Theme::light()};
@@ -222,6 +225,55 @@ TEST_CASE("SearchablePicker dropdown rows commit via pointer and a11y",
     s.type("a");
     CHECK(rows->access_activate_widget_row(0));
     CHECK(got.size() == 2);
+}
+
+TEST_CASE("SearchablePicker dropdown scrolls by wheel, drag and keyboard",
+          "[tk][searchable_picker]")
+{
+    SpStage s;
+    s.layout();
+    std::vector<std::string> got;
+    s.picker->on_changed = [&](std::string v) { got.push_back(v); };
+
+    // "a" matches 4 entries (apple, banana, grape, pineapple); max_rows is 3,
+    // so the 72px viewport shows 3 of 4 rows.
+    s.type("a");
+    REQUIRE(s.rows().size() == 4);
+    Widget* list = s.host.popups_created[0]->root();
+    LayoutCtx lc{s.surface->factory(), Theme::light()};
+    list->arrange(lc, {0, 0, 200, 72});
+
+    // Wheel: scrolls by the delta, clamped to the 24px of overflow.
+    CHECK(list->on_wheel({10, 10}, 0, 100, false));
+    // Scrolled to the end, row 1 (banana) now sits at the top of the viewport.
+    CHECK(list->on_pointer_down({10, 10}));
+    list->on_pointer_up({10, 10}, true);
+    REQUIRE(got.size() == 1);
+    CHECK(got[0] == "k-banana");
+
+    // Scrollbar: pressing the thumb (right edge) grabs it, never commits a
+    // row, and dragging moves the list.
+    s.type("a");
+    list = s.host.popups_created[0]->root();
+    list->arrange(lc, {0, 0, 200, 72});
+    CHECK(list->on_pointer_down({195, 10}));
+    list->on_pointer_drag({195, 60}); // far past the end of the track
+    list->on_pointer_up({195, 60}, true);
+    CHECK(got.size() == 1); // no row committed by the scrollbar gesture
+    CHECK(list->on_pointer_down({10, 10})); // list is at its end again
+    list->on_pointer_up({10, 10}, true);
+    REQUIRE(got.size() == 2);
+    CHECK(got[1] == "k-banana");
+
+    // Keyboard nav keeps the hovered row in view: Down x3 reaches row 3,
+    // which is below the unscrolled viewport.
+    s.type("a");
+    list = s.host.popups_created[0]->root();
+    list->arrange(lc, {0, 0, 200, 72});
+    for (int i = 0; i < 3; ++i)
+        CHECK(s.field().on_popup_nav(NavKey::Down));
+    s.field().on_submit();
+    CHECK(got.back() == "k-pineapple");
 }
 
 TEST_CASE("SearchablePicker losing focus collapses and reverts; focus "

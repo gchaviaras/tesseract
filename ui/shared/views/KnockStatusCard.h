@@ -62,10 +62,10 @@ private:
     tk::Button* cancel_btn_ = nullptr;
 
     // Cached text layouts (rebuilt lazily in paint when the knock changes).
-    mutable std::unique_ptr<tk::TextLayout> name_layout_;
-    mutable std::unique_ptr<tk::TextLayout> topic_layout_;
-    mutable std::unique_ptr<tk::TextLayout> status_layout_;
-    mutable std::unique_ptr<tk::TextLayout> reason_layout_; // shown when non-empty
+    mutable tk::CachedTextLayout name_layout_;
+    mutable tk::CachedTextLayout topic_layout_;
+    mutable tk::CachedTextLayout status_layout_;
+    mutable tk::CachedTextLayout reason_layout_; // shown when non-empty
 
     // Layout constants — mirror InviteCard's group variant.
     static constexpr float kMinW     = 320.0f;

@@ -55,6 +55,7 @@ public:
     // tk::tr()'d by the caller.
     void set_accessible_name(std::string name);
     void set_text_color(Color c);
+    void on_fonts_changed() override;
     void set_font_role(FontRole role);
 
     // Last value passed to set_visible() — matches
@@ -261,7 +262,6 @@ private:
         std::optional<std::string> text;
         std::optional<std::string> placeholder;
         std::optional<Color> text_color;
-        std::optional<FontRole> font_role;
         std::optional<bool> enabled;
         std::function<void(const std::string&)> on_changed;
         std::function<void()> on_submit;
@@ -271,6 +271,7 @@ private:
         NativeTextArea::FilePasteHandler on_file_paste;
         std::function<const Image*(const std::string&)> image_resolver;
     };
+    std::optional<FontRole> font_role_; // last role set; re-applied on a font change
     PendingState pending_;
 };
 

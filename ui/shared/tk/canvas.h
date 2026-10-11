@@ -6,6 +6,7 @@
 // this interface and never sees a platform handle.
 
 #include "emoji_segmentation.h"
+#include "font_config.h"
 
 #include <algorithm>
 #include <cassert>
@@ -125,10 +126,11 @@ struct Color
     }
 };
 
-// Maps to the tesseract::visual::kFont* sizes in visual.h. Backends pick
-// the platform-native font face (Segoe UI Variable on Win32, the system
-// font on macOS, the GTK theme font on GTK4, QApplication::font() on Qt6)
-// and apply the role's weight + size.
+// Sizes come from font_role_pt() (base + per-role offset + the user's font
+// config, font_config.h). Backends pick the platform-native font face (Segoe
+// UI Variable on Win32, the system font on macOS, the GTK theme font on GTK4,
+// QApplication::font() on Qt6) unless the user chose a family, and apply the
+// role's weight + size.
 enum class FontRole
 {
     Small,          // base−3 regular  — hint text
@@ -171,38 +173,10 @@ enum class FontRole
 bool font_role_is_semibold(FontRole role);
 
 // Returns the pt size for `role` given the system body font size `base_pt`.
-// All roles are expressed as additive offsets from body except BigEmoji (2×).
-// Minimum returned size is 6pt to prevent zero/negative sizes at tiny base.
-inline int font_role_pt(FontRole role, int base_pt)
-{
-    int offset = 0;
-    switch (role)
-    {
-    case FontRole::Small:          offset = -4; break;
-    case FontRole::Caption:        offset = -2; break;
-    case FontRole::Body:           offset =  0; break;
-    case FontRole::SenderName:     offset = -1; break;
-    case FontRole::Timestamp:      offset = -3; break;
-    case FontRole::SidebarName:    offset =  0; break;
-    case FontRole::SidebarPreview: offset = -2; break;
-    case FontRole::UnreadBadge:    offset = -2; break;
-    case FontRole::Title:          offset = +2; break;
-    case FontRole::UiSemibold:     offset = -2; break;
-    case FontRole::BigEmoji:       return std::max(base_pt * 2, 6);
-    // Same as Body for now — the emoji-vs-text visual size is being tuned via
-    // the Linux backend comp constants (kQtEmojiStockComp / kGtkEmojiStockComp)
-    // and the shared kEmojiSizeAdjust knob; keeping this at the plain body
-    // size lets that be compared straight across all platforms.
-    case FontRole::InlineEmoji:    return std::max(base_pt, 6);
-    case FontRole::InlineCustomEmoji:
-        return std::max((base_pt + 1) * 5 / 4, 6);
-    case FontRole::EmojiPickerCell:offset = +9; break;
-    case FontRole::ReactionEmoji:  offset = +2; break;
-    case FontRole::ReactionText:
-        return std::max(font_role_pt(FontRole::ReactionEmoji, base_pt) * 4 / 5, 6);
-    }
-    return std::max(base_pt + offset, 6);
-}
+// The base is replaced by the user's base size when one is set, and each role
+// is an additive offset from it plus its category's user delta (font_config.h);
+// BigEmoji is 2x. Minimum returned size is 6pt. Defined in canvas_common.cpp.
+int font_role_pt(FontRole role, int base_pt);
 
 // Global emoji-size tweak for the Linux backends. Both the Qt6 and GTK4
 // text stacks multiply their emoji-run point size by this on top of their

@@ -59,8 +59,8 @@ public:
 private:
     struct AnswerLayout
     {
-        std::unique_ptr<tk::TextLayout> text;
-        std::unique_ptr<tk::TextLayout> stat; // "67% (2)"; null when hidden
+        tk::CachedTextLayout text;
+        tk::CachedTextLayout stat; // "67% (2)"; null when hidden
         std::string id;
         std::uint32_t votes = 0;
         bool mine = false;
@@ -76,13 +76,13 @@ private:
     {
         float card_w = 0;
         float h = 0;
-        std::unique_ptr<tk::TextLayout> question;
+        tk::CachedTextLayout question;
         std::vector<AnswerLayout> answers;
-        std::unique_ptr<tk::TextLayout> hint;
+        tk::CachedTextLayout hint;
         float hint_y = 0;
-        std::unique_ptr<tk::TextLayout> status;
+        tk::CachedTextLayout status;
         float status_y = 0;
-        std::unique_ptr<tk::TextLayout> end_label;
+        tk::CachedTextLayout end_label;
         tk::Rect end_rect; // card-relative; empty when no button
     };
 

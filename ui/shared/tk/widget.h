@@ -389,6 +389,23 @@ public:
     // explicitly told otherwise. Default: no-op.
     virtual void on_scale_changed(float scale_factor) {}
 
+    // Called on this widget when the user's font configuration changes
+    // (font_config.h). Override to re-apply fonts to any native control this
+    // widget owns or to drop caches that don't self-invalidate through
+    // CachedTextLayout. Default: no-op — a re-measure follows anyway.
+    virtual void on_fonts_changed() {}
+
+    // Push a font change through this widget and every descendant,
+    // including invisible ones (a hidden native field still needs the new
+    // font queued for when it next shows). Not virtual, same rationale as
+    // apply_theme().
+    void apply_fonts()
+    {
+        on_fonts_changed();
+        for (auto& ch : children())
+            ch->apply_fonts();
+    }
+
     // Push `scale_factor` through this widget's on_scale_changed(), then
     // recurse into every child unconditionally — including invisible ones,
     // same rationale as apply_theme() above. Not virtual, for the same
@@ -1099,8 +1116,16 @@ public:
 
     void queue_for_deletion(std::unique_ptr<Widget> subtree);
 
+    // Pushes a font-config change (font_config.h) through every live
+    // RootWidget — every window and popup surface — and schedules a relayout
+    // on each. The one propagation path for font changes: shells needn't
+    // enumerate their windows. UI thread only.
+    static void apply_fonts_to_all_roots();
+
+    ~RootWidget() override;
+
 protected:
-    RootWidget() = default;
+    RootWidget();
     TK_WIDGET_FACTORY_FRIEND(RootWidget)
 };
 

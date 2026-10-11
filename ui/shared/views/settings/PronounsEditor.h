@@ -125,7 +125,7 @@ private:
     bool editable_ = false;
     bool busy_     = false;
     std::string error_;
-    mutable std::unique_ptr<tk::TextLayout> error_layout_;
+    mutable tk::CachedTextLayout error_layout_;
 
     // tk::Button::Variant::Icon never draws its own label (see Button::
     // paint()'s "icon glyph drawn by parent" comment) — this widget draws

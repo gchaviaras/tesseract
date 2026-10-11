@@ -83,6 +83,8 @@ public:
         layouts_.clear();
     }
 
+    void on_fonts_changed() override { layouts_.clear(); }
+
     void set_hovered(int row) { hovered_ = row; }
 
     std::function<void(std::size_t index)> on_row_activated;

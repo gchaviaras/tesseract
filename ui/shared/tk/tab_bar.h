@@ -178,7 +178,7 @@ private:
         bool hovered = false;
         bool close_hovered = false;
         // Cached name TextLayout; rebuilt when display_name or width changes.
-        std::unique_ptr<TextLayout> layout;
+        CachedTextLayout layout;
         float layout_max_w = -1.f;
         std::string layout_name;
     };
@@ -208,7 +208,7 @@ private:
     bool pressed_close_ = false;
 
     // Cached "×" layout (built once in arrange, reused in paint).
-    std::unique_ptr<TextLayout> close_layout_;
+    CachedTextLayout close_layout_;
 };
 
 } // namespace tk

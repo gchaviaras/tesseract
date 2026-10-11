@@ -93,8 +93,8 @@ public:
 
 private:
     std::string homeserver_url_;
-    std::unique_ptr<tk::TextLayout> label_layout_;
-    std::unique_ptr<tk::TextLayout> value_layout_;
+    tk::CachedTextLayout label_layout_;
+    tk::CachedTextLayout value_layout_;
 };
 
 // ---------------------------------------------------------------------------

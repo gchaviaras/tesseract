@@ -30,6 +30,7 @@
 #include <QtGui/QImageReader>
 
 #include "emoji_segmentation.h"
+#include "font_config.h"
 
 #include <algorithm>
 #include <array>
@@ -63,6 +64,10 @@ QFont font_for(FontRole role)
 {
     const int base = std::max(QApplication::font().pointSize(), 8);
     QFont f; // inherits app family from platform theme
+    const std::string_view family = font_role_family(role);
+    if (!family.empty())
+        f.setFamily(QString::fromUtf8(family.data(),
+                                      static_cast<qsizetype>(family.size())));
     f.setPointSize(font_role_pt(role, base));
     f.setWeight(font_role_is_semibold(role) ? QFont::DemiBold : QFont::Normal);
     return f;
@@ -73,8 +78,11 @@ QFont font_for(FontRole role)
 // mirrors the per-span face swap the `code` path already does.
 void apply_monospace(QFont& f)
 {
+    const std::string_view user = font_mono_family();
     const QString fam =
-        QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+        user.empty()
+            ? QFontDatabase::systemFont(QFontDatabase::FixedFont).family()
+            : QString::fromUtf8(user.data(), static_cast<qsizetype>(user.size()));
     if (!fam.isEmpty())
         f.setFamily(fam);
     f.setStyleHint(QFont::Monospace);
@@ -1060,9 +1068,9 @@ class QtFactory : public CanvasFactory
     static constexpr std::size_t kNumRoles =
         static_cast<std::size_t>(FontRole::ReactionText) + 1;
     std::array<QFont, kNumRoles> font_cache_;
+    std::uint64_t font_cache_generation_ = 0;
 
-public:
-    QtFactory()
+    void rebuild_font_cache()
     {
         static_assert(
             static_cast<int>(FontRole::ReactionText) == 15,
@@ -1071,7 +1079,19 @@ public:
         {
             font_cache_[i] = font_for(static_cast<FontRole>(i));
         }
+        font_cache_generation_ = font_config_generation();
     }
+
+    // Rebuilt lazily when the user's font config has changed.
+    const QFont& cached_font(FontRole role)
+    {
+        if (font_cache_generation_ != font_config_generation())
+            rebuild_font_cache();
+        return font_cache_[static_cast<std::size_t>(role)];
+    }
+
+public:
+    QtFactory() { rebuild_font_cache(); }
 
     std::unique_ptr<Image>
     decode_image(std::span<const std::uint8_t> bytes) override
@@ -1275,7 +1295,7 @@ public:
     std::unique_ptr<TextLayout> build_rich_text(std::span<const TextSpan> spans,
                                                 const TextStyle& s) override
     {
-        QFont base = font_cache_[static_cast<std::size_t>(s.role)];
+        QFont base = cached_font(s.role);
         if (s.monospace)
             apply_monospace(base);
 
@@ -1316,7 +1336,7 @@ public:
                                         : FontRole::InlineEmoji;
         const int emoji_pt = std::max(
             static_cast<int>(
-                font_cache_[static_cast<std::size_t>(emoji_role)].pointSize() *
+                cached_font(emoji_role).pointSize() *
                     kEmojiSizeAdjust * kQtEmojiStockComp +
                 0.5),
             6);
@@ -1332,8 +1352,7 @@ public:
                                                 ? FontRole::BigEmoji
                                                 : FontRole::InlineCustomEmoji;
         const int custom_emoji_pt = std::max(
-            font_cache_[static_cast<std::size_t>(custom_emoji_role)]
-                .pointSize(),
+            cached_font(custom_emoji_role).pointSize(),
             6);
 
         // QTextDocument has no native "truncate rich content to one line +
@@ -1695,7 +1714,7 @@ public:
         // installed font has the codepoint.
         QTextLayout layout(
             QString::fromUtf8(glyph.data(), static_cast<qsizetype>(glyph.size())),
-            font_cache_[static_cast<std::size_t>(FontRole::EmojiPickerCell)]);
+            cached_font(FontRole::EmojiPickerCell));
         layout.beginLayout();
         QTextLine line = layout.createLine();
         if (line.isValid())

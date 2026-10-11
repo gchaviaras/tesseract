@@ -220,7 +220,7 @@ private:
     tk::Rect media_row_rect_{};
     bool     hover_media_ = false;
     bool     press_media_ = false;
-    std::unique_ptr<tk::TextLayout> media_row_layout_;
+    tk::CachedTextLayout media_row_layout_;
 
     // "Requests to join (N)" row — same direct-painted/hit-tested treatment
     // as the "Media (N)" row above, but only present when
@@ -229,11 +229,11 @@ private:
     tk::Rect knock_row_rect_{};
     bool     hover_knock_ = false;
     bool     press_knock_ = false;
-    std::unique_ptr<tk::TextLayout> knock_row_layout_;
+    tk::CachedTextLayout knock_row_layout_;
 
     // Cached text layouts
-    std::unique_ptr<tk::TextLayout> name_layout_;
-    std::unique_ptr<tk::TextLayout> topic_layout_;
+    tk::CachedTextLayout name_layout_;
+    tk::CachedTextLayout topic_layout_;
 
     // Encrypted / history-visibility / language / bridged badges; wraps
     // onto extra rows. Rebuilt by update_badges_() whenever its inputs change.
@@ -241,8 +241,8 @@ private:
     float          badge_block_h_ = 16.0f; // flow height from the last arrange()
     void update_badges_();
     struct MemberLayout {
-        std::unique_ptr<tk::TextLayout> name;
-        std::unique_ptr<tk::TextLayout> uid;
+        tk::CachedTextLayout name;
+        tk::CachedTextLayout uid;
     };
     std::vector<MemberLayout> member_layouts_;
 

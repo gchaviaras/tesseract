@@ -8,6 +8,7 @@
 #include <uxtheme.h>
 
 #include <algorithm>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -276,7 +277,24 @@ HFONT make_font(FontRole role)
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = CLEARTYPE_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_SWISS;
-    wcsncpy_s(lf.lfFaceName, preferred_family(role), _TRUNCATE);
+    // A user family (font_config.h) for the tk role this GDI role sizes from.
+    tk::FontRole tk_role = tk::FontRole::SenderName;
+    if (role == FontRole::Small)
+        tk_role = tk::FontRole::Timestamp;
+    else if (role == FontRole::Body)
+        tk_role = tk::FontRole::SidebarPreview;
+    else if (role == FontRole::Title)
+        tk_role = tk::FontRole::Title;
+    const std::string_view user = tk::font_role_family(tk_role);
+    if (!user.empty())
+    {
+        const int n = MultiByteToWideChar(CP_UTF8, 0, user.data(),
+                                          static_cast<int>(user.size()),
+                                          lf.lfFaceName, LF_FACESIZE - 1);
+        lf.lfFaceName[n > 0 ? n : 0] = L'\0';
+    }
+    if (!lf.lfFaceName[0] || user.empty())
+        wcsncpy_s(lf.lfFaceName, preferred_family(role), _TRUNCATE);
     return CreateFontIndirectW(&lf);
 }
 
@@ -434,6 +452,11 @@ HBRUSH brush(COLORREF c)
     HBRUSH b = CreateSolidBrush(c);
     g_brush_cache.emplace(c, b);
     return b;
+}
+
+void on_fonts_changed()
+{
+    on_dpi_changed();
 }
 
 void on_dpi_changed()

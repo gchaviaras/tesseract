@@ -32,6 +32,38 @@ Widget::Widget()
     host_ = stack.empty() ? nullptr : stack.back();
 }
 
+namespace
+{
+std::vector<RootWidget*>& live_roots()
+{
+    static std::vector<RootWidget*> roots;
+    return roots;
+}
+} // namespace
+
+RootWidget::RootWidget()
+{
+    live_roots().push_back(this);
+}
+
+RootWidget::~RootWidget()
+{
+    auto& roots = live_roots();
+    roots.erase(std::remove(roots.begin(), roots.end(), this), roots.end());
+}
+
+void RootWidget::apply_fonts_to_all_roots()
+{
+    // Copy: a handler must not be able to invalidate the iteration.
+    const std::vector<RootWidget*> snapshot = live_roots();
+    for (RootWidget* r : snapshot)
+    {
+        r->apply_fonts();
+        if (Host* h = r->host())
+            h->mark_needs_relayout();
+    }
+}
+
 void paint_native_drag_hover_highlight(PaintCtx& ctx, Rect rect)
 {
     constexpr float kInset  = 4.0f;

@@ -686,6 +686,17 @@ std::optional<tk::Color> MainWindow::os_accent_color_() const
     return cr_to_tk(win32::theme::accent_colorref());
 }
 
+void MainWindow::apply_fonts_ui_()
+{
+    // Drop the GDI fonts built from the old config, then hand the rebuilt ones
+    // to the native controls that hold an HFONT.
+    win32::theme::on_fonts_changed();
+    apply_default_font(hStatus_);
+    InvalidateRect(hwnd_, nullptr, TRUE);
+    if (hStatus_)
+        InvalidateRect(hStatus_, nullptr, TRUE);
+}
+
 void MainWindow::apply_theme_ui_(const tk::Theme& t)
 {
     // Sync the Win32-native palette and title bar to match the chosen mode.

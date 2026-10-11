@@ -6154,3 +6154,67 @@ msgstr "tipo desconocido"
 #: ui/shared/app/RoomPane.cpp
 msgid "“{0}” isn't an image, video, audio or text file ({1}). Files like this can contain macros or run code in the app that opens them. Only open it if you trust the sender."
 msgstr "«{0}» no es un archivo de imagen, vídeo, audio o texto ({1}). Archivos así pueden contener macros o ejecutar código en la aplicación que los abre. Ábrelo solo si confías en el remitente."
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Adjust individual text types"
+msgstr "Ajustar tipos de texto individuales"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Base size"
+msgstr "Tamaño base"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Buttons"
+msgstr "Botones"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Font"
+msgstr "Fuente"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Fonts"
+msgstr "Fuentes"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Headings"
+msgstr "Encabezados"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Monospace font"
+msgstr "Fuente monoespaciada"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Reset to defaults"
+msgstr "Restablecer valores predeterminados"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Secondary text"
+msgstr "Texto secundario"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Secondary text and hints"
+msgstr "Texto secundario y sugerencias"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "System ({0} pt)"
+msgstr "Sistema ({0} pt)"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "The quick brown fox jumps over the lazy dog."
+msgstr "El veloz murciélago hindú comía feliz cardillo y kiwi."
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "{0} pt"
+msgstr "{0} pt"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Decrease {0}"
+msgstr "Reducir {0}"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Increase {0}"
+msgstr "Aumentar {0}"
+
+#: ui/shared/views/settings/FontsEditor.cpp
+msgid "Reset {0}"
+msgstr "Restablecer {0}"

@@ -1671,6 +1671,14 @@ protected:
     {
     }
 
+    // Called by handle_fonts_changed_() after the toolkit has been told about
+    // the new fonts and every RootWidget re-measured. A shell overrides this
+    // only to refresh native, non-tk state that cached the old fonts (Win32's
+    // GDI HFONTs for its status bar and child controls).
+    virtual void apply_fonts_ui_()
+    {
+    }
+
     // Re-theme every open pop-out room window. Each shell's apply_theme_ui_()
     // calls this so secondary windows follow the theme setting.
     void apply_theme_to_secondary_windows_(const tk::Theme& t);
@@ -3973,6 +3981,11 @@ protected:
     // Toggle handler for the "Enable developer mode" Advanced setting.
     // Persists the setting only — no behavior gated on it yet.
     void handle_developer_mode_toggle_(bool enabled);
+
+    // Persists + live-applies new font preferences (Settings → Appearance →
+    // Fonts). Re-measures every window; widgets with their own caches drop
+    // them from Widget::on_fonts_changed().
+    void handle_fonts_changed_(const tesseract::Settings::FontPrefs& prefs);
 
     // Handler for the Appearance → Layout combobox. Persists the choice and
     // forces every open timeline (main window, thread panel, pop-out room

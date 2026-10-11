@@ -150,13 +150,13 @@ private:
     tk::Button* cancel_btn_  = nullptr;
 
     // Cached text layouts. Rebuilt when content or width changes.
-    std::unique_ptr<tk::TextLayout> name_layout_;
-    std::unique_ptr<tk::TextLayout> sub_layout_;
-    std::unique_ptr<tk::TextLayout> verif_layout_;
-    std::unique_ptr<tk::TextLayout> this_dev_layout_;
-    std::unique_ptr<tk::TextLayout> uia_hint_layout_;
-    std::unique_ptr<tk::TextLayout> error_layout_;
-    std::unique_ptr<tk::TextLayout> busy_layout_;
+    tk::CachedTextLayout name_layout_;
+    tk::CachedTextLayout sub_layout_;
+    tk::CachedTextLayout verif_layout_;
+    tk::CachedTextLayout this_dev_layout_;
+    tk::CachedTextLayout uia_hint_layout_;
+    tk::CachedTextLayout error_layout_;
+    tk::CachedTextLayout busy_layout_;
     float cached_w_ = -1;
 };
 

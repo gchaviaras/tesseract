@@ -66,6 +66,11 @@ public:
     // don't stay stale/blurry.
     void apply_scale_change(float scale);
 
+    // A popup surface never takes Qt keyboard focus on click: the widget that
+    // opened it (a picker's text field, the composer) keeps focus, so pressing
+    // inside the popup — a scrollbar drag, a row — doesn't blur and dismiss it.
+    void set_takes_focus_on_click(bool takes) { takes_focus_on_click_ = takes; }
+
     // Fired at the tail of apply_scale_change() above, with the new scale.
     // Lets integration code (the owning shell) track the display's current
     // scale — see ShellBase::set_current_scale_()'s doc comment — without
@@ -130,6 +135,7 @@ private:
     std::unique_ptr<Host> host_;
     FileDropErrorHandler on_file_drop_error_;
     bool screen_changed_connected_ = false;
+    bool takes_focus_on_click_ = true;
     std::function<void(float)> on_scale_changed_;
 };
 

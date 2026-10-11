@@ -53,6 +53,30 @@ public:
     {
     }
 
+    std::vector<FontFamilyInfo> list_font_families() override
+    {
+        static const std::vector<FontFamilyInfo> cached = []
+        {
+            std::vector<FontFamilyInfo> out;
+            NSFontManager* fm = [NSFontManager sharedFontManager];
+            for (NSString* fam in [fm availableFontFamilies])
+            {
+                if (fam.length == 0 || [fam hasPrefix:@"."])
+                    continue; // hidden system families
+                NSFont* mono = [fm fontWithFamily:fam
+                                           traits:NSFixedPitchFontMask
+                                           weight:5
+                                             size:12];
+                out.push_back({std::string(fam.UTF8String), mono != nil});
+            }
+            std::sort(out.begin(), out.end(),
+                      [](const FontFamilyInfo& a, const FontFamilyInfo& b)
+                      { return a.name < b.name; });
+            return out;
+        }();
+        return cached;
+    }
+
     void request_repaint() override;
     // Scoped repaint for canvas-drawn native text controls (see
     // NativeTextField::set_on_repaint_needed's doc comment in host.h) —
@@ -729,6 +753,32 @@ static bool occluded_at(const std::function<std::optional<Rect>()>& query,
            p.y < r->y + r->h;
 }
 
+// NSFont for a FontRole honouring the user's font config (family, size);
+// system UI font when no family is set or the name doesn't resolve.
+static NSFont* ns_font_for_role(FontRole role)
+{
+    const int base = static_cast<int>(std::round([NSFont systemFontSize]));
+    const auto pt = static_cast<CGFloat>(font_role_pt(role, base));
+    const bool bold = font_role_is_semibold(role);
+    const std::string_view family = font_role_family(role);
+    if (!family.empty())
+    {
+        NSString* name = [[NSString alloc] initWithBytes:family.data()
+                                                  length:family.size()
+                                                encoding:NSUTF8StringEncoding];
+        if (name)
+        {
+            NSFontDescriptor* d = [NSFontDescriptor
+                fontDescriptorWithFontAttributes:@{NSFontFamilyAttribute : name}];
+            if (bold)
+                d = [d fontDescriptorWithSymbolicTraits:NSFontDescriptorTraitBold];
+            if (NSFont* f = [NSFont fontWithDescriptor:d size:pt])
+                return f;
+        }
+    }
+    return bold ? [NSFont boldSystemFontOfSize:pt] : [NSFont systemFontOfSize:pt];
+}
+
 class NSTextFieldNative : public NativeTextField
 {
 public:
@@ -743,6 +793,11 @@ public:
     void set_visible(bool visible) override;
     void set_enabled(bool enabled) override;
     void set_password(bool password) override;
+    void set_font_role(FontRole role) override
+    {
+        field_.font = ns_font_for_role(role);
+        refresh_image();
+    }
     void set_on_changed(std::function<void(const std::string&)> cb) override
     {
         on_changed_ = std::move(cb);
@@ -1369,10 +1424,7 @@ public:
     void refresh_room_mention_avatar(const tk::Image* avatar) override;
     void set_font_role(FontRole role) override
     {
-        const int base = static_cast<int>(std::round([NSFont systemFontSize]));
-        const auto pt  = static_cast<CGFloat>(font_role_pt(role, base));
-        NSFont* f = font_role_is_semibold(role) ? [NSFont boldSystemFontOfSize:pt]
-                                                : [NSFont systemFontOfSize:pt];
+        NSFont* f = ns_font_for_role(role);
         view_.font = f;
         if (placeholder_) placeholder_.font = f;
     }

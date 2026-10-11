@@ -1027,6 +1027,10 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     {
         handle_room_list_density_changed_(density);
     };
+    view->on_font_prefs_changed = [this](const tesseract::Settings::FontPrefs& prefs)
+    {
+        handle_fonts_changed_(prefs);
+    };
 #ifdef TESSERACT_CRASH_HANDLER_ENABLED
     view->on_crash_reporting_changed = [this](bool enabled)
     {

@@ -28,6 +28,12 @@ protected:
     TK_WIDGET_FACTORY_FRIEND(Label)
 
 public:
+    // A font change alters measure(): re-measure (the layout itself rebuilds
+    // via CachedTextLayout).
+    void on_fonts_changed() override { invalidate_cache(); }
+
+    FontRole role() const { return role_; }
+
     Label& set_text(std::string t)
     {
         text_ = std::move(t);
@@ -105,7 +111,7 @@ private:
     // Layout cache. cached_max_w_ tracks the max-width measure() last
     // built for so subsequent paint reuses the layout when constraints
     // are unchanged.
-    std::unique_ptr<TextLayout> cached_;
+    CachedTextLayout cached_;
     float cached_max_w_ = -2;
     Size cached_size_{};
 };
@@ -378,7 +384,7 @@ private:
     std::optional<Color> icon_color_override_;
     IconCache icon_cache_;
 
-    std::unique_ptr<TextLayout> cached_;
+    CachedTextLayout cached_;
     Size cached_size_{};
 };
 
@@ -506,7 +512,7 @@ private:
 
     FontRole font_role_ = FontRole::Body;
 
-    std::unique_ptr<TextLayout> label_layout_;
+    CachedTextLayout label_layout_;
     float cached_max_w_ = -2.0f;
     Size label_size_{};
     IconCache check_icon_;
@@ -593,7 +599,7 @@ private:
     bool                        checked_ = false;
     bool                        hovered_ = false;
     bool                        pressed_ = false;
-    std::unique_ptr<TextLayout> cached_;
+    CachedTextLayout cached_;
     Size                        cached_size_{};
 };
 
@@ -654,7 +660,7 @@ private:
     std::chrono::steady_clock::time_point start_time_{std::chrono::steady_clock::now()};
 
     std::string                 label_;
-    std::unique_ptr<TextLayout> label_layout_;
+    CachedTextLayout label_layout_;
     Size                        label_size_{};
 };
 

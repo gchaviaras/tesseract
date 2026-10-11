@@ -475,8 +475,8 @@ private:
 
     std::string commit_error_;
 
-    std::unique_ptr<tk::TextLayout> title_layout_;
-    std::unique_ptr<tk::TextLayout> commit_error_layout_;
+    tk::CachedTextLayout title_layout_;
+    tk::CachedTextLayout commit_error_layout_;
 
     // Index of the "Media" tab within tabs_, in add_tab() order (General=0,
     // Media=1, Security=2, Permissions=3, Moderation=4, Emojis & Stickers=

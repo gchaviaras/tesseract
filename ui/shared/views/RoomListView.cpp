@@ -57,7 +57,13 @@ constexpr float kThumb = kRoomListRowH - kRoomListPadY * 2.0f; // 40 px — full
 constexpr float kThumbGap = 4.0f;
 
 // Section header row dimensions.
-constexpr float kRoomListHeaderH = 28.0f;
+constexpr float kRoomListHeaderBaseH = 28.0f;
+// Sized for the default fonts; grown in step with the user's font config.
+inline float room_list_header_h()
+{
+    return std::ceil(kRoomListHeaderBaseH *
+                     tk::font_height_scale(tk::FontRole::Caption));
+}
 constexpr float kHeaderPadX = 10.0f;
 constexpr float kHeaderChevronPx = 14.0f; // Lucide chevron-up / chevron-down
 
@@ -232,7 +238,7 @@ public:
         {
             return owner_.row_h_();
         }
-        return owner_.items_[index].kind == Item::Kind::Header ? kRoomListHeaderH
+        return owner_.items_[index].kind == Item::Kind::Header ? room_list_header_h()
                                                                : owner_.row_h_();
     }
 
@@ -1760,14 +1766,18 @@ float RoomListView::avatar_size_() const
         return kRoomListAvatarSize;
     // A little bigger than the name's glyph height so the avatar reads as
     // inline with the text.
-    return std::round(
-        static_cast<float>(tesseract::Settings::instance().font_sidebar_name) *
-        1.75f);
+    return std::round(21.0f * tk::font_height_scale(tk::FontRole::SidebarName));
 }
 
 float RoomListView::row_h_() const
 {
-    return compact_ ? avatar_size_() + kRoomListPadY * 2.0f : kRoomListRowH;
+    if (compact_)
+        return avatar_size_() + kRoomListPadY * 2.0f;
+    // Two text lines (name + preview) beside the avatar: grow with the larger.
+    const float scale =
+        std::max(tk::font_height_scale(tk::FontRole::SidebarName),
+                 tk::font_height_scale(tk::FontRole::SidebarPreview));
+    return std::ceil(kRoomListRowH * scale);
 }
 
 float RoomListView::thumb_() const
@@ -2039,6 +2049,18 @@ int RoomListView::selected_index() const
         }
     }
     return room_idx;
+}
+
+void RoomListView::on_fonts_changed()
+{
+    // Row heights, cached row layouts and the widest-row memo all depend on
+    // the fonts.
+    if (adapter_)
+        adapter_->clear_row_caches();
+    ++layout_epoch_;
+    if (list_)
+        list_->invalidate_data();
+    tk::Widget::on_fonts_changed();
 }
 
 void RoomListView::on_theme_changed(const tk::Theme& t)
@@ -2535,9 +2557,9 @@ RoomListView::StickyHeader RoomListView::sticky_header_() const
         if (items_[static_cast<std::size_t>(i)].kind == Item::Kind::Header)
         {
             const float next_y = list_->row_world_rect(i).y;
-            if (next_y < list_top + kRoomListHeaderH)
+            if (next_y < list_top + room_list_header_h())
             {
-                world_y = next_y - kRoomListHeaderH;
+                world_y = next_y - room_list_header_h();
             }
             break;
         }
@@ -2559,7 +2581,7 @@ bool RoomListView::sticky_band_contains_(const StickyHeader& s,
     }
     const float list_top = bounds_.y + search_header_h();
     return world.x >= bounds_.x && world.x < bounds_.x + bounds_.w &&
-           world.y >= list_top && world.y < s.world_y + kRoomListHeaderH;
+           world.y >= list_top && world.y < s.world_y + room_list_header_h();
 }
 
 tk::Widget* RoomListView::dispatch_pointer_down(tk::Point world)
@@ -2863,7 +2885,7 @@ void RoomListView::paint_after_children(tk::PaintCtx& ctx)
         tk::Rect    area{bounds_.x, list_top, bounds_.w,
                       std::max(0.0f, bounds_.h - search_header_h())};
         ctx.canvas.push_clip_rect(area);
-        tk::Rect sb{bounds_.x, s.world_y, bounds_.w, kRoomListHeaderH};
+        tk::Rect sb{bounds_.x, s.world_y, bounds_.w, room_list_header_h()};
         adapter_->paint_row(static_cast<std::size_t>(s.header_item), ctx, sb,
                             false, sticky_hovered_);
         ctx.canvas.pop_clip();

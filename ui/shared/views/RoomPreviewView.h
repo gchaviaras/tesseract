@@ -68,10 +68,10 @@ private:
     tk::Button* join_btn_    = nullptr;
     tk::Button* dismiss_btn_ = nullptr;
 
-    mutable std::unique_ptr<tk::TextLayout> name_layout_;
-    mutable std::unique_ptr<tk::TextLayout> alias_layout_;
-    mutable std::unique_ptr<tk::TextLayout> topic_layout_;
-    mutable std::unique_ptr<tk::TextLayout> meta_layout_;
+    mutable tk::CachedTextLayout name_layout_;
+    mutable tk::CachedTextLayout alias_layout_;
+    mutable tk::CachedTextLayout topic_layout_;
+    mutable tk::CachedTextLayout meta_layout_;
     mutable tk::CanvasFactory*              factory_seen_    = nullptr;
     mutable float                           last_bounds_h_   = -1.0f;
 
@@ -84,6 +84,7 @@ private:
 
     std::string join_rule_label_() const;
     void        reset_layouts_();
+    void        on_fonts_changed() override { factory_seen_ = nullptr; }
     void        fire_join_();
     // True when summary_'s join_rule requires a knock (MSC2403) rather than
     // a direct join. Cosmetic here (button label only) — the actual

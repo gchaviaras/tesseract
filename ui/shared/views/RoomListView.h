@@ -99,6 +99,7 @@ public:
     }
 
     void on_theme_changed(const tk::Theme& t) override;
+    void on_fonts_changed() override;
 
     // Debounce delay every shell should wait after the last keystroke
     // before pushing the typed query into set_search_text(). Kept here so

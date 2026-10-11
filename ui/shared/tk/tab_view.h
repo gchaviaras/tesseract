@@ -134,7 +134,7 @@ private:
     {
         std::string label;
         Rect bounds{};
-        std::unique_ptr<TextLayout> layout;
+        CachedTextLayout layout;
     };
 
     std::vector<Item> items_;

@@ -87,6 +87,14 @@ public:
     void arrange(LayoutCtx&, Rect bounds) override;
     void on_theme_changed(const Theme& t) override;
 
+    // The ▾ cell to the right of the field that marks this as a dropdown;
+    // clicking it opens the full list (see on_pointer_down).
+    void paint_before_children(PaintCtx& ctx) override;
+    bool on_pointer_down(Point local) override;
+    void on_pointer_up(Point local, bool inside_self) override;
+    bool on_pointer_move(Point local) override;
+    void on_pointer_leave() override;
+
     // Accessibility — mirrors tk::ComboBox. The internal TextField maps to
     // Role::None (its native overlay carries OS-level a11y), so the
     // combobox-ness — the committed value, the expand/collapse state, and
@@ -150,7 +158,7 @@ private:
 
     std::string value_; // last committed value; reverted to on blur w/o a pick
 
-    // Indices into the leaf class's entry data, ranked, capped at max_rows_.
+    // Indices into the leaf class's entry data, ranked, every match (the popup shows max_rows_ and scrolls).
     std::vector<std::size_t> filtered_;
 
     // Created lazily on first expand — most instances never open a dropdown,
@@ -162,7 +170,10 @@ private:
     bool expanded_    = false;
     int  hovered_row_ = -1;
 
-    Rect field_rect_{};
+    Rect field_rect_{};   // the text field (bounds minus the chevron cell)
+    Rect chevron_rect_{}; // the ▾ cell
+    bool chevron_hovered_ = false;
+    bool chevron_pressed_ = false;
 
     float field_h_  = 32.0f;
     float row_h_    = 28.0f;

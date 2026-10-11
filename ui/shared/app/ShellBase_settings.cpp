@@ -1,3 +1,4 @@
+#include "app/font_prefs.h"
 #include "app/ShellBase.h"
 #include "app/EventHandlerBase.h"
 #include "app/Launch.h"
@@ -578,6 +579,24 @@ void ShellBase::handle_message_layout_changed_(
     s.save_to_disk(tesseract::config_dir());
 
     refresh_all_message_lists_display_prefs_();
+    request_relayout_();
+}
+
+void ShellBase::handle_fonts_changed_(const tesseract::Settings::FontPrefs& prefs)
+{
+    auto& s = tesseract::Settings::instance();
+    if (s.fonts == prefs)
+        return;
+    s.fonts = prefs;
+    s.save_to_disk(tesseract::config_dir());
+
+    if (!tesseract::apply_font_prefs(s.fonts))
+        return; // clamped to the config already in force
+    // Every RootWidget (windows, popups) drops its font-dependent state and
+    // schedules a relayout; message lists / room lists flush their own row
+    // caches from their on_fonts_changed() overrides.
+    tk::RootWidget::apply_fonts_to_all_roots();
+    apply_fonts_ui_();
     request_relayout_();
 }
 

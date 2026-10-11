@@ -50,7 +50,7 @@ public:
 private:
     std::string text_;
     Rect anchor_{};
-    std::unique_ptr<TextLayout> layout_;
+    CachedTextLayout layout_;
     // layout_ is rebuilt only when the text or the wrap width it was built
     // for changes (the latter tracks the host surface's width, so a window
     // resize re-wraps an already-visible tooltip).

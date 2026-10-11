@@ -1241,6 +1241,9 @@ public:
     // caller must also schedule a surface repaint.
     void on_display_prefs_changed();
 
+    // A font change reshapes every row: same flush as a layout change.
+    void on_fonts_changed() override { on_display_prefs_changed(); }
+
     /// Bulk-insert events at the front of the timeline (oldest-first in `rows`).
     void prepend_messages(std::vector<MessageRowData> rows);
 

@@ -248,6 +248,8 @@ add_executable(tesseract_tests
     cpp/test_tk_tooltip.cpp
     cpp/test_tk_combo_controls.cpp
     cpp/test_tk_radio.cpp
+    cpp/test_tk_font_config.cpp
+    cpp/test_fonts_editor.cpp
     cpp/test_tk_tab_bar.cpp
     cpp/test_tk_row_cursor.cpp
     cpp/test_tk_blurhash.cpp

@@ -74,7 +74,7 @@ private:
 
     tk::Rect backdrop_rect_{};
     tk::Rect card_rect_{};
-    std::unique_ptr<tk::TextLayout> title_layout_;
+    tk::CachedTextLayout title_layout_;
     float title_w_ = -1.0f; // max width title_layout_ was built for
 
     static constexpr float kCardMaxW = 600.0f;

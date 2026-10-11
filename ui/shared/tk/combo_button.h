@@ -138,7 +138,7 @@ private:
     std::string         selected_value_;
     Button::Variant      variant_ = Button::Variant::Primary;
 
-    std::unique_ptr<TextLayout> main_label_layout_;
+    CachedTextLayout main_label_layout_;
 
     std::unique_ptr<PopupSurfaceHandle> popup_;
     DropdownList* dropdown_ = nullptr; // borrowed — owned by popup_ once set

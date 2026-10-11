@@ -45,6 +45,7 @@ public:
     // when there are no badges.
     Size measure(LayoutCtx&, Size constraints) override;
     void paint(PaintCtx&) override;
+    void on_fonts_changed() override;
 
     Role access_role() const override
     {

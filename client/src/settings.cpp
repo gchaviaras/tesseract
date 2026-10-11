@@ -1,5 +1,6 @@
 #include "tesseract/settings.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -230,6 +231,35 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
                 : RoomListDensity::Normal;
     }
 
+    {
+        const auto& kKeys = FontPrefs::kCategoryKeys;
+        fonts = FontPrefs{};
+        const auto fj = j.find("fonts");
+        if (fj != j.end() && fj->is_object())
+        {
+            fonts.base_pt = fj->value("base_pt", 0);
+            if (fonts.base_pt != 0)
+                fonts.base_pt = std::clamp(fonts.base_pt, FontPrefs::kBaseMinPt, FontPrefs::kBaseMaxPt);
+            fonts.ui_family = fj->value("ui_family", std::string{});
+            fonts.mono_family = fj->value("mono_family", std::string{});
+            const auto cj = fj->find("categories");
+            if (cj != fj->end() && cj->is_object())
+            {
+                for (std::size_t i = 0; i < FontPrefs::kCategoryCount; ++i)
+                {
+                    const auto it = cj->find(kKeys[i]);
+                    if (it == cj->end() || !it->is_object())
+                        continue;
+                    fonts.categories[i].delta_pt =
+                        std::clamp(it->value("delta", 0), FontPrefs::kDeltaMinPt,
+                                   FontPrefs::kDeltaMaxPt);
+                    fonts.categories[i].family =
+                        it->value("family", std::string{});
+                }
+            }
+        }
+    }
+
     } // try (field reading)
     catch (const nlohmann::json::exception&)
     {
@@ -318,6 +348,18 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
                                                  : "classic";
     j["room_list_density"] =
         room_list_density == RoomListDensity::Compact ? "compact" : "normal";
+
+    {
+        const auto& kKeys = FontPrefs::kCategoryKeys;
+        nlohmann::json cats = nlohmann::json::object();
+        for (std::size_t i = 0; i < FontPrefs::kCategoryCount; ++i)
+            cats[kKeys[i]] = {{"delta", fonts.categories[i].delta_pt},
+                              {"family", fonts.categories[i].family}};
+        j["fonts"] = {{"base_pt", fonts.base_pt},
+                      {"ui_family", fonts.ui_family},
+                      {"mono_family", fonts.mono_family},
+                      {"categories", std::move(cats)}};
+    }
 
     {
         const char* mode_str =

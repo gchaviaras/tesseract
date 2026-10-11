@@ -250,15 +250,53 @@ CTRunDelegateRef create_pill_run_delegate(CGFloat width, CGFloat ascent,
                                new PillRunMetrics{width, ascent, descent});
 }
 
+CFStringRef cfstr_from_utf8(std::string_view s);
+
+// The fixed-pitch face at `size`: the user's family (font_config.h), else
+// Menlo. Null when neither resolves.
+CTFontRef mono_font_with_size(CGFloat size)
+{
+    const std::string_view user = font_mono_family();
+    if (!user.empty())
+    {
+        CFRetained<CFStringRef> name{cfstr_from_utf8(user)};
+        if (name.get())
+            if (CTFontRef f = CTFontCreateWithName(name.get(), size, nullptr))
+                return f;
+    }
+    return CTFontCreateWithName(CFSTR("Menlo"), size, nullptr);
+}
+
 CTFontRef create_font(FontRole role)
 {
     const CGFloat size =
         static_cast<CGFloat>(font_role_pt(role, macos_system_base_pt()));
     const bool bold = font_role_is_semibold(role);
-    CTFontUIFontType ui =
-        bold ? kCTFontUIFontEmphasizedSystem : kCTFontUIFontSystem;
-    CFRetained<CTFontRef> base{
-        CTFontCreateUIFontForLanguage(ui, size, nullptr)};
+    CFRetained<CTFontRef> base;
+    // A user family (font_config.h) replaces the system UI font; fall back to
+    // it when the name doesn't resolve.
+    const std::string_view user = font_role_family(role);
+    if (!user.empty())
+    {
+        CFRetained<CFStringRef> name{cfstr_from_utf8(user)};
+        if (name.get())
+            base = CFRetained<CTFontRef>{
+                CTFontCreateWithName(name.get(), size, nullptr)};
+        if (base.get() && bold)
+        {
+            CFRetained<CTFontRef> bolded{CTFontCreateCopyWithSymbolicTraits(
+                base.get(), size, nullptr, kCTFontTraitBold, kCTFontTraitBold)};
+            if (bolded.get())
+                base = std::move(bolded);
+        }
+    }
+    if (!base.get())
+    {
+        CTFontUIFontType ui =
+            bold ? kCTFontUIFontEmphasizedSystem : kCTFontUIFontSystem;
+        base = CFRetained<CTFontRef>{
+            CTFontCreateUIFontForLanguage(ui, size, nullptr)};
+    }
     if (!base.get())
         return nullptr;
 
@@ -306,8 +344,7 @@ CTFontRef create_mono_font(FontRole role)
 {
     const CGFloat size =
         static_cast<CGFloat>(font_role_pt(role, macos_system_base_pt()));
-    CFRetained<CTFontRef> base{
-        CTFontCreateWithName(CFSTR("Menlo"), size, nullptr)};
+    CFRetained<CTFontRef> base{mono_font_with_size(size)};
     if (!base.get())
         return create_font(role);
     if (font_role_is_semibold(role))
@@ -1673,8 +1710,7 @@ public:
             CFRetained<CTFontRef> span_font;
             if (span.code)
             {
-                span_font = CFRetained<CTFontRef>{CTFontCreateWithName(
-                    CFSTR("Menlo"), base_size, nullptr)};
+                span_font = CFRetained<CTFontRef>{mono_font_with_size(base_size)};
                 if (!span_font.get())
                 {
                     span_font = CFRetained<CTFontRef>{create_font(s.role)};

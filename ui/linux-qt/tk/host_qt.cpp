@@ -14,6 +14,7 @@
 #include <optional>
 
 #include <QtCore/QHash>
+#include <QtGui/QFontDatabase>
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
 #include <QtCore/QSet>
@@ -606,6 +607,22 @@ public:
         ph.setAlpha(128);
         pal.setColor(QPalette::PlaceholderText, ph);
         edit_->setPalette(pal);
+    }
+    void set_font_role(tk::FontRole role) override
+    {
+        if (!edit_)
+            return;
+        const int base = std::max(QApplication::font().pointSize(), 8);
+        QFont f;
+        const std::string_view family = tk::font_role_family(role);
+        if (!family.empty())
+            f.setFamily(QString::fromUtf8(
+                family.data(), static_cast<qsizetype>(family.size())));
+        f.setPointSize(tk::font_role_pt(role, base));
+        f.setWeight(tk::font_role_is_semibold(role) ? QFont::DemiBold
+                                                    : QFont::Normal);
+        edit_->setFont(f);
+        request_capture();
     }
     void set_background_color(Color c) override
     {
@@ -1368,6 +1385,10 @@ public:
             return;
         const int base = std::max(QApplication::font().pointSize(), 8);
         QFont f; // inherits app family
+        const std::string_view family = tk::font_role_family(role);
+        if (!family.empty())
+            f.setFamily(QString::fromUtf8(
+                family.data(), static_cast<qsizetype>(family.size())));
         f.setPointSize(tk::font_role_pt(role, base));
         f.setWeight(tk::font_role_is_semibold(role) ? QFont::DemiBold
                                                     : QFont::Normal);
@@ -2269,6 +2290,7 @@ public:
         frame_->setFocusPolicy(Qt::NoFocus);
         surface_ = std::make_unique<Surface>(theme, frame_, /*transparent=*/false);
         surface_->setFocusPolicy(Qt::NoFocus);
+        surface_->set_takes_focus_on_click(false);
         auto* lay = new QVBoxLayout(frame_);
         lay->setContentsMargins(0, 0, 0, 0);
         lay->setSpacing(0);
@@ -2430,6 +2452,18 @@ public:
     ~Host() override
     {
         qApp->removeEventFilter(this);
+    }
+
+    std::vector<FontFamilyInfo> list_font_families() override
+    {
+        static const std::vector<FontFamilyInfo> cached = []
+        {
+            std::vector<FontFamilyInfo> out;
+            for (const QString& f : QFontDatabase::families())
+                out.push_back({f.toStdString(), QFontDatabase::isFixedPitch(f)});
+            return out; // QFontDatabase::families() is already sorted + unique
+        }();
+        return cached;
     }
 
     void request_repaint() override
@@ -3227,7 +3261,7 @@ void Surface::mousePressEvent(QMouseEvent* e)
     // (or nothing) still needs the surface itself to hold Qt focus, since
     // Surface::keyPressEvent is what feeds Host::dispatch_key_down.
     tk::Widget* focused = host_->focused_widget();
-    if (!focused || !focused->holds_native_focus())
+    if (takes_focus_on_click_ && (!focused || !focused->holds_native_focus()))
         setFocus(Qt::MouseFocusReason);
 }
 

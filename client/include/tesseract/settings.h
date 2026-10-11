@@ -1,9 +1,12 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <set>
 #include <filesystem>
+#include <string>
 #include <string_view>
 
 // Runtime-mutable application settings. Today every field is hardcoded to
@@ -11,8 +14,8 @@
 // singleton in place (on the UI thread). Read sites should always go
 // through Settings::instance() so the dialog has one place to write.
 //
-// Font sizes here correspond 1:1 with tk::FontRole values; reaction-chip
-// sizes are read by MessageListView and the per-platform shells.
+// Reaction-chip sizes are read by MessageListView and the per-platform shells;
+// font choices live in Settings::fonts.
 
 namespace tesseract
 {
@@ -30,19 +33,6 @@ public:
     Settings& operator=(const Settings&) = delete;
     Settings(Settings&&) = delete;
     Settings& operator=(Settings&&) = delete;
-
-    // ── Font sizes (pt) — one per tk::FontRole ────────────────────────
-    int font_small = 8;
-    int font_body = 12;
-    int font_sender_name = 11;
-    int font_timestamp = 9;
-    int font_sidebar_name = 12;
-    int font_sidebar_preview = 10;
-    int font_unread_badge = 10;
-    int font_title = 14;
-    int font_ui_semibold = 10;
-    int font_big_emoji = 24;         // 2× body — emoji-only messages
-    int font_emoji_picker_cell = 17; // emoji picker grid (≈ 1.2× title)
 
     // ── Reaction chip ────────────────────────────────────────────────
     int reaction_chip_height = 24;
@@ -96,6 +86,38 @@ public:
         Compact
     };
     RoomListDensity room_list_density = RoomListDensity::Normal;
+
+    // ── Fonts ────────────────────────────────────────────────────────
+    // User font overrides, live-applied. Mirrors tk::FontConfig (client can't
+    // include tk); the shell converts one to the other. Defaults mean "follow
+    // the platform": empty families, base 0 (= system size), zero deltas.
+    // Categories are indexed in tk::FontCategory order and persisted by the
+    // names in kFontCategoryKeys, never by index.
+    struct FontPrefs
+    {
+        struct Category
+        {
+            int delta_pt = 0;   // added on top of the role's offset from base
+            std::string family; // "" = use ui_family (ignored for emoji)
+            bool operator==(const Category&) const = default;
+        };
+        static constexpr std::size_t kCategoryCount = 6;
+        // Clamp ranges; tk::kFontBase*/kFontDelta* must match (checked in
+        // app/font_prefs.cpp).
+        static constexpr int kBaseMinPt = 6;
+        static constexpr int kBaseMaxPt = 36;
+        static constexpr int kDeltaMinPt = -6;
+        static constexpr int kDeltaMaxPt = 12;
+        // Persisted category keys, in tk::FontCategory order.
+        static constexpr const char* kCategoryKeys[kCategoryCount] = {
+            "messages", "secondary", "room_list", "headings", "buttons", "emoji"};
+        int base_pt = 0;         // 0 = system size; else 6..36
+        std::string ui_family;   // "" = platform default face
+        std::string mono_family; // "" = platform default monospace
+        std::array<Category, kCategoryCount> categories{};
+        bool operator==(const FontPrefs&) const = default;
+    };
+    FontPrefs fonts;
 
     // ── Read state ───────────────────────────────────────────────────
     // Delay (ms) after selecting a room before it is marked as read.

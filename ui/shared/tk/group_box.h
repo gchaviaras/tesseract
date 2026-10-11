@@ -29,7 +29,7 @@ public:
 
 private:
     std::string title_;
-    std::unique_ptr<TextLayout> title_layout_;
+    CachedTextLayout title_layout_;
 };
 
 } // namespace tk

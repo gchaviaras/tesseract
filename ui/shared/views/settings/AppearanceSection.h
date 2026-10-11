@@ -16,6 +16,7 @@
 namespace tesseract::views
 {
 
+class FontsEditor;
 class MessageLayoutPreview;
 class RoomListPreview;
 
@@ -80,6 +81,13 @@ public:
     // Fired when the user picks Normal / Compact for the room list.
     std::function<void(tesseract::Settings::RoomListDensity)> on_room_list_density_changed;
 
+    // ----- Fonts group -----
+    // Silently update the controls without firing on_font_prefs_changed.
+    void set_fonts(const tesseract::Settings::FontPrefs& prefs);
+
+    // Fired after every font edit with the full new preferences.
+    std::function<void(const tesseract::Settings::FontPrefs&)> on_font_prefs_changed;
+
 private:
     tk::RadioGroup*  picker_             = nullptr;
     tk::ComboBox*    accent_combo_       = nullptr;
@@ -95,6 +103,7 @@ private:
     MessageLayoutPreview* message_layout_preview_ = nullptr;
     tk::RadioGroup*       room_list_density_group_ = nullptr;
     RoomListPreview*      room_list_preview_       = nullptr;
+    FontsEditor*          fonts_editor_            = nullptr;
 };
 
 } // namespace tesseract::views

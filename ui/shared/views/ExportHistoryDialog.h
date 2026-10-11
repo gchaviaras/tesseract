@@ -237,8 +237,8 @@ private:
     tk::Rect card_rect_{};
     bool press_backdrop_ = false;
 
-    std::unique_ptr<tk::TextLayout> title_layout_;
-    std::unique_ptr<tk::TextLayout> body_layout_;
+    tk::CachedTextLayout title_layout_;
+    tk::CachedTextLayout body_layout_;
 
     static constexpr float kCardW    = 400.0f;
     static constexpr float kCardPad  = 20.0f;

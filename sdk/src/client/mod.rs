@@ -5359,7 +5359,7 @@ mod server_info_tests {
     #[test]
     fn get_server_info_no_client_returns_empty() {
         let ffi = ClientFfi::new();
-        assert!(ffi.get_server_info().is_empty());
+        assert!(!ffi.get_server_info().ok);
     }
 }
 

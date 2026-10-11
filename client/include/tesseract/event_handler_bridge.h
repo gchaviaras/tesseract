@@ -26,6 +26,7 @@ struct RoomDirectoryEntryFfi;
 struct MediaIndexRowFfi;
 struct RtcParticipantInfo;
 struct RoomSecurityStateFfi;
+struct ServerInfoFfi;
 struct RoomExportProgressFfi;
 } // namespace tesseract_ffi
 
@@ -144,7 +145,7 @@ public:
     void on_space_child_summary_ready(std::uint64_t request_id,
                                       rust::Str summary_json) const;
     void on_server_info_ready(std::uint64_t request_id,
-                              rust::Str info_json) const;
+                              const ServerInfoFfi& info) const;
     void on_media_preview_config_ready(std::uint64_t request_id,
                                        rust::Str config_json) const;
     void on_room_preview_override_ready(std::uint64_t request_id,

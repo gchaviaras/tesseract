@@ -269,9 +269,9 @@ void ShellBase::handle_space_child_summary_ready_ui_(std::uint64_t request_id,
 }
 
 void ShellBase::handle_server_info_async_ready_ui_(std::uint64_t /*request_id*/,
-                                                    std::string info_json)
+                                                    tesseract::ServerInfo info)
 {
-    server_info_ = tesseract::ServerInfo::from_json(info_json);
+    server_info_ = std::move(info);
     push_own_status_to_strip_(); // profile-field support gates the placeholder
     on_server_info_ready_ui_();
     for (auto& [rid, w] : active_account_popouts_())

@@ -418,6 +418,34 @@ inline RoomSecurityState from_ffi(const tesseract_ffi::RoomSecurityStateFfi& s)
     };
 }
 
+inline ServerInfo from_ffi(const tesseract_ffi::ServerInfoFfi& s)
+{
+    ServerInfo out; // defaults stand in for "not fetched" when !s.ok
+    if (!s.ok)
+        return out;
+    out.homeserver_url = std::string(s.homeserver_url);
+    for (const auto& v : s.spec_versions)
+        out.spec_versions.push_back({static_cast<int>(v.major), static_cast<int>(v.minor)});
+    out.supports_msc3030 = s.supports_msc3030;
+    // MSC3030 (Jump to Date) was stabilised in spec v1.6.
+    for (const auto& sv : out.spec_versions)
+        if (sv.at_least(1, 6))
+        {
+            out.supports_msc3030 = true;
+            break;
+        }
+    out.can_change_password     = s.can_change_password;
+    out.can_set_displayname     = s.can_set_displayname;
+    out.can_set_avatar          = s.can_set_avatar;
+    out.supports_profile_fields = s.supports_profile_fields;
+    out.profile_fields_enabled  = s.profile_fields_enabled;
+    out.preview_url_enabled     = s.preview_url_enabled;
+    out.supports_qr_grant       = s.supports_qr_grant;
+    out.supports_calls          = s.supports_calls;
+    out.default_room_version    = std::string(s.default_room_version);
+    return out;
+}
+
 inline RoomInfo from_ffi(const tesseract_ffi::RoomInfo& r)
 {
     RoomInfo out{

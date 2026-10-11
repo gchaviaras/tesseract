@@ -52,18 +52,6 @@ struct PaginateResult
     }
 };
 
-/// A parsed Matrix spec version string (e.g. "v1.6" → {1, 6}).
-struct SpecVersion
-{
-    int major = 0;
-    int minor = 0;
-
-    bool at_least(int maj, int min) const noexcept
-    {
-        return major > maj || (major == maj && minor >= min);
-    }
-};
-
 /// Extended profile fields from MSC4133 companion proposals.
 /// Populated by Client::get_extended_profile().
 struct ExtendedProfile {
@@ -86,29 +74,6 @@ struct ExtendedProfile {
     /// endpoints), which was silently reverting sibling fields to a stale
     /// value. Unknown keys are a no-op.
     void apply_field(const std::string& key, const std::string& value_json);
-};
-
-/// Information about the connected homeserver fetched after login.
-/// Bool capability fields default to `true` (permissive) when absent —
-/// old servers omit capabilities they support.
-struct ServerInfo
-{
-    std::string homeserver_url;
-    std::vector<SpecVersion> spec_versions;  ///< parsed from e.g. ["v1.1","v1.6"]
-    bool supports_msc3030          = false;  ///< Jump-to-Date; true if server advertises MSC3030 or spec >= v1.6
-    bool can_change_password       = true;
-    bool can_set_displayname       = true;
-    bool can_set_avatar            = true;
-    bool supports_profile_fields   = false;  ///< server advertises uk.tcpip.msc4133
-    bool profile_fields_enabled    = true;   ///< m.profile_fields.enabled capability
-    bool preview_url_enabled       = true;   ///< MSC4452 m.preview_url.enabled capability
-    bool supports_qr_grant         = false;  ///< server advertises org.matrix.msc4108 (QR grant login)
-    bool supports_calls            = false;  ///< server has a livekit RTC transport (MSC4195/MSC4143/well-known)
-    std::string default_room_version;        ///< e.g. "10"; empty when absent
-
-    /// Parse from the JSON blob returned by `Client::get_server_info()`.
-    /// Missing/malformed fields use the defaults above.
-    static ServerInfo from_json(const std::string& json);
 };
 
 /// Process-wide SDK log filter from the command line (`--log-level`,

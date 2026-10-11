@@ -386,13 +386,13 @@ void EventHandlerBase::on_space_child_summary_ready(std::uint64_t request_id,
 }
 
 void EventHandlerBase::on_server_info_ready(std::uint64_t request_id,
-                                            const std::string& info_json)
+                                            const ServerInfo& info)
 {
     shell()->post_to_ui_(
-        [shell = shell(), uid = user_id_, request_id, json = info_json]() mutable
+        [shell = shell(), uid = user_id_, request_id, info]() mutable
         {
             ShellBase::EventAccountScope scope(*shell, uid);
-            shell->handle_server_info_async_ready_ui_(request_id, std::move(json));
+            shell->handle_server_info_async_ready_ui_(request_id, std::move(info));
         });
 }
 

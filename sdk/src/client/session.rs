@@ -11,7 +11,7 @@ use matrix_sdk::{
 use serde::{Deserialize, Serialize};
 
 use super::{err, oauth_err, ok, ClientFfi};
-use crate::ffi::{OAuthBegin, OpResult};
+use crate::ffi::{OAuthBegin, OpResult, ServerInfoFfi, SpecVersionFfi};
 use crate::oauth;
 
 use std::sync::atomic::Ordering;
@@ -141,6 +141,140 @@ impl SessionEnvelope {
             });
         }
         None
+    }
+}
+
+/// Placeholder for "no server info": `ok == false`, everything else zeroed.
+/// The C++ side ignores the other fields and uses its own defaults.
+fn server_info_unavailable() -> ServerInfoFfi {
+    ServerInfoFfi {
+        ok: false,
+        homeserver_url: String::new(),
+        spec_versions: Vec::new(),
+        supports_msc3030: false,
+        can_change_password: false,
+        can_set_displayname: false,
+        can_set_avatar: false,
+        supports_profile_fields: false,
+        profile_fields_enabled: false,
+        preview_url_enabled: false,
+        supports_qr_grant: false,
+        supports_calls: false,
+        default_room_version: String::new(),
+    }
+}
+
+/// Build the `get_server_info` result for `client`: spec versions + feature flags
+/// from the SDK's `/versions` handling (so they match the paths it picks for
+/// requests), `/capabilities` from a direct fetch, and the side-effect slots
+/// other code reads (profile-field prefix, invite-reason, URL previews).
+async fn build_server_info(
+    client: Client,
+    http: reqwest::Client,
+    prefix_slot: std::sync::Arc<std::sync::RwLock<Option<String>>>,
+    invite_reason_slot: std::sync::Arc<std::sync::RwLock<bool>>,
+    preview_url_slot: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> ServerInfoFfi {
+    let base = {
+        let url = client.homeserver().to_string();
+        url.trim_end_matches('/').to_owned()
+    };
+    let access_token = client.access_token().unwrap_or_default();
+
+    // Drop any cached `/versions` so every call starts from live data: the
+    // SDK keeps it for 24h and picks endpoint paths (stable vs unstable)
+    // from it, so a stale entry after a server upgrade sent requests down
+    // the wrong path.
+    let (caps_resp, supported) = tokio::join!(
+        http.get(format!("{base}/_matrix/client/v3/capabilities"))
+            .bearer_auth(&access_token)
+            .send(),
+        async {
+            if let Err(e) = client.reset_supported_versions().await {
+                tracing::warn!("failed to reset cached supported versions: {e}");
+            }
+            match client.supported_versions().await {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!("failed to fetch supported versions: {e}");
+                    matrix_sdk::ruma::api::SupportedVersions::from_parts(
+                        &[],
+                        &std::collections::BTreeMap::new(),
+                    )
+                }
+            }
+        }
+    );
+    let spec_versions: Vec<SpecVersionFfi> = supported
+        .versions
+        .iter()
+        .filter_map(|v| {
+            let (major, minor) = v.as_str()?.strip_prefix('v')?.split_once('.')?;
+            Some(SpecVersionFfi { major: major.parse().ok()?, minor: minor.parse().ok()? })
+        })
+        .collect();
+    let has_feature = |name: &str| supported.features.contains(&name.into());
+
+    let supports_msc3030 = has_feature("org.matrix.msc3030");
+
+    let supports_msc4133_stable = has_feature("uk.tcpip.msc4133.stable");
+    let supports_msc4133_unstable = has_feature("uk.tcpip.msc4133");
+    let supports_msc4133 = supports_msc4133_stable || supports_msc4133_unstable;
+
+    let supports_qr_grant = has_feature("org.matrix.msc4108");
+
+    // MSC4491 (experimental as of Synapse 1.156, gated behind
+    // msc4491_enabled) — no stable/unstable pair yet, just the one
+    // unstable_features key.
+    let supports_invite_reason = has_feature("uk.timedout.msc4491.create_room_invite_reasons");
+
+    *prefix_slot.write().unwrap() = if supports_msc4133_stable {
+        Some("/_matrix/client/v3".to_owned())
+    } else if supports_msc4133_unstable {
+        Some("/_matrix/client/unstable/uk.tcpip.msc4133".to_owned())
+    } else {
+        None
+    };
+    *invite_reason_slot.write().unwrap() = supports_invite_reason;
+
+    let caps: serde_json::Value = match caps_resp {
+        Ok(r) => r.json().await.unwrap_or(serde_json::Value::Null),
+        Err(_) => serde_json::Value::Null,
+    };
+
+    let cap_bool = |key: &str| -> bool {
+        caps.pointer(&format!("/capabilities/{key}/enabled"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true)
+    };
+    let default_room_ver = caps
+        .pointer("/capabilities/m.room_versions/default")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_owned();
+    let profile_fields_enabled = caps
+        .pointer("/capabilities/m.profile_fields/enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let preview_url_enabled = preview_url_enabled(&caps);
+    preview_url_slot.store(preview_url_enabled, Ordering::Relaxed);
+
+    let supports_calls = crate::client::rtc::transport::probe_livekit_support(&client, &http).await;
+
+    ServerInfoFfi {
+        ok: true,
+        homeserver_url: base,
+        spec_versions,
+        supports_msc3030,
+        can_change_password: cap_bool("m.change_password"),
+        can_set_displayname: cap_bool("m.set_displayname"),
+        can_set_avatar: cap_bool("m.set_avatar_url"),
+        supports_profile_fields: supports_msc4133,
+        profile_fields_enabled,
+        preview_url_enabled,
+        supports_qr_grant,
+        supports_calls,
+        default_room_version: default_room_ver,
     }
 }
 
@@ -414,11 +548,11 @@ impl ClientFfi {
     }
 
     /// Fetch homeserver spec versions and enabled capabilities.
-    /// Returns a JSON blob or empty string when not logged in or on any error.
+    /// Returns `ok == false` when not logged in.
     /// Blocks the calling thread — call only from a worker thread.
-    pub fn get_server_info(&self) -> String {
+    pub fn get_server_info(&self) -> ServerInfoFfi {
         let Some(client) = &self.client else {
-            return String::new();
+            return server_info_unavailable();
         };
         let client = client.clone();
         let http = self.http_client.clone();
@@ -426,122 +560,24 @@ impl ClientFfi {
         let invite_reason_slot = self.supports_invite_reason.clone();
         let preview_url_slot = self.homeserver_preview_url_enabled.clone();
 
-        self.rt.block_on(async move {
-            let base = {
-                let url = client.homeserver().to_string();
-                url.trim_end_matches('/').to_owned()
-            };
-            let access_token = client.access_token().unwrap_or_default();
-
-            let (versions_resp, caps_resp) = tokio::join!(
-                http.get(format!("{base}/_matrix/client/versions")).send(),
-                http.get(format!("{base}/_matrix/client/v3/capabilities"))
-                    .bearer_auth(&access_token)
-                    .send()
-            );
-
-            let versions_json: serde_json::Value = match versions_resp {
-                Ok(r) => r.json().await.unwrap_or(serde_json::Value::Null),
-                Err(_) => serde_json::Value::Null,
-            };
-
-            let spec_versions: Vec<String> = versions_json["versions"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|s| s.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let supports_msc3030 = versions_json
-                .pointer("/unstable_features/org.matrix.msc3030")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            let supports_msc4133_stable = versions_json
-                .pointer("/unstable_features/uk.tcpip.msc4133.stable")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let supports_msc4133_unstable = versions_json
-                .pointer("/unstable_features/uk.tcpip.msc4133")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let supports_msc4133 = supports_msc4133_stable || supports_msc4133_unstable;
-
-            let supports_qr_grant = versions_json
-                .pointer("/unstable_features/org.matrix.msc4108")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            // MSC4491 (experimental as of Synapse 1.156, gated behind
-            // msc4491_enabled) — no stable/unstable pair yet, just the one
-            // unstable_features key.
-            let supports_invite_reason = versions_json
-                .pointer("/unstable_features/uk.timedout.msc4491.create_room_invite_reasons")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            *prefix_slot.write().unwrap() = if supports_msc4133_stable {
-                Some("/_matrix/client/v3".to_owned())
-            } else if supports_msc4133_unstable {
-                Some("/_matrix/client/unstable/uk.tcpip.msc4133".to_owned())
-            } else {
-                None
-            };
-            *invite_reason_slot.write().unwrap() = supports_invite_reason;
-
-            let caps: serde_json::Value = match caps_resp {
-                Ok(r) => r.json().await.unwrap_or(serde_json::Value::Null),
-                Err(_) => serde_json::Value::Null,
-            };
-
-            let cap_bool = |key: &str| -> bool {
-                caps.pointer(&format!("/capabilities/{key}/enabled"))
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true)
-            };
-            let default_room_ver = caps
-                .pointer("/capabilities/m.room_versions/default")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_owned();
-            let profile_fields_enabled = caps
-                .pointer("/capabilities/m.profile_fields/enabled")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let preview_url_enabled = preview_url_enabled(&caps);
-            preview_url_slot.store(preview_url_enabled, Ordering::Relaxed);
-
-            let supports_calls = crate::client::rtc::transport::probe_livekit_support(&client, &http).await;
-
-            serde_json::json!({
-                "homeserver": base,
-                "spec_versions": spec_versions,
-                "supports_msc3030": supports_msc3030,
-                "can_change_password": cap_bool("m.change_password"),
-                "can_set_displayname": cap_bool("m.set_displayname"),
-                "can_set_avatar": cap_bool("m.set_avatar_url"),
-                "default_room_version": default_room_ver,
-                "supports_profile_fields": supports_msc4133,
-                "profile_fields_enabled": profile_fields_enabled,
-                "preview_url_enabled": preview_url_enabled,
-                "supports_qr_grant": supports_qr_grant,
-                "supports_calls": supports_calls
-            })
-            .to_string()
-        })
+        self.rt.block_on(build_server_info(
+            client,
+            http,
+            prefix_slot,
+            invite_reason_slot,
+            preview_url_slot,
+        ))
     }
 
     /// Async counterpart of `get_server_info`. Spawns the fetch on the tokio
-    /// runtime and fires `on_server_info_ready(request_id, json)` on completion
-    /// (empty string on failure or when not logged in). Does not pin a thread.
+    /// runtime and fires `on_server_info_ready(request_id, info)` on completion
+    /// (`ok == false` when not logged in). Does not pin a thread.
     #[cfg(not(test))]
     pub fn get_server_info_async(&self, request_id: u64) {
         let Some(client) = self.client.clone() else {
             if let Some(ref h) = self.handler {
                 let g = h.lock();
-                g.on_server_info_ready(request_id, "");
+                g.on_server_info_ready(request_id, &server_info_unavailable());
             }
             return;
         };
@@ -552,113 +588,18 @@ impl ClientFfi {
         let preview_url_slot = self.homeserver_preview_url_enabled.clone();
 
         self.rt.spawn(async move {
-            let base = {
-                let url = client.homeserver().to_string();
-                url.trim_end_matches('/').to_owned()
-            };
-            let access_token = client.access_token().unwrap_or_default();
-
-            let (versions_resp, caps_resp) = tokio::join!(
-                http.get(format!("{base}/_matrix/client/versions")).send(),
-                http.get(format!("{base}/_matrix/client/v3/capabilities"))
-                    .bearer_auth(&access_token)
-                    .send()
-            );
-
-            let versions_json: serde_json::Value = match versions_resp {
-                Ok(r) => r.json().await.unwrap_or(serde_json::Value::Null),
-                Err(_) => serde_json::Value::Null,
-            };
-
-            let spec_versions: Vec<String> = versions_json["versions"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|s| s.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let supports_msc3030 = versions_json
-                .pointer("/unstable_features/org.matrix.msc3030")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            let supports_msc4133_stable = versions_json
-                .pointer("/unstable_features/uk.tcpip.msc4133.stable")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let supports_msc4133_unstable = versions_json
-                .pointer("/unstable_features/uk.tcpip.msc4133")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let supports_msc4133 = supports_msc4133_stable || supports_msc4133_unstable;
-
-            let supports_qr_grant = versions_json
-                .pointer("/unstable_features/org.matrix.msc4108")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            // MSC4491 (experimental as of Synapse 1.156, gated behind
-            // msc4491_enabled) — no stable/unstable pair yet, just the one
-            // unstable_features key.
-            let supports_invite_reason = versions_json
-                .pointer("/unstable_features/uk.timedout.msc4491.create_room_invite_reasons")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-
-            *prefix_slot.write().unwrap() = if supports_msc4133_stable {
-                Some("/_matrix/client/v3".to_owned())
-            } else if supports_msc4133_unstable {
-                Some("/_matrix/client/unstable/uk.tcpip.msc4133".to_owned())
-            } else {
-                None
-            };
-            *invite_reason_slot.write().unwrap() = supports_invite_reason;
-
-            let caps: serde_json::Value = match caps_resp {
-                Ok(r) => r.json().await.unwrap_or(serde_json::Value::Null),
-                Err(_) => serde_json::Value::Null,
-            };
-
-            let cap_bool = |key: &str| -> bool {
-                caps.pointer(&format!("/capabilities/{key}/enabled"))
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true)
-            };
-            let default_room_ver = caps
-                .pointer("/capabilities/m.room_versions/default")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_owned();
-            let profile_fields_enabled = caps
-                .pointer("/capabilities/m.profile_fields/enabled")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let preview_url_enabled = preview_url_enabled(&caps);
-            preview_url_slot.store(preview_url_enabled, Ordering::Relaxed);
-
-            let supports_calls = crate::client::rtc::transport::probe_livekit_support(&client, &http).await;
-
-            let json = serde_json::json!({
-                "homeserver": base,
-                "spec_versions": spec_versions,
-                "supports_msc3030": supports_msc3030,
-                "can_change_password": cap_bool("m.change_password"),
-                "can_set_displayname": cap_bool("m.set_displayname"),
-                "can_set_avatar": cap_bool("m.set_avatar_url"),
-                "default_room_version": default_room_ver,
-                "supports_profile_fields": supports_msc4133,
-                "profile_fields_enabled": profile_fields_enabled,
-                "preview_url_enabled": preview_url_enabled,
-                "supports_qr_grant": supports_qr_grant,
-                "supports_calls": supports_calls
-            })
-            .to_string();
+            let info = build_server_info(
+                client,
+                http,
+                prefix_slot,
+                invite_reason_slot,
+                preview_url_slot,
+            )
+            .await;
 
             if let Some(h) = handler {
                 let g = h.lock();
-                g.on_server_info_ready(request_id, &json);
+                g.on_server_info_ready(request_id, &info);
             }
         });
     }
@@ -1300,7 +1241,7 @@ mod ffi_state_tests {
 
     #[test]
     fn get_server_info_is_empty_when_not_logged_in() {
-        assert_eq!(ClientFfi::new().get_server_info(), "");
+        assert!(!ClientFfi::new().get_server_info().ok);
     }
 
     #[test]

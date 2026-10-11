@@ -989,6 +989,39 @@ struct MediaPreviewOverride
     static MediaPreviewOverride from_json(const std::string& json);
 };
 
+/// A parsed Matrix spec version string (e.g. "v1.6" → {1, 6}).
+struct SpecVersion
+{
+    int major = 0;
+    int minor = 0;
+
+    bool at_least(int maj, int min) const noexcept
+    {
+        return major > maj || (major == maj && minor >= min);
+    }
+};
+
+/// Information about the connected homeserver fetched after login.
+/// Delivered via `Client::get_server_info()` / `IEventHandler::on_server_info_ready`
+/// (a typed mirror of the FFI's `ServerInfoFfi`). A default-constructed value
+/// means "not fetched": bool capability fields default to `true` (permissive)
+/// because old servers omit capabilities they support.
+struct ServerInfo
+{
+    std::string homeserver_url;
+    std::vector<SpecVersion> spec_versions;  ///< e.g. v1.1, v1.6
+    bool supports_msc3030          = false;  ///< Jump-to-Date; true if server advertises MSC3030 or spec >= v1.6
+    bool can_change_password       = true;
+    bool can_set_displayname       = true;
+    bool can_set_avatar            = true;
+    bool supports_profile_fields   = false;  ///< server advertises uk.tcpip.msc4133
+    bool profile_fields_enabled    = true;   ///< m.profile_fields.enabled capability
+    bool preview_url_enabled       = true;   ///< MSC4452 m.preview_url.enabled capability
+    bool supports_qr_grant         = false;  ///< server advertises org.matrix.msc4108 (QR grant login)
+    bool supports_calls            = false;  ///< server has a livekit RTC transport (MSC4195/MSC4143/well-known)
+    std::string default_room_version;        ///< e.g. "10"; empty when absent
+};
+
 /// A direct GET /state read of the four Security & Privacy tab fields,
 /// delivered via `IEventHandler::on_room_security_state_ready` (a direct
 /// typed mirror of the FFI's `RoomSecurityStateFfi` — no JSON round-trip).

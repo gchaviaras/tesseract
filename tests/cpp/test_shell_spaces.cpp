@@ -366,12 +366,15 @@ TEST_CASE("the space children cache is cleared when there is nothing to track",
     CHECK(s.space_children_cache_.empty());
 }
 
-TEST_CASE("server info JSON updates capability flags", "[shell][spaces]")
+TEST_CASE("server info updates capability flags", "[shell][spaces]")
 {
     SpacesShell s;
-    s.handle_server_info_async_ready_ui_(
-        1, R"({"homeserver":"https://hs.invalid","supports_calls":true,
-               "supports_qr_grant":true,"supports_profile_fields":false})");
+    tesseract::ServerInfo info;
+    info.homeserver_url = "https://hs.invalid";
+    info.supports_calls = true;
+    info.supports_qr_grant = true;
+    info.supports_profile_fields = false;
+    s.handle_server_info_async_ready_ui_(1, info);
     CHECK(s.server_info_.homeserver_url == "https://hs.invalid");
     CHECK(s.server_info_.supports_calls);
     CHECK(s.server_info_.supports_qr_grant);

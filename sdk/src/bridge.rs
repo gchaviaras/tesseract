@@ -1372,6 +1372,32 @@ pub mod ffi {
         history_visibility: String,
     }
 
+    /// A homeserver-advertised Matrix spec version (`v1.6` → 1, 6).
+    struct SpecVersionFfi {
+        major: u32,
+        minor: u32,
+    }
+
+    /// Homeserver spec versions, feature flags and capabilities, returned by
+    /// `get_server_info` / delivered via `on_server_info_ready`. `ok` is false
+    /// on failure or when not logged in; the rest is then meaningless and the
+    /// C++ side substitutes its own defaults.
+    struct ServerInfoFfi {
+        ok: bool,
+        homeserver_url: String,
+        spec_versions: Vec<SpecVersionFfi>,
+        supports_msc3030: bool,
+        can_change_password: bool,
+        can_set_displayname: bool,
+        can_set_avatar: bool,
+        supports_profile_fields: bool,
+        profile_fields_enabled: bool,
+        preview_url_enabled: bool,
+        supports_qr_grant: bool,
+        supports_calls: bool,
+        default_room_version: String,
+    }
+
     /// Result of `parse_matrix_link`.  `kind` values:
     ///   0 = unknown / not a matrix link
     ///   1 = room ID  (`!room:server`)
@@ -1832,10 +1858,13 @@ pub mod ffi {
         );
 
         /// Fired when an async server-info fetch started via
-        /// `get_server_info_async` completes. `info_json` is the same JSON
-        /// shape as the synchronous `get_server_info` return value (empty
-        /// string on failure or when not logged in).
-        fn on_server_info_ready(self: &EventHandlerBridge, request_id: u64, info_json: &str);
+        /// `get_server_info_async` completes (`ok` false on failure or when
+        /// not logged in).
+        fn on_server_info_ready(
+            self: &EventHandlerBridge,
+            request_id: u64,
+            info: &ServerInfoFfi,
+        );
 
         /// Fired when an async `media_preview_config_async` fetch completes.
         /// `config_json` is `{"media_previews":N,"invite_avatars":bool}`.
@@ -2294,9 +2323,9 @@ pub mod ffi {
         fn export_session(self: &ClientFfi) -> String;
 
         /// Fetch homeserver spec versions and enabled capabilities.
-        /// Returns JSON blob or empty string when not logged in / on error.
+        /// Returns `ok == false` when not logged in / on error.
         /// Blocks — call from a worker thread only.
-        fn get_server_info(self: &ClientFfi) -> String;
+        fn get_server_info(self: &ClientFfi) -> ServerInfoFfi;
 
         // ----- Sync -----
 
@@ -4142,7 +4171,7 @@ pub mod ffi {
         );
 
         /// Async counterpart of `get_server_info`. Spawns the fetch on the
-        /// tokio runtime and fires `on_server_info_ready(request_id, info_json)`
+        /// tokio runtime and fires `on_server_info_ready(request_id, info)`
         /// on completion. Does not pin a thread.
         fn get_server_info_async(self: &ClientFfi, request_id: u64);
 

@@ -96,7 +96,7 @@ public:
     void on_space_child_summary_ready(std::uint64_t request_id,
                                       const std::string& summary_json) override;
     void on_server_info_ready(std::uint64_t request_id,
-                              const std::string& info_json) override;
+                              const ServerInfo& info) override;
     void on_media_preview_config_ready(std::uint64_t request_id,
                                        const std::string& config_json) override;
     void on_room_preview_override_ready(std::uint64_t request_id,

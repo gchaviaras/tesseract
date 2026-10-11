@@ -575,10 +575,10 @@ public:
     }
 
     /// Fired when an async server-info fetch (`Client::get_server_info_async`)
-    /// completes. `info_json` matches the synchronous `get_server_info` shape
-    /// (empty on failure or when not logged in). Default no-op.
+    /// completes. `info` is default-constructed on failure or when not logged
+    /// in. Default no-op.
     virtual void on_server_info_ready(std::uint64_t /*request_id*/,
-                                      const std::string& /*info_json*/)
+                                      const ServerInfo& /*info*/)
     {
     }
 

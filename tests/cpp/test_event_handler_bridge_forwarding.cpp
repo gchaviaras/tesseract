@@ -131,9 +131,11 @@ struct FwdRecorder : tesseract::IEventHandler
     {
         log.push_back("space:" + n(id) + ":" + j);
     }
-    void on_server_info_ready(std::uint64_t id, const std::string& j) override
+    void on_server_info_ready(std::uint64_t id,
+                              const tesseract::ServerInfo& info) override
     {
-        log.push_back("server:" + n(id) + ":" + j);
+        log.push_back("server:" + n(id) + ":" + info.homeserver_url + ":" +
+                      (info.supports_msc3030 ? "1" : "0"));
     }
     void on_media_preview_config_ready(std::uint64_t id,
                                        const std::string& j) override
@@ -382,7 +384,11 @@ TEST_CASE("bridge forwards request/response completions", "[bridge][forwarding]"
     f.bridge.on_forward_done(4);
     f.bridge.on_forward_failed(5, "ff");
     f.bridge.on_space_child_summary_ready(6, "{s}");
-    f.bridge.on_server_info_ready(7, "{i}");
+    tesseract_ffi::ServerInfoFfi si{};
+    si.ok = true;
+    si.homeserver_url = "hs";
+    si.supports_msc3030 = true;
+    f.bridge.on_server_info_ready(7, si);
     f.bridge.on_media_preview_config_ready(8, "{c}");
     f.bridge.on_room_preview_override_ready(9, "{o}");
     f.bridge.on_search_failed(10, "sf");
@@ -397,7 +403,7 @@ TEST_CASE("bridge forwards request/response completions", "[bridge][forwarding]"
     CHECK(f.rec.log ==
           std::vector<std::string>{
               "chunk:1:3:2:99", "preview:2:{p}", "giffail:3:gf", "fwddone:4",
-              "fwdfail:5:ff", "space:6:{s}", "server:7:{i}", "mpcr:8:{c}",
+              "fwdfail:5:ff", "space:6:{s}", "server:7:hs:1", "mpcr:8:{c}",
               "rpo:9:{o}", "searchfail:10:sf", "dirfail:11:df", "pag:12101:p",
               "mvpag:13" + std::string("01") + ":42:mv", "action:141:!joined:m",
               "upload:150:um", "uprog:16:5/50", "field:17:status1:ok",

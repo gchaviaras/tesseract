@@ -2991,7 +2991,7 @@ protected:
     // Completion for an async get_server_info_async fetch. Populates
     // server_info_ and drives the same post-processing as the sync path.
     void handle_server_info_async_ready_ui_(std::uint64_t request_id,
-                                            std::string info_json);
+                                            tesseract::ServerInfo info);
     // Completion for an async get_url_preview_async fetch.
     void handle_url_preview_ready_ui_(std::uint64_t request_id,
                                       std::string preview_json);

@@ -560,6 +560,29 @@ pub mod ffi {
         pub history_visibility: String,
     }
 
+    #[derive(Debug, PartialEq, Default, Clone)]
+    pub struct SpecVersionFfi {
+        pub major: u32,
+        pub minor: u32,
+    }
+
+    #[derive(Debug, PartialEq, Default)]
+    pub struct ServerInfoFfi {
+        pub ok: bool,
+        pub homeserver_url: String,
+        pub spec_versions: Vec<SpecVersionFfi>,
+        pub supports_msc3030: bool,
+        pub can_change_password: bool,
+        pub can_set_displayname: bool,
+        pub can_set_avatar: bool,
+        pub supports_profile_fields: bool,
+        pub profile_fields_enabled: bool,
+        pub preview_url_enabled: bool,
+        pub supports_qr_grant: bool,
+        pub supports_calls: bool,
+        pub default_room_version: String,
+    }
+
     #[derive(Debug, PartialEq, Default)]
     pub struct ThreadInfo {
         pub root_event_id: String,

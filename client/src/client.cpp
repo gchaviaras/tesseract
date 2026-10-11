@@ -2027,40 +2027,6 @@ bool js_bool(const nlohmann::json& j, const char* key, bool default_val)
     return default_val;
 }
 
-// Parse the `spec_versions` array of "vMAJOR.MINOR" strings.
-std::vector<tesseract::SpecVersion>
-si_parse_spec_versions(const nlohmann::json& j)
-{
-    std::vector<tesseract::SpecVersion> out;
-    auto it = j.find("spec_versions");
-    if (it == j.end() || !it->is_array())
-    {
-        return out;
-    }
-    for (const auto& elem : *it)
-    {
-        if (!elem.is_string())
-            continue;
-        const std::string& raw = elem.get_ref<const std::string&>();
-        if (raw.size() >= 2 && raw[0] == 'v')
-        {
-            int major = 0, minor = 0;
-            const char* p = raw.data() + 1;
-            const char* end = raw.data() + raw.size();
-            while (p < end && *p >= '0' && *p <= '9')
-                major = major * 10 + (*p++ - '0');
-            if (p < end && *p == '.')
-            {
-                ++p;
-                while (p < end && *p >= '0' && *p <= '9')
-                    minor = minor * 10 + (*p++ - '0');
-            }
-            out.push_back({major, minor});
-        }
-    }
-    return out;
-}
-
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -2691,34 +2657,10 @@ Client::discover_homeserver(const std::string& server_name_or_mxid)
 // ServerInfo
 // ---------------------------------------------------------------------------
 
-tesseract::ServerInfo tesseract::ServerInfo::from_json(const std::string& json)
-{
-    if (json.empty())
-        return {};
-    nlohmann::json j = parse_json_obj(json);
-    ServerInfo info;
-    info.homeserver_url       = js_str(j, "homeserver");
-    info.spec_versions        = si_parse_spec_versions(j);
-    info.supports_msc3030     = js_bool(j, "supports_msc3030", false);
-    // MSC3030 (Jump to Date) was stabilised in spec v1.6.
-    for (const auto& sv : info.spec_versions)
-        if (sv.at_least(1, 6)) { info.supports_msc3030 = true; break; }
-    info.can_change_password       = js_bool(j, "can_change_password", true);
-    info.can_set_displayname       = js_bool(j, "can_set_displayname", true);
-    info.can_set_avatar            = js_bool(j, "can_set_avatar", true);
-    info.supports_profile_fields   = js_bool(j, "supports_profile_fields", false);
-    info.profile_fields_enabled    = js_bool(j, "profile_fields_enabled", true);
-    info.preview_url_enabled       = js_bool(j, "preview_url_enabled", true);
-    info.supports_qr_grant         = js_bool(j, "supports_qr_grant", false);
-    info.supports_calls            = js_bool(j, "supports_calls", false);
-    info.default_room_version      = js_str(j, "default_room_version");
-    return info;
-}
-
 ServerInfo Client::get_server_info() const
 {
     SH_FFI;
-    return ServerInfo::from_json(std::string(impl_->ffi->get_server_info()));
+    return from_ffi(impl_->ffi->get_server_info());
 }
 
 // RoomSummary

@@ -469,7 +469,7 @@ TEST_CASE("remaining callbacks are safe on an idle shell", "[event_handler_base]
     f.h.on_forward_done(99);
     f.h.on_forward_failed(99, "x");
     f.h.on_space_child_summary_ready(99, "{}");
-    f.h.on_server_info_ready(99, "{}");
+    f.h.on_server_info_ready(99, tesseract::ServerInfo{});
     f.h.on_media_preview_config_ready(99, "{}");
     f.h.on_room_preview_override_ready(99, "{}");
     f.h.on_room_security_state_ready(99, tesseract::RoomSecurityState{});

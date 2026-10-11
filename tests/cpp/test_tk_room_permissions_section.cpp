@@ -55,6 +55,7 @@ TEST_CASE("RoomPermissionsSection: set_permissions seeds all 10 combos to matchi
     p.change_permissions = 100;
     p.notify_everyone    = 50;
     p.start_calls        = 50;
+    p.join_calls         = 0;
     s.set_permissions(p);
 
     CHECK(s.default_role_combo()->selected_value() == "0");
@@ -67,6 +68,7 @@ TEST_CASE("RoomPermissionsSection: set_permissions seeds all 10 combos to matchi
     CHECK(s.change_permissions_combo()->selected_value() == "100");
     CHECK(s.notify_everyone_combo()->selected_value() == "50");
     CHECK(s.start_calls_combo()->selected_value() == "50");
+    CHECK(s.join_calls_combo()->selected_value() == "0");
 }
 
 TEST_CASE("RoomPermissionsSection: a non-preset value synthesizes and selects "
@@ -88,6 +90,16 @@ TEST_CASE("RoomPermissionsSection: start_calls combo accepts a non-preset value"
     p.start_calls = 30;
     s.set_permissions(p);
     CHECK(s.start_calls_combo()->selected_value() == "30");
+}
+
+TEST_CASE("RoomPermissionsSection: join_calls combo accepts a non-preset value",
+          "[room_permissions_section]")
+{
+    RoomPermissionsSection s;
+    RoomPermissions p;
+    p.join_calls = 30;
+    s.set_permissions(p);
+    CHECK(s.join_calls_combo()->selected_value() == "30");
 }
 
 TEST_CASE("RoomPermissionsSection: set_calls_supported toggles the Calls group's visibility",

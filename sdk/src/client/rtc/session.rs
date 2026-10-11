@@ -321,7 +321,12 @@ pub async fn start_call(
     // ── Pre-flight Matrix signaling ───────────────────────────────────────
     if let Some(ref pid) = preflight_identity {
         info!("rtc: pre-flight signaling with identity={pid}");
-        send_msc3401_call_open(&room, "").await?;
+        if signaling::should_open_call_slot(
+            signaling::call_slot_exists(&room, "").await,
+            !initial_members.is_empty(),
+        ) {
+            signaling::start_msc3401_call_slot(&room, "").await?;
+        }
         send_msc3401_member_join(
             &room,
             "",
@@ -372,7 +377,12 @@ pub async fn start_call(
             "rtc: identity mismatch — preflight={preflight_identity:?} actual={lk_identity}; \
              re-sending signaling"
         );
-        send_msc3401_call_open(&room, "").await?;
+        if signaling::should_open_call_slot(
+            signaling::call_slot_exists(&room, "").await,
+            !initial_members.is_empty(),
+        ) {
+            signaling::start_msc3401_call_slot(&room, "").await?;
+        }
         send_msc3401_member_join(
             &room,
             "",

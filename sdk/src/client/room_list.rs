@@ -2251,7 +2251,7 @@ impl ClientFfi {
         err("not logged in")
     }
 
-    /// Read the room's current power levels, narrowed to the 9 fields the
+    /// Read the room's current power levels, narrowed to the 10 fields the
     /// Permissions room-settings tab edits. Synchronous — Room::power_levels()
     /// is a cached local read with no network round-trip, unlike the fields
     /// the Security & Privacy tab needs an async GET /state fetch for (see
@@ -2272,6 +2272,7 @@ impl ClientFfi {
                 notify_everyone: 50,
                 change_permissions: 50,
                 start_calls: 50,
+                join_calls: 50,
             }
         }
         let _enter = self.rt.enter();
@@ -2294,6 +2295,13 @@ impl ClientFfi {
         let start_calls = pl
             .events
             .get(&matrix_sdk::ruma::events::TimelineEventType::from(
+                "org.matrix.msc3401.call",
+            ))
+            .map(|v| i64::from(*v))
+            .unwrap_or_else(|| i64::from(pl.state_default));
+        let join_calls = pl
+            .events
+            .get(&matrix_sdk::ruma::events::TimelineEventType::from(
                 "org.matrix.msc4143.rtc.member",
             ))
             .or_else(|| {
@@ -2314,6 +2322,7 @@ impl ClientFfi {
             notify_everyone: i64::from(pl.notifications.room),
             change_permissions,
             start_calls,
+            join_calls,
         }
     }
 
@@ -2322,10 +2331,10 @@ impl ClientFfi {
         crate::ffi::RoomPowerLevelsFfi::default()
     }
 
-    /// Send an updated m.room.power_levels state event with the 9 fields
+    /// Send an updated m.room.power_levels state event with the 10 fields
     /// from `levels`. Reads the current power levels first (preserving every
     /// field this tab doesn't edit, e.g. per-user overrides and other
-    /// per-event-type overrides), mutates only the 9 fields the Permissions
+    /// per-event-type overrides), mutates only the 10 fields the Permissions
     /// tab exposes, then sends the result. Blocks — worker thread.
     #[cfg(not(test))]
     pub fn set_room_power_levels(
@@ -2362,14 +2371,18 @@ impl ClientFfi {
             TimelineEventType::from("m.room.power_levels"),
             try_op!(to_int(levels.change_permissions)),
         );
-        let start_calls_level = try_op!(to_int(levels.start_calls));
+        pl.events.insert(
+            TimelineEventType::from("org.matrix.msc3401.call"),
+            try_op!(to_int(levels.start_calls)),
+        );
+        let join_calls_level = try_op!(to_int(levels.join_calls));
         pl.events.insert(
             TimelineEventType::from("org.matrix.msc4143.rtc.member"),
-            start_calls_level,
+            join_calls_level,
         );
         pl.events.insert(
             TimelineEventType::from("org.matrix.msc3401.call.member"),
-            start_calls_level,
+            join_calls_level,
         );
 
         let content = match RoomPowerLevelsEventContent::try_from(pl) {

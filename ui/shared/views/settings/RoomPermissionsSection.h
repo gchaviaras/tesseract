@@ -110,6 +110,7 @@ public:
     tk::ComboBox* change_permissions_combo() const { return change_permissions_combo_; }
     tk::ComboBox* notify_everyone_combo() const { return notify_everyone_combo_; }
     tk::ComboBox* start_calls_combo() const { return start_calls_combo_; }
+    tk::ComboBox* join_calls_combo() const { return join_calls_combo_; }
 
     // Accessor used by tests to inspect the Calls group's visibility.
     tk::Widget* calls_group() const;
@@ -135,6 +136,7 @@ private:
     tk::ComboBox* change_permissions_combo_ = nullptr;
     tk::ComboBox* notify_everyone_combo_    = nullptr;
     tk::ComboBox* start_calls_combo_        = nullptr;
+    tk::ComboBox* join_calls_combo_         = nullptr;
 
     // Borrowed — owned via SettingsPage::content_'s add_child(). Kept (unlike
     // the other groups, which are only local variables in the constructor)

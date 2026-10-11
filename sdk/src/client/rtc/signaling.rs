@@ -234,6 +234,45 @@ pub async fn send_msc3401_call_open(room: &matrix_sdk::Room, call_id: &str) -> a
     Ok(())
 }
 
+/// True when the room already carries the `org.matrix.msc3401.call` slot
+/// event for `call_id`.
+pub async fn call_slot_exists(room: &matrix_sdk::Room, call_id: &str) -> bool {
+    use matrix_sdk::ruma::events::StateEventType;
+    room.get_state_event(StateEventType::from("org.matrix.msc3401.call"), call_id)
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|_| true)
+}
+
+/// Whether joining must publish the `org.matrix.msc3401.call` slot event.
+/// That event needs the "Start Element Call calls" permission (moderator by
+/// default), unlike the member event, so a joiner of a call someone else
+/// started must not send it.
+pub fn should_open_call_slot(slot_exists: bool, others_in_call: bool) -> bool {
+    !slot_exists && !others_in_call
+}
+
+/// Like [`send_msc3401_call_open`] but turns a `M_FORBIDDEN` into a
+/// message saying what is missing.
+pub async fn start_msc3401_call_slot(room: &matrix_sdk::Room, call_id: &str) -> anyhow::Result<()> {
+    match send_msc3401_call_open(room, call_id).await {
+        Err(e)
+            if e.downcast_ref::<matrix_sdk::Error>().is_some_and(|me| {
+                matches!(
+                    me.client_api_error_kind(),
+                    Some(matrix_sdk::ruma::api::error::ErrorKind::Forbidden)
+                )
+            }) =>
+        {
+            Err(anyhow::anyhow!(
+                "you don't have permission to start calls in this room ({e})"
+            ))
+        }
+        other => other,
+    }
+}
+
 fn msc3401_state_key(
     user_id: &str,
     membership_id: &str,
@@ -747,6 +786,14 @@ pub async fn send_ring_ack(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn call_slot_opened_only_when_starting_a_call() {
+        assert!(should_open_call_slot(false, false));
+        assert!(!should_open_call_slot(true, false));
+        assert!(!should_open_call_slot(false, true));
+        assert!(!should_open_call_slot(true, true));
+    }
 
     #[test]
     fn state_key_strips_user_prefix_from_membership_id() {

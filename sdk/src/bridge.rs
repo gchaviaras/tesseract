@@ -1212,12 +1212,15 @@ pub mod ffi {
         remove_messages: i64,    // redact
         notify_everyone: i64,    // notifications.room
         change_permissions: i64, // events["m.room.power_levels"], falls back to state_default
+        // events["org.matrix.msc3401.call"], falling back to state_default —
+        // gates opening the call slot (Element's "Start Element Call calls").
+        start_calls: i64,
         // events["org.matrix.msc4143.rtc.member"], falling back to
         // events["org.matrix.msc3401.call.member"], falling back to
-        // state_default — gates the MatrixRTC/legacy call-member state
-        // events sent by sdk/src/client/rtc/session.rs. Written to both
-        // event-type keys together on save.
-        start_calls: i64,
+        // state_default — gates the call-member state events sent by
+        // sdk/src/client/rtc/session.rs (Element's "Join Element Call
+        // calls"). Written to both event-type keys together on save.
+        join_calls: i64,
     }
 
     /// Options for creating a new room via `create_room`/`create_room_async`.
@@ -4405,6 +4408,7 @@ pub mod ffi {
         /// Reads cached power levels — no network round-trip. False on any
         /// uncertainty.
         fn can_start_call_in_room(self: &ClientFfi, room_id: &str) -> bool;
+        fn can_join_call_in_room(self: &ClientFfi, room_id: &str) -> bool;
 
         /// Start a MatrixRTC call in `room_id` / `slot_id`. Returns an error when
         /// not logged in or when the `calls` feature is disabled. On success the

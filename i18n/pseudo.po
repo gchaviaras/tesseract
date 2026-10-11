@@ -4898,6 +4898,10 @@ msgstr "[Çàllsx]"
 msgid "Start calls"
 msgstr "[Stàrt çàllsxx]"
 
+#: ui/shared/views/settings/RoomPermissionsSection.cpp
+msgid "Join calls"
+msgstr "[Jòìn çàllsxx]"
+
 #: ui/shared/views/settings/RoomPermissionsSection.cpp:123
 msgid "Change settings"
 msgstr "[Çhàñgé séttïñgsxxx]"

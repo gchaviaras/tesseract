@@ -5418,6 +5418,10 @@ msgstr ""
 msgid "Start calls"
 msgstr ""
 
+#: ui/shared/views/settings/RoomPermissionsSection.cpp
+msgid "Join calls"
+msgstr ""
+
 #: ui/shared/views/settings/RoomPermissionsSection.cpp:123
 msgid "Change settings"
 msgstr ""

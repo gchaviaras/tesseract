@@ -305,6 +305,7 @@ inline RoomPermissions from_ffi(const tesseract_ffi::RoomPowerLevelsFfi& p)
         .notify_everyone    = p.notify_everyone,
         .change_permissions = p.change_permissions,
         .start_calls        = p.start_calls,
+        .join_calls         = p.join_calls,
     };
 }
 
@@ -321,6 +322,7 @@ inline tesseract_ffi::RoomPowerLevelsFfi to_ffi(const RoomPermissions& p)
         .notify_everyone    = p.notify_everyone,
         .change_permissions = p.change_permissions,
         .start_calls        = p.start_calls,
+        .join_calls         = p.join_calls,
     };
 }
 

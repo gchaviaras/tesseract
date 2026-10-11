@@ -1780,8 +1780,13 @@ public:
 
     /// True iff the current user's PL meets the requirement for sending
     /// org.matrix.msc3401.call.member state events in this room — required
-    /// to start or join a MatrixRTC call. Cached read — no network.
-    /// Returns false on any uncertainty.
+    /// to join a MatrixRTC call. Cached read — no network. Returns false on
+    /// any uncertainty.
+    bool can_join_call_in_room(const std::string& room_id);
+
+    /// True iff the user can join (above) and also send the
+    /// org.matrix.msc3401.call state event, i.e. may start a call that is
+    /// not yet running. Cached read — no network. False on any uncertainty.
     bool can_start_call_in_room(const std::string& room_id);
 
     /// True iff the current user's PL meets the requirement for sending

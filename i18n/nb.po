@@ -3401,6 +3401,10 @@ msgstr "Samtaler"
 msgid "Start calls"
 msgstr "Start samtaler"
 
+#: ui/shared/views/settings/RoomPermissionsSection.cpp
+msgid "Join calls"
+msgstr "Delta i samtaler"
+
 msgid "Change settings"
 msgstr "Endre innstillinger"
 

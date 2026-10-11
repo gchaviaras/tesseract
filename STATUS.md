@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-11**. 3198 C++ + 1005 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-11**. 3202 C++ + 1013 Rust tests.
 
 > **Compact room list and external media viewers (2026-10-11).**
 > Settings → Appearance → Layout offers Normal / Compact room rows (name only,

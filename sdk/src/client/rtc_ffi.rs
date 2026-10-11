@@ -52,12 +52,27 @@ impl ClientFfi {
         }
     }
 
-    /// Returns true iff the current user has permission to send
-    /// org.matrix.msc3401.call.member state events in this room — the event
-    /// that both starting and joining a MatrixRTC call requires. Reads
-    /// cached m.room.power_levels — no network round-trip. Returns false on
-    /// any uncertainty (not logged in, room unknown, PL unreadable).
+    /// Returns true iff the current user may send every state event needed
+    /// to join a MatrixRTC call in this room — `org.matrix.msc3401.call.member`
+    /// (Element's "Join Element Call calls"). Reads cached m.room.power_levels
+    /// — no network round-trip. Returns false on any uncertainty (not logged
+    /// in, room unknown, PL unreadable).
+    pub fn can_join_call_in_room(&self, room_id: &str) -> bool {
+        self.can_send_call_state(room_id, &["org.matrix.msc3401.call.member"])
+    }
+
+    /// Returns true iff the current user may start a call in this room: join
+    /// permission plus `org.matrix.msc3401.call` (Element's "Start Element
+    /// Call calls"). Same cached read and fail-closed behaviour as
+    /// `can_join_call_in_room`.
     pub fn can_start_call_in_room(&self, room_id: &str) -> bool {
+        self.can_send_call_state(
+            room_id,
+            &["org.matrix.msc3401.call", "org.matrix.msc3401.call.member"],
+        )
+    }
+
+    fn can_send_call_state(&self, room_id: &str, event_types: &[&str]) -> bool {
         use matrix_sdk::ruma::events::StateEventType;
         use matrix_sdk::ruma::OwnedRoomId;
 
@@ -75,10 +90,9 @@ impl ClientFfi {
         };
 
         match self.rt.block_on(room.power_levels()) {
-            Ok(pl) => pl.user_can_send_state(
-                user_id,
-                StateEventType::from("org.matrix.msc3401.call.member"),
-            ),
+            Ok(pl) => event_types
+                .iter()
+                .all(|t| pl.user_can_send_state(user_id, StateEventType::from(*t))),
             Err(_) => false,
         }
     }

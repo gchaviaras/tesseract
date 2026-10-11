@@ -499,9 +499,10 @@ void ShellBase::on_unpin_requested(const std::string& event_id)
 
 // Compute and apply calls-button visibility for one room header:
 // requires server support, a non-bridged room, and either the current
-// user's PL permitting org.matrix.msc3401.call.member, or the user
-// already being in a call for that room (so they can still hang up if
-// their permission was revoked mid-call). Called for room_view_ and
+// user's PL permitting the call (join when a call is already running in
+// the room, start otherwise), or the user already being in a call for
+// that room (so they can still hang up if their permission was revoked
+// mid-call). Called for room_view_ and
 // every secondary window's header whenever room state, server info, or
 // the active room changes.
 void ShellBase::update_call_btn_visibility_(views::RoomHeader* header,
@@ -513,7 +514,9 @@ void ShellBase::update_call_btn_visibility_(views::RoomHeader* header,
     const bool room_is_bridged = r && r->is_bridged && !r->bridge_overridden;
     const bool in_call_room =
         call_session_ != nullptr && call_session_->room_id() == room_id;
-    const bool can_call = client_ && client_->can_start_call_in_room(room_id);
+    const bool can_call =
+        client_ && (r && r->has_active_call ? client_->can_join_call_in_room(room_id)
+                                            : client_->can_start_call_in_room(room_id));
     header->set_show_call_btn(server_info_.supports_calls && !room_is_bridged &&
                                (can_call || in_call_room));
 }

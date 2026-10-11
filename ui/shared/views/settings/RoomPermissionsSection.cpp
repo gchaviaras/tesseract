@@ -114,6 +114,9 @@ RoomPermissionsSection::RoomPermissionsSection()
     start_calls_combo_ = calls_form->add_row(
         tk::tr("Start calls"), tk::create_widget<tk::ComboBox>(this));
     wire(start_calls_combo_, &tesseract::RoomPermissions::start_calls);
+    join_calls_combo_ = calls_form->add_row(
+        tk::tr("Join calls"), tk::create_widget<tk::ComboBox>(this));
+    wire(join_calls_combo_, &tesseract::RoomPermissions::join_calls);
 
     // ── Advanced ──────────────────────────────────────────────────────────
     auto* advanced_group = add_group(tk::tr("Advanced"));
@@ -143,6 +146,7 @@ void RoomPermissionsSection::set_permissions(const tesseract::RoomPermissions& p
     set_level_combo(change_permissions_combo_, p.change_permissions);
     set_level_combo(notify_everyone_combo_, p.notify_everyone);
     set_level_combo(start_calls_combo_, p.start_calls);
+    set_level_combo(join_calls_combo_, p.join_calls);
 }
 
 void RoomPermissionsSection::refresh_enabled_()
@@ -158,6 +162,7 @@ void RoomPermissionsSection::refresh_enabled_()
     change_permissions_combo_->set_enabled(enabled);
     notify_everyone_combo_->set_enabled(enabled);
     start_calls_combo_->set_enabled(enabled);
+    join_calls_combo_->set_enabled(enabled);
 }
 
 void RoomPermissionsSection::set_field_permissions(bool can_edit)

@@ -1776,6 +1776,10 @@ msgid "Start calls"
 msgstr "Iniciar llamadas"
 
 #: ui/shared/views/settings/RoomPermissionsSection.cpp
+msgid "Join calls"
+msgstr "Unirse a llamadas"
+
+#: ui/shared/views/settings/RoomPermissionsSection.cpp
 msgid "Advanced"
 msgstr "Avanzado"
 

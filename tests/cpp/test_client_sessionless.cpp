@@ -69,6 +69,7 @@ TEST_CASE("sessionless Client: permission and capability queries are false",
     Client c;
     CHECK_FALSE(c.can_redact_in_room(kRoom));
     CHECK_FALSE(c.can_pin_in_room(kRoom));
+    CHECK_FALSE(c.can_join_call_in_room(kRoom));
     CHECK_FALSE(c.can_start_call_in_room(kRoom));
     CHECK_FALSE(c.can_set_room_name(kRoom));
     CHECK_FALSE(c.can_set_room_topic(kRoom));

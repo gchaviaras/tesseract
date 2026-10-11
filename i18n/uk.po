@@ -5273,6 +5273,10 @@ msgstr "Дзвінки"
 msgid "Start calls"
 msgstr "Розпочинати виклики"
 
+#: ui/shared/views/settings/RoomPermissionsSection.cpp
+msgid "Join calls"
+msgstr "Приєднуватися до викликів"
+
 #: ui/shared/views/settings/RoomPermissionsSection.cpp:123
 msgid "Change settings"
 msgstr "Змінювати налаштування"

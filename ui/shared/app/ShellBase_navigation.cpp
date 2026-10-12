@@ -461,10 +461,30 @@ void ShellBase::update_call_btn_visibility_(views::RoomHeader* header,
     const bool in_call_room =
         call_session_ != nullptr && call_session_->room_id() == room_id;
     const bool can_call =
-        client_ && (r && r->has_active_call ? client_->can_join_call_in_room(room_id)
-                                            : client_->can_start_call_in_room(room_id));
+        client_ && call_entry_permitted(r && r->has_active_call,
+                                        client_->can_join_call_in_room(room_id),
+                                        client_->can_start_call_in_room(room_id));
     header->set_show_call_btn(server_info_.supports_calls && !room_is_bridged &&
                                (can_call || in_call_room));
+    update_call_lobby_gate_(room_id);
+}
+
+void ShellBase::update_call_lobby_gate_(const std::string& room_id)
+{
+    views::RoomView* rv = room_view_for_room_(room_id);
+    views::CallLobbyView* lobby = rv ? rv->call_lobby() : nullptr;
+    if (!lobby || !lobby->is_open() || lobby->room_id() != room_id)
+        return;
+    const auto* r = room_by_id_(room_id);
+    const bool has_call = r && r->has_active_call;
+    const bool permitted =
+        !client_ || call_entry_permitted(has_call,
+                                         client_->can_join_call_in_room(room_id),
+                                         client_->can_start_call_in_room(room_id));
+    lobby->set_join_blocked(
+        permitted ? std::string()
+                  : has_call ? tk::tr("You don't have permission to join calls in this room.")
+                             : tk::tr("A moderator needs to start the call."));
 }
 
 void ShellBase::refresh_pinned_for_current_room_()

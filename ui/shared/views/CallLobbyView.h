@@ -62,6 +62,11 @@ public:
     void set_local_user_id(std::string id) { local_user_id_ = std::move(id); }
     void set_repaint_requester(std::function<void()> fn);
 
+    // Disables Join and shows `reason` above the toggles (e.g. the user may
+    // not start calls in this room); an empty string re-enables Join.
+    void set_join_blocked(const std::string& reason);
+    bool join_blocked() const { return join_blocked_; }
+
     // room_id, slot_id, audio_only (camera was deliberately left off),
     // start_audio_muted (mic was left off), start_video_muted (the camera
     // failed — join as a video call with video off so it can be retried).
@@ -102,6 +107,8 @@ private:
     tk::Button*      join_btn_     = nullptr;
     tk::Button*      cancel_btn_   = nullptr;
     tk::Label*       cam_error_label_ = nullptr;
+    tk::Label*       blocked_label_   = nullptr;
+    bool             join_blocked_    = false;
 
     std::function<const tk::Image*(const std::string&)> avatar_provider_;
     std::function<void()>                                repaint_requester_;

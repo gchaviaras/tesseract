@@ -4731,3 +4731,11 @@ msgstr "Noe gikk galt under bekreftelsen. Prøv igjen."
 #: ui/shared/views/settings/AppearanceSection.cpp
 msgid "Show my name and avatar"
 msgstr "Vis navnet og avataren min"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "You don't have permission to join calls in this room."
+msgstr "Du har ikke tillatelse til å bli med i samtaler i dette rommet."
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "A moderator needs to start the call."
+msgstr "En moderator må starte samtalen."

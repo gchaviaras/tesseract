@@ -19,6 +19,9 @@ constexpr float kLobbyActionBtnGap= 12.0f;
 constexpr float kLobbyActionRowH  = 80.0f;
 constexpr float kLobbyToggleIconPx= 22.0f;
 constexpr float kLobbyErrorRowH   = 28.0f;
+// The preview tile is dark in every theme, so the strip labels over it use
+// the tile's own light text colour rather than the themed default.
+constexpr tk::Color kLobbyStripText{255, 255, 255, 230};
 } // namespace
 
 CallLobbyView::CallLobbyView()
@@ -29,8 +32,15 @@ CallLobbyView::CallLobbyView()
     auto err_label = tk::create_widget<tk::Label>(this, "");
     err_label->set_halign(tk::TextHAlign::Center);
     err_label->set_wrap(true);
+    err_label->set_colour(kLobbyStripText);
     err_label->set_visible(false);
     cam_error_label_ = add_child(std::move(err_label));
+
+    auto blocked_label = tk::create_widget<tk::Label>(this, "");
+    blocked_label->set_halign(tk::TextHAlign::Center);
+    blocked_label->set_wrap(true);
+    blocked_label->set_visible(false);
+    blocked_label_ = add_child(std::move(blocked_label));
 
     auto mic = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
                                             tk::Button::Variant::Icon);
@@ -112,6 +122,7 @@ void CallLobbyView::close()
     set_visible(false);
     room_id_.clear();
     slot_id_.clear();
+    set_join_blocked({});
 }
 
 void CallLobbyView::set_avatar_provider(
@@ -125,6 +136,18 @@ void CallLobbyView::set_repaint_requester(std::function<void()> fn)
 {
     repaint_requester_ = std::move(fn);
     if (preview_tile_) preview_tile_->set_repaint_requester(repaint_requester_);
+}
+
+void CallLobbyView::set_join_blocked(const std::string& reason)
+{
+    join_blocked_ = !reason.empty();
+    if (join_btn_) join_btn_->set_enabled(!join_blocked_);
+    if (blocked_label_)
+    {
+        blocked_label_->set_text(reason);
+        blocked_label_->set_visible(join_blocked_);
+    }
+    if (repaint_requester_) repaint_requester_();
 }
 
 void CallLobbyView::start_camera_()
@@ -214,7 +237,10 @@ void CallLobbyView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     bounds_ = bounds;
     if (!open_) return;
 
-    const float action_y  = bounds.y + bounds.h - kLobbyActionRowH;
+    // A join-blocked reason takes its own strip at the top of the action row,
+    // directly above Cancel/Join; the row grows to make room for it.
+    const float blocked_h = join_blocked_ ? kLobbyErrorRowH : 0.0f;
+    const float action_y  = bounds.y + bounds.h - kLobbyActionRowH - blocked_h;
     const float toggle_y  = action_y - kLobbyToggleRowH;
     const float preview_y = bounds.y;
     const float preview_h = std::max(0.0f, toggle_y - preview_y);
@@ -222,6 +248,18 @@ void CallLobbyView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     if (preview_tile_)
         preview_tile_->arrange(ctx, {bounds.x + kLobbyPadX, preview_y,
                                      bounds.w - kLobbyPadX * 2.0f, preview_h});
+    if (blocked_label_ && join_blocked_)
+    {
+        // Centre the reason, both ways, in its strip at the label's own
+        // natural size rather than trusting the text alignment.
+        const float strip_w = bounds.w - kLobbyPadX * 2.0f;
+        const tk::Size sz = blocked_label_->measure(ctx, {strip_w, kLobbyErrorRowH});
+        const float w = std::min(strip_w, sz.w);
+        const float h = std::min(kLobbyErrorRowH, sz.h);
+        blocked_label_->arrange(
+            ctx, {bounds.x + (bounds.w - w) * 0.5f,
+                  action_y + (kLobbyErrorRowH - h) * 0.5f, w, h});
+    }
     // Camera failure reason: a strip along the bottom of the preview, just
     // above the toggles it explains.
     if (cam_error_label_)
@@ -245,7 +283,8 @@ void CallLobbyView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     // Join/Cancel row, centred, at the bottom.
     const float action_total_w = kLobbyActionBtnW * 2.0f + kLobbyActionBtnGap;
     float ax = bounds.x + (bounds.w - action_total_w) * 0.5f;
-    const float action_btn_y = action_y + (kLobbyActionRowH - kLobbyActionBtnH) * 0.5f;
+    const float action_btn_y =
+        action_y + blocked_h + (kLobbyActionRowH - kLobbyActionBtnH) * 0.5f;
     if (cancel_btn_)
     {
         cancel_btn_->arrange(ctx, {ax, action_btn_y, kLobbyActionBtnW, kLobbyActionBtnH});
@@ -291,6 +330,8 @@ void CallLobbyView::paint(tk::PaintCtx& ctx)
     if (preview_tile_) preview_tile_->paint(ctx);
     if (cam_error_label_ && cam_error_label_->visible())
         cam_error_label_->paint(ctx);
+    if (blocked_label_ && blocked_label_->visible())
+        blocked_label_->paint(ctx);
 
     if (mic_btn_)
     {

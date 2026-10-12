@@ -6238,3 +6238,11 @@ msgstr "Algo salió mal al confirmar. Inténtalo de nuevo."
 #: ui/shared/views/settings/AppearanceSection.cpp
 msgid "Show my name and avatar"
 msgstr "Mostrar mi nombre y avatar"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "You don't have permission to join calls in this room."
+msgstr "No tienes permiso para unirte a llamadas en esta sala."
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "A moderator needs to start the call."
+msgstr "Un moderador debe iniciar la llamada."

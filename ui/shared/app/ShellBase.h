@@ -127,6 +127,14 @@ CallRoomAction decide_call_room_action(bool has_active_call,
                                        bool call_auto_floated,
                                        bool overlay_is_docked);
 
+// Whether the user may enter a call in a room: joining a running call needs
+// only the join level, but the first joiner also publishes the call slot
+// event, which needs the (higher) start-call level.
+inline bool call_entry_permitted(bool has_active_call, bool can_join, bool can_start)
+{
+    return has_active_call ? can_join : can_start;
+}
+
 // ShellBase holds all state and platform-agnostic logic that is identical
 // across the Qt6, GTK4, Win32, and macOS shells. Platform-specific concerns
 // (UI widget manipulation, image decode, thread-dispatch mechanism) are
@@ -421,6 +429,10 @@ protected:
     // already being in a call for that room (so they can still hang up if
     // their permission was revoked mid-call).
     void update_call_btn_visibility_(views::RoomHeader* header, const std::string& room_id);
+    // Blocks Join in room_id's open call lobby (with the reason) while the
+    // user lacks the permission to enter the call; re-run on room-info
+    // updates so a power-level change or a call starting lifts it live.
+    void update_call_lobby_gate_(const std::string& room_id);
 
     // Post-switch hook: called by tab_open/tab_select/tab_navigate/tab_close
     // after current_room_id_ has been updated. Subscribes to the new active

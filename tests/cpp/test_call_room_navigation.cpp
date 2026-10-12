@@ -70,3 +70,17 @@ TEST_CASE("decide_call_room_action: leaving the active call's room while "
                                   /*overlay_is_docked=*/false) ==
           CallRoomAction::NoOp);
 }
+
+TEST_CASE("call_entry_permitted: a running call needs only the join level")
+{
+    using tesseract::call_entry_permitted;
+    CHECK(call_entry_permitted(true, true, false));
+    CHECK_FALSE(call_entry_permitted(true, false, true));
+}
+
+TEST_CASE("call_entry_permitted: starting a call needs the start level")
+{
+    using tesseract::call_entry_permitted;
+    CHECK(call_entry_permitted(false, true, true));
+    CHECK_FALSE(call_entry_permitted(false, true, false));
+}

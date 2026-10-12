@@ -523,6 +523,7 @@ void ShellBase::request_call_(const std::string& room_id, const std::string& slo
     lobby->on_cancel = [] {};
 
     lobby->open(room_id, slot_id, audio_only);
+    update_call_lobby_gate_(room_id);
 }
 
 void ShellBase::handle_call_room_navigation_()

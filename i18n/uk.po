@@ -7008,3 +7008,11 @@ msgstr "Під час підтвердження сталася помилка. 
 #: ui/shared/views/settings/AppearanceSection.cpp
 msgid "Show my name and avatar"
 msgstr "Показувати моє ім’я та аватар"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "You don't have permission to join calls in this room."
+msgstr "У вас немає дозволу приєднуватися до дзвінків у цій кімнаті."
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "A moderator needs to start the call."
+msgstr "Модератор має розпочати дзвінок."

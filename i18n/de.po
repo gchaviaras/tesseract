@@ -6098,3 +6098,11 @@ msgstr "Beim Bestätigen ist etwas schiefgelaufen. Bitte versuche es erneut."
 #: ui/shared/views/settings/AppearanceSection.cpp
 msgid "Show my name and avatar"
 msgstr "Meinen Namen und Avatar anzeigen"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "You don't have permission to join calls in this room."
+msgstr "Du hast keine Berechtigung, Anrufen in diesem Raum beizutreten."
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "A moderator needs to start the call."
+msgstr "Ein Moderator muss den Anruf starten."

@@ -37,7 +37,9 @@ ui/
                   VideoViewerPage / AudioViewerPage / FileViewerPage are its
                   per-kind page strategies, video+audio share MediaTransportBar,
                   items built by media_viewer_items), ShortcodePopup;
-                  SettingsView, JoinRoomView, UserInfo;
+                  SettingsView (preferences: `binder.bind(control, &Settings::field, SettingKey::X)` in
+                  the section; a `case` in ShellBase::handle_setting_changed_ only if it has a
+                  side effect beyond saving), JoinRoomView, UserInfo;
                   shortcut_registry (every keyboard shortcut, one table) +
                   KeyboardShortcutsOverlay (Ctrl+/ / F1 list built from it);
                   EncryptionSetupOverlay (the one encryption dialog: recovery-key

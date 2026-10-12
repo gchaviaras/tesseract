@@ -9,7 +9,7 @@
 namespace tesseract::views
 {
 
-LanguageSection::LanguageSection()
+LanguageSection::LanguageSection(SettingBinder& binder)
 {
     auto* group = add_group(tk::tr("Language"));
 
@@ -23,13 +23,8 @@ LanguageSection::LanguageSection()
         {tk::tr("Ukrainian"), "uk"},
         {tk::tr("Norwegian Bokmål"), "nb"},
     });
-    combo->set_selected_value(tesseract::Settings::instance().language);
     combo_ = group->add_widget(std::move(combo));
-    combo_->on_changed = [this](std::string value)
-    {
-        if (on_language_changed)
-            on_language_changed(std::move(value));
-    };
+    binder.bind(combo_, &tesseract::Settings::language, SettingKey::Language);
 
     auto note = tk::create_widget<tk::Label>(
         this, tk::tr("Changes take effect after restart."), tk::FontRole::Small);
@@ -48,12 +43,6 @@ void LanguageSection::set_restart_pending(bool pending)
 {
     if (restart_row_)
         restart_row_->set_visible(pending);
-}
-
-void LanguageSection::set_selected(const std::string& lang)
-{
-    if (combo_)
-        combo_->set_selected_value(lang);
 }
 
 } // namespace tesseract::views

@@ -6,6 +6,7 @@
 #include "views/settings/StatusEditor.h"
 #include "views/settings/TimezonePicker.h"
 
+#include "app/Launch.h"
 #include "tk/i18n.h"
 #include "tk/theme.h"
 
@@ -66,197 +67,27 @@ SettingsView::SettingsView()
     account_ = account.get();
 
     // General section.
-    auto general = std::make_unique<GeneralSection>();
-    general->on_launch_at_login_changed = [this](bool v)
-    {
-        if (on_launch_at_login_changed) on_launch_at_login_changed(v);
-    };
-    general->on_start_minimized_changed = [this](bool v)
-    {
-        if (on_start_minimized_changed) on_start_minimized_changed(v);
-    };
-    general->on_close_action_changed =
-        [this](tesseract::Settings::CloseAction action)
-    {
-        if (on_close_action_changed) on_close_action_changed(action);
-    };
-    general->on_low_power_changed =
-        [this](tesseract::Settings::LowPowerPreference pref)
-    {
-        if (on_low_power_preference_changed) on_low_power_preference_changed(pref);
-    };
+    auto general = std::make_unique<GeneralSection>(binder_);
     general_ = general.get();
 
     // Appearance section.
-    auto appearance = std::make_unique<AppearanceSection>();
-    appearance->on_theme_changed =
-        [this](tesseract::Settings::ThemePreference pref)
-    {
-        if (on_theme_preference_changed)
-        {
-            on_theme_preference_changed(pref);
-        }
-    };
-    appearance->on_accent_changed =
-        [this](tesseract::Settings::ThemeAccent accent)
-    {
-        if (on_theme_accent_changed)
-        {
-            on_theme_accent_changed(accent);
-        }
-    };
-    appearance->on_group_inactive_changed = [this](bool v)
-    {
-        if (on_group_inactive_changed) on_group_inactive_changed(v);
-    };
-    appearance->on_group_unread_changed = [this](bool v)
-    {
-        if (on_group_unread_changed) on_group_unread_changed(v);
-    };
-    appearance->on_inactive_period_changed = [this](int days)
-    {
-        if (on_inactive_period_changed) on_inactive_period_changed(days);
-    };
-    appearance->on_autoscroll_unread_changed = [this](bool v)
-    {
-        if (on_autoscroll_unread_changed) on_autoscroll_unread_changed(v);
-    };
-    appearance->on_show_membership_events_changed = [this](bool v)
-    {
-        if (on_show_membership_events_changed) on_show_membership_events_changed(v);
-    };
-    appearance->on_show_sender_status_changed = [this](bool v)
-    {
-        if (on_show_sender_status_changed) on_show_sender_status_changed(v);
-    };
-    appearance->on_animate_avatars_changed = [this](bool v)
-    {
-        if (on_animate_avatars_changed) on_animate_avatars_changed(v);
-    };
-    appearance->on_bubbles_show_own_avatar_changed = [this](bool v)
-    {
-        if (on_bubbles_show_own_avatar_changed) on_bubbles_show_own_avatar_changed(v);
-    };
-    appearance->on_message_layout_changed =
-        [this](tesseract::Settings::MessageLayout l)
-    {
-        if (on_message_layout_changed) on_message_layout_changed(l);
-    };
-    appearance->on_room_list_density_changed =
-        [this](tesseract::Settings::RoomListDensity d)
-    {
-        if (on_room_list_density_changed) on_room_list_density_changed(d);
-    };
-    appearance->on_font_prefs_changed =
-        [this](const tesseract::Settings::FontPrefs& p)
-    {
-        if (on_font_prefs_changed) on_font_prefs_changed(p);
-    };
+    auto appearance = std::make_unique<AppearanceSection>(binder_);
     appearance_ = appearance.get();
 
     // Notifications section.
-    auto notifications = std::make_unique<NotificationsSection>();
-    notifications->on_notifications_changed = [this](bool enabled)
-    {
-        if (on_notifications_changed)
-        {
-            on_notifications_changed(enabled);
-        }
-    };
-    notifications->on_hide_content_changed = [this](bool enabled)
-    {
-        if (on_hide_content_changed)
-        {
-            on_hide_content_changed(enabled);
-        }
-    };
-    notifications->on_image_previews_changed = [this](bool enabled)
-    {
-        if (on_image_previews_changed)
-        {
-            on_image_previews_changed(enabled);
-        }
-    };
-    // Unlike on_notifications_changed/on_hide_content_changed above (which
-    // persist directly to local Settings with no controller round trip),
+    auto notifications = std::make_unique<NotificationsSection>(binder_);
+    // Unlike the three bound checkboxes above (which live in local Settings),
     // the Mentions & Keywords callbacks are push-rule-backed and wired
     // straight to SettingsController in set_controller() below — same
     // pattern as DevicesSection's on_delete_requested/on_uia_confirmed.
     notifications_ = notifications.get();
 
     // Media section.
-    auto media = std::make_unique<MediaSection>();
-    media->on_prefetch_changed = [this](bool enabled)
-    {
-        if (on_prefetch_changed)
-        {
-            on_prefetch_changed(enabled);
-        }
-    };
-    media->on_open_external_changed = [this](bool enabled)
-    {
-        if (on_open_external_changed)
-        {
-            on_open_external_changed(enabled);
-        }
-    };
-    media->on_media_previews_changed =
-        [this](tesseract::Settings::MediaPreviews mode)
-    {
-        if (on_media_previews_changed)
-            on_media_previews_changed(mode);
-    };
-    media->on_invite_avatars_changed = [this](bool enabled)
-    {
-        if (on_invite_avatars_changed)
-            on_invite_avatars_changed(enabled);
-    };
-    media->on_audio_input_changed = [this](std::string id)
-    {
-        if (on_audio_input_changed) on_audio_input_changed(std::move(id));
-    };
-    media->on_audio_output_changed = [this](std::string id)
-    {
-        if (on_audio_output_changed) on_audio_output_changed(std::move(id));
-    };
-    media->on_camera_changed = [this](std::string id)
-    {
-        if (on_camera_changed) on_camera_changed(std::move(id));
-    };
+    auto media = std::make_unique<MediaSection>(binder_);
     media_ = media.get();
 
     // Privacy section.
-    auto privacy = std::make_unique<PrivacySection>();
-    privacy->on_send_presence_changed = [this](bool v)
-    {
-        if (on_send_presence_changed) on_send_presence_changed(v);
-    };
-    privacy->on_exclude_insecure_devices_changed = [this](bool v)
-    {
-        if (on_exclude_insecure_devices_changed)
-            on_exclude_insecure_devices_changed(v);
-    };
-    privacy->on_send_maps_urls_as_location_changed = [this](bool v)
-    {
-        if (on_send_maps_urls_as_location_changed)
-            on_send_maps_urls_as_location_changed(v);
-    };
-    privacy->on_bundled_url_previews_changed = [this](bool enabled, bool direct)
-    {
-        if (on_bundled_url_previews_changed)
-            on_bundled_url_previews_changed(enabled, direct);
-    };
-    privacy->on_index_messages_changed = [this](bool v)
-    {
-        if (request_repaint_) request_repaint_();
-        if (on_index_messages_changed) on_index_messages_changed(v);
-    };
-#ifdef TESSERACT_UPDATE_CHECKS
-    privacy->on_check_for_updates_changed = [this](bool v)
-    {
-        if (on_check_for_updates_changed) on_check_for_updates_changed(v);
-    };
-#endif
+    auto privacy = std::make_unique<PrivacySection>(binder_);
     // on_export_keys / on_import_keys are wired in set_controller()
     // once the SettingsController is available.
     privacy_ = privacy.get();
@@ -275,30 +106,12 @@ SettingsView::SettingsView()
 
     // Advanced section — hidden bottom tab, revealed via About's "Advanced"
     // button. See kAdvancedTabIdx.
-    auto advanced = std::make_unique<AdvancedSection>();
+    auto advanced = std::make_unique<AdvancedSection>(binder_);
     advanced_ = advanced.get();
-    advanced_->on_msc2545_legacy_compat_changed = [this](bool v)
-    {
-        // Reflect immediately in the Emojis & Stickers tab — the personal
-        // pack disappears/reappears without waiting for the async
-        // on_image_packs_updated round-trip from the Rust rebuild.
-        if (image_packs_) image_packs_->set_personal_pack_enabled(v);
-        if (on_msc2545_legacy_compat_changed) on_msc2545_legacy_compat_changed(v);
-    };
-    advanced_->on_developer_mode_changed = [this](bool v)
-    {
-        if (on_developer_mode_changed) on_developer_mode_changed(v);
-    };
     advanced_->on_open_activity_monitor = [this]
     {
         if (on_open_activity_monitor) on_open_activity_monitor();
     };
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-    advanced_->on_crash_reporting_changed = [this](bool v)
-    {
-        if (on_crash_reporting_changed) on_crash_reporting_changed(v);
-    };
-#endif
 
     // Emojis & Stickers section.
     auto image_packs = std::make_unique<ImagePacksSection>();
@@ -312,14 +125,7 @@ SettingsView::SettingsView()
     };
 
     // Network section.
-    auto network = std::make_unique<NetworkSection>();
-    network->on_proxy_changed = [this](tesseract::Settings::ProxyMode mode, std::string url)
-    {
-        if (on_proxy_changed)
-        {
-            on_proxy_changed(mode, std::move(url));
-        }
-    };
+    auto network = std::make_unique<NetworkSection>(binder_);
     network->on_restart_requested = [this]
     {
         if (on_restart_requested)
@@ -328,14 +134,7 @@ SettingsView::SettingsView()
     network_ = network.get();
 
     // Language section.
-    auto language = std::make_unique<LanguageSection>();
-    language->on_language_changed = [this](std::string code)
-    {
-        if (on_language_changed)
-        {
-            on_language_changed(std::move(code));
-        }
-    };
+    auto language = std::make_unique<LanguageSection>(binder_);
     language->on_restart_requested = [this]
     {
         if (on_restart_requested)
@@ -469,6 +268,39 @@ SettingsView::SettingsView()
     {
         if (on_emoji_skin_tone_changed) on_emoji_skin_tone_changed(tone);
     };
+
+    binder_.on_changed = [this](SettingKey key)
+    {
+        react_locally_(key);
+        if (on_setting_changed) on_setting_changed(key);
+    };
+    binder_.reload();
+}
+
+void SettingsView::react_locally_(SettingKey key)
+{
+    const auto& s = tesseract::Settings::instance();
+    switch (key)
+    {
+    case SettingKey::IndexMessages:
+        if (request_repaint_) request_repaint_();
+        break;
+    case SettingKey::Msc2545Compat:
+        // Reflect immediately in the Emojis & Stickers tab — the personal
+        // pack disappears/reappears without waiting for the async
+        // on_image_packs_updated round-trip from the Rust rebuild.
+        if (image_packs_) image_packs_->set_personal_pack_enabled(s.msc2545_legacy_compat);
+        break;
+    case SettingKey::Proxy:
+        set_proxy_restart_pending(
+            tesseract::proxy_changed_since_launch(s.proxy_mode, s.proxy_url));
+        break;
+    case SettingKey::Language:
+        set_language_restart_pending(s.language != tesseract::launch_language());
+        break;
+    default:
+        break;
+    }
 }
 
 SettingsView::~SettingsView()
@@ -529,91 +361,6 @@ void SettingsView::set_image_provider(AccountSection::ImageProvider provider)
     }
 }
 
-void SettingsView::set_theme_pref(tesseract::Settings::ThemePreference pref)
-{
-    if (appearance_)
-    {
-        appearance_->set_selected(pref);
-    }
-}
-
-void SettingsView::set_theme_accent(tesseract::Settings::ThemeAccent accent)
-{
-    if (appearance_)
-    {
-        appearance_->set_selected_accent(accent);
-    }
-}
-
-void SettingsView::set_group_inactive_pref(bool enabled)
-{
-    if (appearance_) appearance_->set_group_inactive(enabled);
-}
-
-void SettingsView::set_group_unread_pref(bool enabled)
-{
-    if (appearance_) appearance_->set_group_unread(enabled);
-}
-
-void SettingsView::set_inactive_period_pref(int days)
-{
-    if (appearance_) appearance_->set_inactive_period(days);
-}
-
-void SettingsView::set_autoscroll_unread_pref(bool enabled)
-{
-    if (appearance_) appearance_->set_autoscroll_unread(enabled);
-}
-
-void SettingsView::set_show_membership_events_pref(bool enabled)
-{
-    if (appearance_) appearance_->set_show_membership_events(enabled);
-}
-
-void SettingsView::set_show_sender_status_pref(bool enabled)
-{
-    if (appearance_) appearance_->set_show_sender_status(enabled);
-}
-
-void SettingsView::set_animate_avatars_pref(bool enabled)
-{
-    if (appearance_) appearance_->set_animate_avatars(enabled);
-}
-
-void SettingsView::set_bubbles_show_own_avatar_pref(bool enabled)
-{
-    if (appearance_) appearance_->set_bubbles_show_own_avatar(enabled);
-}
-
-void SettingsView::set_message_layout_pref(tesseract::Settings::MessageLayout layout)
-{
-    if (appearance_) appearance_->set_message_layout(layout);
-}
-
-void SettingsView::set_notifications_enabled(bool enabled)
-{
-    if (notifications_)
-    {
-        notifications_->set_checked(enabled);
-    }
-}
-
-void SettingsView::set_hide_content_enabled(bool enabled)
-{
-    if (notifications_)
-    {
-        notifications_->set_hide_content_checked(enabled);
-    }
-}
-
-void SettingsView::set_image_previews_enabled(bool enabled)
-{
-    if (notifications_)
-    {
-        notifications_->set_image_previews_checked(enabled);
-    }
-}
-
 void SettingsView::set_mentions_enabled_ui(bool enabled)
 {
     if (notifications_) notifications_->set_mentions_enabled(enabled);
@@ -644,68 +391,11 @@ void SettingsView::set_keyword_error_ui(std::string error)
     if (notifications_) notifications_->set_keyword_error(std::move(error));
 }
 
-void SettingsView::set_prefetch_enabled(bool enabled)
-{
-    if (media_)
-    {
-        media_->set_prefetch_checked(enabled);
-    }
-}
-
-void SettingsView::set_exclude_insecure_devices_pref(bool enabled)
-{
-    if (privacy_)
-    {
-        privacy_->set_exclude_insecure_devices(enabled);
-    }
-}
-
 void SettingsView::set_proxy_restart_pending(bool pending)
 {
     if (network_)
     {
         network_->set_restart_pending(pending);
-    }
-}
-
-void SettingsView::set_proxy_pref(tesseract::Settings::ProxyMode mode, const std::string& url)
-{
-    if (network_)
-    {
-        network_->set_proxy(mode, url);
-    }
-}
-
-void SettingsView::set_send_maps_urls_as_location_pref(bool enabled)
-{
-    if (privacy_)
-    {
-        privacy_->set_send_maps_urls_as_location(enabled);
-    }
-}
-
-void SettingsView::set_bundled_url_previews_pref(bool enabled, bool direct)
-{
-    if (privacy_)
-    {
-        privacy_->set_bundled_url_previews(enabled, direct);
-    }
-}
-
-void SettingsView::set_media_previews_pref(
-    tesseract::Settings::MediaPreviews mode)
-{
-    if (media_)
-    {
-        media_->set_media_previews(mode);
-    }
-}
-
-void SettingsView::set_invite_avatars_pref(bool enabled)
-{
-    if (media_)
-    {
-        media_->set_invite_avatars(enabled);
     }
 }
 
@@ -741,17 +431,13 @@ void SettingsView::set_selected_camera(const std::string& id)
 
 void SettingsView::set_launch_at_login_pref(bool enabled)
 {
+    // The persisted bool is only a cache of the OS registration; keep it in
+    // step with the real state so a later user toggle isn't swallowed as
+    // "unchanged".
+    tesseract::Settings::instance().launch_at_login = enabled;
     if (general_)
     {
         general_->set_launch_at_login(enabled);
-    }
-}
-
-void SettingsView::set_start_minimized_pref(bool enabled)
-{
-    if (general_)
-    {
-        general_->set_start_minimized(enabled);
     }
 }
 
@@ -763,14 +449,6 @@ void SettingsView::set_tray_available(bool available)
     }
 }
 
-void SettingsView::set_low_power_pref(tesseract::Settings::LowPowerPreference pref)
-{
-    if (general_)
-    {
-        general_->set_low_power(pref);
-    }
-}
-
 void SettingsView::set_low_power_available(bool available)
 {
     if (general_)
@@ -779,103 +457,9 @@ void SettingsView::set_low_power_available(bool available)
     }
 }
 
-void SettingsView::set_send_presence_pref(bool enabled)
-{
-    if (privacy_)
-    {
-        privacy_->set_send_presence(enabled);
-    }
-}
-
-void SettingsView::set_index_messages_pref(bool enabled)
-{
-    if (privacy_)
-    {
-        privacy_->set_index_messages(enabled);
-    }
-}
-
-#ifdef TESSERACT_UPDATE_CHECKS
-void SettingsView::set_check_for_updates_pref(bool enabled)
-{
-    if (privacy_)
-    {
-        privacy_->set_check_for_updates(enabled);
-    }
-}
-#endif
-
-void SettingsView::set_msc2545_legacy_compat_pref(bool enabled)
-{
-    if (advanced_)
-    {
-        advanced_->set_msc2545_legacy_compat(enabled);
-    }
-    if (image_packs_)
-    {
-        image_packs_->set_personal_pack_enabled(enabled);
-    }
-}
-
-void SettingsView::set_developer_mode_pref(bool enabled)
-{
-    if (advanced_)
-    {
-        advanced_->set_developer_mode(enabled);
-    }
-}
-
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-void SettingsView::set_crash_reporting_pref(bool enabled)
-{
-    if (advanced_)
-    {
-        advanced_->set_crash_reporting_enabled(enabled);
-    }
-}
-#endif
-
 void SettingsView::load_persisted_settings()
 {
-    auto& s = tesseract::Settings::instance();
-    // Initial value only — the shell re-pushes this from IAutostart::is_enabled()
-    // (actual OS state) right after showing the Settings view, since this cached
-    // bool can drift from what's actually registered with the OS.
-    set_launch_at_login_pref(s.launch_at_login);
-    set_start_minimized_pref(s.start_minimized);
-    set_low_power_pref(s.low_power_pref);
-    set_theme_pref(s.theme_pref);
-    set_theme_accent(s.theme_accent);
-    set_notifications_enabled(s.notifications_enabled);
-    set_hide_content_enabled(s.notification_hide_content);
-    set_image_previews_enabled(s.notification_image_previews);
-    set_prefetch_enabled(s.prefetch_full_media);
-    set_send_maps_urls_as_location_pref(s.send_maps_urls_as_location);
-    set_exclude_insecure_devices_pref(s.exclude_insecure_devices);
-    set_proxy_pref(s.proxy_mode, s.proxy_url);
-    set_bundled_url_previews_pref(s.send_bundled_url_previews, s.fetch_url_previews_directly);
-    set_group_inactive_pref(s.group_inactive_rooms);
-    set_group_unread_pref(s.group_unread_rooms);
-    set_inactive_period_pref(s.inactive_room_threshold_days);
-    set_autoscroll_unread_pref(s.autoscroll_unread_rooms);
-    set_show_membership_events_pref(s.show_room_join_leave_events);
-    set_show_sender_status_pref(s.show_sender_status_in_timeline);
-    set_animate_avatars_pref(s.animate_avatars);
-    set_message_layout_pref(s.message_layout);
-    set_bubbles_show_own_avatar_pref(s.bubbles_show_own_avatar);
-    if (appearance_) appearance_->set_fonts(s.fonts);
-    set_msc2545_legacy_compat_pref(s.msc2545_legacy_compat);
-    set_developer_mode_pref(s.developer_mode);
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-    set_crash_reporting_pref(s.crash_reporting_enabled);
-#endif
-    set_send_presence_pref(s.send_presence);
-    set_index_messages_pref(s.index_messages_for_search);
-#ifdef TESSERACT_UPDATE_CHECKS
-    set_check_for_updates_pref(s.check_for_updates);
-#endif
-    set_media_previews_pref(s.media_previews);
-    set_invite_avatars_pref(s.invite_avatars);
+    binder_.reload();
 }
 
 void SettingsView::set_search_index_stats(

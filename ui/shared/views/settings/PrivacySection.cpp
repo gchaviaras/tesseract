@@ -57,20 +57,17 @@ std::string month_year(std::uint64_t ts_ms)
 }
 } // namespace
 
-PrivacySection::PrivacySection()
+PrivacySection::PrivacySection(SettingBinder& binder)
 {
-    const auto& s = tesseract::Settings::instance();
+    using S = tesseract::Settings;
+    const auto& s = S::instance();
 
     // ── Presence ──────────────────────────────────────────────────────────────
     auto* presence_group = add_group(tk::tr("Presence"));
 
-    auto presence_cb = tk::create_widget<tk::CheckButton>(
-        this, tk::tr("Send and receive presence status"), s.send_presence);
-    presence_cb_ = presence_group->add_widget(std::move(presence_cb));
-    presence_cb_->on_change = [this](bool v)
-    {
-        if (on_send_presence_changed) on_send_presence_changed(v);
-    };
+    auto* presence_cb = presence_group->add_widget(tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Send and receive presence status"), s.send_presence));
+    binder.bind(presence_cb, &S::send_presence, SettingKey::SendPresence);
 
     // ── Location ──────────────────────────────────────────────────────────────
     auto* location_group = add_group(tk::tr("Location"));
@@ -79,11 +76,8 @@ PrivacySection::PrivacySection()
         this, tk::tr("Send Google Maps / OpenStreetMap links as locations"),
         s.send_maps_urls_as_location);
     send_maps_urls_as_location_cb_ = location_group->add_widget(std::move(maps_link_cb));
-    send_maps_urls_as_location_cb_->on_change = [this](bool v)
-    {
-        if (on_send_maps_urls_as_location_changed)
-            on_send_maps_urls_as_location_changed(v);
-    };
+    binder.bind(send_maps_urls_as_location_cb_, &S::send_maps_urls_as_location,
+                SettingKey::SendMapsAsLocation);
     send_maps_urls_as_location_cb_->on_hover_enter = [this]
     {
         if (host_)
@@ -123,19 +117,17 @@ PrivacySection::PrivacySection()
     url_previews_direct_cb_ = previews_group->add_widget(std::move(direct_cb));
     url_previews_direct_cb_->set_enabled(s.send_bundled_url_previews);
 
-    auto fire_previews_changed = [this]
-    {
-        if (on_bundled_url_previews_changed)
-            on_bundled_url_previews_changed(bundled_url_previews_cb_->checked(),
-                                            url_previews_direct_cb_->checked());
-    };
-    bundled_url_previews_cb_->on_change = [this, fire_previews_changed](bool v)
-    {
-        url_previews_direct_cb_->set_enabled(v);
-        fire_previews_changed();
-    };
-    url_previews_direct_cb_->on_change = [fire_previews_changed](bool)
-    { fire_previews_changed(); };
+    binder.bind(bundled_url_previews_cb_, &S::send_bundled_url_previews,
+                SettingKey::BundledUrlPreviews,
+                [this](bool v) { url_previews_direct_cb_->set_enabled(v); });
+    binder.bind(url_previews_direct_cb_, &S::fetch_url_previews_directly,
+                SettingKey::BundledUrlPreviews);
+    binder.bind_custom(
+        [this]
+        {
+            url_previews_direct_cb_->set_enabled(
+                tesseract::Settings::instance().send_bundled_url_previews);
+        });
 
     bundled_url_previews_cb_->on_hover_enter = [this]
     {
@@ -176,7 +168,9 @@ PrivacySection::PrivacySection()
         tk::tr("Index messages for search (stores decrypted text on this device)"),
         s.index_messages_for_search);
     search_index_cb_ = search_group->add_widget(std::move(search_cb));
-    search_index_cb_->on_change = [this](bool v)
+    binder.bind(search_index_cb_, &S::index_messages_for_search,
+                SettingKey::IndexMessages,
+                [this](bool v)
     {
         // Optimistic: show the indexing line immediately on enable (the shell's
         // stat poll fills in real counts a beat later), hide both on disable.
@@ -188,8 +182,7 @@ PrivacySection::PrivacySection()
         }
         if (search_date_label_)
             search_date_label_->set_visible(false);
-        if (on_index_messages_changed) on_index_messages_changed(v);
-    };
+    });
 
     // Stats lines under the checkbox (populated by the shell via
     // set_search_index_stats). Hidden until indexing is enabled.
@@ -210,11 +203,9 @@ PrivacySection::PrivacySection()
         auto* updates_group = add_group(tk::tr("Updates"));
         auto updates_cb = tk::create_widget<tk::CheckButton>(
             this, tk::tr("Check for updates automatically"), s.check_for_updates);
-        check_updates_cb_ = updates_group->add_widget(std::move(updates_cb));
-        check_updates_cb_->on_change = [this](bool v)
-        {
-            if (on_check_for_updates_changed) on_check_for_updates_changed(v);
-        };
+        auto* check_updates_cb = updates_group->add_widget(std::move(updates_cb));
+        binder.bind(check_updates_cb, &S::check_for_updates,
+                    SettingKey::CheckForUpdates);
     }
 #endif
 
@@ -225,10 +216,8 @@ PrivacySection::PrivacySection()
         this, tk::tr("Exclude insecure devices (takes effect after restart)"),
         s.exclude_insecure_devices);
     exclude_insecure_cb_ = enc_group->add_widget(std::move(exclude_cb));
-    exclude_insecure_cb_->on_change = [this](bool v)
-    {
-        if (on_exclude_insecure_devices_changed) on_exclude_insecure_devices_changed(v);
-    };
+    binder.bind(exclude_insecure_cb_, &S::exclude_insecure_devices,
+                SettingKey::ExcludeInsecure);
     exclude_insecure_cb_->on_hover_enter = [this]
     {
         if (host_)
@@ -265,45 +254,10 @@ void PrivacySection::paint_before_children(tk::PaintCtx& ctx)
     SettingsPage::paint_before_children(ctx);
 }
 
-void PrivacySection::set_send_presence(bool enabled)
-{
-    presence_cb_->set_checked(enabled);
-}
-
-void PrivacySection::set_send_maps_urls_as_location(bool enabled)
-{
-    send_maps_urls_as_location_cb_->set_checked(enabled);
-}
-
-void PrivacySection::set_bundled_url_previews(bool enabled, bool direct)
-{
-    bundled_url_previews_cb_->set_checked(enabled);
-    url_previews_direct_cb_->set_checked(direct);
-    url_previews_direct_cb_->set_enabled(enabled);
-}
-
 void PrivacySection::set_homeserver_previews_available(bool available)
 {
     previews_unavailable_label_->set_visible(!available);
 }
-
-void PrivacySection::set_exclude_insecure_devices(bool enabled)
-{
-    exclude_insecure_cb_->set_checked(enabled);
-}
-
-void PrivacySection::set_index_messages(bool enabled)
-{
-    search_index_cb_->set_checked(enabled);
-}
-
-#ifdef TESSERACT_UPDATE_CHECKS
-void PrivacySection::set_check_for_updates(bool enabled)
-{
-    if (check_updates_cb_)
-        check_updates_cb_->set_checked(enabled);
-}
-#endif
 
 void PrivacySection::set_search_index_stats(
     const tesseract::SearchIndexStats& stats, bool enabled)

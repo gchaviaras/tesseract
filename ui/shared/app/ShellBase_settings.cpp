@@ -407,11 +407,9 @@ void ShellBase::force_full_repaint_all_surfaces_()
     }
 }
 
-void ShellBase::handle_send_presence_toggle_(bool enabled)
+void ShellBase::apply_send_presence_()
 {
-    auto& s = tesseract::Settings::instance();
-    s.send_presence = enabled;
-    s.save_to_disk(tesseract::config_dir());
+    const bool enabled = tesseract::Settings::instance().send_presence;
 
     // Fold the new setting together with window-active / low-power state.
     resolve_presence_polling_();
@@ -427,11 +425,9 @@ void ShellBase::handle_send_presence_toggle_(bool enabled)
     }
 }
 
-void ShellBase::handle_index_messages_toggle_(bool enabled)
+void ShellBase::apply_index_messages_()
 {
-    auto& s = tesseract::Settings::instance();
-    s.index_messages_for_search = enabled;
-    s.save_to_disk(tesseract::config_dir());
+    const bool enabled = tesseract::Settings::instance().index_messages_for_search;
 
     // Apply to every logged-in account's client: the index is per-account, but
     // the preference is global. Enabling lazily backfills history; disabling
@@ -445,39 +441,26 @@ void ShellBase::handle_index_messages_toggle_(bool enabled)
     }
 }
 
-void ShellBase::handle_show_membership_events_toggle_(bool enabled)
+void ShellBase::apply_show_membership_events_()
 {
-    auto& s = tesseract::Settings::instance();
-    s.show_room_join_leave_events = enabled;
-    s.save_to_disk(tesseract::config_dir());
-
     if (client_)
     {
-        client_->set_show_membership_events(enabled);
+        client_->set_show_membership_events(
+            tesseract::Settings::instance().show_room_join_leave_events);
         if (!current_room_id_.empty())
             client_->subscribe_room(current_room_id_);
     }
 }
 
-void ShellBase::handle_msc2545_legacy_compat_toggle_(bool enabled)
+void ShellBase::apply_msc2545_legacy_compat_()
 {
-    auto& s = tesseract::Settings::instance();
-    s.msc2545_legacy_compat = enabled;
-    s.save_to_disk(tesseract::config_dir());
-
     // set_msc2545_legacy_compat synchronously rebuilds the image-pack cache
     // and fires on_image_packs_updated Rust-side, which the shells already
     // handle to refresh list_image_packs()-driven UI — no extra refresh
     // call needed here.
     if (client_)
-        client_->set_msc2545_legacy_compat(enabled);
-}
-
-void ShellBase::handle_developer_mode_toggle_(bool enabled)
-{
-    auto& s = tesseract::Settings::instance();
-    s.developer_mode = enabled;
-    s.save_to_disk(tesseract::config_dir());
+        client_->set_msc2545_legacy_compat(
+            tesseract::Settings::instance().msc2545_legacy_compat);
 }
 
 void ShellBase::refresh_all_message_lists_display_prefs_()
@@ -504,50 +487,10 @@ void ShellBase::refresh_all_message_lists_display_prefs_()
     }
 }
 
-void ShellBase::handle_show_sender_status_toggle_(bool enabled)
+void ShellBase::apply_fonts_()
 {
-    auto& s = tesseract::Settings::instance();
-    if (s.show_sender_status_in_timeline == enabled)
-        return;
-    s.show_sender_status_in_timeline = enabled;
-    s.save_to_disk(tesseract::config_dir());
-    refresh_all_message_lists_display_prefs_();
-    request_relayout_();
-}
-
-void ShellBase::handle_message_layout_changed_(
-    tesseract::Settings::MessageLayout layout)
-{
-    auto& s = tesseract::Settings::instance();
-    if (s.message_layout == layout)
-        return;
-    s.message_layout = layout;
-    s.save_to_disk(tesseract::config_dir());
-
-    refresh_all_message_lists_display_prefs_();
-    request_relayout_();
-}
-
-void ShellBase::handle_bubbles_own_avatar_toggle_(bool enabled)
-{
-    auto& s = tesseract::Settings::instance();
-    if (s.bubbles_show_own_avatar == enabled)
-        return;
-    s.bubbles_show_own_avatar = enabled;
-    s.save_to_disk(tesseract::config_dir());
-    refresh_all_message_lists_display_prefs_();
-    request_relayout_();
-}
-
-void ShellBase::handle_fonts_changed_(const tesseract::Settings::FontPrefs& prefs)
-{
-    auto& s = tesseract::Settings::instance();
-    if (s.fonts == prefs)
-        return;
-    s.fonts = prefs;
-    s.save_to_disk(tesseract::config_dir());
-
-    if (!tesseract::apply_font_prefs(s.fonts))
+    const auto& fonts = tesseract::Settings::instance().fonts;
+    if (!tesseract::apply_font_prefs(fonts))
         return; // clamped to the config already in force
     // Every RootWidget (windows, popups) drops its font-dependent state and
     // schedules a relayout; message lists / room lists flush their own row
@@ -557,62 +500,103 @@ void ShellBase::handle_fonts_changed_(const tesseract::Settings::FontPrefs& pref
     request_relayout_();
 }
 
-void ShellBase::handle_room_list_density_changed_(
-    tesseract::Settings::RoomListDensity density)
+void ShellBase::apply_room_list_density_()
 {
-    auto& s = tesseract::Settings::instance();
-    if (s.room_list_density == density)
-        return;
-    s.room_list_density = density;
-    s.save_to_disk(tesseract::config_dir());
-
     if (main_app_)
         main_app_->set_room_list_compact(
-            density == tesseract::Settings::RoomListDensity::Compact);
+            tesseract::Settings::instance().room_list_density ==
+            tesseract::Settings::RoomListDensity::Compact);
     request_relayout_();
 }
 
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-void ShellBase::handle_crash_reporting_toggle_(bool enabled)
+void ShellBase::apply_bundled_url_previews_()
 {
-    auto& s = tesseract::Settings::instance();
-    s.crash_reporting_enabled = enabled;
-    s.save_to_disk(tesseract::config_dir());
-    tesseract::set_crash_reporting_enabled(enabled);
-}
-#endif
-
-void ShellBase::handle_send_maps_urls_as_location_toggle_(bool enabled)
-{
-    auto& s = tesseract::Settings::instance();
-    s.send_maps_urls_as_location = enabled;
-    s.save_to_disk(tesseract::config_dir());
-}
-
-void ShellBase::handle_bundled_url_previews_toggle_(bool enabled, bool direct)
-{
-    auto& s = tesseract::Settings::instance();
-    s.send_bundled_url_previews = enabled;
-    s.fetch_url_previews_directly = direct;
-    s.save_to_disk(tesseract::config_dir());
-
+    const auto& s = tesseract::Settings::instance();
     // Global preference, per-account flag: push to every logged-in client.
     // A plain atomic store on the Rust side — safe on the UI thread.
     for (const auto& sess : account_manager_.accounts())
     {
         if (sess && sess->client)
-            sess->client->set_bundled_url_previews(enabled, direct);
+            sess->client->set_bundled_url_previews(s.send_bundled_url_previews,
+                                                   s.fetch_url_previews_directly);
     }
 }
 
-#ifdef TESSERACT_UPDATE_CHECKS
-void ShellBase::handle_check_for_updates_toggle_(bool enabled)
+void ShellBase::handle_setting_changed_(views::SettingKey key)
 {
+    using K = views::SettingKey;
     auto& s = tesseract::Settings::instance();
-    s.check_for_updates = enabled;
+
+    // The settings view already wrote the new value into Settings; most keys
+    // need nothing beyond persisting it (they are read when next used).
     s.save_to_disk(tesseract::config_dir());
-}
+
+    switch (key)
+    {
+    case K::LaunchAtLogin:
+        apply_launch_at_login_();
+        // The failure path may have corrected the cached bool.
+        s.save_to_disk(tesseract::config_dir());
+        break;
+    case K::LowPower:
+        apply_low_power_preference_();
+        break;
+    case K::Theme:
+    case K::Accent:
+        apply_current_theme_();
+        break;
+    case K::GroupInactive:
+    case K::GroupUnread:
+    case K::InactivePeriod:
+        refresh_room_list_();
+        break;
+    case K::ShowMembershipEvents:
+        apply_show_membership_events_();
+        break;
+    case K::ShowSenderStatus:
+    case K::MessageLayout:
+    case K::BubblesOwnAvatar:
+        refresh_all_message_lists_display_prefs_();
+        request_relayout_();
+        break;
+    case K::AnimateAvatars:
+        apply_animate_avatars_();
+        break;
+    case K::RoomListDensity:
+        apply_room_list_density_();
+        break;
+    case K::Fonts:
+        apply_fonts_();
+        break;
+    case K::Notifications:
+        if (settings_controller_)
+            settings_controller_->set_notifications_enabled(s.notifications_enabled);
+        break;
+    case K::MediaPreviews:
+    case K::InviteAvatars:
+        apply_media_preview_config_();
+        break;
+    case K::SendPresence:
+        apply_send_presence_();
+        break;
+    case K::BundledUrlPreviews:
+        apply_bundled_url_previews_();
+        break;
+    case K::IndexMessages:
+        apply_index_messages_();
+        break;
+    case K::Msc2545Compat:
+        apply_msc2545_legacy_compat_();
+        break;
+#ifdef TESSERACT_CRASH_HANDLER_ENABLED
+    case K::CrashReporting:
+        tesseract::set_crash_reporting_enabled(s.crash_reporting_enabled);
+        break;
 #endif
+    default:
+        break; // persist-only (or compiled out)
+    }
+}
 
 void ShellBase::apply_search_indexing_pref_(tesseract::Client& client)
 {
@@ -724,13 +708,11 @@ void ShellBase::refresh_low_power_signals_()
     }
 }
 
-void ShellBase::set_low_power_preference_(
-    tesseract::Settings::LowPowerPreference pref)
+void ShellBase::apply_low_power_preference_()
 {
     if (!low_power_available())
         return; // no battery: the control is hidden; ignore stray calls
-    tesseract::Settings::instance().low_power_pref = pref;
-    tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
+    const auto pref = tesseract::Settings::instance().low_power_pref;
 
     using LP = tesseract::Settings::LowPowerPreference;
     power_policy_.set_pref(pref == LP::On    ? PowerPolicy::Pref::On
@@ -911,20 +893,6 @@ void ShellBase::set_current_scale_(float scale)
                 tml->reset_visible_avatar_tracking();
     }
     request_relayout_();
-}
-
-void ShellBase::set_theme_preference_(tesseract::Settings::ThemePreference pref)
-{
-    tesseract::Settings::instance().theme_pref = pref;
-    tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
-    apply_current_theme_();
-}
-
-void ShellBase::set_theme_accent_(tesseract::Settings::ThemeAccent accent)
-{
-    tesseract::Settings::instance().theme_accent = accent;
-    tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
-    apply_current_theme_();
 }
 
 // Mark the account-data-backed prefs (currently just the room layout —

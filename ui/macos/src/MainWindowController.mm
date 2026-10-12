@@ -330,20 +330,6 @@ public:
     // method directly) as the tk::Host pre-paint hook.
     void run_media_prefetch();
     void notify_presence_tick();
-    void handle_send_presence_toggle(bool enabled);
-    void handle_launch_at_login_toggle(bool enabled);
-    void handle_index_messages_toggle(bool enabled);
-    void handle_show_membership_events_toggle(bool enabled);
-#ifdef TESSERACT_UPDATE_CHECKS
-    void handle_check_for_updates_toggle(bool enabled);
-#endif
-    void handle_msc2545_legacy_compat_toggle(bool enabled);
-    void handle_developer_mode_toggle(bool enabled);
-    void handle_message_layout_changed(tesseract::Settings::MessageLayout layout);
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-    void handle_crash_reporting_toggle(bool enabled);
-#endif
-    void handle_send_maps_urls_as_location_toggle(bool enabled);
     // Public forwarders to the protected ShellBase::wire_settings_view_ /
     // wire_settings_controller_common_ — see their doc comments in
     // ShellBase.h. MainWindowController (ObjC++, not a ShellBase subclass)
@@ -411,8 +397,6 @@ public:
     }
 #endif
     void save_settings_debounced();
-    void set_theme_preference(tesseract::Settings::ThemePreference pref);
-    void set_low_power_preference(tesseract::Settings::LowPowerPreference pref);
     void set_screen_lock(std::unique_ptr<tesseract::IScreenLock> lock);
     void set_power_monitor(std::unique_ptr<tesseract::IPowerMonitor> pm);
     void set_autostart(std::unique_ptr<tesseract::IAutostart> autostart);
@@ -524,8 +508,6 @@ public:
         int default_w, int default_h);
     void begin_focused_subscription(const std::string& room_id,
                                     const std::string& event_id);
-    void apply_media_preview_config(tesseract::Settings::MediaPreviews mode,
-                                    bool invite_avatars);
     void commit_room_media_preview_override(
         const std::string& room_id, bool has_override,
         tesseract::MediaPreviewConfig::Mode mode);
@@ -2287,30 +2269,6 @@ void MacShell::notify_user_activity()     { notify_user_activity_(); }
 void MacShell::set_current_scale(float scale) { set_current_scale_(scale); }
 void MacShell::run_media_prefetch()       { run_media_prefetch_(); }
 void MacShell::notify_presence_tick()     { notify_presence_tick_(); }
-void MacShell::handle_send_presence_toggle(bool enabled)
-    { handle_send_presence_toggle_(enabled); }
-void MacShell::handle_launch_at_login_toggle(bool enabled)
-    { handle_launch_at_login_toggle_(enabled); }
-void MacShell::handle_index_messages_toggle(bool enabled)
-    { handle_index_messages_toggle_(enabled); }
-void MacShell::handle_show_membership_events_toggle(bool enabled)
-    { handle_show_membership_events_toggle_(enabled); }
-#ifdef TESSERACT_UPDATE_CHECKS
-void MacShell::handle_check_for_updates_toggle(bool enabled)
-    { handle_check_for_updates_toggle_(enabled); }
-#endif
-void MacShell::handle_msc2545_legacy_compat_toggle(bool enabled)
-    { handle_msc2545_legacy_compat_toggle_(enabled); }
-void MacShell::handle_developer_mode_toggle(bool enabled)
-    { handle_developer_mode_toggle_(enabled); }
-void MacShell::handle_message_layout_changed(tesseract::Settings::MessageLayout layout)
-    { handle_message_layout_changed_(layout); }
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-void MacShell::handle_crash_reporting_toggle(bool enabled)
-    { handle_crash_reporting_toggle_(enabled); }
-#endif
-void MacShell::handle_send_maps_urls_as_location_toggle(bool enabled)
-    { handle_send_maps_urls_as_location_toggle_(enabled); }
 void MacShell::wire_settings_view(tesseract::views::SettingsView* view)
     { wire_settings_view_(view); }
 void MacShell::wire_settings_controller_common(
@@ -2392,10 +2350,6 @@ std::vector<std::uint8_t> MacShell::voice_bytes_or_fetch(
 void MacShell::apply_current_theme()    { apply_current_theme_(); }
 void MacShell::on_system_accent_changed() { on_system_accent_changed_(); }
 void MacShell::save_settings_debounced() { save_settings_debounced_(); }
-void MacShell::set_theme_preference(tesseract::Settings::ThemePreference pref)
-    { set_theme_preference_(pref); }
-void MacShell::set_low_power_preference(tesseract::Settings::LowPowerPreference pref)
-    { set_low_power_preference_(pref); }
 void MacShell::set_screen_lock(std::unique_ptr<tesseract::IScreenLock> lock)
     { set_screen_lock_(std::move(lock)); }
 void MacShell::set_power_monitor(std::unique_ptr<tesseract::IPowerMonitor> pm)
@@ -2538,9 +2492,6 @@ void MacShell::begin_focused_subscription(const std::string& room_id,
     if (main_room_pane_)
         main_room_pane_->begin_focused_subscription_(room_id, event_id);
 }
-void MacShell::apply_media_preview_config(tesseract::Settings::MediaPreviews mode,
-                                           bool invite_avatars)
-    { apply_media_preview_config_(mode, invite_avatars); }
 void MacShell::commit_room_media_preview_override(
     const std::string& room_id, bool has_override,
     tesseract::MediaPreviewConfig::Mode mode)

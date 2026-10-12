@@ -101,6 +101,7 @@ add_executable(tesseract_tests
     cpp/test_media_preview_policy.cpp
     cpp/test_tk_form_layout.cpp
     cpp/test_tk_media_section.cpp
+    cpp/test_setting_binder.cpp
     cpp/test_gif_engine.cpp
     cpp/test_tk_gif_popup.cpp
     cpp/test_map_tiles.cpp

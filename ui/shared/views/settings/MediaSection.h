@@ -8,6 +8,7 @@
 // their change callbacks write it back through the shell. Reads initial state
 // from Settings::instance().
 
+#include "SettingBinder.h"
 #include "SettingsPage.h"
 
 #include "tk/combobox.h"
@@ -26,37 +27,22 @@ namespace tesseract::views
 class MediaSection : public SettingsPage
 {
 public:
-    MediaSection();
+    explicit MediaSection(SettingBinder& binder);
     ~MediaSection() override = default;
-
-    // Silently update control state without firing the callbacks.
-    void set_prefetch_checked(bool enabled);
-    void set_media_previews(tesseract::Settings::MediaPreviews mode);
-    void set_invite_avatars(bool enabled);
-
-    // Fired with the new state when a row changes.
-    std::function<void(bool)> on_prefetch_changed;
-    std::function<void(bool)> on_open_external_changed;
-    std::function<void(tesseract::Settings::MediaPreviews)>
-        on_media_previews_changed;
-    std::function<void(bool)> on_invite_avatars_changed;
 
     // ── Capture device selection ──────────────────────────────────────────
     // Populate combos. Prepends "System default" (value="") automatically.
-    // Does not fire the callbacks below.
+    // Does not change the stored selection.
     void set_audio_input_devices(std::vector<tk::DeviceListing> devices);
     void set_audio_output_devices(std::vector<tk::DeviceListing> devices);
     void set_camera_devices(std::vector<tk::DeviceListing> devices);
 
-    // Silently pre-select a value. Does not fire the callbacks.
+    // Silently pre-select a value. Does not fire the binder. (The stored ids
+    // are bound to Settings; these remain for shells that re-select after
+    // rebuilding the option list.)
     void set_selected_audio_input(const std::string& id);
     void set_selected_audio_output(const std::string& id);
     void set_selected_camera(const std::string& id);
-
-    // Fires with the newly selected device ID (empty = system default).
-    std::function<void(std::string)> on_audio_input_changed;
-    std::function<void(std::string)> on_audio_output_changed;
-    std::function<void(std::string)> on_camera_changed;
 
     // ComboBox accessors used by tests to simulate user selections.
     tk::ComboBox* audio_input_combo()  const { return audio_input_combo_; }

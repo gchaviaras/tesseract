@@ -29,6 +29,7 @@
 #include "views/settings/GeneralSection.h"
 #include "views/settings/ImagePacksSection.h"
 #include "views/settings/LanguageSection.h"
+#include "views/settings/SettingBinder.h"
 #include "views/settings/NetworkSection.h"
 #include "views/settings/MediaSection.h"
 #include "views/settings/NotificationsSection.h"
@@ -81,19 +82,14 @@ public:
 
     // Silently initialise the "launch at login" checkbox. Sourced from
     // IAutostart::is_enabled() (actual OS state), not the persisted
-    // Settings bool directly — see ShellBase::handle_launch_at_login_toggle_.
+    // Settings bool directly. Also refreshes the persisted bool, which is
+    // only a cache of the OS registration (see ShellBase::handle_setting_changed_).
     void set_launch_at_login_pref(bool enabled);
-
-    // Silently initialise the "start minimized to tray" checkbox.
-    void set_start_minimized_pref(bool enabled);
 
     // Report whether a tray icon exists so the close-action dropdown can drop
     // the "hide to tray" option, which would be unreachable without one. The
     // shell also resolves a stored HideToTray to Quit in that case.
     void set_tray_available(bool available);
-
-    // Silently initialise the low-power-mode selector from the persisted pref.
-    void set_low_power_pref(tesseract::Settings::LowPowerPreference pref);
 
     // Show / hide the Low Power Mode setting. The shell calls this once with
     // IPowerMonitor::has_battery() — hidden on a batteryless desktop.
@@ -110,41 +106,7 @@ public:
 
     // ----- Appearance section -----------------------------------------------
 
-    // Silently initialise the theme radio buttons from persisted settings.
-    void set_theme_pref(tesseract::Settings::ThemePreference pref);
-
-    // Silently initialise the accent-color combo from persisted settings.
-    void set_theme_accent(tesseract::Settings::ThemeAccent accent);
-
-    // Room list grouping (forwarded from AppearanceSection).
-    void set_group_inactive_pref(bool enabled);
-    void set_group_unread_pref(bool enabled);
-    void set_inactive_period_pref(int days);
-    void set_autoscroll_unread_pref(bool enabled);
-
-    // Timeline: show room join/leave events (forwarded from AppearanceSection).
-    void set_show_membership_events_pref(bool enabled);
-
-    // Timeline: show status emoji next to sender names.
-    void set_show_sender_status_pref(bool enabled);
-
-    // Appearance: play animated avatars.
-    void set_animate_avatars_pref(bool enabled);
-
-    // Appearance → Layout: message layout (forwarded from AppearanceSection).
-    void set_message_layout_pref(tesseract::Settings::MessageLayout layout);
-    void set_bubbles_show_own_avatar_pref(bool enabled);
-
     // ----- Notifications section --------------------------------------------
-
-    // Silently initialise the notifications checkbox from persisted settings.
-    void set_notifications_enabled(bool enabled);
-
-    // Silently initialise the hide-content checkbox from persisted settings.
-    void set_hide_content_enabled(bool enabled);
-
-    // Silently initialise the image-preview checkbox from persisted settings.
-    void set_image_previews_enabled(bool enabled);
 
     // ----- Mentions & Keywords (push-rule-backed, account-wide) -------------
 
@@ -157,65 +119,20 @@ public:
 
     // ----- Media section ----------------------------------------------------
 
-    // Silently initialise the prefetch checkbox from persisted settings.
-    void set_prefetch_enabled(bool enabled);
-
-    // Silently initialise the MSC4278 media-preview controls (from the
-    // Settings mirror of the account-data config).
-    void set_media_previews_pref(tesseract::Settings::MediaPreviews mode);
-    void set_invite_avatars_pref(bool enabled);
-
     // Populate device combos in the Media section.
     // Call once when the settings view is first opened.
     void set_audio_input_devices(std::vector<tk::DeviceListing> devices);
     void set_audio_output_devices(std::vector<tk::DeviceListing> devices);
     void set_camera_devices(std::vector<tk::DeviceListing> devices);
 
-    // Silently pre-select the stored device (does not fire callbacks).
+    // Silently pre-select a device (the stored ids are bound to Settings and
+    // re-loaded by load_persisted_settings(); this is for re-selecting after
+    // the option list was rebuilt).
     void set_selected_audio_input(const std::string& id);
     void set_selected_audio_output(const std::string& id);
     void set_selected_camera(const std::string& id);
 
-    // Fires when the user picks a different device; empty = system default.
-    std::function<void(std::string)> on_audio_input_changed;
-    std::function<void(std::string)> on_audio_output_changed;
-    std::function<void(std::string)> on_camera_changed;
-
     // ----- Privacy section --------------------------------------------------
-
-    // Silently initialise the presence checkbox from persisted settings.
-    void set_send_presence_pref(bool enabled);
-
-    // Silently initialise the "send maps links as location" checkbox from
-    // persisted settings.
-    void set_send_maps_urls_as_location_pref(bool enabled);
-
-    // Silently initialise the "exclude insecure devices" checkbox.
-    void set_exclude_insecure_devices_pref(bool enabled);
-
-    // Silently initialise the two bundled-URL-preview checkboxes.
-    void set_bundled_url_previews_pref(bool enabled, bool direct);
-
-    // Silently initialise the "index messages for search" checkbox.
-    void set_index_messages_pref(bool enabled);
-
-#ifdef TESSERACT_UPDATE_CHECKS
-    // Silently initialise the "check for updates" checkbox.
-    void set_check_for_updates_pref(bool enabled);
-#endif
-
-    // ----- Advanced section (hidden tab, revealed via About's "Advanced" button) --
-
-    // Silently initialise the "Use historical MSC2545 compatibility" checkbox.
-    void set_msc2545_legacy_compat_pref(bool enabled);
-
-    // Silently initialise the "Enable developer mode" checkbox.
-    void set_developer_mode_pref(bool enabled);
-
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-    // Silently initialise the "Save a local crash report" checkbox.
-    void set_crash_reporting_pref(bool enabled);
-#endif
 
     // Update the search-index stats line under the checkbox (shown only while
     // enabled). Driven by the shell on settings-open and a slow poll.
@@ -353,127 +270,22 @@ public:
     // Fired after the user confirms the logout dialog.
     std::function<void()> on_logout;
 
-    // Fired when the user selects a different theme. Named distinctly from
-    // tk::Widget::on_theme_changed() (the app-theme-applied hook this class
-    // also overrides below) to avoid a name collision — this one fires the
-    // other way, up from the Appearance tab's picker to the shell.
-    std::function<void(tesseract::Settings::ThemePreference)> on_theme_preference_changed;
+    // Fired after the user changed any bound preference. The value is already
+    // in tesseract::Settings::instance(); the receiver saves it and applies
+    // whatever the key needs (see ShellBase::handle_setting_changed_).
+    std::function<void(SettingKey)> on_setting_changed;
 
-    // Fired when the user selects a different accent color.
-    std::function<void(tesseract::Settings::ThemeAccent)> on_theme_accent_changed;
     // The account's default emoji skin tone, read each time the status-emoji
     // picker opens; on_emoji_skin_tone_changed fires when the user picks a
     // new one from that picker's tone menu.
     std::function<tesseract::emoji::SkinTone()> emoji_skin_tone_provider;
     std::function<void(tesseract::emoji::SkinTone)> on_emoji_skin_tone_changed;
 
-    // Fired when the user changes the Low power mode selector (Auto/On/Off).
-    std::function<void(tesseract::Settings::LowPowerPreference)>
-        on_low_power_preference_changed;
-
-    // Fired when the user toggles room-list grouping of inactive rooms.
-    std::function<void(bool)> on_group_inactive_changed;
-
-    // Fired when the user toggles room-list grouping of unread rooms.
-    std::function<void(bool)> on_group_unread_changed;
-
-    // Fired when the user changes the inactivity threshold (days).
-    std::function<void(int)>  on_inactive_period_changed;
-
-    // Fired when the user toggles auto-scroll-to-unread in the room list.
-    std::function<void(bool)> on_autoscroll_unread_changed;
-
-    // Fired when the user toggles "show room join/leave events" in Timeline.
-    std::function<void(bool)> on_show_membership_events_changed;
-
-    // Fired when the user toggles "show status emoji next to names" in Timeline.
-    std::function<void(bool)> on_show_sender_status_changed;
-
-    // Fired when the user toggles "animate avatars" in Appearance.
-    std::function<void(bool)> on_animate_avatars_changed;
-
-    // Fired when the user picks a layout in Appearance → Layout.
-    std::function<void(tesseract::Settings::MessageLayout)> on_message_layout_changed;
-    std::function<void(bool)> on_bubbles_show_own_avatar_changed;
-    std::function<void(tesseract::Settings::RoomListDensity)> on_room_list_density_changed;
-
-    // Fired after every font edit in Appearance → Fonts with the new prefs.
-    std::function<void(const tesseract::Settings::FontPrefs&)> on_font_prefs_changed;
-
-    // Fired when the user toggles "Launch Tesseract when you log in".
-    std::function<void(bool)> on_launch_at_login_changed;
-
-    // Fired when the user toggles "Start minimized to system tray".
-    std::function<void(bool)> on_start_minimized_changed;
-
-    // Fired when the user changes what closing the window does.
-    std::function<void(tesseract::Settings::CloseAction)> on_close_action_changed;
-
-    // Fired when the user toggles notifications.
-    std::function<void(bool)> on_notifications_changed;
-
-    // Fired when the user toggles "hide message content in notifications".
-    std::function<void(bool)> on_hide_content_changed;
-
-    // Fired when the user toggles image/sticker notification previews.
-    std::function<void(bool)> on_image_previews_changed;
-
-    // Fired when the user toggles full-media pre-fetch.
-    std::function<void(bool)> on_prefetch_changed;
-    std::function<void(bool)> on_open_external_changed;
-
-    // Fired when the user changes the MSC4278 media-preview mode.
-    std::function<void(tesseract::Settings::MediaPreviews)>
-        on_media_previews_changed;
-
-    // Fired when the user toggles the MSC4278 "Show avatars in invites" option.
-    std::function<void(bool)> on_invite_avatars_changed;
-
-    // Fired when the user toggles the "Send and receive presence status" option.
-    std::function<void(bool)> on_send_presence_changed;
-
-    // Fired when the user toggles "Send Google Maps / OpenStreetMap links as
-    // locations".
-    std::function<void(bool)> on_send_maps_urls_as_location_changed;
-
-    // Fired when the user toggles "Exclude insecure devices" (MSC4153).
-    std::function<void(bool)> on_exclude_insecure_devices_changed;
-
-    // Fired when the user changes the network proxy (mode + URL; the URL is
-    // only ever valid when mode is Manual). Applied after restart.
-    std::function<void(tesseract::Settings::ProxyMode, std::string)> on_proxy_changed;
-
     // Show / hide the network section's "Restart now" row.
     void set_proxy_restart_pending(bool pending);
-    void set_proxy_pref(tesseract::Settings::ProxyMode mode, const std::string& url);
-
-    // Fired when the user toggles either "Include link previews in messages I
-    // send" or "Fetch link previews directly…". The shell persists both and
-    // calls Client::set_bundled_url_previews() on every account.
-    std::function<void(bool enabled, bool direct)> on_bundled_url_previews_changed;
-
-    // Fired when the user toggles "Index messages for search". The shell
-    // persists the setting and calls Client::set_search_indexing_enabled().
-    std::function<void(bool)> on_index_messages_changed;
-
-#ifdef TESSERACT_UPDATE_CHECKS
-    // Fired when the user toggles "Check for updates automatically".
-    std::function<void(bool)> on_check_for_updates_changed;
-#endif
-
-    // Fired when the user toggles "Use historical MSC2545 compatibility".
-    std::function<void(bool)> on_msc2545_legacy_compat_changed;
-
-    // Fired when the user toggles "Enable developer mode".
-    std::function<void(bool)> on_developer_mode_changed;
 
     // Fired when the user clicks "Open Activity Monitor" (Advanced tab).
     std::function<void()> on_open_activity_monitor;
-
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-    // Fired when the user toggles "Save a local crash report".
-    std::function<void(bool)> on_crash_reporting_changed;
-#endif
 
     // Fired when the active settings tab changes (so shells can relayout
     // native overlays whose visibility depends on the selected tab).
@@ -503,9 +315,6 @@ public:
                          uint64_t mem_hits   = 0, uint64_t mem_misses  = 0,
                          uint64_t disk_hits  = 0, uint64_t disk_misses = 0);
 
-    // Fired when the user selects a different language (BCP47 code or "auto").
-    std::function<void(std::string)> on_language_changed;
-
     // Fired by the language section's "Restart now" button.
     std::function<void()> on_restart_requested;
 
@@ -534,6 +343,13 @@ private:
     // callbacks it installed. Non-owning — see set_controller()'s doc
     // comment for the lifetime relationship.
     tesseract::SettingsController* ctrl_ = nullptr;
+
+    // Bound preference controls: every section registers its Settings-backed
+    // controls here; changes arrive as on_changed(key). Declared before the
+    // sections' raw pointers and torn down with the view.
+    SettingBinder binder_;
+    // View-local reactions to a preference change (restart rows, repaint, ...).
+    void react_locally_(SettingKey key);
 
     // MSC4426 status-emoji picker. Not a tree child (Host popup, like
     // RoomView's) — see show_status_emoji_picker_().

@@ -828,14 +828,13 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
     media_sweep_timer_.start();
 }
 
-// Wire every SettingsView callback whose body is pure Settings
-// persistence or a forward into an existing ShellBase handler — i.e.
-// everything that does NOT need a Surface/Host/native dialog. Each shell
-// calls this once, right after constructing its SettingsView, then wires
-// only what's left: on_close/on_logout/on_reset_identity (differ in how
-// the settings surface is dismissed), on_tab_changed (needs the shell's
-// Surface), and audio/camera/mic device enumeration (needs tk::Host —
-// though the *_changed callbacks themselves are wired here).
+// Wire every SettingsView callback that needs no Surface/Host/native dialog:
+// preference changes (one on_setting_changed → handle_setting_changed_) and the
+// command buttons that forward into an existing ShellBase handler. Each shell
+// calls this once, right after constructing its SettingsView, then wires only
+// what's left: on_close/on_logout/on_reset_identity (differ in how the
+// settings surface is dismissed), on_tab_changed (needs the shell's Surface),
+// and audio/camera/mic device enumeration (needs tk::Host).
 void ShellBase::wire_settings_view_(views::SettingsView* view)
 {
     if (!view)
@@ -846,216 +845,16 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     {
         set_emoji_skin_tone_(tone);
     };
-    view->on_theme_preference_changed =
-        [this](tesseract::Settings::ThemePreference pref)
+    view->on_setting_changed = [this](views::SettingKey key)
     {
-        set_theme_preference_(pref);
-    };
-    view->on_theme_accent_changed =
-        [this](tesseract::Settings::ThemeAccent accent)
-    {
-        set_theme_accent_(accent);
-    };
-    view->on_low_power_preference_changed =
-        [this](tesseract::Settings::LowPowerPreference pref)
-    {
-        set_low_power_preference_(pref);
-    };
-    view->on_notifications_changed = [this](bool enabled)
-    {
-        if (settings_controller_)
-            settings_controller_->set_notifications_enabled(enabled);
-    };
-    view->on_hide_content_changed = [](bool enabled)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.notification_hide_content = enabled;
-        s.save_to_disk(tesseract::config_dir());
-    };
-    view->on_image_previews_changed = [](bool enabled)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.notification_image_previews = enabled;
-        s.save_to_disk(tesseract::config_dir());
-    };
-    view->on_prefetch_changed = [](bool enabled)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.prefetch_full_media = enabled;
-        s.save_to_disk(tesseract::config_dir());
-    };
-    view->on_open_external_changed = [](bool enabled)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.open_media_externally = enabled;
-        s.save_to_disk(tesseract::config_dir());
-    };
-    view->on_autoscroll_unread_changed = [](bool enabled)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.autoscroll_unread_rooms = enabled;
-        s.save_to_disk(tesseract::config_dir());
-    };
-    view->on_group_inactive_changed = [this](bool enabled)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.group_inactive_rooms = enabled;
-        s.save_to_disk(tesseract::config_dir());
-        refresh_room_list_();
-    };
-    view->on_group_unread_changed = [this](bool enabled)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.group_unread_rooms = enabled;
-        s.save_to_disk(tesseract::config_dir());
-        refresh_room_list_();
-    };
-    view->on_inactive_period_changed = [this](int days)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.inactive_room_threshold_days = days;
-        s.save_to_disk(tesseract::config_dir());
-        refresh_room_list_();
-    };
-    view->on_show_membership_events_changed = [this](bool enabled)
-    {
-        handle_show_membership_events_toggle_(enabled);
-    };
-    view->on_show_sender_status_changed = [this](bool enabled)
-    {
-        handle_show_sender_status_toggle_(enabled);
-    };
-    view->on_bubbles_show_own_avatar_changed = [this](bool enabled)
-    {
-        handle_bubbles_own_avatar_toggle_(enabled);
-    };
-    view->on_animate_avatars_changed = [this](bool enabled)
-    {
-        handle_animate_avatars_toggle_(enabled);
-    };
-    view->on_launch_at_login_changed = [this](bool enabled)
-    {
-        handle_launch_at_login_toggle_(enabled);
-    };
-    view->on_start_minimized_changed = [this](bool enabled)
-    {
-        handle_start_minimized_toggle_(enabled);
-    };
-    view->on_close_action_changed = [this](tesseract::Settings::CloseAction action)
-    {
-        handle_close_action_toggle_(action);
-    };
-    view->on_send_presence_changed = [this](bool enabled)
-    {
-        handle_send_presence_toggle_(enabled);
-    };
-    view->on_index_messages_changed = [this](bool enabled)
-    {
-        handle_index_messages_toggle_(enabled);
-    };
-#ifdef TESSERACT_UPDATE_CHECKS
-    view->on_check_for_updates_changed = [this](bool enabled)
-    {
-        handle_check_for_updates_toggle_(enabled);
-    };
-#endif
-    view->on_msc2545_legacy_compat_changed = [this](bool enabled)
-    {
-        handle_msc2545_legacy_compat_toggle_(enabled);
-    };
-    view->on_developer_mode_changed = [this](bool enabled)
-    {
-        handle_developer_mode_toggle_(enabled);
-    };
-    view->on_open_activity_monitor = [this] { open_activity_monitor_(); };
-    view->on_message_layout_changed =
-        [this](tesseract::Settings::MessageLayout layout)
-    {
-        handle_message_layout_changed_(layout);
-    };
-    view->on_room_list_density_changed =
-        [this](tesseract::Settings::RoomListDensity density)
-    {
-        handle_room_list_density_changed_(density);
-    };
-    view->on_font_prefs_changed = [this](const tesseract::Settings::FontPrefs& prefs)
-    {
-        handle_fonts_changed_(prefs);
-    };
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-    view->on_crash_reporting_changed = [this](bool enabled)
-    {
-        handle_crash_reporting_toggle_(enabled);
-    };
-#endif
-    view->on_send_maps_urls_as_location_changed = [this](bool enabled)
-    {
-        handle_send_maps_urls_as_location_toggle_(enabled);
-    };
-    view->on_exclude_insecure_devices_changed = [](bool enabled)
-    {
-        // Persist only: the mode is read when a client is built, so it
-        // applies from the next launch (see Settings::exclude_insecure_devices).
-        auto& s = tesseract::Settings::instance();
-        s.exclude_insecure_devices = enabled;
-        s.save_to_disk(tesseract::config_dir());
+        handle_setting_changed_(key);
     };
     view->set_proxy_restart_pending(tesseract::proxy_changed_since_launch(
         tesseract::Settings::instance().proxy_mode,
         tesseract::Settings::instance().proxy_url));
-    view->on_proxy_changed = [view](tesseract::Settings::ProxyMode mode, std::string url)
-    {
-        // Persist only: the proxy is applied at launch, so it takes effect
-        // after a restart.
-        auto& s = tesseract::Settings::instance();
-        s.proxy_mode = mode;
-        s.proxy_url = std::move(url);
-        s.save_to_disk(tesseract::config_dir());
-        view->set_proxy_restart_pending(
-            tesseract::proxy_changed_since_launch(s.proxy_mode, s.proxy_url));
-    };
-    view->on_bundled_url_previews_changed = [this](bool enabled, bool direct)
-    {
-        handle_bundled_url_previews_toggle_(enabled, direct);
-    };
-    view->on_media_previews_changed =
-        [this](tesseract::Settings::MediaPreviews mode)
-    {
-        apply_media_preview_config_(
-            mode, tesseract::Settings::instance().invite_avatars);
-    };
-    view->on_invite_avatars_changed = [this](bool enabled)
-    {
-        apply_media_preview_config_(
-            tesseract::Settings::instance().media_previews, enabled);
-    };
-    view->on_audio_input_changed = [](std::string id)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.audio_input_device_id = std::move(id);
-        s.save_to_disk(tesseract::config_dir());
-    };
-    view->on_audio_output_changed = [](std::string id)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.audio_output_device_id = std::move(id);
-        s.save_to_disk(tesseract::config_dir());
-    };
-    view->on_camera_changed = [](std::string id)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.camera_device_id = std::move(id);
-        s.save_to_disk(tesseract::config_dir());
-    };
     view->set_language_restart_pending(
         tesseract::Settings::instance().language != tesseract::launch_language());
-    view->on_language_changed = [view](std::string code)
-    {
-        auto& s = tesseract::Settings::instance();
-        s.language = std::move(code);
-        s.save_to_disk(tesseract::config_dir());
-        view->set_language_restart_pending(s.language != tesseract::launch_language());
-    };
+    view->on_open_activity_monitor = [this] { open_activity_monitor_(); };
     view->on_restart_requested = [this] { restart_app_(); };
     view->on_about_tab_shown = [this] { refresh_cache_sizes_poll_(); };
     view->on_clear_caches = [this, view]

@@ -1,23 +1,31 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "view_test_util.h"
+#include "settings_guard.h"
 #include "views/settings/AppearanceSection.h"
+#include "views/settings/SettingBinder.h"
 
 #include <string>
 #include <vector>
 
 using tesseract::Settings;
 using tesseract::views::AppearanceSection;
+using tesseract::views::SettingBinder;
+using tesseract::views::SettingKey;
 
 namespace
 {
 
 struct AsStage : vt::Stage
 {
+    tesseract::test::SettingsGuard guard;
+    SettingBinder binder;
+    std::vector<SettingKey> keys; // reported keys, in order
     std::unique_ptr<AppearanceSection> sec =
-        tk::create_root_widget<AppearanceSection>(&host);
+        tk::create_root_widget<AppearanceSection>(&host, binder);
     AsStage()
     {
+        binder.on_changed = [this](SettingKey k) { keys.push_back(k); };
         mount(*sec, {0, 0, 700, 1200});
     }
     void run() { relayout_paint(*sec, {0, 0, 700, 1200}); }
@@ -32,24 +40,16 @@ struct AsStage : vt::Stage
 
 } // namespace
 
-TEST_CASE("AppearanceSection checkboxes fire their callbacks and the setters "
-          "stay silent",
+TEST_CASE("AppearanceSection checkboxes write Settings and report their keys; "
+          "reload is silent",
           "[tk][view][appearance]")
 {
     AsStage s;
-    struct Row
-    {
-        const char* label;
-        std::function<void(bool)>* cb;
-    };
-    bool unread = false, inactive = false, autoscroll = false, membership = false,
-         anim = false, status = false;
-    s.sec->on_group_unread_changed = [&](bool v) { unread = v; };
-    s.sec->on_group_inactive_changed = [&](bool v) { inactive = v; };
-    s.sec->on_autoscroll_unread_changed = [&](bool v) { autoscroll = v; };
-    s.sec->on_show_membership_events_changed = [&](bool v) { membership = v; };
-    s.sec->on_animate_avatars_changed = [&](bool v) { anim = v; };
-    s.sec->on_show_sender_status_changed = [&](bool v) { status = v; };
+    auto& st = Settings::instance();
+    st.group_unread_rooms = st.group_inactive_rooms = st.autoscroll_unread_rooms =
+        st.show_room_join_leave_events = st.animate_avatars =
+            st.show_sender_status_in_timeline = false;
+    s.binder.reload();
 
     auto fire = [&](const char* label)
     {
@@ -63,29 +63,26 @@ TEST_CASE("AppearanceSection checkboxes fire their callbacks and the setters "
     fire("Show room join/leave events");
     fire("Animate avatars");
     fire("Show status emoji next to names");
-    CHECK(unread);
-    CHECK(inactive);
-    CHECK(autoscroll);
-    CHECK(membership);
-    CHECK(anim);
-    CHECK(status);
+    CHECK(s.keys == std::vector<SettingKey>{
+                        SettingKey::GroupUnread, SettingKey::GroupInactive,
+                        SettingKey::AutoscrollUnread, SettingKey::ShowMembershipEvents,
+                        SettingKey::AnimateAvatars, SettingKey::ShowSenderStatus});
+    CHECK(st.group_unread_rooms);
+    CHECK(st.group_inactive_rooms);
+    CHECK(st.autoscroll_unread_rooms);
+    CHECK(st.show_room_join_leave_events);
+    CHECK(st.animate_avatars);
+    CHECK(st.show_sender_status_in_timeline);
 
-    // Programmatic setters update the controls without notifying.
-    unread = inactive = autoscroll = membership = anim = status = false;
-    s.sec->set_group_unread(true);
-    s.sec->set_group_inactive(true);
-    s.sec->set_autoscroll_unread(true);
-    s.sec->set_show_membership_events(true);
-    s.sec->set_animate_avatars(true);
-    s.sec->set_show_sender_status(true);
-    CHECK_FALSE(unread);
-    CHECK_FALSE(inactive);
-    CHECK_FALSE(autoscroll);
-    CHECK_FALSE(membership);
-    CHECK_FALSE(anim);
-    CHECK_FALSE(status);
-    CHECK(s.check("Group unread rooms")->checked());
-    CHECK(s.check("Animate avatars")->checked());
+    // reload() pushes the stored values into the controls without reporting.
+    s.keys.clear();
+    st.group_unread_rooms = false;
+    st.animate_avatars = false;
+    s.binder.reload();
+    CHECK(s.keys.empty());
+    CHECK_FALSE(s.check("Group unread rooms")->checked());
+    CHECK_FALSE(s.check("Animate avatars")->checked());
+    CHECK(s.check("Group inactive rooms")->checked());
 }
 
 TEST_CASE("AppearanceSection combos map to settings enums",
@@ -95,35 +92,39 @@ TEST_CASE("AppearanceSection combos map to settings enums",
     auto combos = vt::find_all<tk::ComboBox>(*s.sec);
     REQUIRE(combos.size() == 3); // accent, message layout, inactive period
 
+    auto& st = Settings::instance();
     std::vector<Settings::ThemeAccent> accents;
-    s.sec->on_accent_changed = [&](Settings::ThemeAccent a) { accents.push_back(a); };
     for (const char* v : {"blue", "forest", "sunset", "violet", "system", "bogus"})
+    {
         combos[0]->on_changed(v);
+        accents.push_back(st.theme_accent);
+    }
+    // "bogus" is not an option id: ignored, the previous value stays.
     CHECK(accents == std::vector<Settings::ThemeAccent>{
                          Settings::ThemeAccent::Blue, Settings::ThemeAccent::Forest,
                          Settings::ThemeAccent::Sunset, Settings::ThemeAccent::Violet,
                          Settings::ThemeAccent::System, Settings::ThemeAccent::System});
+    CHECK(s.keys.size() == 5); // the unknown id reported nothing
 
     std::vector<Settings::MessageLayout> layouts;
-    s.sec->on_message_layout_changed = [&](Settings::MessageLayout l) { layouts.push_back(l); };
     for (const char* v : {"bubbles", "irc", "classic"})
+    {
         combos[1]->on_changed(v);
+        layouts.push_back(st.message_layout);
+    }
     CHECK(layouts == std::vector<Settings::MessageLayout>{
                          Settings::MessageLayout::Bubbles, Settings::MessageLayout::Irc,
                          Settings::MessageLayout::Classic});
 
-    int days = 0;
-    s.sec->on_inactive_period_changed = [&](int d) { days = d; };
     combos[2]->on_changed("90");
-    CHECK(days == 90);
+    CHECK(st.inactive_room_threshold_days == 90);
 
-    s.sec->set_selected_accent(Settings::ThemeAccent::Violet);
+    st.theme_accent = Settings::ThemeAccent::Violet;
+    st.message_layout = Settings::MessageLayout::Irc;
+    st.inactive_room_threshold_days = 30;
+    s.binder.reload();
     CHECK(combos[0]->selected_value() == "violet");
-    s.sec->set_message_layout(Settings::MessageLayout::Irc);
     CHECK(combos[1]->selected_value() == "irc");
-    s.sec->set_message_layout(Settings::MessageLayout::Bubbles);
-    s.sec->set_message_layout(Settings::MessageLayout::Classic);
-    s.sec->set_inactive_period(30);
     CHECK(combos[2]->selected_value() == "30");
     s.run();
 }
@@ -133,8 +134,13 @@ TEST_CASE("AppearanceSection theme picker: click, hover and arrow keys",
 {
     AsStage s;
     std::vector<Settings::ThemePreference> prefs;
-    s.sec->on_theme_changed = [&](Settings::ThemePreference p) { prefs.push_back(p); };
-    s.sec->set_selected(Settings::ThemePreference::Light);
+    s.binder.on_changed = [&](SettingKey k)
+    {
+        if (k == SettingKey::Theme)
+            prefs.push_back(Settings::instance().theme_pref);
+    };
+    Settings::instance().theme_pref = Settings::ThemePreference::Light;
+    s.binder.reload();
     s.run();
 
     // Find the picker by scanning for a click that changes the theme. The
@@ -164,9 +170,8 @@ TEST_CASE("AppearanceSection room list density radio fires its callback",
           "[tk][view][appearance]")
 {
     AsStage s;
-    std::vector<Settings::RoomListDensity> got;
-    s.sec->on_room_list_density_changed =
-        [&](Settings::RoomListDensity d) { got.push_back(d); };
+    Settings::instance().room_list_density = Settings::RoomListDensity::Normal;
+    s.binder.reload();
     s.run();
 
     tk::RadioButton* compact = nullptr;
@@ -175,6 +180,6 @@ TEST_CASE("AppearanceSection room list density radio fires its callback",
             compact = b;
     REQUIRE(compact);
     CHECK(compact->access_default_action());
-    REQUIRE(got.size() == 1);
-    CHECK(got[0] == Settings::RoomListDensity::Compact);
+    CHECK(s.keys == std::vector<SettingKey>{SettingKey::RoomListDensity});
+    CHECK(Settings::instance().room_list_density == Settings::RoomListDensity::Compact);
 }

@@ -13,6 +13,7 @@
 // tesseract::IAutostart) since the OS registration is the source of truth,
 // not the persisted preference.
 
+#include "SettingBinder.h"
 #include "SettingsPage.h"
 
 #include "tesseract/settings.h"
@@ -36,7 +37,7 @@ namespace tesseract::views
 class GeneralSection : public SettingsPage
 {
 public:
-    GeneralSection();
+    explicit GeneralSection(SettingBinder& binder);
     ~GeneralSection() override = default;
 
     // Silently update the "launch at login" checkbox without firing the
@@ -44,19 +45,6 @@ public:
     // IAutostart::is_enabled(), not the persisted Settings bool) and after a
     // failed toggle to reflect the actual OS state.
     void set_launch_at_login(bool enabled);
-
-    // Fired with the new state when the "launch at login" checkbox is toggled.
-    std::function<void(bool)> on_launch_at_login_changed;
-
-    // Silently update the "start minimized to tray" checkbox without firing the
-    // callback. Mirrors set_launch_at_login.
-    void set_start_minimized(bool enabled);
-
-    // Fired when the "start minimized to tray" checkbox is toggled.
-    std::function<void(bool)> on_start_minimized_changed;
-
-    // Fired when the "when I close the window" dropdown changes.
-    std::function<void(tesseract::Settings::CloseAction)> on_close_action_changed;
 
     // Report whether a system tray icon actually exists on this machine, and
     // rebuild the close-action dropdown accordingly. Without a tray icon,
@@ -66,22 +54,18 @@ public:
     // at runtime (ITrayIcon::is_available()).
     void set_tray_available(bool available);
 
-    // Silently update the low-power-mode selection without firing the callback.
-    void set_low_power(tesseract::Settings::LowPowerPreference pref);
-
     // Show / hide the whole "Power" group. Hidden by default — the shell shows
     // it only on a machine that has a battery (IPowerMonitor::has_battery()).
     void set_low_power_available(bool available);
 
-    // Fired when the user changes the low-power-mode selection.
-    std::function<void(tesseract::Settings::LowPowerPreference)> on_low_power_changed;
-
 private:
     // Rebuild close_action_combo_'s options for the current tray availability.
     void rebuild_close_action_options_();
+    // Resolve an unoffered "tray" selection to "quit" and refresh the
+    // description under the dropdown from the current selection.
+    void refresh_close_action_();
 
     tk::CheckButton* launch_at_login_cb_ = nullptr;
-    tk::CheckButton* start_minimized_cb_ = nullptr;
     tk::ComboBox* close_action_combo_ = nullptr;
     tk::Label* close_action_desc_ = nullptr;
     bool tray_available_ = true;

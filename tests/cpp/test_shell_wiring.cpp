@@ -433,50 +433,63 @@ struct SettingsFixture
 };
 } // namespace
 
-TEST_CASE("wiring: settings view persists simple toggles", "[shell][wiring][settings]")
-{
-    SettingsFixture f;
-    auto& st = tesseract::Settings::instance();
-    f.view->on_hide_content_changed(true);
-    CHECK(st.notification_hide_content);
-    f.view->on_image_previews_changed(false);
-    CHECK_FALSE(st.notification_image_previews);
-    f.view->on_prefetch_changed(true);
-    CHECK(st.prefetch_full_media);
-    f.view->on_autoscroll_unread_changed(false);
-    CHECK_FALSE(st.autoscroll_unread_rooms);
-    f.view->on_exclude_insecure_devices_changed(true);
-    CHECK(st.exclude_insecure_devices);
-    f.view->on_group_inactive_changed(true);
-    CHECK(st.group_inactive_rooms);
-    f.view->on_group_unread_changed(true);
-    CHECK(st.group_unread_rooms);
-    f.view->on_inactive_period_changed(45);
-    CHECK(st.inactive_room_threshold_days == 45);
-}
-
-TEST_CASE("wiring: settings view persists device selections and language",
+TEST_CASE("wiring: settings view changes are persisted by the shell",
           "[shell][wiring][settings]")
 {
     SettingsFixture f;
     auto& st = tesseract::Settings::instance();
-    f.view->on_audio_input_changed("mic-1");
-    f.view->on_audio_output_changed("spk-2");
-    f.view->on_camera_changed("cam-3");
+    using K = tesseract::views::SettingKey;
+    REQUIRE(f.view->on_setting_changed != nullptr);
+
+    // The view writes the field, then reports the key.
+    st.notification_hide_content = true;
+    st.notification_image_previews = false;
+    st.prefetch_full_media = true;
+    st.autoscroll_unread_rooms = false;
+    st.exclude_insecure_devices = true;
+    st.group_inactive_rooms = true;
+    st.group_unread_rooms = true;
+    st.inactive_room_threshold_days = 45;
+    st.audio_input_device_id = "mic-1";
+    st.audio_output_device_id = "spk-2";
+    st.camera_device_id = "cam-3";
+    st.language = "de";
+    st.proxy_mode = tesseract::Settings::ProxyMode::Manual;
+    st.proxy_url = "http://proxy.invalid:3128";
+    for (K k : {K::HideContent, K::ImagePreviews, K::Prefetch, K::AutoscrollUnread,
+                K::ExcludeInsecure, K::GroupInactive, K::GroupUnread,
+                K::InactivePeriod, K::AudioInput, K::AudioOutput, K::Camera,
+                K::Language, K::Proxy})
+        f.view->on_setting_changed(k);
+
+    // Everything reached disk: reset in memory, reload.
+    st.notification_hide_content = false;
+    st.notification_image_previews = true;
+    st.prefetch_full_media = false;
+    st.autoscroll_unread_rooms = true;
+    st.exclude_insecure_devices = false;
+    st.group_inactive_rooms = false;
+    st.group_unread_rooms = false;
+    st.inactive_room_threshold_days = 7;
+    st.audio_input_device_id.clear();
+    st.audio_output_device_id.clear();
+    st.camera_device_id.clear();
+    st.language = "auto";
+    st.proxy_mode = tesseract::Settings::ProxyMode::System;
+    st.proxy_url.clear();
+    st.load_from_disk(tesseract::config_dir());
+    CHECK(st.notification_hide_content);
+    CHECK_FALSE(st.notification_image_previews);
+    CHECK(st.prefetch_full_media);
+    CHECK_FALSE(st.autoscroll_unread_rooms);
+    CHECK(st.exclude_insecure_devices);
+    CHECK(st.group_inactive_rooms);
+    CHECK(st.group_unread_rooms);
+    CHECK(st.inactive_room_threshold_days == 45);
     CHECK(st.audio_input_device_id == "mic-1");
     CHECK(st.audio_output_device_id == "spk-2");
     CHECK(st.camera_device_id == "cam-3");
-    f.view->on_language_changed("de");
     CHECK(st.language == "de");
-}
-
-TEST_CASE("wiring: settings view proxy change is stored and flags a restart",
-          "[shell][wiring][settings]")
-{
-    SettingsFixture f;
-    auto& st = tesseract::Settings::instance();
-    f.view->on_proxy_changed(tesseract::Settings::ProxyMode::Manual,
-                             "http://proxy.invalid:3128");
     CHECK(st.proxy_mode == tesseract::Settings::ProxyMode::Manual);
     CHECK(st.proxy_url == "http://proxy.invalid:3128");
 }

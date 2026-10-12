@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-12
 
+- refactor(settings): preference controls bind straight to `Settings` fields (`SettingBinder`), and the settings view reports one `on_setting_changed(SettingKey)` instead of ~35 per-preference callbacks; `ShellBase::handle_setting_changed_` saves once and applies side effects per key. Qt6 build, ctest 3222/3222
 - fix(calls): the call lobby disables Join and says why ("A moderator needs to start the call.") when the user lacks the permission to start a call nobody has joined, instead of failing with `M_FORBIDDEN` after the click; re-evaluated on room-info updates. Qt6 build, ctest (call/i18n subset), user-verified Qt6
 - feat(settings): Bubbles layout option "Show my name and avatar" (Appearance → Layout, default on, shown only for Bubbles): own bubbles get the avatar in a right gutter and the name above, like other people's rows. Qt6 build, ctest 3218/3218, user-verified Qt6
 - fix(quick-switcher): upgraded (tombstoned) rooms are no longer listed, in results or recents. Qt6 + GTK4 build, user-verified Qt6

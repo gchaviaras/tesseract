@@ -4,6 +4,7 @@
 #include "views/settings/AppearanceSection.h"
 #include "views/settings/LanguageSection.h"
 #include "views/settings/NetworkSection.h"
+#include "views/settings/SettingBinder.h"
 #include "tk/combobox.h"
 #include "tk/text_field.h"
 #include "views/settings/UserPackEditor.h"
@@ -84,32 +85,41 @@ void collect_check_buttons(tk::Widget& root, std::vector<tk::CheckButton*>& out)
 
 } // namespace
 
-TEST_CASE("AppearanceSection: the sender-status checkbox fires its callback, set_ is silent",
+TEST_CASE("AppearanceSection: the sender-status checkbox writes Settings and reports its key",
           "[settings-view]")
 {
-    tesseract::views::AppearanceSection section;
+    auto& st = tesseract::Settings::instance();
+    const bool saved = st.show_sender_status_in_timeline;
+    st.show_sender_status_in_timeline = true;
+
+    tesseract::views::SettingBinder binder;
+    tesseract::views::AppearanceSection section(binder);
     std::vector<tk::CheckButton*> boxes;
     collect_check_buttons(section, boxes);
     REQUIRE_FALSE(boxes.empty());
     // Added last, to the Timeline group.
     tk::CheckButton* status_cb = boxes.back();
 
-    std::vector<bool> fired;
-    section.on_show_sender_status_changed = [&](bool v) { fired.push_back(v); };
+    std::vector<tesseract::views::SettingKey> fired;
+    binder.on_changed = [&](tesseract::views::SettingKey k) { fired.push_back(k); };
 
-    section.set_show_sender_status(true);
+    binder.reload(); // silent
     CHECK(status_cb->checked());
     CHECK(fired.empty());
 
     status_cb->on_change(false);
     REQUIRE(fired.size() == 1);
-    CHECK(fired[0] == false);
+    CHECK(fired[0] == tesseract::views::SettingKey::ShowSenderStatus);
+    CHECK_FALSE(st.show_sender_status_in_timeline);
+
+    st.show_sender_status_in_timeline = saved;
 }
 
 TEST_CASE("LanguageSection: Restart now shows only while a restart is pending",
           "[settings-view]")
 {
-    tesseract::views::LanguageSection section;
+    tesseract::views::SettingBinder binder;
+    tesseract::views::LanguageSection section(binder);
     int restarts = 0;
     section.on_restart_requested = [&] { ++restarts; };
 
@@ -146,35 +156,53 @@ TEST_CASE("NetworkSection: URL field is enabled only for Manual and invalid URLs
           "[settings-view]")
 {
     using PM = tesseract::Settings::ProxyMode;
-    tesseract::views::NetworkSection section;
+    tesseract::views::SettingBinder binder;
+    tesseract::views::NetworkSection section(binder);
     auto* combo = find_widget<tk::ComboBox>(section);
     auto* field = find_widget<tk::TextField>(section);
     REQUIRE(combo);
     REQUIRE(field);
 
-    std::vector<std::pair<PM, std::string>> fired;
-    section.on_proxy_changed = [&](PM m, std::string u) { fired.emplace_back(m, std::move(u)); };
+    auto& st = tesseract::Settings::instance();
+    const PM saved_mode = st.proxy_mode;
+    const std::string saved_url = st.proxy_url;
+    int fired = 0;
+    binder.on_changed = [&](tesseract::views::SettingKey k)
+    {
+        CHECK(k == tesseract::views::SettingKey::Proxy);
+        ++fired;
+    };
+    auto load = [&](PM m, const std::string& u)
+    {
+        st.proxy_mode = m;
+        st.proxy_url = u;
+        binder.reload(); // silent
+    };
 
-    section.set_proxy(PM::System, "");
+    load(PM::System, "");
     CHECK_FALSE(field->enabled());
-    CHECK(fired.empty());
+    CHECK(fired == 0);
 
-    section.set_proxy(PM::Manual, "ftp://bad");
+    load(PM::Manual, "ftp://bad");
     CHECK(field->enabled());
     combo->on_changed("manual");
-    CHECK(fired.empty());
+    CHECK(fired == 0); // invalid URL: nothing stored or reported
 
-    section.set_proxy(PM::Manual, "http://proxy.example.com:8080");
+    load(PM::Manual, "http://proxy.example.com:8080");
+    st.proxy_mode = PM::System; // differs from the combo's Manual
     combo->on_changed("manual");
-    REQUIRE(fired.size() == 1);
-    CHECK(fired[0].first == PM::Manual);
-    CHECK(fired[0].second == "http://proxy.example.com:8080");
+    REQUIRE(fired == 1);
+    CHECK(st.proxy_mode == PM::Manual);
+    CHECK(st.proxy_url == "http://proxy.example.com:8080");
 
     combo->set_selected_value("none");
     combo->on_changed("none");
     CHECK_FALSE(field->enabled());
-    REQUIRE(fired.size() == 2);
-    CHECK(fired[1].first == PM::None);
+    REQUIRE(fired == 2);
+    CHECK(st.proxy_mode == PM::None);
+
+    st.proxy_mode = saved_mode;
+    st.proxy_url = saved_url;
 }
 
 TEST_CASE("SettingsView::show_account_section selects the Account tab",

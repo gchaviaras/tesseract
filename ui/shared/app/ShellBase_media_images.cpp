@@ -309,13 +309,8 @@ void ShellBase::note_member_event_(const std::string& room_id, const tesseract::
     request_repaint_();
 }
 
-void ShellBase::handle_animate_avatars_toggle_(bool enabled)
+void ShellBase::apply_animate_avatars_()
 {
-    auto& s = tesseract::Settings::instance();
-    if (s.animate_avatars == enabled)
-        return;
-    s.animate_avatars = enabled;
-    s.save_to_disk(tesseract::config_dir());
     on_avatar_animation_mode_changed_(/*evict=*/true);
 }
 
@@ -1807,12 +1802,11 @@ void ShellBase::wire_media_preview_gating_(views::MessageListView* ml)
     };
 }
 
-void ShellBase::apply_media_preview_config_(
-    tesseract::Settings::MediaPreviews mode, bool invite_avatars)
+void ShellBase::apply_media_preview_config_()
 {
-    auto& s = tesseract::Settings::instance();
-    s.media_previews = mode;
-    s.invite_avatars = invite_avatars;
+    const auto& s = tesseract::Settings::instance();
+    const auto mode = s.media_previews;
+    const bool invite_avatars = s.invite_avatars;
 
     if (client_)
     {

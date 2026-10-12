@@ -161,7 +161,7 @@ struct MediaShell : tesseract::test::TestShellBase
     using ShellBase::evict_avatar_caches_;
     using ShellBase::fetch_room_security_state_;
     using ShellBase::fullres_key_;
-    using ShellBase::handle_animate_avatars_toggle_;
+    using ShellBase::handle_setting_changed_;
     using ShellBase::handle_media_chunk_ui_;
     using ShellBase::handle_media_preview_config_fetched_ui_;
     using ShellBase::handle_media_preview_config_updated_ui_;
@@ -474,10 +474,8 @@ TEST_CASE("avatar animation toggle evicts only avatar entries and bumps the "
     f.s.media_decode_failed_.insert("mxc://hs/a");
     const auto gen = f.s.avatar_mode_gen_;
 
-    f.s.handle_animate_avatars_toggle_(false); // unchanged: no-op
-    CHECK(f.s.avatar_mode_gen_ == gen);
-
-    f.s.handle_animate_avatars_toggle_(true);
+    tesseract::Settings::instance().animate_avatars = true;
+    f.s.handle_setting_changed_(tesseract::views::SettingKey::AnimateAvatars);
     CHECK(f.s.avatar_mode_gen_ == gen + 1);
     CHECK_FALSE(f.s.account_manager_.thumbnail_cache().contains(
         tk::CacheKey::media("mxc://hs/a")));
@@ -1258,12 +1256,18 @@ TEST_CASE("global media preview config: apply, updated and fetched",
 {
     using P = tesseract::Settings::MediaPreviews;
     MiFx f;
-    f.s.apply_media_preview_config_(P::Off, false);
-    CHECK(tesseract::Settings::instance().media_previews == P::Off);
-    CHECK_FALSE(tesseract::Settings::instance().invite_avatars);
-    f.s.apply_media_preview_config_(P::Private, true);
-    f.s.apply_media_preview_config_(P::On, true);
-    CHECK(tesseract::Settings::instance().media_previews == P::On);
+    auto& st = tesseract::Settings::instance();
+    st.media_previews = P::Off;
+    st.invite_avatars = false;
+    f.s.apply_media_preview_config_();
+    CHECK(st.media_previews == P::Off);
+    CHECK_FALSE(st.invite_avatars);
+    st.media_previews = P::Private;
+    st.invite_avatars = true;
+    f.s.apply_media_preview_config_();
+    st.media_previews = P::On;
+    f.s.apply_media_preview_config_();
+    CHECK(st.media_previews == P::On);
 
     f.s.handle_media_preview_config_fetched_ui_(
         1, R"({"media_previews":1,"invite_avatars":false})");

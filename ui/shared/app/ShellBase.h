@@ -53,6 +53,7 @@
 #include "views/MessageListView.h"
 #include "views/QuickSwitcher.h"
 #include "views/RoomListView.h"
+#include "views/settings/SettingBinder.h"
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
 #include "app/ScreenshotDirector.h"
 #include "app/ScreenshotFixture.h"
@@ -1683,7 +1684,7 @@ protected:
     {
     }
 
-    // Called by handle_fonts_changed_() after the toolkit has been told about
+    // Called by apply_fonts_() after the toolkit has been told about
     // the new fonts and every RootWidget re-measured. A shell overrides this
     // only to refresh native, non-tk state that cached the old fonts (Win32's
     // GDI HFONTs for its status bar and child controls).
@@ -1824,9 +1825,9 @@ protected:
     // a debounce is armed so the flip doesn't wait for the 30 s presence tick.
     void refresh_low_power_signals_();
 
-    // Settings → General → "Low power mode" radio handler: persist the pref and
-    // hand it to power_policy_ (which applies On/Off immediately).
-    void set_low_power_preference_(tesseract::Settings::LowPowerPreference pref);
+    // Settings → General → "Low power mode": hand the stored pref to
+    // power_policy_ (which applies On/Off immediately).
+    void apply_low_power_preference_();
 
     // power_policy_.on_mode_change target: start / stop the suspendable work
     // across every account.
@@ -1863,12 +1864,6 @@ protected:
     // Resolve the current ThemePreference to a concrete ThemeMode (calling
     // os_color_scheme_() for System), then call apply_theme_ui_.
     void apply_current_theme_();
-
-    // Change the stored preference, save to disk, then call apply_current_theme_.
-    void set_theme_preference_(tesseract::Settings::ThemePreference pref);
-
-    // Change the stored accent, save to disk, then call apply_current_theme_.
-    void set_theme_accent_(tesseract::Settings::ThemeAccent accent);
 
     // Re-read the OS accent and re-apply the theme if it actually changed.
     // Platform shells call this from their OS accent-change notification
@@ -3441,22 +3436,19 @@ protected:
         }
     }
 
-    // Settings → General → "Launch at login" toggle handler. Attempts the
-    // OS-level registration/unregistration; on success, mirrors the result
-    // into Settings::launch_at_login (bookkeeping cache used for
-    // early-startup gating, see launch_args.h). On failure, leaves OS state
-    // untouched and re-pushes the actual queried state back to the
-    // checkbox so the UI never shows a value the OS didn't accept.
-    void handle_launch_at_login_toggle_(bool enabled)
+    // Settings → General → "Launch at login": attempts the OS-level
+    // registration/unregistration for the stored value; the persisted bool is
+    // only a bookkeeping cache of the OS state (used for early-startup gating,
+    // see launch_args.h). On failure, the OS state is left untouched and the
+    // actual queried state is re-pushed to the checkbox (and the cache) so the
+    // UI never shows a value the OS didn't accept.
+    void apply_launch_at_login_()
     {
-        if (autostart_->set_enabled(enabled))
+        auto& s = tesseract::Settings::instance();
+        if (!autostart_->set_enabled(s.launch_at_login))
         {
-            tesseract::Settings::instance().launch_at_login = enabled;
-            tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
-        }
-        else
-        {
-            on_launch_at_login_pref_ui_(autostart_->is_enabled());
+            s.launch_at_login = autostart_->is_enabled();
+            on_launch_at_login_pref_ui_(s.launch_at_login);
         }
     }
 
@@ -3480,28 +3472,11 @@ protected:
             });
     }
 
-    // Called after a failed handle_launch_at_login_toggle_() to re-push the
+    // Called after a failed apply_launch_at_login_() to re-push the
     // actual OS state into the Settings General checkbox. Each shell
     // overrides to forward into its SettingsWidget/SettingsView instance;
     // default no-op covers headless/test builds.
     virtual void on_launch_at_login_pref_ui_(bool /*enabled*/) {}
-
-    // Settings → General → "Start minimized to tray" toggle handler. Pure
-    // preference write — no OS call, unlike launch-at-login. Takes effect on
-    // the next launch.
-    void handle_start_minimized_toggle_(bool enabled)
-    {
-        tesseract::Settings::instance().start_minimized = enabled;
-        tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
-    }
-
-    // Settings → General → "When I close the window" handler. Pure preference
-    // write; takes effect on the next close.
-    void handle_close_action_toggle_(tesseract::Settings::CloseAction action)
-    {
-        tesseract::Settings::instance().close_action = action;
-        tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
-    }
 
     // Whether a system tray icon currently exists. Each shell overrides this
     // to report its own ITrayIcon::is_available(); the default says no, which
@@ -3946,23 +3921,23 @@ protected:
     // sync handshake has settled (RoomListState::Running).
     void start_presence_tracking_();
 
-    // Called from each shell when the "Send and receive presence status" toggle
-    // changes. Persists the setting, enables/disables the Rust polling loop,
-    // and starts or stops the PresenceTracker accordingly.
-    void handle_send_presence_toggle_(bool enabled);
+    // The preference changed in Settings (the new value is already in
+    // Settings::instance()): save it and apply whatever the key needs. The one
+    // entry point for every SettingsView-bound preference.
+    void handle_setting_changed_(views::SettingKey key);
 
-    // Toggle handler for the "Index messages for search" Privacy setting.
-    // Persists the setting and calls Client::set_search_indexing_enabled() on
-    // every logged-in account (enable → lazy backfill; disable → clear index).
-    void handle_index_messages_toggle_(bool enabled);
+    // "Send and receive presence status": enables/disables the Rust polling
+    // loop and starts or stops the PresenceTracker.
+    void apply_send_presence_();
 
-    // Toggle handler for the "Show room join/leave events" Appearance
-    // setting. Persists the setting, applies it to the active account's
-    // client, and re-subscribes the currently-open room (when any) so the
-    // change is reflected immediately instead of waiting for the next room
-    // switch.
-    void handle_show_membership_events_toggle_(bool enabled);
-    void handle_show_sender_status_toggle_(bool enabled);
+    // "Index messages for search": calls Client::set_search_indexing_enabled()
+    // on every logged-in account (enable → lazy backfill; disable → clear index).
+    void apply_index_messages_();
+
+    // "Show room join/leave events": applies it to the active account's client
+    // and re-subscribes the currently-open room (when any) so the change is
+    // reflected immediately instead of waiting for the next room switch.
+    void apply_show_membership_events_();
 
     // Sidebar user strip: avatar URL to show now — the user's own avatar in
     // the active room when it has one, else the account avatar. Called from
@@ -3978,52 +3953,23 @@ protected:
     /// Re-reads display prefs in every message list (main, thread, popouts).
     void refresh_all_message_lists_display_prefs_();
 
-#ifdef TESSERACT_UPDATE_CHECKS
-    // Persists the "check for updates automatically" preference.
-    void handle_check_for_updates_toggle_(bool enabled);
-#endif
+    // "Use historical MSC2545 compatibility": calls
+    // Client::set_msc2545_legacy_compat() on the active account's client, which
+    // synchronously rebuilds the image-pack cache so the change takes effect
+    // immediately (no restart needed).
+    void apply_msc2545_legacy_compat_();
 
-    // Toggle handler for the "Use historical MSC2545 compatibility" Advanced
-    // setting. Persists the setting and calls
-    // Client::set_msc2545_legacy_compat() on the active account's client,
-    // which synchronously rebuilds the image-pack cache so the change takes
-    // effect immediately (no restart needed).
-    void handle_msc2545_legacy_compat_toggle_(bool enabled);
+    // Applies the stored font preferences (Settings → Appearance → Fonts).
+    // Re-measures every window; widgets with their own caches drop them from
+    // Widget::on_fonts_changed().
+    void apply_fonts_();
 
-    // Toggle handler for the "Enable developer mode" Advanced setting.
-    // Persists the setting only — no behavior gated on it yet.
-    void handle_developer_mode_toggle_(bool enabled);
+    // The room-list density (Normal / Compact) changed.
+    void apply_room_list_density_();
 
-    // Persists + live-applies new font preferences (Settings → Appearance →
-    // Fonts). Re-measures every window; widgets with their own caches drop
-    // them from Widget::on_fonts_changed().
-    void handle_fonts_changed_(const tesseract::Settings::FontPrefs& prefs);
-
-    // Handler for the Appearance → Layout combobox. Persists the choice and
-    // forces every open timeline (main window, thread panel, pop-out room
-    // windows) to re-measure with the matching row renderer — no restart.
-    void handle_message_layout_changed_(tesseract::Settings::MessageLayout layout);
-    void handle_bubbles_own_avatar_toggle_(bool enabled);
-    void handle_room_list_density_changed_(
-        tesseract::Settings::RoomListDensity density);
-
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-    // Toggle handler for the "Save a local crash report" Advanced/Diagnostics
-    // setting. Persists the setting and calls
-    // tesseract::set_crash_reporting_enabled() so the change takes effect
-    // immediately, without a restart.
-    void handle_crash_reporting_toggle_(bool enabled);
-#endif
-
-    // Toggle handler for the "Send Google Maps / OpenStreetMap links as
-    // locations" Media setting. Persists the setting only — the flag is
-    // read directly from Settings::instance() by dispatch_room_send_ at
-    // send time.
-    void handle_send_maps_urls_as_location_toggle_(bool enabled);
-
-    // Toggle handler for the two "Link previews" Privacy settings. Persists
-    // both and pushes them to every logged-in account's client.
-    void handle_bundled_url_previews_toggle_(bool enabled, bool direct);
+    // The two "Link previews" Privacy settings changed: push both to every
+    // logged-in account's client.
+    void apply_bundled_url_previews_();
 
     // Resume live search indexing for a freshly-restored account's client if
     // the global "index messages for search" preference is enabled. Called
@@ -4303,7 +4249,7 @@ protected:
     // decode turns out single-frame). Replaces the shells' still-only branch.
     void deliver_animated_avatar_(const std::string& mxc, MediaKind kind,
                                   std::vector<std::uint8_t> bytes);
-    void handle_animate_avatars_toggle_(bool enabled);
+    void apply_animate_avatars_();
     // The avatar animation mode flipped (setting toggled, or low power mode
     // entered/left while the setting is on). Bumps avatar_mode_gen_; with
     // `evict`, also drops every avatar cache entry so avatars refetch lazily in
@@ -4648,12 +4594,9 @@ protected:
     // Each shell calls this once after creating room_view_ (and pop-out windows
     // call it on their own list).
     void wire_media_preview_gating_(views::MessageListView* ml);
-    // Apply a settings-UI change to the MSC4278 config: update the Settings
-    // mirror, write it back to account-data, fetch newly-allowed media, and
-    // repaint. Each shell wires SettingsView::on_media_previews_changed /
-    // on_invite_avatars_changed to this.
-    void apply_media_preview_config_(tesseract::Settings::MediaPreviews mode,
-                                     bool invite_avatars);
+    // Apply a settings-UI change to the MSC4278 config: write the Settings
+    // mirror back to account-data, fetch newly-allowed media, and repaint.
+    void apply_media_preview_config_();
     // Called once, on the UI thread, after a successful Accept commit whose
     // RoomSettingsChanges.media_override was populated (see
     // apply_room_settings_, which performs the actual server write on the

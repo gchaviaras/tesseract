@@ -79,16 +79,6 @@ void SettingsWidget::set_tray_available(bool available)
     settings_view_->set_tray_available(available);
 }
 
-void SettingsWidget::set_show_membership_events_pref(bool enabled)
-{
-    settings_view_->set_show_membership_events_pref(enabled);
-}
-
-void SettingsWidget::set_msc2545_legacy_compat_pref(bool enabled)
-{
-    settings_view_->set_msc2545_legacy_compat_pref(enabled);
-}
-
 void SettingsWidget::set_server_info(const tesseract::ServerInfo& info)
 {
     if (settings_view_)

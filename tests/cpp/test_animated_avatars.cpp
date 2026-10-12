@@ -86,7 +86,7 @@ struct AvatarShell : AvatarAccountManager, ShellBase
     using ShellBase::account_manager_;
     using ShellBase::animate_avatars_effective_;
     using ShellBase::deliver_animated_avatar_;
-    using ShellBase::handle_animate_avatars_toggle_;
+    using ShellBase::handle_setting_changed_;
     using ShellBase::note_member_event_;
     using ShellBase::avatar_mxcs_;
     using ShellBase::avatar_mode_gen_;
@@ -216,7 +216,8 @@ TEST_CASE("toggling Animate avatars evicts only avatar entries", "[avatars][anim
     s.account_manager_.anim_cache().store(tk::CacheKey::media(other), avatar_frames(2), {50, 50}, 1000);
     s.avatar_mxcs_.insert(av);
 
-    s.handle_animate_avatars_toggle_(false);
+    tesseract::Settings::instance().animate_avatars = false;
+    s.handle_setting_changed_(tesseract::views::SettingKey::AnimateAvatars);
 
     CHECK_FALSE(s.account_manager_.thumbnail_cache().contains(tk::CacheKey::media(av)));
     CHECK_FALSE(s.account_manager_.anim_cache().has(s.avatar_anim_key_(av)));

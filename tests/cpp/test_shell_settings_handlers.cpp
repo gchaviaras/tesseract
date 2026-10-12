@@ -79,16 +79,7 @@ struct SettingsShell : tesseract::test::TestShellBase
     using ShellBase::current_scale_;
     using ShellBase::current_theme_;
     using ShellBase::emoji_skin_tone_;
-    using ShellBase::handle_bundled_url_previews_toggle_;
-    using ShellBase::handle_developer_mode_toggle_;
-    using ShellBase::handle_index_messages_toggle_;
-    using ShellBase::handle_message_layout_changed_;
-    using ShellBase::handle_room_list_density_changed_;
-    using ShellBase::handle_msc2545_legacy_compat_toggle_;
-    using ShellBase::handle_send_maps_urls_as_location_toggle_;
-    using ShellBase::handle_send_presence_toggle_;
-    using ShellBase::handle_show_membership_events_toggle_;
-    using ShellBase::handle_show_sender_status_toggle_;
+    using ShellBase::handle_setting_changed_;
     using ShellBase::last_system_accent_;
     using ShellBase::low_power_active;
     using ShellBase::low_power_available;
@@ -100,12 +91,34 @@ struct SettingsShell : tesseract::test::TestShellBase
     using ShellBase::set_bridge_override_;
     using ShellBase::set_current_scale_;
     using ShellBase::set_emoji_skin_tone_;
-    using ShellBase::set_low_power_preference_;
     using ShellBase::set_power_monitor_;
-    using ShellBase::set_theme_accent_;
-    using ShellBase::set_theme_preference_;
     using ShellBase::settle_emoji_skin_tone_;
 };
+
+// Write `value` into Settings the way the settings view does, then report the
+// key to the shell.
+void changed(SettingsShell& s, tesseract::views::SettingKey key)
+{
+    s.handle_setting_changed_(key);
+}
+
+void set_theme(SettingsShell& s, Settings::ThemePreference pref)
+{
+    Settings::instance().theme_pref = pref;
+    changed(s, tesseract::views::SettingKey::Theme);
+}
+
+void set_accent(SettingsShell& s, Settings::ThemeAccent accent)
+{
+    Settings::instance().theme_accent = accent;
+    changed(s, tesseract::views::SettingKey::Accent);
+}
+
+void set_low_power(SettingsShell& s, Settings::LowPowerPreference pref)
+{
+    Settings::instance().low_power_pref = pref;
+    changed(s, tesseract::views::SettingKey::LowPower);
+}
 
 struct FakePower : tesseract::IPowerMonitor
 {
@@ -140,17 +153,32 @@ TEST_CASE("settings handlers persist plain toggles", "[shell][settings_handlers]
     SettingsShell s;
     auto& st = Settings::instance();
 
-    s.handle_developer_mode_toggle_(true);
+    using K = tesseract::views::SettingKey;
+    st.developer_mode = true;
+    st.send_maps_urls_as_location = false;
+    st.index_messages_for_search = true;
+    st.show_room_join_leave_events = true;
+    st.msc2545_legacy_compat = false;
+    st.send_bundled_url_previews = true;
+    st.fetch_url_previews_directly = true;
+    for (K k : {K::DeveloperMode, K::SendMapsAsLocation, K::IndexMessages,
+                K::ShowMembershipEvents, K::Msc2545Compat, K::BundledUrlPreviews})
+        changed(s, k);
+
+    // Every key is persisted: flip the in-memory values, reload from disk.
+    st.developer_mode = false;
+    st.send_maps_urls_as_location = true;
+    st.index_messages_for_search = false;
+    st.show_room_join_leave_events = false;
+    st.msc2545_legacy_compat = true;
+    st.send_bundled_url_previews = false;
+    st.fetch_url_previews_directly = false;
+    st.load_from_disk(tesseract::config_dir());
     CHECK(st.developer_mode);
-    s.handle_send_maps_urls_as_location_toggle_(false);
     CHECK_FALSE(st.send_maps_urls_as_location);
-    s.handle_index_messages_toggle_(true);
     CHECK(st.index_messages_for_search);
-    s.handle_show_membership_events_toggle_(true);
     CHECK(st.show_room_join_leave_events);
-    s.handle_msc2545_legacy_compat_toggle_(false);
     CHECK_FALSE(st.msc2545_legacy_compat);
-    s.handle_bundled_url_previews_toggle_(true, true);
     CHECK(st.send_bundled_url_previews);
     CHECK(st.fetch_url_previews_directly);
 }
@@ -163,45 +191,38 @@ TEST_CASE("toggles that need a client push to clients when present",
     tesseract::Client client;
     s.client_ = &client;
     s.current_room_id_ = "!r:x";
-    CHECK_NOTHROW(s.handle_show_membership_events_toggle_(false));
-    CHECK_NOTHROW(s.handle_msc2545_legacy_compat_toggle_(true));
+    using K = tesseract::views::SettingKey;
+    CHECK_NOTHROW(changed(s, K::ShowMembershipEvents));
+    CHECK_NOTHROW(changed(s, K::Msc2545Compat));
 
     auto sess = settings_handlers_account("@a:x");
     sess->client = std::make_unique<tesseract::Client>();
     s.account_manager_.add_account(sess);
-    CHECK_NOTHROW(s.handle_index_messages_toggle_(false));
-    CHECK_NOTHROW(s.handle_bundled_url_previews_toggle_(false, false));
+    CHECK_NOTHROW(changed(s, K::IndexMessages));
+    CHECK_NOTHROW(changed(s, K::BundledUrlPreviews));
 }
 
-TEST_CASE("sender status and layout changes relayout only on a real change",
+TEST_CASE("sender status, layout and density changes relayout",
           "[shell][settings_handlers]")
 {
     tesseract::test::SettingsGuard guard;
     SettingsShell s;
     auto& st = Settings::instance();
-    st.show_sender_status_in_timeline = false;
+    using K = tesseract::views::SettingKey;
 
-    s.handle_show_sender_status_toggle_(false); // unchanged
-    CHECK(s.relayouts == 0);
-    s.handle_show_sender_status_toggle_(true);
-    CHECK(st.show_sender_status_in_timeline);
+    st.show_sender_status_in_timeline = true;
+    changed(s, K::ShowSenderStatus);
     CHECK(s.relayouts == 1);
 
-    const auto other = st.message_layout == Settings::MessageLayout::Bubbles
-                           ? Settings::MessageLayout::Classic
-                           : Settings::MessageLayout::Bubbles;
-    s.handle_message_layout_changed_(st.message_layout); // unchanged
-    CHECK(s.relayouts == 1);
-    s.handle_message_layout_changed_(other);
-    CHECK(st.message_layout == other);
+    st.message_layout = st.message_layout == Settings::MessageLayout::Bubbles
+                            ? Settings::MessageLayout::Classic
+                            : Settings::MessageLayout::Bubbles;
+    changed(s, K::MessageLayout);
     CHECK(s.relayouts == 2);
 
     using RD = Settings::RoomListDensity;
-    st.room_list_density = RD::Normal;
-    s.handle_room_list_density_changed_(RD::Normal); // unchanged
-    CHECK(s.relayouts == 2);
-    s.handle_room_list_density_changed_(RD::Compact);
-    CHECK(st.room_list_density == RD::Compact);
+    st.room_list_density = RD::Compact;
+    changed(s, K::RoomListDensity);
     CHECK(s.relayouts == 3);
     st.room_list_density = RD::Normal;
 }
@@ -210,7 +231,9 @@ TEST_CASE("presence toggle persists and resolves polling", "[shell][settings_han
 {
     tesseract::test::SettingsGuard guard;
     SettingsShell s;
-    s.handle_send_presence_toggle_(false);
+    Settings::instance().send_presence = false;
+    changed(s, tesseract::views::SettingKey::SendPresence);
+    Settings::instance().load_from_disk(tesseract::config_dir());
     CHECK_FALSE(Settings::instance().send_presence);
 }
 
@@ -286,20 +309,20 @@ TEST_CASE("theme preference and accent are persisted and re-applied",
 {
     tesseract::test::SettingsGuard guard;
     SettingsShell s;
-    s.set_theme_preference_(Settings::ThemePreference::Dark);
+    set_theme(s, Settings::ThemePreference::Dark);
     CHECK(Settings::instance().theme_pref == Settings::ThemePreference::Dark);
     CHECK(s.theme_applies == 1);
     CHECK(s.current_theme_.mode == tk::ThemeMode::Dark);
 
-    s.set_theme_preference_(Settings::ThemePreference::Light);
+    set_theme(s, Settings::ThemePreference::Light);
     CHECK(s.current_theme_.mode == tk::ThemeMode::Light);
 
     // "System" asks the OS.
     s.scheme = tk::ThemeMode::Dark;
-    s.set_theme_preference_(Settings::ThemePreference::System);
+    set_theme(s, Settings::ThemePreference::System);
     CHECK(s.current_theme_.mode == tk::ThemeMode::Dark);
 
-    s.set_theme_accent_(Settings::ThemeAccent::Forest);
+    set_accent(s, Settings::ThemeAccent::Forest);
     CHECK(Settings::instance().theme_accent == Settings::ThemeAccent::Forest);
     CHECK_FALSE(s.last_system_accent_.has_value());
     CHECK(s.theme_applies == 4);
@@ -311,13 +334,13 @@ TEST_CASE("system accent changes re-theme only when the OS colour moved",
     tesseract::test::SettingsGuard guard;
     SettingsShell s;
     // Not on the System accent: ignored.
-    s.set_theme_accent_(Settings::ThemeAccent::Blue);
+    set_accent(s, Settings::ThemeAccent::Blue);
     const int base = s.theme_applies;
     s.on_system_accent_changed_();
     CHECK(s.theme_applies == base);
 
     s.accent = tk::Color{10, 20, 30, 255};
-    s.set_theme_accent_(Settings::ThemeAccent::System);
+    set_accent(s, Settings::ThemeAccent::System);
     REQUIRE(s.last_system_accent_.has_value());
     const int after = s.theme_applies;
     s.on_system_accent_changed_(); // same colour: no re-apply
@@ -349,7 +372,7 @@ TEST_CASE("low power mode is unavailable without a battery",
     pm->battery = false;
     s.set_power_monitor_(std::move(pm));
     CHECK_FALSE(s.low_power_available());
-    s.set_low_power_preference_(Settings::LowPowerPreference::On);
+    set_low_power(s, Settings::LowPowerPreference::On);
     CHECK_FALSE(s.low_power_active());
     s.set_power_monitor_(nullptr); // ignored
 }
@@ -364,12 +387,12 @@ TEST_CASE("low power preference On/Off drives the policy and the UI",
     REQUIRE(s.low_power_available());
     CHECK_FALSE(s.low_power_active());
 
-    s.set_low_power_preference_(Settings::LowPowerPreference::On);
+    set_low_power(s, Settings::LowPowerPreference::On);
     CHECK(Settings::instance().low_power_pref == Settings::LowPowerPreference::On);
     CHECK(s.low_power_active());
     CHECK(s.low_power_ui);
 
-    s.set_low_power_preference_(Settings::LowPowerPreference::Off);
+    set_low_power(s, Settings::LowPowerPreference::Off);
     CHECK_FALSE(s.low_power_active());
     CHECK_FALSE(s.low_power_ui);
 }

@@ -16,29 +16,6 @@ namespace
 {
 using MP = tesseract::Settings::MediaPreviews;
 
-const char* mp_to_value(MP m)
-{
-    switch (m)
-    {
-    case MP::Off:
-        return "off";
-    case MP::Private:
-        return "private";
-    case MP::On:
-    default:
-        return "on";
-    }
-}
-
-MP value_to_mp(const std::string& v)
-{
-    if (v == "off")
-        return MP::Off;
-    if (v == "private")
-        return MP::Private;
-    return MP::On;
-}
-
 std::vector<tk::ComboBox::Option> make_device_options(
     const std::vector<tk::DeviceListing>& devices)
 {
@@ -50,9 +27,10 @@ std::vector<tk::ComboBox::Option> make_device_options(
 }
 } // namespace
 
-MediaSection::MediaSection()
+MediaSection::MediaSection(SettingBinder& binder)
 {
-    const auto& s = tesseract::Settings::instance();
+    using S = tesseract::Settings;
+    const auto& s = S::instance();
 
     // ── Media previews (MSC4278) ────────────────────────────────────────────
     auto* previews_group = add_group(tk::tr("Media previews"));
@@ -63,22 +41,14 @@ MediaSection::MediaSection()
         {tk::tr("In private rooms only"),  "private"},
         {tk::tr("Never"),                 "off"},
     });
-    combo->set_selected_value(mp_to_value(s.media_previews));
     previews_combo_ = previews_group->add_widget(std::move(combo));
-    previews_combo_->on_changed = [this](std::string value)
-    {
-        if (on_media_previews_changed)
-            on_media_previews_changed(value_to_mp(value));
-    };
+    binder.bind<MP>(previews_combo_, &S::media_previews, SettingKey::MediaPreviews,
+                    {{MP::On, "on"}, {MP::Private, "private"}, {MP::Off, "off"}});
 
     auto invite_cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Show avatars in invites"), s.invite_avatars);
     invite_avatars_cb_ = previews_group->add_widget(std::move(invite_cb));
-    invite_avatars_cb_->on_change = [this](bool v)
-    {
-        if (on_invite_avatars_changed)
-            on_invite_avatars_changed(v);
-    };
+    binder.bind(invite_avatars_cb_, &S::invite_avatars, SettingKey::InviteAvatars);
 
     // ── Local media loading ─────────────────────────────────────────────────
     auto* group = add_group(tk::tr("Media"));
@@ -86,19 +56,13 @@ MediaSection::MediaSection()
     auto prefetch_cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Pre-load full images while scrolling"), s.prefetch_full_media);
     prefetch_cb_ = group->add_widget(std::move(prefetch_cb));
-    prefetch_cb_->on_change = [this](bool v)
-    {
-        if (on_prefetch_changed) on_prefetch_changed(v);
-    };
+    binder.bind(prefetch_cb_, &S::prefetch_full_media, SettingKey::Prefetch);
 
     auto external_cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Open images, videos and files in the system's default viewer"),
         s.open_media_externally);
     open_external_cb_ = group->add_widget(std::move(external_cb));
-    open_external_cb_->on_change = [this](bool v)
-    {
-        if (on_open_external_changed) on_open_external_changed(v);
-    };
+    binder.bind(open_external_cb_, &S::open_media_externally, SettingKey::OpenExternal);
 
     // ── Capture devices ─────────────────────────────────────────────────────
     auto* dev_group = add_group(tk::tr("Capture devices"));
@@ -107,44 +71,18 @@ MediaSection::MediaSection()
 
     auto mic_combo = tk::create_widget<tk::ComboBox>(this);
     mic_combo->set_options({{tk::tr("System default"), ""}});
-    mic_combo->on_changed = [this](std::string value)
-    {
-        if (on_audio_input_changed) on_audio_input_changed(std::move(value));
-    };
     audio_input_combo_ = dev_form->add_row(tk::tr("Microphone"), std::move(mic_combo));
+    binder.bind(audio_input_combo_, &S::audio_input_device_id, SettingKey::AudioInput);
 
     auto spk_combo = tk::create_widget<tk::ComboBox>(this);
     spk_combo->set_options({{tk::tr("System default"), ""}});
-    spk_combo->on_changed = [this](std::string value)
-    {
-        if (on_audio_output_changed) on_audio_output_changed(std::move(value));
-    };
     audio_output_combo_ = dev_form->add_row(tk::tr("Speaker"), std::move(spk_combo));
+    binder.bind(audio_output_combo_, &S::audio_output_device_id, SettingKey::AudioOutput);
 
     auto cam_combo = tk::create_widget<tk::ComboBox>(this);
     cam_combo->set_options({{tk::tr("System default"), ""}});
-    cam_combo->on_changed = [this](std::string value)
-    {
-        if (on_camera_changed) on_camera_changed(std::move(value));
-    };
     camera_combo_ = dev_form->add_row(tk::tr("Camera"), std::move(cam_combo));
-}
-
-void MediaSection::set_prefetch_checked(bool enabled)
-{
-    prefetch_cb_->set_checked(enabled);
-}
-
-void MediaSection::set_media_previews(tesseract::Settings::MediaPreviews mode)
-{
-    if (previews_combo_)
-        previews_combo_->set_selected_value(mp_to_value(mode));
-}
-
-void MediaSection::set_invite_avatars(bool enabled)
-{
-    if (invite_avatars_cb_)
-        invite_avatars_cb_->set_checked(enabled);
+    binder.bind(camera_combo_, &S::camera_device_id, SettingKey::Camera);
 }
 
 void MediaSection::set_audio_input_devices(std::vector<tk::DeviceListing> devices)

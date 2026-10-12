@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-11**. 3217 C++ + 1013 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-12**. 3222 C++ + 1013 Rust tests.
 
 > **Configurable fonts (2026-10-11).**
 > Settings → Appearance → Fonts: a base size that scales every text role

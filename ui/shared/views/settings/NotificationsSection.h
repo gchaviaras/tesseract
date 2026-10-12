@@ -6,7 +6,7 @@
 //   2. "Hide message content in notifications"
 //   3. "Show image & sticker previews in notifications"
 // Reads initial state from Settings::instance() and fires the matching
-// callback when a row is toggled. (The lock-screen privacy gate is always on
+// binder key when a row is toggled. (The lock-screen privacy gate is always on
 // regardless of row 3 — see ShellBase::notification_image_allowed_.)
 //
 // A second "Mentions & Keywords" group holds the account-wide, push-rule-
@@ -18,6 +18,7 @@
 // set_mentions_enabled()/set_room_mentions_enabled()/set_notify_all_messages()
 // rather than trusting the click.
 
+#include "SettingBinder.h"
 #include "SettingsPage.h"
 
 #include "tk/controls.h"
@@ -39,18 +40,8 @@ class SettingsGroup;
 class NotificationsSection : public SettingsPage
 {
 public:
-    NotificationsSection();
+    explicit NotificationsSection(SettingBinder& binder);
     ~NotificationsSection() override;
-
-    // Silently update checkbox state without firing callbacks.
-    void set_checked(bool enabled);                // row 1
-    void set_hide_content_checked(bool enabled);   // row 2
-    void set_image_previews_checked(bool enabled); // row 3
-
-    // Fire with the new boolean state when the matching row is toggled.
-    std::function<void(bool)> on_notifications_changed;
-    std::function<void(bool)> on_hide_content_changed;
-    std::function<void(bool)> on_image_previews_changed;
 
     // ---- Mentions & Keywords (push-rule-backed, account-wide) ----
 

@@ -10,19 +10,17 @@
 namespace tesseract::views
 {
 
-AdvancedSection::AdvancedSection()
+AdvancedSection::AdvancedSection(SettingBinder& binder)
 {
-    const auto& s = tesseract::Settings::instance();
+    using S = tesseract::Settings;
+    const auto& s = S::instance();
 
     auto* group = add_group(tk::tr("Advanced"));
 
     auto cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Use historical MSC2545 compatibility"), s.msc2545_legacy_compat);
     legacy_compat_cb_ = group->add_widget(std::move(cb));
-    legacy_compat_cb_->on_change = [this](bool v)
-    {
-        if (on_msc2545_legacy_compat_changed) on_msc2545_legacy_compat_changed(v);
-    };
+    binder.bind(legacy_compat_cb_, &S::msc2545_legacy_compat, SettingKey::Msc2545Compat);
     legacy_compat_cb_->on_hover_enter = [this]
     {
         if (host_)
@@ -43,10 +41,7 @@ AdvancedSection::AdvancedSection()
     auto dev_cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Enable developer mode"), s.developer_mode);
     developer_mode_cb_ = dev_group->add_widget(std::move(dev_cb));
-    developer_mode_cb_->on_change = [this](bool v)
-    {
-        if (on_developer_mode_changed) on_developer_mode_changed(v);
-    };
+    binder.bind(developer_mode_cb_, &S::developer_mode, SettingKey::DeveloperMode);
 
     auto* activity_group = add_group(tk::tr("Activity"));
     activity_group->add_widget(tk::create_widget<tk::Button>(
@@ -61,10 +56,8 @@ AdvancedSection::AdvancedSection()
         this, tk::tr("Save a local crash report if the app crashes"),
         s.crash_reporting_enabled);
     crash_reporting_cb_ = diagnostics_group->add_widget(std::move(crash_cb));
-    crash_reporting_cb_->on_change = [this](bool v)
-    {
-        if (on_crash_reporting_changed) on_crash_reporting_changed(v);
-    };
+    binder.bind(crash_reporting_cb_, &S::crash_reporting_enabled,
+                SettingKey::CrashReporting);
     crash_reporting_cb_->on_hover_enter = [this]
     {
         if (host_)
@@ -88,22 +81,5 @@ void AdvancedSection::paint_before_children(tk::PaintCtx& ctx)
     host_ = ctx.host;
     SettingsPage::paint_before_children(ctx);
 }
-
-void AdvancedSection::set_msc2545_legacy_compat(bool enabled)
-{
-    legacy_compat_cb_->set_checked(enabled);
-}
-
-void AdvancedSection::set_developer_mode(bool enabled)
-{
-    developer_mode_cb_->set_checked(enabled);
-}
-
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-void AdvancedSection::set_crash_reporting_enabled(bool enabled)
-{
-    crash_reporting_cb_->set_checked(enabled);
-}
-#endif
 
 } // namespace tesseract::views

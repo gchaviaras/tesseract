@@ -364,6 +364,7 @@ set(_tk_sources
     views/PopoutRoomWidget.cpp
     views/SettingsView.h
     views/SettingsView.cpp
+    views/settings/SettingBinder.h
     views/settings/SettingsPage.h
     views/settings/SettingsPage.cpp
     views/settings/SettingsGroup.h

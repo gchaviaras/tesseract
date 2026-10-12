@@ -130,37 +130,29 @@ private:
     }
 };
 
-NotificationsSection::NotificationsSection()
+NotificationsSection::NotificationsSection(SettingBinder& binder)
 {
-    const auto& s = tesseract::Settings::instance();
+    using S = tesseract::Settings;
+    const auto& s = S::instance();
 
     auto* group = add_group(tk::tr("Notifications"));
 
     auto notif_cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Enable notifications on this device"), s.notifications_enabled);
     notif_cb_ = group->add_widget(std::move(notif_cb));
-    notif_cb_->on_change = [this](bool v)
-    {
-        if (on_notifications_changed) on_notifications_changed(v);
-    };
+    binder.bind(notif_cb_, &S::notifications_enabled, SettingKey::Notifications);
 
     auto hide_content_cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Hide message content in notifications"),
         s.notification_hide_content);
     hide_content_cb_ = group->add_widget(std::move(hide_content_cb));
-    hide_content_cb_->on_change = [this](bool v)
-    {
-        if (on_hide_content_changed) on_hide_content_changed(v);
-    };
+    binder.bind(hide_content_cb_, &S::notification_hide_content, SettingKey::HideContent);
 
     auto previews_cb = tk::create_widget<tk::CheckButton>(
         this, tk::tr("Show image & sticker previews in notifications"),
         s.notification_image_previews);
     previews_cb_ = group->add_widget(std::move(previews_cb));
-    previews_cb_->on_change = [this](bool v)
-    {
-        if (on_image_previews_changed) on_image_previews_changed(v);
-    };
+    binder.bind(previews_cb_, &S::notification_image_previews, SettingKey::ImagePreviews);
 
     // ---- Mentions & Keywords (push-rule-backed, account-wide) ----
 
@@ -230,21 +222,6 @@ NotificationsSection::NotificationsSection()
 }
 
 NotificationsSection::~NotificationsSection() = default;
-
-void NotificationsSection::set_checked(bool enabled)
-{
-    notif_cb_->set_checked(enabled);
-}
-
-void NotificationsSection::set_hide_content_checked(bool enabled)
-{
-    hide_content_cb_->set_checked(enabled);
-}
-
-void NotificationsSection::set_image_previews_checked(bool enabled)
-{
-    previews_cb_->set_checked(enabled);
-}
 
 void NotificationsSection::set_mentions_enabled(bool enabled)
 {

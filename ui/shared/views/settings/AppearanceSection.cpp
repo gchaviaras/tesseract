@@ -44,52 +44,7 @@ std::string message_layout_description(tesseract::Settings::MessageLayout layout
                   "avatar in the gutter.");
 }
 
-const char* message_layout_value(tesseract::Settings::MessageLayout layout)
-{
-    using ML = tesseract::Settings::MessageLayout;
-    switch (layout)
-    {
-    case ML::Bubbles: return "bubbles";
-    case ML::Irc:     return "irc";
-    case ML::Classic: break;
-    }
-    return "classic";
-}
-
-tesseract::Settings::MessageLayout message_layout_from_value(const std::string& v)
-{
-    using ML = tesseract::Settings::MessageLayout;
-    if (v == "bubbles") return ML::Bubbles;
-    if (v == "irc")     return ML::Irc;
-    return ML::Classic;
-}
-
-// Persisted value strings match tk::AccentTheme <-> Settings::ThemeAccent 1:1;
-// keep them in sync with Settings::save_to_disk/load_from_disk's own strings.
-const char* accent_value(tesseract::Settings::ThemeAccent accent)
-{
-    using TA = tesseract::Settings::ThemeAccent;
-    switch (accent)
-    {
-    case TA::Blue:   return "blue";
-    case TA::Forest: return "forest";
-    case TA::Sunset: return "sunset";
-    case TA::Violet: return "violet";
-    case TA::System: break;
-    }
-    return "system";
-}
-
-tesseract::Settings::ThemeAccent accent_from_value(const std::string& v)
-{
-    using TA = tesseract::Settings::ThemeAccent;
-    if (v == "blue")   return TA::Blue;
-    if (v == "forest") return TA::Forest;
-    if (v == "sunset") return TA::Sunset;
-    if (v == "violet") return TA::Violet;
-    return TA::System;
-}
-
+// Option ids match tk::AccentTheme <-> Settings::ThemeAccent 1:1.
 const char* accent_theme_value(tk::AccentTheme accent)
 {
     switch (accent)
@@ -106,26 +61,6 @@ const char* accent_theme_value(tk::AccentTheme accent)
 constexpr float kLayoutRowGap = 16.0f; // gap between the combo/desc column and the preview
 constexpr float kLayoutColumnGap = 6.0f; // matches SettingsGroup's own inter-row spacing
 
-const char* theme_value(tesseract::Settings::ThemePreference pref)
-{
-    using TP = tesseract::Settings::ThemePreference;
-    switch (pref)
-    {
-    case TP::Light: return "light";
-    case TP::Dark:  return "dark";
-    case TP::System: break;
-    }
-    return "system";
-}
-
-tesseract::Settings::ThemePreference theme_from_value(const std::string& v)
-{
-    using TP = tesseract::Settings::ThemePreference;
-    if (v == "light") return TP::Light;
-    if (v == "dark")  return TP::Dark;
-    return TP::System;
-}
-
 } // namespace
 
 
@@ -133,8 +68,9 @@ tesseract::Settings::ThemePreference theme_from_value(const std::string& v)
 // AppearanceSection — thin SettingsPage with one "Theme" group.
 // ---------------------------------------------------------------------------
 
-AppearanceSection::AppearanceSection()
+AppearanceSection::AppearanceSection(SettingBinder& binder)
 {
+    using S = tesseract::Settings;
     auto* group = add_group(tk::tr("Theme"));
     auto picker = tk::create_widget<tk::RadioGroup>(
         this, tk::FlexBox::Axis::Horizontal);
@@ -144,13 +80,12 @@ AppearanceSection::AppearanceSection()
         {tk::tr("Dark"), "dark"},
         {tk::tr("System"), "system"},
     });
-    picker->set_selected_value(
-        theme_value(tesseract::Settings::instance().theme_pref));
-    picker->on_changed = [this](std::string v)
-    {
-        if (on_theme_changed) on_theme_changed(theme_from_value(v));
-    };
     picker_ = group->add_widget(std::move(picker));
+    binder.bind<S::ThemePreference>(
+        picker_, &S::theme_pref, SettingKey::Theme,
+        {{S::ThemePreference::Light, "light"},
+         {S::ThemePreference::Dark, "dark"},
+         {S::ThemePreference::System, "system"}});
 
     group->add_widget(tk::create_widget<tk::Label>(this, tk::tr("Accent color")));
     {
@@ -159,13 +94,14 @@ AppearanceSection::AppearanceSection()
         for (const auto& info : tk::accent_theme_infos())
             opts.push_back({tk::tr(info.name), accent_theme_value(info.id)});
         accent_combo->set_options(std::move(opts));
-        accent_combo->set_selected_value(
-            accent_value(tesseract::Settings::instance().theme_accent));
-        accent_combo->on_changed = [this](std::string v)
-        {
-            if (on_accent_changed) on_accent_changed(accent_from_value(v));
-        };
         accent_combo_ = group->add_widget(std::move(accent_combo));
+        binder.bind<S::ThemeAccent>(
+            accent_combo_, &S::theme_accent, SettingKey::Accent,
+            {{S::ThemeAccent::Blue, "blue"},
+             {S::ThemeAccent::Forest, "forest"},
+             {S::ThemeAccent::Sunset, "sunset"},
+             {S::ThemeAccent::Violet, "violet"},
+             {S::ThemeAccent::System, "system"}});
     }
 
     {
@@ -191,7 +127,6 @@ AppearanceSection::AppearanceSection()
             {tk::tr("Bubbles"), "bubbles"},
             {tk::tr("IRC"), "irc"},
         });
-        combo->set_selected_value(message_layout_value(s.message_layout));
         message_layout_combo_ = column->add_child(std::move(combo));
 
         auto desc = tk::create_widget<tk::Label>(
@@ -208,11 +143,8 @@ AppearanceSection::AppearanceSection()
             auto cb = tk::create_widget<tk::CheckButton>(
                 this, tk::tr("Show my name and avatar"), s.bubbles_show_own_avatar);
             bubbles_own_avatar_cb_ = opts->add_child(std::move(cb));
-            bubbles_own_avatar_cb_->on_change = [this](bool v)
-            {
-                if (on_bubbles_show_own_avatar_changed)
-                    on_bubbles_show_own_avatar_changed(v);
-            };
+            binder.bind(bubbles_own_avatar_cb_, &S::bubbles_show_own_avatar,
+                        SettingKey::BubblesOwnAvatar);
             opts->set_visible(s.message_layout == ML::Bubbles);
             layout_options_bubbles_ = column->add_child(std::move(opts));
         }
@@ -223,18 +155,33 @@ AppearanceSection::AppearanceSection()
 
         layout_group->add_widget(std::move(row));
 
-        message_layout_combo_->on_changed = [this](std::string v)
+        binder.bind<ML>(message_layout_combo_, &S::message_layout,
+                        SettingKey::MessageLayout,
+                        {{ML::Classic, "classic"},
+                         {ML::Bubbles, "bubbles"},
+                         {ML::Irc, "irc"}});
+        // Description, per-layout options and preview follow the selection,
+        // both after a user change and after a silent reload.
+        auto refresh_layout = [this]
         {
-            const ML layout = message_layout_from_value(v);
+            const ML layout = tesseract::Settings::instance().message_layout;
             if (message_layout_desc_)
                 message_layout_desc_->set_text(message_layout_description(layout));
             if (layout_options_bubbles_)
                 layout_options_bubbles_->set_visible(layout == ML::Bubbles);
-            if (on_message_layout_changed)
-                on_message_layout_changed(layout);
             if (message_layout_preview_)
                 message_layout_preview_->refresh_layout();
         };
+        {
+            auto bound = message_layout_combo_->on_changed;
+            message_layout_combo_->on_changed =
+                [bound, refresh_layout](std::string v)
+            {
+                if (bound) bound(v);
+                refresh_layout();
+            };
+        }
+        binder.bind_custom(refresh_layout);
 
         // Room list density: radio group + description on the left, live
         // preview on the right.
@@ -255,10 +202,6 @@ AppearanceSection::AppearanceSection()
             {tk::tr("Normal"), "normal"},
             {tk::tr("Compact"), "compact"},
         });
-        density->set_selected_value(
-            s.room_list_density == tesseract::Settings::RoomListDensity::Compact
-                ? "compact"
-                : "normal");
         room_list_density_group_ = density_col->add_child(std::move(density));
 
         auto density_desc = tk::create_widget<tk::Label>(
@@ -275,26 +218,44 @@ AppearanceSection::AppearanceSection()
             s.room_list_density == tesseract::Settings::RoomListDensity::Compact);
         layout_group->add_widget(std::move(density_row));
 
-        room_list_density_group_->on_changed = [this](std::string v)
+        using RD = tesseract::Settings::RoomListDensity;
+        binder.bind<RD>(room_list_density_group_, &S::room_list_density,
+                        SettingKey::RoomListDensity,
+                        {{RD::Normal, "normal"}, {RD::Compact, "compact"}});
+        auto refresh_density = [this]
         {
-            const bool compact = v == "compact";
-            if (on_room_list_density_changed)
-                on_room_list_density_changed(
-                    compact ? tesseract::Settings::RoomListDensity::Compact
-                            : tesseract::Settings::RoomListDensity::Normal);
             if (room_list_preview_)
-                room_list_preview_->set_compact(compact);
+                room_list_preview_->set_compact(
+                    tesseract::Settings::instance().room_list_density ==
+                    tesseract::Settings::RoomListDensity::Compact);
         };
+        {
+            auto bound = room_list_density_group_->on_changed;
+            room_list_density_group_->on_changed =
+                [bound, refresh_density](std::string v)
+            {
+                if (bound) bound(v);
+                refresh_density();
+            };
+        }
+        binder.bind_custom(refresh_density);
     }
 
     {
         auto* fonts_group = add_group(tk::tr("Fonts"));
         auto editor = tk::create_widget<FontsEditor>(this);
-        editor->on_changed = [this](const tesseract::Settings::FontPrefs& p)
+        editor->on_changed = [&binder](const tesseract::Settings::FontPrefs& p)
         {
-            if (on_font_prefs_changed) on_font_prefs_changed(p);
+            auto& s = tesseract::Settings::instance();
+            if (s.fonts == p)
+                return;
+            s.fonts = p;
+            binder.changed(SettingKey::Fonts);
         };
         fonts_editor_ = fonts_group->add_widget(std::move(editor));
+        binder.bind_custom(
+            [this]
+            { fonts_editor_->set_prefs(tesseract::Settings::instance().fonts); });
     }
 
     {
@@ -304,18 +265,13 @@ AppearanceSection::AppearanceSection()
         auto cb_unread = tk::create_widget<tk::CheckButton>(
             this, tk::tr("Group unread rooms"), s.group_unread_rooms);
         group_unread_cb_ = rl_group->add_widget(std::move(cb_unread));
-        group_unread_cb_->on_change = [this](bool v)
-        {
-            if (on_group_unread_changed) on_group_unread_changed(v);
-        };
+        binder.bind(group_unread_cb_, &S::group_unread_rooms, SettingKey::GroupUnread);
 
         auto cb = tk::create_widget<tk::CheckButton>(
             this, tk::tr("Group inactive rooms"), s.group_inactive_rooms);
         group_inactive_cb_ = rl_group->add_widget(std::move(cb));
-        group_inactive_cb_->on_change = [this](bool v)
-        {
-            if (on_group_inactive_changed) on_group_inactive_changed(v);
-        };
+        binder.bind(group_inactive_cb_, &S::group_inactive_rooms,
+                    SettingKey::GroupInactive);
 
         auto combo = tk::create_widget<tk::ComboBox>(this);
         combo->set_options({
@@ -325,24 +281,16 @@ AppearanceSection::AppearanceSection()
             {tk::tr("3 months"), "90"},
             {tk::tr("6 months"), "180"},
         });
-        combo->set_selected_value(
-            std::to_string(s.inactive_room_threshold_days));
         period_combo_ = rl_group->add_widget(std::move(combo));
-        period_combo_->on_changed = [this](std::string value)
-        {
-            if (on_inactive_period_changed)
-            {
-                on_inactive_period_changed(std::stoi(value));
-            }
-        };
+        binder.bind<int>(period_combo_, &S::inactive_room_threshold_days,
+                         SettingKey::InactivePeriod,
+                         {{7, "7"}, {14, "14"}, {30, "30"}, {90, "90"}, {180, "180"}});
 
         auto autoscroll = tk::create_widget<tk::CheckButton>(
             this, tk::tr("Scroll to rooms with new messages"), s.autoscroll_unread_rooms);
         autoscroll_cb_ = rl_group->add_widget(std::move(autoscroll));
-        autoscroll_cb_->on_change = [this](bool v)
-        {
-            if (on_autoscroll_unread_changed) on_autoscroll_unread_changed(v);
-        };
+        binder.bind(autoscroll_cb_, &S::autoscroll_unread_rooms,
+                    SettingKey::AutoscrollUnread);
     }
 
     {
@@ -352,99 +300,23 @@ AppearanceSection::AppearanceSection()
         auto cb_membership = tk::create_widget<tk::CheckButton>(
             this, tk::tr("Show room join/leave events"), s.show_room_join_leave_events);
         show_membership_events_cb_ = timeline_group->add_widget(std::move(cb_membership));
-        show_membership_events_cb_->on_change = [this](bool v)
-        {
-            if (on_show_membership_events_changed) on_show_membership_events_changed(v);
-        };
+        binder.bind(show_membership_events_cb_, &S::show_room_join_leave_events,
+                    SettingKey::ShowMembershipEvents);
 
         auto cb_anim_avatars = tk::create_widget<tk::CheckButton>(
             this, tk::tr("Animate avatars"), s.animate_avatars);
         animate_avatars_cb_ = timeline_group->add_widget(std::move(cb_anim_avatars));
-        animate_avatars_cb_->on_change = [this](bool v)
-        {
-            if (on_animate_avatars_changed) on_animate_avatars_changed(v);
-        };
+        binder.bind(animate_avatars_cb_, &S::animate_avatars, SettingKey::AnimateAvatars);
 
         auto cb_status = tk::create_widget<tk::CheckButton>(
             this, tk::tr("Show status emoji next to names"),
             s.show_sender_status_in_timeline);
         show_sender_status_cb_ = timeline_group->add_widget(std::move(cb_status));
-        show_sender_status_cb_->on_change = [this](bool v)
-        {
-            if (on_show_sender_status_changed) on_show_sender_status_changed(v);
-        };
+        binder.bind(show_sender_status_cb_, &S::show_sender_status_in_timeline,
+                    SettingKey::ShowSenderStatus);
     }
 }
 
 AppearanceSection::~AppearanceSection() = default;
-
-void AppearanceSection::set_selected(tesseract::Settings::ThemePreference pref)
-{
-    picker_->set_selected_value(theme_value(pref));
-}
-
-void AppearanceSection::set_selected_accent(tesseract::Settings::ThemeAccent accent)
-{
-    if (accent_combo_) accent_combo_->set_selected_value(accent_value(accent));
-}
-
-void AppearanceSection::set_group_unread(bool enabled)
-{
-    if (group_unread_cb_) group_unread_cb_->set_checked(enabled);
-}
-
-void AppearanceSection::set_group_inactive(bool enabled)
-{
-    if (group_inactive_cb_) group_inactive_cb_->set_checked(enabled);
-}
-
-void AppearanceSection::set_inactive_period(int days)
-{
-    if (period_combo_) period_combo_->set_selected_value(std::to_string(days));
-}
-
-void AppearanceSection::set_autoscroll_unread(bool enabled)
-{
-    if (autoscroll_cb_) autoscroll_cb_->set_checked(enabled);
-}
-
-void AppearanceSection::set_fonts(const tesseract::Settings::FontPrefs& prefs)
-{
-    if (fonts_editor_)
-        fonts_editor_->set_prefs(prefs);
-}
-
-void AppearanceSection::set_message_layout(tesseract::Settings::MessageLayout layout)
-{
-    if (message_layout_combo_)
-        message_layout_combo_->set_selected_value(message_layout_value(layout));
-    if (message_layout_desc_)
-        message_layout_desc_->set_text(message_layout_description(layout));
-    if (layout_options_bubbles_)
-        layout_options_bubbles_->set_visible(
-            layout == tesseract::Settings::MessageLayout::Bubbles);
-    if (message_layout_preview_)
-        message_layout_preview_->refresh_layout();
-}
-
-void AppearanceSection::set_bubbles_show_own_avatar(bool enabled)
-{
-    if (bubbles_own_avatar_cb_) bubbles_own_avatar_cb_->set_checked(enabled);
-}
-
-void AppearanceSection::set_show_membership_events(bool enabled)
-{
-    if (show_membership_events_cb_) show_membership_events_cb_->set_checked(enabled);
-}
-
-void AppearanceSection::set_show_sender_status(bool enabled)
-{
-    if (show_sender_status_cb_) show_sender_status_cb_->set_checked(enabled);
-}
-
-void AppearanceSection::set_animate_avatars(bool enabled)
-{
-    if (animate_avatars_cb_) animate_avatars_cb_->set_checked(enabled);
-}
 
 } // namespace tesseract::views

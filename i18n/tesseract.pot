@@ -3240,6 +3240,10 @@ msgstr ""
 msgid "No internet connection — reconnecting…"
 msgstr ""
 
+#: ui/shared/views/MainAppWidget.cpp:375
+msgid "Can’t reach the server — reconnecting…"
+msgstr ""
+
 #: ui/shared/views/MainAppWidget.cpp:512
 msgid "Resize sidebar"
 msgstr ""

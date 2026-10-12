@@ -3107,6 +3107,10 @@ msgstr "Se connecter"
 msgid "No internet connection — reconnecting…"
 msgstr "Aucune connexion Internet — reconnexion…"
 
+#: ui/shared/views/MainAppWidget.cpp:375
+msgid "Can’t reach the server — reconnecting…"
+msgstr "Serveur injoignable — reconnexion…"
+
 #: ui/shared/views/MessageListView.cpp:2404
 msgid "started a video call"
 msgstr "a lancé un appel vidéo"

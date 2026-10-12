@@ -1966,6 +1966,10 @@ msgstr "Områdets startside"
 msgid "No internet connection — reconnecting…"
 msgstr "Ingen internettilkobling – kobler til på nytt…"
 
+#: ui/shared/views/MainAppWidget.cpp:375
+msgid "Can’t reach the server — reconnecting…"
+msgstr "Får ikke kontakt med serveren – kobler til på nytt…"
+
 msgid "Resize sidebar"
 msgstr "Endre størrelse på sidefeltet"
 

@@ -327,8 +327,10 @@ public:
 
     // ── Offline connectivity banner ───────────────────────────────────────────
 
-    // Show or hide the "No internet connection" strip at the top of the chat
-    // panel. Called by ShellBase when sync loses/regains network connectivity.
+    // Show or hide the offline strip at the top of the chat panel. Called by
+    // ShellBase when sync loses/regains the homeserver. The text says "No
+    // internet connection" only if tk::Host::is_network_available() agrees;
+    // otherwise "Can't reach the server".
     void set_offline(bool offline);
 
     // ── Native overlay rects (call from the surface's set_on_layout) ──────

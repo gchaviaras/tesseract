@@ -371,7 +371,10 @@ public:
             st.role = tk::FontRole::Small;
             st.max_width = bounds_.w - 16.0f;
             layout_ = ctx.factory.build_text(
-                tk::tr("No internet connection \xe2\x80\x94 reconnecting\xe2\x80\xa6"), st);
+                no_network_
+                    ? tk::tr("No internet connection \xe2\x80\x94 reconnecting\xe2\x80\xa6")
+                    : tk::tr("Can\xe2\x80\x99t reach the server \xe2\x80\x94 reconnecting\xe2\x80\xa6"),
+                st);
         }
         if (layout_)
         {
@@ -382,8 +385,18 @@ public:
         }
     }
 
+    // True when the OS reports no network at all; false when only the
+    // homeserver is unreachable.
+    void set_no_network(bool no_network)
+    {
+        if (no_network_ == no_network) return;
+        no_network_ = no_network;
+        layout_.reset();
+    }
+
 private:
     static constexpr float kHeight = MainAppWidget::kOfflineBannerH;
+    bool no_network_ = false;
     tk::CachedTextLayout layout_;
 };
 
@@ -417,10 +430,11 @@ public:
     tk::TabBar* tab_bar() const { return tab_bar_; }
     ChatContentStack* chat_content() const { return chat_content_; }
 
-    void set_offline(bool offline)
+    void set_offline(bool offline, bool no_network)
     {
-        if (offline_banner_)
-            offline_banner_->set_visible(offline);
+        if (!offline_banner_) return;
+        offline_banner_->set_no_network(no_network);
+        offline_banner_->set_visible(offline);
     }
 
     bool reminder_requested() const { return reminder_requested_; }
@@ -1315,7 +1329,12 @@ void MainAppWidget::set_offline(bool offline)
 {
     if (chat_panel_)
     {
-        chat_panel_->set_offline(offline);
+        // Probe only when going offline: distinguishes "no network at all"
+        // from "homeserver unreachable" so the banner doesn't blame the
+        // user's internet for a server-side outage.
+        const bool no_network =
+            offline && host() && !host()->is_network_available();
+        chat_panel_->set_offline(offline, no_network);
     }
 }
 

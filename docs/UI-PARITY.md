@@ -23,19 +23,23 @@ three places.**
 ├─────────────────┬───────────────────────────────────────────────────┤
 │                 │                                                   │
 │  Room list      │   Message list                                    │
-│  (260 px wide)  │   (expands)                                       │
+│  (260 px dflt)  │   (expands)                                       │
 │                 │                                                   │
 │                 │                                                   │
 │                 │                                                   │
 ├─────────────────┤                                                   │
 │  User strip     │                                                   │
-│  (48 px tall)   │                                                   │
+│  (64 px tall)   │                                                   │
 ├─────────────────┴───────────────────────────────────────────────────┤
 │                          Compose bar (40–120 px, expanding)         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-Sidebar width: `kSidebarWidth` (260 px), fixed.
+Sidebar width: `kSidebarWidth` (260 px) by default. The sidebar is
+resizable: dragging its separator below `kSidebarMinExpandedWidth`
+(180 px) snaps it to the icon-only collapsed width
+(`kSidebarCollapsedWidth`, 68 px), which shows a hover flyout per room.
+User strip height: `kUserStripHeight` (64 px).
 Compose bar grows with content between `kComposeMinHeight` and
 `kComposeMaxHeight`.
 
@@ -97,7 +101,7 @@ via `WM_GETMINMAXINFO` (Win32), `NSWindow.minSize` (macOS),
 - **Inline media** — `m.image` and `m.sticker` thumbnails capped at
   `kMaxInlineImageWidth` × `kMaxInlineImageHeight` (320 × 200) for
   images, `kStickerSize` (256 px square) for stickers.
-- **Reaction chips** — `Settings::reaction_chip_height` (28 px) tall
+- **Reaction chips** — `Settings::reaction_chip_height` (24 px) tall
   pill chips with `Settings::reaction_chip_gap` (6 px) between, in a row
   beneath the body.
 - **Timestamp** — `HH:MM`, `FontRole::Timestamp` (base−3 pt), muted text
@@ -124,6 +128,9 @@ via `WM_GETMINMAXINFO` (Win32), `NSWindow.minSize` (macOS),
   (10 pt), `kUnreadBadgeMinWidth` × `kUnreadBadgeHeight` (20 × 18 px).
   Hidden when count is zero.
 - Row height: `kRoomRowHeight` (48 px).
+- **Compact density** — `Settings::room_list_density` (Appearance →
+  Layout) `Compact` drops the last-message preview and shrinks the avatar
+  to the height of the name text; `Normal` (default) is the layout above.
 
 ## Decision list
 
@@ -140,7 +147,8 @@ UI that doesn't already match.
    Render the initials disc when the sender has no avatar URL.
 3. **Timestamp visible on every message** in a small right-aligned
    footer (HH:MM, secondary colour, 10 pt).
-4. **Sidebar width is 260 px**, fixed across all platforms.
+4. **Sidebar width defaults to 260 px** on all platforms; resizing and
+   the icon-only collapsed mode behave identically everywhere.
 5. **Spaces are not prefixed with `#`** in the sidebar; they are
    distinguished by drill-in behaviour, not a glyph.
 6. **Light + dark are both shipped, on every platform.** All four UIs

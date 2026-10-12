@@ -42,7 +42,7 @@ and in-progress work, as a single backlog ordered by priority/urgency.
   from the disk cache the next time they are painted.
 - Cmd/Ctrl+K refinements, room mentions as pills (vs. just user mentions),
   self-mention emphasis, device rename, new-device warnings, edit history
-  viewer, GIF picker.
+  viewer.
 - Room upgrades, alias management beyond viewing.
 - **MSC4153 follow-ups.** The MSC4350 bridge-bot annotation, a reason
   tooltip on sends blocked by an encryption check (`pending_error` is
@@ -85,12 +85,13 @@ and in-progress work, as a single backlog ordered by priority/urgency.
   in Settings → Appearance currently only affects in-app widget painting,
   not the window's own title bar. Out of scope for the accent-themes
   feature; a distinct, Windows-only follow-up if wanted.
-- **GTK4 message-list CSS not theme-aware** — `apply_theme_ui_()` only
-  rebuilds the `.sidebar` / `.sidebar-separator` CSS rules. `.sender-name` /
-  `.timestamp` / `.room-header` / `.room-header-topic` and the
-  `status_bar_` / `topic_tooltip_label_` `GtkLabel`s keep hardcoded light
-  colours. Fix: rebuild all theme CSS rules from `t.palette` and give the
-  status / tooltip labels palette-driven CSS classes.
+- **GTK4 shell: dead CSS rules** — the static CSS block in
+  `ui/linux-gtk/src/MainWindow.cpp` defines `.sidebar`, `.sidebar-separator`,
+  `.message-body`, `.sender-name`, `.timestamp`, `.avatar-initial`,
+  `.unread-badge` and `.room-header*`, and `apply_theme_ui_()` re-colours
+  `.sidebar` / `.sidebar-separator`, but no widget carries any of those
+  classes any more (the sidebar, timeline and room header are canvas-drawn
+  shared views). Only the `compose-area` rule is live. Delete the rest.
 - **`tk_avatars_` / `tk_images_` not keyed by `(user_id, mxc)`** — cosmetic
   ghosting risk when two accounts share an mxc URL that resolves to
   different bytes.

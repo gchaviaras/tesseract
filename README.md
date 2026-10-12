@@ -154,7 +154,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - Ctrl+Tab / Ctrl+Shift+Tab MRU room switcher (Alt-Tab-style: hold Ctrl, tap Tab to cycle recently-visited rooms, release to jump; Escape cancels); recent rooms are remembered per account across restarts
 - Full-text message search across all rooms, including encrypted rooms (Ctrl+Shift+F / ⌘⇧F) — opt-in local index
 - Room search (filter by name)
-- Slash commands (/me, /shrug, /slap, /spoiler, /myroomnick, /myroomavatar, /join, /leave, /invite, /gif, /selfie, /location)
+- Slash commands (/me, /shrug, /slap, /spoiler, /myroomnick, /myroomavatar, /join, /leave, /invite, /gif, /selfie, /location, /poll)
 - Room tags (favorite, low priority)
 - Room creation (name, topic, alias, public/private)
 - Room knocking: request to join a knock-restricted room, with admin/moderator review (accept / deny / deny-and-ban)
@@ -272,7 +272,7 @@ Change proposals where the homeserver advertises support for them:
 | Windows (Win32) | Windows 10 version 1607 (Anniversary Update) | x86-64 |
 | macOS (AppKit) | macOS 11 Big Sur | Apple Silicon (arm64) or Intel (x86-64) |
 | Linux — Qt6 | Debian 12 (Bookworm) / Ubuntu 24.04 LTS or newer | x86-64 |
-| Linux — GTK4 | Debian 12 (Bookworm) / Ubuntu 22.04 or newer | x86-64 |
+| Linux — GTK4 | Debian 13 (Trixie) / Ubuntu 24.04 LTS or newer (GTK ≥ 4.12) | x86-64 |
 
 ---
 
@@ -339,10 +339,9 @@ The screenshot fixture's user avatars are generated from [Lorelei](https://www.f
 | [audiopus](https://github.com/lakelezz/audiopus) | Opus codec bindings (voice) | Lars Wirth |
 | [ogg](https://github.com/RustAudio/ogg) | Ogg container parsing (voice) | RustAudio |
 | [mime](https://github.com/hyperium/mime) | MIME types | Sean McArthur |
-| [hostname](https://github.com/svartalf/hostname) | Local hostname lookup | Steven Allen |
 | [Qt6](https://www.qt.io/) (Core, Gui, Widgets, Multimedia, DBus, Concurrent, Network) | Linux (Qt6 shell) | The Qt Company / Qt Project |
 | [GTK4](https://www.gtk.org/) + Pango / Cairo / gdk-pixbuf | Linux (GTK shell) | The GNOME Project |
-| [GStreamer](https://gstreamer.freedesktop.org/) (+ gst-plugins-base for Opus) | Linux GTK voice playback | The GStreamer Project |
+| [GStreamer](https://gstreamer.freedesktop.org/) (+ gst-plugins-base for Opus) | Linux video and animated-image decode, camera/screen capture, call video, GTK voice playback | The GStreamer Project |
 | Win32 / Direct2D | Windows | Microsoft |
 | [BetterText](https://github.com/surakin/bettertext) (vendored) | Windows compose text control (D2D/DirectWrite) | surakin |
 | AppKit / CoreGraphics / CoreText | macOS | Apple |
@@ -376,11 +375,13 @@ Tesseract is licensed under the [GNU General Public License v3](./LICENSE)
 - **Linux (Qt6)** — runtime depends on Qt ≥ 6.4, which is the version
   shipped by Debian 12 and Ubuntu 24.04 LTS. Older distros work if a
   Qt ≥ 6.4 is provided.
-- **Linux (GTK4)** — needs GTK 4 plus GStreamer base/good plugins (for
-  voice-message playback); the system tray is a built-in StatusNotifierItem
-  D-Bus implementation and needs no AppIndicator package.
-  GTK 4 is available from Debian 12 / Ubuntu 22.04 onward.
-- **Building from source** requires Rust ≥ 1.75 on every platform (install
-  via `rustup` on distros that ship an older toolchain). See
+- **Linux (GTK4)** — needs GTK ≥ 4.12 (`GtkFileDialog`,
+  `gtk_css_provider_load_from_string`), available from Debian 13 / Ubuntu
+  24.04 onward, plus GStreamer base/good plugins (for voice-message
+  playback); the system tray is a built-in StatusNotifierItem D-Bus
+  implementation and needs no AppIndicator package.
+- **Building from source** requires Rust ≥ 1.96 (the pinned matrix-sdk's
+  minimum) on every platform (install via `rustup` on distros that ship an
+  older toolchain). See
   [docs/BUILD.md](docs/BUILD.md) for build setup and
   [PACKAGING.md](PACKAGING.md) for building installers.

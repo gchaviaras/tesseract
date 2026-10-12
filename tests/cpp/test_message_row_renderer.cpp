@@ -141,3 +141,27 @@ TEST_CASE("msgbubble::layout with unknown natural width fills the bubble", "[bub
     const mb::Box b = mb::layout(900.0f, true, false, -1.0f);
     CHECK(b.content_w == Approx(mb::shaping_width(900.0f, true)));
 }
+
+// ── own-avatar gutter ──────────────────────────────────────────────────────
+
+TEST_CASE("msgbubble::shaping_width reserves the own-avatar gutter", "[bubble]")
+{
+    namespace mb = tesseract::views::msgbubble;
+    CHECK(mb::shaping_width(300.0f, true, 0.0f, true) ==
+          Catch::Approx(256.0f - mb::kAvatarSize - mb::kAvatarGap));
+}
+
+TEST_CASE("msgbubble::layout draws an own avatar and shifts the bubble left",
+          "[bubble]")
+{
+    namespace mb = tesseract::views::msgbubble;
+    const mb::Box off = mb::layout(900.0f, true, false, 60.0f, false);
+    const mb::Box on  = mb::layout(900.0f, true, false, 60.0f, true);
+    CHECK_FALSE(off.draw_avatar);
+    CHECK(on.draw_avatar);
+    CHECK(on.draw_sender);
+    CHECK(on.header_h == Approx(mb::kAvatarSize));
+    CHECK(on.bubble_x + on.bubble_w ==
+          Catch::Approx(900.0f - mb::kEdgePadX - mb::kAvatarSize - mb::kAvatarGap));
+    CHECK_FALSE(mb::layout(900.0f, true, true, 60.0f, true).draw_avatar);
+}

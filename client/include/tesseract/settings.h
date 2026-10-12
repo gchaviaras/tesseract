@@ -77,6 +77,10 @@ public:
     };
     MessageLayout message_layout = MessageLayout::Classic;
 
+    // Bubbles layout only: draw the local user's avatar and name on their own
+    // bubbles (right gutter, first row of a run). Default on.
+    bool bubbles_show_own_avatar = true;
+
     // ── Room list density ───────────────────────────────────────────
     // Normal  → avatar, name and last-message preview per row (default).
     // Compact → name only, with an avatar the height of the name text.

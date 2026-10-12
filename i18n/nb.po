@@ -4727,3 +4727,7 @@ msgstr "Forespørselen ble tidsavbrutt. Prøv igjen."
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Something went wrong while confirming. Please try again."
 msgstr "Noe gikk galt under bekreftelsen. Prøv igjen."
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show my name and avatar"
+msgstr "Vis navnet og avataren min"

@@ -2246,7 +2246,8 @@ public:
     // column — the name gets the full row width, not the hugged bubble width.
     void paint_avatar_and_sender_(const RowPaintCtx& rp, float avatar_cx,
                                   float avatar_cy, float sender_x,
-                                  float sender_max_w)
+                                  float sender_max_w, bool draw_name = true,
+                                  bool right_align = false)
     {
         const MessageRowData& m = rp.m;
         tk::PaintCtx& ctx = rp.ctx;
@@ -2266,6 +2267,9 @@ public:
                         m.sender_name.empty() ? m.sender : m.sender_name,
                         ctx.theme.palette.avatar_initials_bg,
                         ctx.theme.palette.avatar_initials_text);
+            if (!draw_name)
+                return;
+            // right_align: sender_x is the RIGHT edge of name+status.
 
             // Sender name — vertically centered against the avatar disc.
             float sender_y = bounds.y + kMsgListPadY + (kMsgListAvatarSize - sender_h()) * 0.5f;
@@ -2306,6 +2310,11 @@ public:
                 rc.sender = ctx.factory.build_text(skey, s);
                 rc.sender_key = skey;
                 rc.sender_col_w = name_max_w;
+            }
+            if (right_align && rc.sender)
+            {
+                sender_x -= rc.sender->measure().w +
+                            (rc.status ? kStatusGap + rc.status->measure().w : 0.0f);
             }
             if (rc.sender)
             {
@@ -3221,19 +3230,27 @@ public:
         const MessageRowData& m = mc.m;
         tk::LayoutCtx& ctx = mc.ctx;
         const bool cont = mc.cont;
+        const bool own_av = own_avatar_shown_(m);
         const float shp = msgbubble::shaping_width(
-            mc.width, m.is_own, receipt_reserve_width(m, ctx.factory));
+            mc.width, m.is_own, receipt_reserve_width(m, ctx.factory), own_av);
         const float body_h = measure_body_block_height(m, ctx, shp);
         const float chips_h = m.reactions.empty() ? 0.0f : chip_h();
         const float top_pad = cont ? kContPadY : kMsgListPadY;
         const float header_h =
-            (m.is_own || cont) ? 0.0f : kMsgListAvatarSize;
+            (cont || (m.is_own && !own_av)) ? 0.0f : kMsgListAvatarSize;
         float raw_h = top_pad + header_h + 2.0f * msgbubble::kBubblePadY +
                       body_h + chips_h + kMsgListPadY;
         // Not inflated to fit the hover action pill — see measure_classic_row_.
         if (m.is_thread_root && m.thread_reply_count > 0)
             raw_h += kThreadChipH + kThreadChipGap;
         return raw_h;
+    }
+
+    // Bubbles layout: draw the local user's avatar in the right gutter.
+    static bool own_avatar_shown_(const MessageRowData& m)
+    {
+        return m.is_own &&
+               tesseract::Settings::instance().bubbles_show_own_avatar;
     }
 
     void render_bubble_row_(const RowPaintCtx& rp)
@@ -3246,12 +3263,13 @@ public:
         paint_row_tints_(rp);
         begin_row_hover_capture_(rp);
 
+        const bool own_av = own_avatar_shown_(m);
         const float shp = msgbubble::shaping_width(
-            bounds.w, m.is_own, receipt_reserve_width(m, ctx.factory));
+            bounds.w, m.is_own, receipt_reserve_width(m, ctx.factory), own_av);
         tk::LayoutCtx lc{ctx.factory, ctx.theme};
         const float natural_w = body_block_natural_width_(m, lc, shp);
         const msgbubble::Box box =
-            msgbubble::layout(bounds.w, m.is_own, cont, natural_w);
+            msgbubble::layout(bounds.w, m.is_own, cont, natural_w, own_av);
 
         const float col_x = bounds.x + box.content_x;
         const float col_w = box.content_w;
@@ -3263,7 +3281,10 @@ public:
             std::max(0.0f, bounds.x + bounds.w - col_x - kMsgListPadX);
         const float right_edge_base = bounds.x + box.furniture_right_x;
         const float avatar_cx =
-            bounds.x + msgbubble::kEdgePadX + msgbubble::kAvatarSize * 0.5f;
+            m.is_own
+                ? bounds.x + bounds.w - msgbubble::kEdgePadX -
+                      msgbubble::kAvatarSize * 0.5f
+                : bounds.x + msgbubble::kEdgePadX + msgbubble::kAvatarSize * 0.5f;
         const float avatar_cy =
             bounds.y + kMsgListPadY + msgbubble::kAvatarSize * 0.5f;
 
@@ -3276,8 +3297,20 @@ public:
             // The name is drawn at the bubble's content-left but may run the
             // full row width — it is not clipped to the (possibly narrow)
             // hugged bubble.
-            paint_avatar_and_sender_(rp, avatar_cx, avatar_cy, col_x,
-                                     row_max_w);
+            if (m.is_own)
+            {
+                const float name_right =
+                    bounds.x + box.bubble_x + box.bubble_w - msgbubble::kBubblePadX;
+                paint_avatar_and_sender_(
+                    rp, avatar_cx, avatar_cy, name_right,
+                    std::max(0.0f, name_right - bounds.x - msgbubble::kEdgePadX),
+                    /*draw_name=*/true, /*right_align=*/true);
+            }
+            else
+            {
+                paint_avatar_and_sender_(rp, avatar_cx, avatar_cy, col_x,
+                                         row_max_w);
+            }
         }
 
         // Subtle bubble fill behind the body block. Height is the body
@@ -3320,10 +3353,12 @@ public:
             // leftward instead.
             if (m.is_own)
             {
+                const float gutter =
+                    own_av ? msgbubble::kAvatarSize + msgbubble::kAvatarGap : 0.0f;
                 const float avail =
-                    std::max(0.0f, bounds.w - 2.0f * msgbubble::kEdgePadX);
+                    std::max(0.0f, bounds.w - 2.0f * msgbubble::kEdgePadX - gutter);
                 const float right_edge =
-                    bounds.x + bounds.w - msgbubble::kEdgePadX;
+                    bounds.x + bounds.w - msgbubble::kEdgePadX - gutter;
                 paint_thread_chip(m, ctx, bounds, right_edge, avail,
                                   /*right_align=*/true);
             }

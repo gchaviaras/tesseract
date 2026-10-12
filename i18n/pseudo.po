@@ -6788,3 +6788,7 @@ msgstr "[Thé réqùést tïméd öùt. Pléàsé try àgàïñ.xxxxxxxx]"
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Something went wrong while confirming. Please try again."
 msgstr "[Söméthïñg wéñt wröñg whïlé çöñfïrmïñg. Pléàsé try àgàïñ.xxxxxxxxxxx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show my name and avatar"
+msgstr "[Shöw my ñàmé àñd àvàtàrxxxxx]"

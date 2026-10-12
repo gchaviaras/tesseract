@@ -133,6 +133,7 @@ public:
 
     // Appearance → Layout: message layout (forwarded from AppearanceSection).
     void set_message_layout_pref(tesseract::Settings::MessageLayout layout);
+    void set_bubbles_show_own_avatar_pref(bool enabled);
 
     // ----- Notifications section --------------------------------------------
 
@@ -393,6 +394,7 @@ public:
 
     // Fired when the user picks a layout in Appearance → Layout.
     std::function<void(tesseract::Settings::MessageLayout)> on_message_layout_changed;
+    std::function<void(bool)> on_bubbles_show_own_avatar_changed;
     std::function<void(tesseract::Settings::RoomListDensity)> on_room_list_density_changed;
 
     // Fired after every font edit in Appearance → Fonts with the new prefs.

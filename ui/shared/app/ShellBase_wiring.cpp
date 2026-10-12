@@ -925,6 +925,10 @@ void ShellBase::wire_settings_view_(views::SettingsView* view)
     {
         handle_show_sender_status_toggle_(enabled);
     };
+    view->on_bubbles_show_own_avatar_changed = [this](bool enabled)
+    {
+        handle_bubbles_own_avatar_toggle_(enabled);
+    };
     view->on_animate_avatars_changed = [this](bool enabled)
     {
         handle_animate_avatars_toggle_(enabled);

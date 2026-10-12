@@ -6094,3 +6094,7 @@ msgstr "Die Anfrage ist abgelaufen. Bitte versuche es erneut."
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Something went wrong while confirming. Please try again."
 msgstr "Beim Bestätigen ist etwas schiefgelaufen. Bitte versuche es erneut."
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show my name and avatar"
+msgstr "Meinen Namen und Avatar anzeigen"

@@ -6096,3 +6096,7 @@ msgstr "La demande a expiré. Veuillez réessayer."
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Something went wrong while confirming. Please try again."
 msgstr "Un problème est survenu lors de la confirmation. Veuillez réessayer."
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show my name and avatar"
+msgstr "Afficher mon nom et mon avatar"

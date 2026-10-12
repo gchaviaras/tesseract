@@ -3991,6 +3991,7 @@ protected:
     // forces every open timeline (main window, thread panel, pop-out room
     // windows) to re-measure with the matching row renderer — no restart.
     void handle_message_layout_changed_(tesseract::Settings::MessageLayout layout);
+    void handle_bubbles_own_avatar_toggle_(bool enabled);
     void handle_room_list_density_changed_(
         tesseract::Settings::RoomListDensity density);
 

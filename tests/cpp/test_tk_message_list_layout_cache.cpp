@@ -693,6 +693,13 @@ TEST_CASE("bubble mode renders own + other rows without crashing",
                                            make_own("$b", "from me")};
     };
 
+    // These assertions cover the avatar-less own bubble.
+    struct OwnAvatarOff
+    {
+        bool v = tesseract::Settings::instance().bubbles_show_own_avatar;
+        OwnAvatarOff() { tesseract::Settings::instance().bubbles_show_own_avatar = false; }
+        ~OwnAvatarOff() { tesseract::Settings::instance().bubbles_show_own_avatar = v; }
+    } own_avatar_off;
     BubbleModeGuard g{true};
     TkMessageListLayoutCacheStage bub;
     MessageListView bv;
@@ -1262,6 +1269,13 @@ TEST_CASE("bubble layout draws a portrait sticker at full height with no slack",
         tesseract::Settings::MessageLayout v;
         ~Restore() { tesseract::Settings::instance().message_layout = v; }
     } restore{saved};
+    const bool saved_av = settings.bubbles_show_own_avatar;
+    settings.bubbles_show_own_avatar = false; // measures the avatar-less own bubble
+    struct RestoreAv
+    {
+        bool v;
+        ~RestoreAv() { tesseract::Settings::instance().bubbles_show_own_avatar = v; }
+    } restore_av{saved_av};
 
     TkMessageListLayoutCacheStage st;
     MessageListView v;

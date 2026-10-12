@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-12
 
+- feat(settings): Bubbles layout option "Show my name and avatar" (Appearance → Layout, default on, shown only for Bubbles): own bubbles get the avatar in a right gutter and the name above, like other people's rows. Qt6 build, ctest 3218/3218, user-verified Qt6
 - fix(quick-switcher): upgraded (tombstoned) rooms are no longer listed, in results or recents. Qt6 + GTK4 build, user-verified Qt6
 - fix(calls): joining a dedicated call room no longer rings the other members, and incoming rings in call rooms are ignored. cargo 1014
 - fix(encryption): a cancelled verification shows plain wording (e.g. "Another of your devices already took this request") instead of the Matrix protocol text; the SDK now forwards the cancel code to `on_verification_cancelled`. Qt6 + GTK4 build, ctest 67/67 (verification/overlay/i18n subset)

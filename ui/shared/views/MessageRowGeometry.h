@@ -35,10 +35,13 @@ inline constexpr float kQuoteMinW    = 220.0f; // reply-quote card readability f
 // other-users' bubbles so they don't hug out under the receipts painted at
 // the row's right edge; own bubbles ignore it since their receipts sit to
 // the left of the bubble instead.
-inline float shaping_width(float row_w, bool is_own, float receipt_reserve = 0.0f)
+// `own_avatar` reserves the right avatar gutter on own rows (the
+// "show my avatar" option), on every own row so widths stay stable across a run.
+inline float shaping_width(float row_w, bool is_own, float receipt_reserve = 0.0f,
+                           bool own_avatar = false)
 {
     const float avail = row_w - 2.0f * kEdgePadX
-                        - (is_own ? 0.0f
+                        - (is_own ? (own_avatar ? kAvatarSize + kAvatarGap : 0.0f)
                                   : (kAvatarSize + kAvatarGap + receipt_reserve));
     const float outer = std::clamp(avail, kBubbleMinW, kMaxBubbleW);
     return std::max(kBubbleMinW, outer - 2.0f * kBubblePadX);
@@ -63,10 +66,12 @@ struct Box
 // `natural_w` is the body's measured intrinsic width (longest wrapped line
 // or media width). Pass <= 0 when it is not yet known — the bubble then
 // simply fills the available width.
-inline Box layout(float row_w, bool is_own, bool is_cont, float natural_w)
+inline Box layout(float row_w, bool is_own, bool is_cont, float natural_w,
+                  bool own_avatar = false)
 {
     Box b;
-    const float cap = shaping_width(row_w, is_own);
+    const float gutter = (is_own && own_avatar) ? kAvatarSize + kAvatarGap : 0.0f;
+    const float cap = shaping_width(row_w, is_own, 0.0f, own_avatar);
     const float nat = natural_w > 0.0f ? natural_w : cap;
     // No minimum: the bubble hugs its content so a short own message stays
     // flush to the right edge with no dead space beside the text. `cap` is
@@ -78,11 +83,11 @@ inline Box layout(float row_w, bool is_own, bool is_cont, float natural_w)
 
     if (is_own)
     {
-        b.bubble_x = std::max(kEdgePadX, row_w - kEdgePadX - b.bubble_w);
+        b.bubble_x = std::max(kEdgePadX, row_w - kEdgePadX - gutter - b.bubble_w);
         b.content_x = b.bubble_x + kBubblePadX;
-        b.header_h = 0.0f;
-        b.draw_avatar = false;
-        b.draw_sender = false;
+        b.header_h = (own_avatar && !is_cont) ? kAvatarSize : 0.0f;
+        b.draw_avatar = own_avatar && !is_cont;
+        b.draw_sender = own_avatar && !is_cont;
         b.furniture_right_x = b.bubble_x - kFurnitureGap;
         b.reserve_receipt_width = false;
     }

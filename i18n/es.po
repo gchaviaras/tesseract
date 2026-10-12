@@ -6234,3 +6234,7 @@ msgstr "La solicitud caducó. Inténtalo de nuevo."
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Something went wrong while confirming. Please try again."
 msgstr "Algo salió mal al confirmar. Inténtalo de nuevo."
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show my name and avatar"
+msgstr "Mostrar mi nombre y avatar"

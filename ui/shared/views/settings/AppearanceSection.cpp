@@ -200,6 +200,23 @@ AppearanceSection::AppearanceSection()
         desc->set_wrap(true);
         message_layout_desc_ = column->add_child(std::move(desc));
 
+        // Optional per-layout settings; each container is shown only while
+        // its layout is selected.
+        {
+            auto opts = tk::create_widget<tk::VBox>(this);
+            opts->set_spacing(kLayoutColumnGap);
+            auto cb = tk::create_widget<tk::CheckButton>(
+                this, tk::tr("Show my name and avatar"), s.bubbles_show_own_avatar);
+            bubbles_own_avatar_cb_ = opts->add_child(std::move(cb));
+            bubbles_own_avatar_cb_->on_change = [this](bool v)
+            {
+                if (on_bubbles_show_own_avatar_changed)
+                    on_bubbles_show_own_avatar_changed(v);
+            };
+            opts->set_visible(s.message_layout == ML::Bubbles);
+            layout_options_bubbles_ = column->add_child(std::move(opts));
+        }
+
         row->add_child(std::move(column));
         message_layout_preview_ = row->add_child(
             std::make_unique<MessageLayoutPreview>());
@@ -211,6 +228,8 @@ AppearanceSection::AppearanceSection()
             const ML layout = message_layout_from_value(v);
             if (message_layout_desc_)
                 message_layout_desc_->set_text(message_layout_description(layout));
+            if (layout_options_bubbles_)
+                layout_options_bubbles_->set_visible(layout == ML::Bubbles);
             if (on_message_layout_changed)
                 on_message_layout_changed(layout);
             if (message_layout_preview_)
@@ -401,8 +420,16 @@ void AppearanceSection::set_message_layout(tesseract::Settings::MessageLayout la
         message_layout_combo_->set_selected_value(message_layout_value(layout));
     if (message_layout_desc_)
         message_layout_desc_->set_text(message_layout_description(layout));
+    if (layout_options_bubbles_)
+        layout_options_bubbles_->set_visible(
+            layout == tesseract::Settings::MessageLayout::Bubbles);
     if (message_layout_preview_)
         message_layout_preview_->refresh_layout();
+}
+
+void AppearanceSection::set_bubbles_show_own_avatar(bool enabled)
+{
+    if (bubbles_own_avatar_cb_) bubbles_own_avatar_cb_->set_checked(enabled);
 }
 
 void AppearanceSection::set_show_membership_events(bool enabled)

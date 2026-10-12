@@ -528,6 +528,17 @@ void ShellBase::handle_message_layout_changed_(
     request_relayout_();
 }
 
+void ShellBase::handle_bubbles_own_avatar_toggle_(bool enabled)
+{
+    auto& s = tesseract::Settings::instance();
+    if (s.bubbles_show_own_avatar == enabled)
+        return;
+    s.bubbles_show_own_avatar = enabled;
+    s.save_to_disk(tesseract::config_dir());
+    refresh_all_message_lists_display_prefs_();
+    request_relayout_();
+}
+
 void ShellBase::handle_fonts_changed_(const tesseract::Settings::FontPrefs& prefs)
 {
     auto& s = tesseract::Settings::instance();

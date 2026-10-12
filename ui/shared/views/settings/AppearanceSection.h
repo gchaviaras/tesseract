@@ -78,6 +78,12 @@ public:
     // Fired when the user picks a layout in the combobox.
     std::function<void(tesseract::Settings::MessageLayout)> on_message_layout_changed;
 
+    // Silently update the Bubbles "show my avatar" checkbox.
+    void set_bubbles_show_own_avatar(bool enabled);
+
+    // Fired when the user toggles the Bubbles "show my avatar" checkbox.
+    std::function<void(bool)> on_bubbles_show_own_avatar_changed;
+
     // Fired when the user picks Normal / Compact for the room list.
     std::function<void(tesseract::Settings::RoomListDensity)> on_room_list_density_changed;
 
@@ -101,6 +107,8 @@ private:
     tk::ComboBox*    message_layout_combo_      = nullptr;
     tk::Label*       message_layout_desc_       = nullptr;
     MessageLayoutPreview* message_layout_preview_ = nullptr;
+    tk::VBox*        layout_options_bubbles_    = nullptr; // per-layout options: Bubbles
+    tk::CheckButton* bubbles_own_avatar_cb_     = nullptr;
     tk::RadioGroup*       room_list_density_group_ = nullptr;
     RoomListPreview*      room_list_preview_       = nullptr;
     FontsEditor*          fonts_editor_            = nullptr;

@@ -225,6 +225,7 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
         message_layout = (layout == "bubbles") ? MessageLayout::Bubbles
                          : (layout == "irc")   ? MessageLayout::Irc
                                                : MessageLayout::Classic;
+        bubbles_show_own_avatar = j.value("bubbles_show_own_avatar", true);
         room_list_density =
             j.value("room_list_density", std::string("normal")) == "compact"
                 ? RoomListDensity::Compact
@@ -346,6 +347,7 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         message_layout == MessageLayout::Bubbles ? "bubbles"
         : message_layout == MessageLayout::Irc   ? "irc"
                                                  : "classic";
+    j["bubbles_show_own_avatar"] = bubbles_show_own_avatar;
     j["room_list_density"] =
         room_list_density == RoomListDensity::Compact ? "compact" : "normal";
 

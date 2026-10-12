@@ -7004,3 +7004,7 @@ msgstr "Час очікування запиту вичерпано. Спроб�
 #: ui/shared/views/EncryptionSetupOverlay.cpp
 msgid "Something went wrong while confirming. Please try again."
 msgstr "Під час підтвердження сталася помилка. Спробуйте ще раз."
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Show my name and avatar"
+msgstr "Показувати моє ім’я та аватар"

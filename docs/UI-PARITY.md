@@ -94,7 +94,8 @@ via `WM_GETMINMAXINFO` (Win32), `NSWindow.minSize` (macOS),
   the ambient text colour token. `Settings::message_layout` (Appearance →
   Layout, `Classic` by default) can select `Bubbles` instead, which swaps
   the shared row renderer for a subtle-bubble layout: the local user's
-  messages align right in a faint rounded bubble (avatar dropped), other
+  messages align right in a faint rounded bubble (avatar and name shown in a
+  right gutter unless "Show my name and avatar" is off), other
   messages keep the left avatar column with a bubble behind the body. Both
   renderers live in shared code (`MessageListView`), so the behaviour is
   identical across all four UIs.

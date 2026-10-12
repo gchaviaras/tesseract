@@ -993,13 +993,13 @@ void EventHandlerBridge::on_verification_done(rust::Str flow_id) const
 }
 
 void EventHandlerBridge::on_verification_cancelled(rust::Str flow_id,
-                                                   rust::Str reason) const
+                                                   rust::Str cancel_code) const
 {
     with_handler("on_verification_cancelled", slot_,
           [&](tesseract::IEventHandler* handler_)
           {
               handler_->on_verification_cancelled(std::string(flow_id),
-                                                  std::string(reason));
+                                                  std::string(cancel_code));
           });
 }
 

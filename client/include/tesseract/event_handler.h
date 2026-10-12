@@ -507,9 +507,9 @@ public:
     }
 
     /// The SAS flow was cancelled (mismatch, timeout, or remote decline).
-    /// `reason` is the human-readable cancel code from matrix-sdk.
+    /// `cancel_code` is the Matrix cancel code (e.g. "m.accepted", "m.user").
     virtual void on_verification_cancelled(const std::string& /*flow_id*/,
-                                           const std::string& /*reason*/)
+                                           const std::string& /*cancel_code*/)
     {
     }
 

@@ -3857,7 +3857,7 @@ protected:
                                          bool incoming);
     void handle_sas_ready_ui_(std::string flow_id, VerificationSas sas);
     void handle_verification_done_ui_(std::string flow_id);
-    void handle_verification_cancelled_ui_(std::string flow_id, std::string reason);
+    void handle_verification_cancelled_ui_(std::string flow_id, std::string cancel_code);
     // Updates the avatar warning dot and the reminder strip.
     void handle_verification_state_ui_(bool is_verified);
 

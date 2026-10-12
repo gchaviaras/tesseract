@@ -1727,7 +1727,7 @@ pub mod ffi {
         /// Fired when a verification flow is cancelled for any reason
         /// (mismatch, timeout, explicit cancel by either party). `reason` is a
         /// human-readable description from the cancel code.
-        fn on_verification_cancelled(self: &EventHandlerBridge, flow_id: &str, reason: &str);
+        fn on_verification_cancelled(self: &EventHandlerBridge, flow_id: &str, cancel_code: &str);
 
         /// Fired when the cross-signing verification state for the current
         /// account changes. `verified` is `true` when the SDK considers the

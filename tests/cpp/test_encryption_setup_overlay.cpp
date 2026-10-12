@@ -1023,3 +1023,15 @@ TEST_CASE("AutoSetupNotice: a failed turn-off returns to the notice with the err
     CHECK(ov->step() == EncryptionSetupOverlay::Step::Intro);
     CHECK(ov->error_msg() == "boom");
 }
+
+TEST_CASE("Verify: cancel codes map to plain wording", "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(nullptr, EncryptionSetupOverlay::Mode::Recover);
+    st.run(*ov, {0, 0, 800, 600});
+    ov->simulate_sas_link();
+    ov->verification_cancelled("m.accepted", false);
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::VerifyFailed);
+    CHECK(ov->error_msg().find("m.") == std::string::npos);
+    CHECK(ov->error_msg().find("Another of your devices") != std::string::npos);
+}

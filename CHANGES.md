@@ -5,6 +5,10 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-12
+
+- fix(encryption): a cancelled verification shows plain wording (e.g. "Another of your devices already took this request") instead of the Matrix protocol text; the SDK now forwards the cancel code to `on_verification_cancelled`. Qt6 + GTK4 build, ctest 67/67 (verification/overlay/i18n subset)
+
 ### 2026-10-11
 
 - fix(jump-to-date): Jump to date works on servers whose cached `/versions` is stale (e.g. right after a homeserver upgrade); the SDK's cached version set picked the unstable MSC3030 path and got `M_UNRECOGNIZED`. Server info now reads versions and feature flags from the SDK (no separate `/versions` request) and resets its cache on each fetch. Qt6 build, cargo 1013, user-verified Qt6 (zendrite)

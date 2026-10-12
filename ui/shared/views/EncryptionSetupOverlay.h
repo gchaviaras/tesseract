@@ -194,6 +194,9 @@ public:
     // No-op once already on VerifyFailed (a local "don't match" already
     // explained it; the SDK's own cancel echo follows).
     void verification_failed(std::string reason, bool can_retry);
+    // Same, for a Matrix cancel code (m.accepted, m.user, …): shows a plain
+    // explanation instead of the protocol text.
+    void verification_cancelled(const std::string& cancel_code, bool can_retry);
     // True while an interactive verification is on screen — where an
     // incoming request would otherwise yank the user out of something.
     bool in_verification_step() const;

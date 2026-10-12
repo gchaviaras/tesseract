@@ -209,7 +209,7 @@ public:
                                  rust::Str device_id, bool incoming) const;
     void on_sas_ready(rust::Str flow_id, const VerificationSas& sas) const;
     void on_verification_done(rust::Str flow_id) const;
-    void on_verification_cancelled(rust::Str flow_id, rust::Str reason) const;
+    void on_verification_cancelled(rust::Str flow_id, rust::Str cancel_code) const;
     void on_verification_state_changed(bool verified) const;
     void on_recovery_state_changed(std::uint8_t state) const;
 

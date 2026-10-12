@@ -155,7 +155,7 @@ pub(super) async fn watch_verification_request(
             VerificationRequestState::Cancelled(info) => {
                 {
                     let guard = handler.lock();
-                    guard.on_verification_cancelled(&flow_id, info.reason());
+                    guard.on_verification_cancelled(&flow_id, info.cancel_code().as_str());
                 }
                 lock_or_recover(&flow_users).remove(&flow_id);
                 break;
@@ -209,7 +209,7 @@ pub(super) async fn watch_sas(
             SasState::Cancelled(info) => {
                 {
                     let guard = handler.lock();
-                    guard.on_verification_cancelled(&flow_id, &info.reason().to_string());
+                    guard.on_verification_cancelled(&flow_id, info.cancel_code().as_str());
                 }
                 lock_or_recover(&sas_cache).remove(&flow_id);
                 break;

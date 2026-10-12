@@ -6988,3 +6988,19 @@ msgstr "Збільшити: {0}"
 #: ui/shared/views/settings/FontsEditor.cpp
 msgid "Reset {0}"
 msgstr "Скинути: {0}"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Another of your devices already took this request. You can close this."
+msgstr "Інший ваш пристрій уже прийняв цей запит. Можете закрити це вікно."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The other device cancelled the verification."
+msgstr "Інший пристрій скасував верифікацію."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The request timed out. Please try again."
+msgstr "Час очікування запиту вичерпано. Спробуйте ще раз."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Something went wrong while confirming. Please try again."
+msgstr "Під час підтвердження сталася помилка. Спробуйте ще раз."

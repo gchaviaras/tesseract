@@ -530,6 +530,26 @@ void EncryptionSetupOverlay::verification_failed(std::string reason, bool can_re
     announce_(error_msg_, true);
 }
 
+void EncryptionSetupOverlay::verification_cancelled(const std::string& cancel_code,
+                                                    bool can_retry)
+{
+    std::string msg;
+    if (cancel_code == "m.accepted")
+        msg = tk::tr("Another of your devices already took this request. You can close this.");
+    else if (cancel_code == "m.user")
+        msg = tk::tr("The other device cancelled the verification.");
+    else if (cancel_code == "m.timeout")
+        msg = tk::tr("The request timed out. Please try again.");
+    else if (cancel_code == "m.mismatched_sas" || cancel_code == "m.key_mismatch" ||
+             cancel_code == "m.mismatched_commitment")
+        msg = tk::tr("The codes didn't match, so nothing was confirmed. If you "
+                     "didn't start this, someone else may be trying to get into "
+                     "your account.");
+    else
+        msg = tk::tr("Something went wrong while confirming. Please try again.");
+    verification_failed(std::move(msg), can_retry);
+}
+
 bool EncryptionSetupOverlay::in_verification_step() const
 {
     switch (step_)

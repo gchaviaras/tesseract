@@ -6930,3 +6930,19 @@ msgstr ""
 #: client/src/emoji.cpp:191
 msgid "Flags"
 msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Another of your devices already took this request. You can close this."
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The other device cancelled the verification."
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The request timed out. Please try again."
+msgstr ""
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Something went wrong while confirming. Please try again."
+msgstr ""

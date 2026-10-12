@@ -6080,3 +6080,19 @@ msgstr "Augmenter {0}"
 #: ui/shared/views/settings/FontsEditor.cpp
 msgid "Reset {0}"
 msgstr "Réinitialiser {0}"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Another of your devices already took this request. You can close this."
+msgstr "Un autre de vos appareils a déjà pris en charge cette demande. Vous pouvez fermer cette fenêtre."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The other device cancelled the verification."
+msgstr "L'autre appareil a annulé la vérification."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The request timed out. Please try again."
+msgstr "La demande a expiré. Veuillez réessayer."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Something went wrong while confirming. Please try again."
+msgstr "Un problème est survenu lors de la confirmation. Veuillez réessayer."

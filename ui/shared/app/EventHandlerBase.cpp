@@ -826,10 +826,10 @@ void EventHandlerBase::on_verification_done(const std::string& flow_id)
 }
 
 void EventHandlerBase::on_verification_cancelled(const std::string& flow_id,
-                                                 const std::string& reason)
+                                                 const std::string& cancel_code)
 {
     shell()->post_to_ui_(
-        [shell = shell(), uid = user_id_, fid = flow_id, r = reason]() mutable
+        [shell = shell(), uid = user_id_, fid = flow_id, r = cancel_code]() mutable
         {
             ShellBase::EventAccountScope scope(*shell, uid);
             shell->handle_verification_cancelled_ui_(std::move(fid),

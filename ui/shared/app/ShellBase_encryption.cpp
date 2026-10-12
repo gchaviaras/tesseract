@@ -1154,14 +1154,14 @@ void ShellBase::handle_verification_done_ui_(std::string flow_id)
     request_relayout_();
 }
 
-void ShellBase::handle_verification_cancelled_ui_(std::string flow_id, std::string reason)
+void ShellBase::handle_verification_cancelled_ui_(std::string flow_id, std::string cancel_code)
 {
     if (!encryption_flow_.is_flow(flow_id)) return;
     const bool we_started = !encryption_flow_.flow().incoming;
     encryption_flow_.clear();
     auto* ov = main_app_ ? main_app_->encryption_setup() : nullptr;
     if (!ov || !ov->visible() || !ov->in_verification_step()) return;
-    ov->verification_failed(std::move(reason), we_started);
+    ov->verification_cancelled(cancel_code, we_started);
     request_relayout_();
 }
 

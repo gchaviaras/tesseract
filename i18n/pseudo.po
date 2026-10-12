@@ -6772,3 +6772,19 @@ msgstr "[Ïñçréàsé {0}xx]"
 #: ui/shared/views/settings/FontsEditor.cpp
 msgid "Reset {0}"
 msgstr "[Rését {0}x]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Another of your devices already took this request. You can close this."
+msgstr "[Àñöthér öf yöùr dévïçés àlréàdy töök thïs réqùést. Yöù çàñ çlösé thïs.xxxxxxxxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The other device cancelled the verification."
+msgstr "[Thé öthér dévïçé çàñçélléd thé vérïfïçàtïöñ.xxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The request timed out. Please try again."
+msgstr "[Thé réqùést tïméd öùt. Pléàsé try àgàïñ.xxxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Something went wrong while confirming. Please try again."
+msgstr "[Söméthïñg wéñt wröñg whïlé çöñfïrmïñg. Pléàsé try àgàïñ.xxxxxxxxxxx]"

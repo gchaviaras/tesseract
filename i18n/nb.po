@@ -4711,3 +4711,19 @@ msgstr "Øk {0}"
 #: ui/shared/views/settings/FontsEditor.cpp
 msgid "Reset {0}"
 msgstr "Tilbakestill {0}"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Another of your devices already took this request. You can close this."
+msgstr "En annen av enhetene dine har allerede tatt denne forespørselen. Du kan lukke dette."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The other device cancelled the verification."
+msgstr "Den andre enheten avbrøt verifiseringen."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "The request timed out. Please try again."
+msgstr "Forespørselen ble tidsavbrutt. Prøv igjen."
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "Something went wrong while confirming. Please try again."
+msgstr "Noe gikk galt under bekreftelsen. Prøv igjen."

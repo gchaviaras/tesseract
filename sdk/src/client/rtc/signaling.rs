@@ -253,6 +253,13 @@ pub fn should_open_call_slot(slot_exists: bool, others_in_call: bool) -> bool {
     !slot_exists && !others_in_call
 }
 
+/// Whether joining should ring the room (MSC4075). Only the first joiner
+/// rings, and never in an MSC3417 call room: there, joining is dropping in,
+/// not calling the other members.
+pub fn should_ring_room(others_in_call: bool, is_call_room: bool) -> bool {
+    !others_in_call && !is_call_room
+}
+
 /// Like [`send_msc3401_call_open`] but turns a `M_FORBIDDEN` into a
 /// message saying what is missing.
 pub async fn start_msc3401_call_slot(room: &matrix_sdk::Room, call_id: &str) -> anyhow::Result<()> {
@@ -793,6 +800,14 @@ mod tests {
         assert!(!should_open_call_slot(true, false));
         assert!(!should_open_call_slot(false, true));
         assert!(!should_open_call_slot(true, true));
+    }
+
+    #[test]
+    fn ring_only_first_joiner_and_never_in_call_rooms() {
+        assert!(should_ring_room(false, false));
+        assert!(!should_ring_room(true, false));
+        assert!(!should_ring_room(false, true));
+        assert!(!should_ring_room(true, true));
     }
 
     #[test]

@@ -341,8 +341,12 @@ pub async fn start_call(
         .await?;
     }
 
-    // MSC4075: ring the room only if nobody else is in the call yet.
-    if initial_members.is_empty() {
+    // MSC4075: ring the room only if nobody else is in the call yet, and
+    // never in a dedicated call room (joining there isn't calling anyone).
+    if signaling::should_ring_room(
+        !initial_members.is_empty(),
+        signaling::is_call_room(&room).await,
+    ) {
         if let Err(e) =
             signaling::send_rtc_notification(&room, call_intent, &device_id, &user_id).await
         {
@@ -941,6 +945,9 @@ pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) {
                 if orig.content.notification_type != NotificationType::Ring {
                     return;
                 }
+                if signaling::is_call_room(&room).await {
+                    return;
+                }
 
                 let expiry = orig.content.expiration_ts(orig.origin_server_ts, None);
                 let now_ms = {
@@ -999,6 +1006,9 @@ pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) {
                     return;
                 }
                 if orig.content.notification_type != "ring" {
+                    return;
+                }
+                if signaling::is_call_room(&room).await {
                     return;
                 }
 

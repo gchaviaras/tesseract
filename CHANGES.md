@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-12
 
+- fix(calls): joining a dedicated call room no longer rings the other members, and incoming rings in call rooms are ignored. cargo 1014
 - fix(encryption): a cancelled verification shows plain wording (e.g. "Another of your devices already took this request") instead of the Matrix protocol text; the SDK now forwards the cancel code to `on_verification_cancelled`. Qt6 + GTK4 build, ctest 67/67 (verification/overlay/i18n subset)
 
 ### 2026-10-11

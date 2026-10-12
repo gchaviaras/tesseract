@@ -11,6 +11,7 @@ Tagged releases summarize all changes since the previous tag.
 - fix(calls): the call lobby disables Join and says why ("A moderator needs to start the call.") when the user lacks the permission to start a call nobody has joined, instead of failing with `M_FORBIDDEN` after the click; re-evaluated on room-info updates. Qt6 build, ctest (call/i18n subset), user-verified Qt6
 - feat(settings): Bubbles layout option "Show my name and avatar" (Appearance → Layout, default on, shown only for Bubbles): own bubbles get the avatar in a right gutter and the name above, like other people's rows. Qt6 build, ctest 3218/3218, user-verified Qt6
 - fix(quick-switcher): upgraded (tombstoned) rooms are no longer listed, in results or recents. Qt6 + GTK4 build, user-verified Qt6
+- fix(room-list): upgraded (tombstoned) rooms are hidden from the room list (the open one stays until you leave it). Qt6 build
 - fix(calls): joining a dedicated call room no longer rings the other members, and incoming rings in call rooms are ignored. cargo 1014
 - fix(encryption): a cancelled verification shows plain wording (e.g. "Another of your devices already took this request") instead of the Matrix protocol text; the SDK now forwards the cancel code to `on_verification_cancelled`. Qt6 + GTK4 build, ctest 67/67 (verification/overlay/i18n subset)
 

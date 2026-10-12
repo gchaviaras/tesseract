@@ -2201,6 +2201,12 @@ void RoomListView::rebuild_items()
 
     for (const auto& r : rooms_)
     {
+        // Upgraded (tombstoned) rooms are dead ends; their successor is the
+        // target. Keep the open one so the selection doesn't vanish under it.
+        if (!r.successor_room_id.empty() && r.id != selected_room_id_cache_)
+        {
+            continue;
+        }
         const std::string& hay = r.name.empty() ? r.id : r.name;
         if (!search_text_.empty() && !name_matches(hay, search_text_))
         {

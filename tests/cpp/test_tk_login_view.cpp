@@ -235,3 +235,28 @@ TEST_CASE("LoginView Enter does nothing when the server offers neither",
     lv.simulate_oauth_probe_result(false);
     CHECK(lv.homeserver_submit_action() == LoginView::SubmitAction::Nothing);
 }
+
+TEST_CASE("LoginView settings button shows only on the first-login form",
+          "[tk][view][login][settings]")
+{
+    StubHost host;
+    auto lv_owner = tk::create_root_widget<LoginView>(&host);
+    LoginView& lv = *lv_owner;
+    lv.set_relayout([] {});
+    lv.finish_init();
+
+    int opened = 0;
+    lv.set_on_open_settings([&] { ++opened; });
+
+    CHECK(lv.settings_visible());
+    lv.simulate_settings_click();
+    CHECK(opened == 1);
+
+    lv.set_state(LoginView::State::Waiting);
+    CHECK_FALSE(lv.settings_visible());
+    lv.set_state(LoginView::State::Form);
+    CHECK(lv.settings_visible());
+
+    lv.set_mode(LoginView::Mode::AddAccount);
+    CHECK_FALSE(lv.settings_visible());
+}

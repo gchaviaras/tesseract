@@ -1211,6 +1211,30 @@ void SettingsView::show_account_section()
         tabs_->select(kAccountTabIdx); // no-op + no signal if already there
 }
 
+void SettingsView::set_signed_out_mode(bool on)
+{
+    if (!tabs_)
+        return;
+    for (int i = 0; i <= kAboutTabIdx; ++i)
+    {
+        const bool keep =
+            i == kNetworkTabIdx || i == kLanguageTabIdx || i == kAboutTabIdx;
+        tabs_->set_tab_visible(i, !on || keep);
+    }
+    tabs_->set_tab_visible(kAdvancedTabIdx, false);
+    if (about_)
+        about_->set_account_actions_visible(!on);
+    if (network_)
+        network_->set_applies_immediately(on);
+    if (on)
+        tabs_->select(kNetworkTabIdx);
+}
+
+bool SettingsView::tab_visible(int idx) const
+{
+    return tabs_ && tabs_->tab_visible(idx);
+}
+
 void SettingsView::show_appearance_section()
 {
     if (tabs_)

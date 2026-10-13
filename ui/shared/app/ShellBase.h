@@ -510,6 +510,11 @@ protected:
     std::unique_ptr<tesseract::HistoryExportController> history_export_controller_;
 
     std::unique_ptr<Client> pending_login_client_;
+    // Pending login clients replaced by reset_pending_login_client_() while a
+    // LoginView worker may still be inside a call on them (the workers hold a
+    // raw pointer). Freed once the pools are idle, or at shutdown after the
+    // pools drain.
+    std::vector<std::unique_ptr<Client>> retired_login_clients_;
     std::filesystem::path pending_login_temp_dir_;
     bool pending_login_is_add_account_ = false;
     int add_account_return_idx_ = -1;
@@ -668,6 +673,7 @@ protected:
     // main app surface. While set, compose_window_title_() stays plain
     // "Tesseract" instead of "Tesseract - <room>".
     bool app_settings_open_ = false;
+    bool settings_opened_from_login_ = false;
     // Most-recently-visited room IDs in visit order (front = most recent),
     // recorded in after_active_room_changed_(). Feeds the Ctrl+K quick
     // switcher's "Recent" strip and the Ctrl+Tab MRU switcher. Persisted per
@@ -3680,9 +3686,29 @@ protected:
     /// `open_app_settings_ui_()`; shells forward to their existing
     /// "show main content" path. Default no-op.
     virtual void close_app_settings_ui_() {}
+    /// Give the login view a freshly built pending-login `Client`
+    /// (`reset_pending_login_client_()`), so a proxy change made from the login
+    /// screen reaches the HTTP client its sign-in will use. Default no-op.
+    virtual void rebind_login_client_ui_() {}
     /// Open settings and land on the Account tab — wired to the sidebar
     /// status line's `on_status_clicked`.
     void open_settings_to_account_tab_();
+    /// Open settings from the login screen (no account yet): the settings
+    /// view shows only the account-independent tabs, and leaving it returns
+    /// to the login view rather than the main content.
+    void open_settings_from_login_();
+    /// True while settings was opened from the login screen. Shells pass it
+    /// to `SettingsView::set_signed_out_mode` when showing settings.
+    bool settings_from_login_() const { return settings_opened_from_login_; }
+    /// Returns whether settings was opened from login and clears the flag.
+    /// Shells call it on every "leave settings" path: true → show the login
+    /// view again, false → show the main content.
+    bool take_settings_from_login_()
+    {
+        const bool v = settings_opened_from_login_;
+        settings_opened_from_login_ = false;
+        return v;
+    }
 
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
     /// Screenshot mode: install the fixture's assets, then seed shell state

@@ -262,7 +262,8 @@ public:
     // ── Network proxy ─────────────────────────────────────────────────
     // System → OS/environment proxy (default); None → never use a proxy;
     // Manual → proxy_url (`http(s)://[user:pass@]host:port`). Applied via
-    // Client::set_proxy at launch; a change takes effect after restart.
+    // Client::set_proxy at launch; a change takes effect after restart,
+    // except from the login screen, where it applies immediately.
     // Credentials in proxy_url are stored in plain text in app_settings.json.
     enum class ProxyMode
     {

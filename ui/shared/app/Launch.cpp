@@ -21,6 +21,9 @@ namespace
 std::string g_launch_language;
 Settings::ProxyMode g_launch_proxy_mode = Settings::ProxyMode::System;
 std::string g_launch_proxy_url;
+// The launch-time proxy was Manual, so the proxy variables set then stay in
+// the process environment (a live change cannot clear them).
+bool g_launch_env_proxy = false;
 
 std::string help_for(std::string_view id)
 {
@@ -160,8 +163,13 @@ LaunchPlan prepare_launch(const std::vector<std::string>& args,
     {
         const auto& s = Settings::instance();
         const bool ok = Client::set_proxy(s.proxy_mode, s.proxy_url);
-        g_launch_proxy_mode = ok ? s.proxy_mode : Settings::ProxyMode::System;
-        g_launch_proxy_url = ok ? s.proxy_url : std::string();
+        // A bad Manual URL fails closed in the SDK (every request errors), so
+        // the baseline is the requested setting either way; only an unknown
+        // mode value falls back to System.
+        const bool manual = s.proxy_mode == Settings::ProxyMode::Manual;
+        g_launch_proxy_mode = (ok || manual) ? s.proxy_mode : Settings::ProxyMode::System;
+        g_launch_proxy_url = (ok || manual) ? s.proxy_url : std::string();
+        g_launch_env_proxy = manual;
     }
     {
         std::string lang = Settings::instance().language;
@@ -220,6 +228,17 @@ bool proxy_changed_since_launch(Settings::ProxyMode mode, const std::string& url
         return true;
     }
     return mode == Settings::ProxyMode::Manual && url != g_launch_proxy_url;
+}
+
+void apply_proxy_live(Settings::ProxyMode mode, const std::string& url)
+{
+    Client::set_proxy_live(mode, url);
+    if (mode == Settings::ProxyMode::System && g_launch_env_proxy)
+    {
+        return; // stale launch-time environment: keep the restart pending
+    }
+    g_launch_proxy_mode = mode;
+    g_launch_proxy_url = url;
 }
 
 std::vector<std::string> relaunch_args()

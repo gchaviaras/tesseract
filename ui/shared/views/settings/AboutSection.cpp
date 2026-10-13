@@ -319,7 +319,7 @@ AboutSection::AboutSection()
 
     auto hbox = tk::create_widget<tk::HBox>(this);
     hbox->add_child(std::move(sg));
-    add_widget(std::move(hbox));
+    storage_row_ = add_widget(std::move(hbox));
 
     // Right-aligned "Advanced" button — reveals the hidden Advanced settings
     // tab (see SettingsView::kAdvancedTabIdx). BrandView's fill_main above
@@ -331,7 +331,15 @@ AboutSection::AboutSection()
         tk::tr("Advanced"),
         [this] { if (on_advanced_clicked) on_advanced_clicked(); },
         tk::Button::Variant::Subtle));
-    add_widget(std::move(btn_row));
+    advanced_row_ = add_widget(std::move(btn_row));
+}
+
+void AboutSection::set_account_actions_visible(bool visible)
+{
+    if (storage_row_)
+        storage_row_->set_visible(visible);
+    if (advanced_row_)
+        advanced_row_->set_visible(visible);
 }
 
 void AboutSection::set_memory_cache_size(uint64_t bytes)

@@ -82,6 +82,12 @@ void LoginView::set_on_cancel(std::function<void()> cb)
         shared_->set_on_cancel_done(std::move(cb));
 }
 
+void LoginView::set_on_open_settings(std::function<void()> cb)
+{
+    if (shared_)
+        shared_->set_on_open_settings(std::move(cb));
+}
+
 void LoginView::set_run_async(std::function<void(std::function<void()>)> fn)
 {
     if (shared_)

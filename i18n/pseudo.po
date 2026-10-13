@@ -6816,3 +6816,11 @@ msgstr "[Thïs ïmàgé çàñ't bé séñt béçàùsé ïts métàdàtà çà�
 #: ui/shared/app/RoomPane.cpp
 msgid "Some images weren't sent because their metadata can't be removed."
 msgstr "[Sömé ïmàgés wéréñ't séñt béçàùsé théïr métàdàtà çàñ't bé rémövéd.xxxxxxxxxxxxx]"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Settings"
+msgstr "[Séttïñgsx]"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Applied now. Calls use the new proxy after a restart."
+msgstr "[Àpplïéd ñöw. Çàlls ùsé thé ñéw pröxy àftér à réstàrt.xxxxxxxxxx]"

@@ -373,3 +373,54 @@ TEST_CASE("SettingsView: file drop stages an image into the personal "
     CHECK(editor->images().size() == 1);
     CHECK(editor->has_changes());
 }
+
+TEST_CASE("SettingsView: signed-out mode keeps only Network, Language and About",
+          "[settings-view]")
+{
+    TkSettingsViewStage st;
+    auto view_owner = tk::create_root_widget<SettingsView>(nullptr);
+    SettingsView& view = *view_owner;
+    st.run(view, {0, 0, 900, 700});
+
+    auto* tabs = find_tabs(view);
+    REQUIRE(tabs);
+    constexpr int kNetworkTabIdx  = 7;
+    constexpr int kLanguageTabIdx = 10;
+    constexpr int kAboutTabIdx    = 11;
+
+    view.set_signed_out_mode(true);
+    for (int i = 0; i <= kAdvancedTabIdx; ++i)
+    {
+        const bool expected = i == kNetworkTabIdx || i == kLanguageTabIdx ||
+                              i == kAboutTabIdx;
+        CHECK(view.tab_visible(i) == expected);
+    }
+    CHECK(tabs->selected_idx() == kNetworkTabIdx);
+
+    view.set_signed_out_mode(false);
+    for (int i = 0; i <= kAboutTabIdx; ++i)
+        CHECK(view.tab_visible(i));
+    CHECK_FALSE(view.tab_visible(kAdvancedTabIdx));
+}
+
+TEST_CASE("NetworkSection: the note says changes apply now when signed out",
+          "[settings-view]")
+{
+    tesseract::views::SettingBinder binder;
+    tesseract::views::NetworkSection section(binder);
+
+    const std::string restart = section.restart_note_text();
+    CHECK(restart == "Changes take effect after restart."); // signed in
+
+    section.set_applies_immediately(true);
+    CHECK(section.restart_note_text() != restart);
+
+    // A restart that is still pending (e.g. Manual -> System) brings it back.
+    section.set_restart_pending(true);
+    CHECK(section.restart_note_text() == restart);
+    section.set_restart_pending(false);
+    CHECK(section.restart_note_text() != restart);
+
+    section.set_applies_immediately(false);
+    CHECK(section.restart_note_text() == restart);
+}

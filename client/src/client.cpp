@@ -262,6 +262,14 @@ bool Client::set_proxy(Settings::ProxyMode mode, const std::string& url)
     return tesseract_ffi::set_proxy(m, rust::Str(url.data(), url.size()));
 }
 
+bool Client::set_proxy_live(Settings::ProxyMode mode, const std::string& url)
+{
+    const std::uint8_t m = mode == Settings::ProxyMode::None   ? 1
+                         : mode == Settings::ProxyMode::Manual ? 2
+                                                               : 0;
+    return tesseract_ffi::set_proxy_live(m, rust::Str(url.data(), url.size()));
+}
+
 bool Client::is_valid_proxy_url(const std::string& url)
 {
     return tesseract_ffi::validate_proxy_url(rust::Str(url.data(), url.size()));

@@ -64,6 +64,13 @@ std::string nsstr(NSString* s)
             if (s && [s.delegate respondsToSelector:@selector(loginViewDidCancel:)])
                 [s.delegate loginViewDidCancel:s];
         });
+    _shared->set_on_open_settings(
+        [weakSelf]
+        {
+            LoginView* s = weakSelf;
+            if (s && s.onOpenSettings)
+                s.onOpenSettings();
+        });
     _shared->set_on_begin_oauth(
         [weakSelf]
         {

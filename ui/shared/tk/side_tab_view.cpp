@@ -100,6 +100,14 @@ void SideTabView::set_tab_visible(int idx, bool visible)
         // Every tab had been hidden; adopt this one now that it's back.
         select(idx);
     }
+
+    // The set of top tabs changed, so the old scroll offset may now be out of
+    // range (hiding tabs one by one moves the selection, which scrolls).
+    scroll_y_ = std::clamp(scroll_y_, 0.0f, max_top_scroll_());
+    if (selected_idx_ >= 0)
+    {
+        scroll_tab_into_view_(selected_idx_);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +178,9 @@ Size SideTabView::measure(LayoutCtx& ctx, Size constraints)
 void SideTabView::arrange(LayoutCtx& ctx, Rect bounds)
 {
     bounds_ = bounds;
+    // A resize (or a selection made before the first layout, when the
+    // sidebar had no height) can leave the offset out of range.
+    scroll_y_ = std::clamp(scroll_y_, 0.0f, max_top_scroll_());
 
     const float content_x = bounds.x + kSidebarWidth;
     const float content_w = std::max(0.0f, bounds.w - kSidebarWidth);

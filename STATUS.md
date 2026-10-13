@@ -1,6 +1,13 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-12**. 3259 C++ + 1055 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**. 3267 C++ + 1055 Rust tests.
+
+> **Settings from the login screen (2026-10-13).**
+> A wrench button on the first-login screen opens Settings with only Network,
+> Language and About, so a proxy can be set before the first sign-in. A proxy
+> change made there applies immediately (call signalling picks it up on the
+> next launch); Settings closes back to the login screen. Qt6 + GTK4 build,
+> ctest 3267/3267.
 
 > **Image send (2026-10-13).**
 > Animated images are never recompressed and stills only when smaller (toggle

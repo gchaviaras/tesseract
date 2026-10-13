@@ -178,6 +178,7 @@ public:
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override { open_settings_(); }
     void close_app_settings_ui_() override { close_settings_(); }
+    void rebind_login_client_ui_() override;
     void on_profile_field_result_ui_(const std::string& key, bool ok,
                                      const std::string& error) override;
     void update_typing_bar_(const std::string& text, bool visible) override;

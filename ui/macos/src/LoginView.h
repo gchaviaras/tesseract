@@ -27,6 +27,10 @@
 /// Set by MainWindow to lazily create the pending directory on first sign-in.
 @property(nonatomic, copy) void (^onBeginOAuth)(void);
 
+/// Called on the main thread when the corner settings button is clicked
+/// (reaches Network settings before any account exists).
+@property(nonatomic, copy) void (^onOpenSettings)(void);
+
 /// Route background workers (e.g. the homeserver-discovery debounce) through
 /// the shell's drain so they can't outlive ~LoginView and corrupt the heap.
 /// Wired by MainWindowController to MacShell::run_async_.

@@ -7032,3 +7032,11 @@ msgstr "Це зображення не можна надіслати, бо йо�
 #: ui/shared/app/RoomPane.cpp
 msgid "Some images weren't sent because their metadata can't be removed."
 msgstr "Деякі зображення не було надіслано, бо їхні метадані неможливо видалити."
+
+#: ui/shared/views/LoginView.cpp
+msgid "Settings"
+msgstr "Налаштування"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Applied now. Calls use the new proxy after a restart."
+msgstr "Застосовано одразу. Дзвінки використовуватимуть новий проксі після перезапуску."

@@ -94,6 +94,7 @@ add_executable(tesseract_tests
     cpp/test_settings.cpp
     cpp/test_cli.cpp
     cpp/test_launch_args.cpp
+    cpp/test_launch_proxy.cpp
     cpp/test_launchable_url.cpp
     cpp/test_single_instance.cpp
     cpp/test_pending_send.cpp

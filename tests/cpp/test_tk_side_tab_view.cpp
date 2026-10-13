@@ -287,3 +287,33 @@ TEST_CASE("SideTabView hit-testing stays consistent with painted positions "
     claimer->on_pointer_up({50.0f, 130.0f}, true);
     CHECK(tabs.selected_idx() == 10);
 }
+
+TEST_CASE("SideTabView hiding tabs before first layout leaves no stale scroll offset",
+          "[tk][side_tab_view][scroll]")
+{
+    TkSideTabViewStage st;
+    auto tabs_owner = tk::create_root_widget<SideTabView>(nullptr);
+    SideTabView& tabs = *tabs_owner;
+    for (int i = 0; i < 11; ++i)
+    {
+        tabs.add_tab("Tab" + std::to_string(i), std::make_unique<NullWidget>());
+    }
+    tabs.add_bottom_tab("About", std::make_unique<NullWidget>());
+
+    // Keep only tabs 7 and 10 (plus About), hiding the rest one at a time
+    // before the view has ever been laid out — each hide moves the selection
+    // on, which scrolls the (not yet sized) sidebar.
+    for (int i : {0, 1, 2, 3, 4, 5, 6, 8, 9})
+    {
+        tabs.set_tab_visible(i, false);
+    }
+    tabs.select(7);
+    st.run(tabs, {0, 0, 600, 400});
+
+    // The first visible tab must sit in the first slot, not scrolled off.
+    CHECK(tabs.scroll_y_for_testing() == 0.0f);
+    Widget* claimer = tabs.dispatch_pointer_down({50.0f, 10.0f});
+    REQUIRE(claimer == &tabs);
+    claimer->on_pointer_up({50.0f, 10.0f}, true);
+    CHECK(tabs.selected_idx() == 7);
+}

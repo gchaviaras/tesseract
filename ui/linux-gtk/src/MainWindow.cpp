@@ -2779,6 +2779,7 @@ void MainWindow::ensure_login_view_()
         {
             on_login_cancelled();
         });
+    login_view_->set_on_open_settings([this] { open_settings_from_login_(); });
     gtk_stack_add_named(GTK_STACK(content_stack_), login_view_->widget(),
                         "login");
 }
@@ -2822,7 +2823,27 @@ void MainWindow::close_app_settings_ui_()
         return;
     // Same steps as the settings view's on_close.
     stop_search_index_stats_poll_();
-    show_main_content_();
+    leave_settings_();
+}
+
+void MainWindow::rebind_login_client_ui_()
+{
+    if (!login_view_)
+        return;
+    login_view_->set_client(reset_pending_login_client_());
+    // Re-run the homeserver check against the new client (a failed lookup made
+    // before the proxy was fixed would otherwise stay on screen).
+    login_view_->reset();
+}
+
+void MainWindow::leave_settings_()
+{
+    // Opened from the login screen: go back to it (the view is still alive
+    // in the stack) instead of the main content, which would tear it down.
+    if (take_settings_from_login_() && login_view_)
+        gtk_stack_set_visible_child_name(GTK_STACK(content_stack_), "login");
+    else
+        show_main_content_();
     set_app_settings_open_(false);
     teardown_settings_view_();
 }
@@ -5284,9 +5305,7 @@ void MainWindow::open_settings_()
         settings_widget_->settings_view()->on_close = [this]
         {
             stop_search_index_stats_poll_();
-            show_main_content_();
-            set_app_settings_open_(false);
-            teardown_settings_view_();
+            leave_settings_();
         };
         settings_widget_->settings_view()->on_logout = [this]
         {
@@ -5329,6 +5348,9 @@ void MainWindow::open_settings_()
         my_display_name_, my_user_id_, my_avatar_url_,
         [this](const std::string& mxc) -> const tk::Image*
         { return avatar_image_(mxc); });
+    if (settings_widget_->settings_view())
+        settings_widget_->settings_view()->set_signed_out_mode(
+            settings_from_login_());
 
     // load_persisted_settings() (inside populate()) seeded the checkbox from
     // the cached Settings::launch_at_login; refresh_launch_at_login_pref_()

@@ -24,6 +24,7 @@ LoginView::LoginView(QWidget* parent)
     shared_->set_relayout([this] { surface_->relayout(); });
     shared_->set_on_success([this] { emit loginSucceeded(); });
     shared_->set_on_cancel_done([this] { emit loginCancelled(); });
+    shared_->set_on_open_settings([this] { emit settingsRequested(); });
     shared_->set_open_browser(
         [](const std::string& url)
         {

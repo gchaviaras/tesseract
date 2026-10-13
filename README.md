@@ -195,7 +195,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - In-flight request indicator in the status bar
 - Low power mode (Auto / On / Off) — pauses background work (backfill, prefetch, cache GC, search indexing) while keeping sync live
 - Light / dark / system themes
-- HTTP proxy: system (default), none or manual, under Settings → Network
+- HTTP proxy: system (default), none or manual, under Settings → Network (reachable from the login screen before signing in)
 - Animated avatars (GIF, animated WebP, APNG), switchable under Appearance → Timeline
 - Windows: installable via the Microsoft Store or an NSIS installer; taskbar unread/mention overlays, thumbnail controls, and Jump Lists
 - Linux: system-wide room/contact search via GNOME Shell search and KRunner; MPRIS media controls for voice/audio playback; installable via a self-hosted Flatpak repo (not Flathub — see [packaging/flatpak/README.md](packaging/flatpak/README.md)), plus DEB/RPM/AppImage/AUR

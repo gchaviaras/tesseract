@@ -186,6 +186,9 @@ private:
     void ensureLoginView_();
     void teardownLoginView_();
     void teardownSettingsView_();
+    // Close the settings page: back to the login view if it was opened from
+    // there, otherwise to the main content.
+    void leaveSettings_();
     void setupActivationListener_();
 
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED
@@ -239,6 +242,7 @@ private:
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override { openSettings(); }
     void close_app_settings_ui_() override;
+    void rebind_login_client_ui_() override;
     void raise_main_window_ui_() override;
     void open_quick_switch_ui_() override { openQuickSwitch_(); }
     void open_message_search_ui_() override { openMessageSearch_(); }

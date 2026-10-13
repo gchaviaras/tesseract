@@ -4755,3 +4755,11 @@ msgstr "Dette bildet kan ikke sendes fordi metadataene ikke kan fjernes."
 #: ui/shared/app/RoomPane.cpp
 msgid "Some images weren't sent because their metadata can't be removed."
 msgstr "Noen bilder ble ikke sendt fordi metadataene ikke kan fjernes."
+
+#: ui/shared/views/LoginView.cpp
+msgid "Settings"
+msgstr "Innstillinger"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Applied now. Calls use the new proxy after a restart."
+msgstr "Brukt med en gang. Samtaler bruker den nye proxyen etter en omstart."

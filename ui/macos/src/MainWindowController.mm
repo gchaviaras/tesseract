@@ -232,6 +232,7 @@ protected:
     void on_own_extended_profile_ready_ui_() override;
     void open_app_settings_ui_() override;
     void close_app_settings_ui_() override;
+    void rebind_login_client_ui_() override;
     // makeKeyAndOrderFront: also brings back a window orderOut:'d to the tray.
     void raise_main_window_ui_() override { raise_and_activate_(); }
     void open_quick_switch_ui_() override;
@@ -574,6 +575,10 @@ public:
     // Window title (thin wrappers over the protected ShellBase members).
     void refresh_window_title() { refresh_window_title_(); }
     void set_app_settings_open(bool open) { set_app_settings_open_(open); }
+    // Settings opened from the login screen (no account yet).
+    void open_settings_from_login() { open_settings_from_login_(); }
+    bool settings_from_login() const { return settings_from_login_(); }
+    bool take_settings_from_login() { return take_settings_from_login_(); }
 
     // Public method to call the protected send_current_location_ method.
     void send_current_location(const std::string& room_id)
@@ -816,6 +821,7 @@ using TkImagePtr = std::unique_ptr<tk::Image>;
 - (void)_beginAddAccount;
 - (void)_logoutActiveAccount;
 - (void)_openSettings;
+- (void)_rebindLoginClient;
 // _loginView and the settings surface/view are seldom used for a typical
 // logged-in session, so they're built on first need (_ensureLoginView,
 // called from beginLogin/_beginAddAccount/_logoutActiveAccount;
@@ -1941,6 +1947,13 @@ void MacShell::close_app_settings_ui_()
     MainWindowController* c = ctrl_;
     if (c)
         [c _closeSettings];
+}
+
+void MacShell::rebind_login_client_ui_()
+{
+    MainWindowController* c = ctrl_;
+    if (c)
+        [c _rebindLoginClient];
 }
 
 void MacShell::open_quick_switch_ui_()
@@ -5351,6 +5364,11 @@ private:
     // the heap (mirrors the SettingsController wiring elsewhere).
     {
         __weak MainWindowController* ws = self;
+        _loginView.onOpenSettings = ^{
+            MainWindowController* s = ws;
+            if (s && s->_shell)
+                s->_shell->open_settings_from_login();
+        };
         [_loginView setRunAsync:^(void (^body)(void)) {
             MainWindowController* s = ws;
             if (!s || !s->_shell)
@@ -5504,8 +5522,12 @@ private:
     if (!_settingsSurface)
         return;
     _shell->stop_search_stats_poll();
+    // Opened from the login screen: go back to it, not the main content.
+    const bool toLogin = _shell->take_settings_from_login() && _loginView;
     NSView* mainAppView = (__bridge NSView*)_mainAppSurface->view_handle();
-    mainAppView.hidden = NO;
+    mainAppView.hidden = toLogin ? YES : NO;
+    if (toLogin)
+        _loginView.hidden = NO;
     ((__bridge NSView*)_settingsSurface->view_handle()).hidden = YES;
     _shell->set_app_settings_open(false);
     [self _teardownSettingsView];
@@ -5533,6 +5555,16 @@ private:
             [settingsView removeFromSuperview];
             s->_settingsSurface.reset();
         });
+}
+
+- (void)_rebindLoginClient
+{
+    if (_loginView && _shell)
+    {
+        [_loginView setClient:_shell->reset_pending_login_client()];
+        // Re-run the homeserver check against the new client.
+        [_loginView reset];
+    }
 }
 
 - (void)_showMainContent
@@ -7118,6 +7150,9 @@ private:
             return s->_shell->avatar_image_(mxc);
         });
     _settingsView->load_persisted_settings();
+    _settingsView->set_signed_out_mode(_shell->settings_from_login());
+    if (_shell->settings_from_login() && _loginView)
+        _loginView.hidden = YES;
     // load_persisted_settings() seeded the checkbox from the cached
     // Settings::launch_at_login; refresh_launch_at_login_pref() re-queries the
     // real OS state off the UI thread and pushes it in when it returns, so the

@@ -302,9 +302,15 @@ public:
     /// Process-wide HTTP proxy for every outgoing request (Matrix, media,
     /// previews, LiveKit signalling; call media over UDP is unaffected).
     /// Call once at launch, before any account starts and before worker
-    /// threads exist. Returns false (and uses the system proxy) if `url` is
-    /// not a valid http(s) proxy URL in Manual mode.
+    /// threads exist. Returns false if `url` is not a valid http(s) proxy URL
+    /// in Manual mode; every request then fails (a bad proxy is never
+    /// bypassed).
     static bool set_proxy(Settings::ProxyMode mode, const std::string& url);
+
+    /// Change the proxy while the app is running (e.g. from the login
+    /// screen). Only clients built afterwards use it, and call signalling
+    /// keeps the launch-time proxy until the next launch.
+    static bool set_proxy_live(Settings::ProxyMode mode, const std::string& url);
 
     /// True if `url` is an `http(s)://[user:pass@]host:port` proxy URL.
     static bool is_valid_proxy_url(const std::string& url);

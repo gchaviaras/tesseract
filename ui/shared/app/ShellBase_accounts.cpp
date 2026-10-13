@@ -1412,6 +1412,13 @@ void ShellBase::clear_main_ui_after_last_logout_()
 Client* ShellBase::reset_pending_login_client_()
 {
     pending_login_temp_dir_.clear();
+    // LoginView's discovery/probe workers capture the old client by raw
+    // pointer and may still be mid-call on it: retire it instead of
+    // destroying it here.
+    if (pool_.pending_count() == 0 && mut_pool_.pending_count() == 0)
+        retired_login_clients_.clear();
+    if (pending_login_client_)
+        retired_login_clients_.push_back(std::move(pending_login_client_));
     pending_login_client_ = std::make_unique<Client>();
     return pending_login_client_.get();
 }

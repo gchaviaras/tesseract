@@ -1,4 +1,5 @@
 #include "app/font_prefs.h"
+#include "app/Launch.h"
 #include "app/ShellBase.h"
 #include <tesseract/crash_handler.h>
 #include <tesseract/version.h>
@@ -540,6 +541,20 @@ void ShellBase::handle_setting_changed_(views::SettingKey key)
         break;
     case K::LowPower:
         apply_low_power_preference_();
+        break;
+    case K::Proxy:
+        // Signed in: existing clients keep the launch proxy, so the settings
+        // view already shows "Restart now". Signed out (settings opened from
+        // the login screen): no connection exists yet, so apply it now.
+        if (settings_from_login_())
+        {
+            tesseract::apply_proxy_live(s.proxy_mode, s.proxy_url);
+            if (stats_settings_view_)
+                stats_settings_view_->set_proxy_restart_pending(
+                    tesseract::proxy_changed_since_launch(s.proxy_mode,
+                                                          s.proxy_url));
+            rebind_login_client_ui_();
+        }
         break;
     case K::Theme:
     case K::Accent:

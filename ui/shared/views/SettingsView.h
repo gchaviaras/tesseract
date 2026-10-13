@@ -250,6 +250,13 @@ public:
     void show_appearance_section();
     std::string selected_tab_label() const;
 
+    // Settings reached from the login screen, before any account exists:
+    // only the account-independent tabs (Network, Language, About) stay
+    // visible, Network is selected, and About's account actions are hidden.
+    // Passing false restores the full set (Advanced stays hidden).
+    void set_signed_out_mode(bool on);
+    bool tab_visible(int idx) const;
+
     // Fired when a profile field value changes (on_submit from its
     // self-owned field, wired by set_controller()). key = MSC key string,
     // value_json = JSON or "null".
@@ -365,6 +372,8 @@ private:
     static constexpr int kAboutTabIdx = 11;
     // Account is the first tab added (see the constructor) and hence index 0.
     static constexpr int kAccountTabIdx = 0;
+    static constexpr int kNetworkTabIdx = 7;
+    static constexpr int kLanguageTabIdx = 10;
 
     // Child widgets — owned via add_child, raw pointers borrowed back.
     tk::Button* back_btn_ = nullptr;

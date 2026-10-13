@@ -38,8 +38,15 @@ public:
     // reveal and navigate to the hidden Advanced tab.
     std::function<void()> on_advanced_clicked;
 
+    // Hide the storage group (cache sizes + "Clear all caches") and the
+    // "Advanced" button — both act on a signed-in account. Used while
+    // Settings is open from the login screen.
+    void set_account_actions_visible(bool visible);
+
 private:
     class CacheSizeRow;
+    tk::Widget* storage_row_ = nullptr; // borrowed
+    tk::Widget* advanced_row_ = nullptr; // borrowed
     CacheSizeRow* memory_row_ = nullptr; // borrowed
     CacheSizeRow* local_row_  = nullptr; // borrowed
     CacheSizeRow* sdk_row_    = nullptr; // borrowed

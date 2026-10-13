@@ -2096,6 +2096,8 @@ void MainWindow::ensureLoginView_()
             &MainWindow::onLoginSucceeded);
     connect(loginView_, &LoginView::loginCancelled, this,
             &MainWindow::onLoginCancelled);
+    connect(loginView_, &LoginView::settingsRequested, this,
+            [this] { open_settings_from_login_(); });
 }
 
 void MainWindow::teardownLoginView_()
@@ -2136,7 +2138,27 @@ void MainWindow::close_app_settings_ui_()
         return;
     // Same steps as SettingsWidget::settingsClosed.
     stop_search_index_stats_poll_();
-    showMainContent_();
+    leaveSettings_();
+}
+
+void MainWindow::rebind_login_client_ui_()
+{
+    if (!loginView_)
+        return;
+    loginView_->set_client(reset_pending_login_client_());
+    // Re-run the homeserver check against the new client (a failed lookup made
+    // before the proxy was fixed would otherwise stay on screen).
+    loginView_->reset();
+}
+
+void MainWindow::leaveSettings_()
+{
+    // Opened from the login screen: go back to it (the view is still alive
+    // in the stack) instead of the main content, which would tear it down.
+    if (take_settings_from_login_() && loginView_)
+        contentStack_->setCurrentWidget(loginView_);
+    else
+        showMainContent_();
     set_app_settings_open_(false);
     teardownSettingsView_();
 }
@@ -3994,9 +4016,7 @@ void MainWindow::openSettings()
                 [this]
                 {
                     stop_search_index_stats_poll_();
-                    showMainContent_();
-                    set_app_settings_open_(false);
-                    teardownSettingsView_();
+                    leaveSettings_();
                 });
         connect(settingsWidget_, &SettingsWidget::logoutRequested, this,
                 [this]
@@ -4041,6 +4061,9 @@ void MainWindow::openSettings()
         my_display_name_, my_user_id_, my_avatar_url_,
         [this](const std::string& mxc) -> const tk::Image*
         { return avatar_image_(mxc); });
+    if (settingsWidget_->settings_view())
+        settingsWidget_->settings_view()->set_signed_out_mode(
+            settings_from_login_());
 
     // load_persisted_settings() (inside populate()) seeded the checkbox from
     // the cached Settings::launch_at_login; refresh_launch_at_login_pref_()

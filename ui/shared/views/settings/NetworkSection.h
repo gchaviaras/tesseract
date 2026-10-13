@@ -26,6 +26,12 @@ public:
     // one this process started with.
     void set_restart_pending(bool pending);
 
+    // True while no account is signed in (Settings opened from the login
+    // screen): a proxy change applies at once, so the note says so (calls
+    // still need a restart) instead of "Changes take effect after restart".
+    void set_applies_immediately(bool immediately);
+    std::string restart_note_text() const { return restart_note_ ? restart_note_->text() : std::string(); }
+
     // On a user change of the mode, or of the URL in Manual mode, the new
     // values are written to Settings and SettingKey::Proxy is reported. An
     // invalid Manual URL never reports (an inline error is shown instead).
@@ -47,6 +53,10 @@ private:
     tk::TextField* url_field_ = nullptr;
     tk::Label* error_label_ = nullptr;
     tk::Widget* restart_row_ = nullptr;
+    tk::Label* restart_note_ = nullptr;
+    bool restart_pending_ = false;
+    bool applies_immediately_ = false;
+    void update_restart_note_();
 };
 
 } // namespace tesseract::views

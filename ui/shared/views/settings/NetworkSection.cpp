@@ -55,7 +55,7 @@ NetworkSection::NetworkSection(SettingBinder& binder) : binder_(&binder)
 
     auto note = tk::create_widget<tk::Label>(
         this, tk::tr("Changes take effect after restart."), tk::FontRole::Small);
-    group->add_widget(std::move(note));
+    restart_note_ = group->add_widget(std::move(note));
 
     // HBox so the button keeps its natural width instead of stretching.
     auto row = tk::create_widget<tk::HBox>(this);
@@ -135,9 +135,30 @@ void NetworkSection::load_()
 
 void NetworkSection::set_restart_pending(bool pending)
 {
+    restart_pending_ = pending;
     if (restart_row_)
     {
         restart_row_->set_visible(pending);
+    }
+    update_restart_note_();
+}
+
+void NetworkSection::set_applies_immediately(bool immediately)
+{
+    applies_immediately_ = immediately;
+    update_restart_note_();
+}
+
+void NetworkSection::update_restart_note_()
+{
+    // Applied live (signed out): HTTP requests use the new proxy at once, but
+    // call signalling still reads the launch-time one. Otherwise, or while a
+    // restart is still pending, everything waits for a restart.
+    if (restart_note_)
+    {
+        restart_note_->set_text(applies_immediately_ && !restart_pending_
+                                    ? tk::tr("Applied now. Calls use the new proxy after a restart.")
+                                    : tk::tr("Changes take effect after restart."));
     }
 }
 

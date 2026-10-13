@@ -37,6 +37,7 @@ public:
 signals:
     void loginSucceeded();
     void loginCancelled();
+    void settingsRequested();
 
 protected:
     void resizeEvent(QResizeEvent* e) override;

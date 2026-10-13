@@ -6262,3 +6262,11 @@ msgstr "Esta imagen no se puede enviar porque no se pueden eliminar sus metadato
 #: ui/shared/app/RoomPane.cpp
 msgid "Some images weren't sent because their metadata can't be removed."
 msgstr "Algunas imágenes no se enviaron porque no se pueden eliminar sus metadatos."
+
+#: ui/shared/views/LoginView.cpp
+msgid "Settings"
+msgstr "Ajustes"
+
+#: ui/shared/views/settings/NetworkSection.cpp
+msgid "Applied now. Calls use the new proxy after a restart."
+msgstr "Aplicado ahora. Las llamadas usarán el nuevo proxy después de reiniciar."

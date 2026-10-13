@@ -78,6 +78,18 @@ public:
         return sign_in_btn_ && sign_in_btn_->visible();
     }
 
+    /// The corner settings button (reaches Network settings before any
+    /// account exists). Shown only on the first-login form.
+    bool settings_visible() const
+    {
+        return settings_btn_ && settings_btn_->visible();
+    }
+    void simulate_settings_click()
+    {
+        if (on_open_settings_)
+            on_open_settings_();
+    }
+
     void set_status(std::string message, bool is_error = false);
 
     enum class DiscoveryState
@@ -188,6 +200,12 @@ public:
     void set_on_success(std::function<void()> fn)
     {
         on_success_ = std::move(fn);
+    }
+
+    /// Fired on the UI thread when the corner settings button is clicked.
+    void set_on_open_settings(std::function<void()> fn)
+    {
+        on_open_settings_ = std::move(fn);
     }
 
     /// Fired on the UI thread after cancel() finishes and state is reset.
@@ -311,6 +329,7 @@ private:
     std::function<void()>                on_begin_oauth_;
     std::function<void()>                on_success_;
     std::function<void()>                on_cancel_done_;
+    std::function<void()>                on_open_settings_;
 
     // Visual state
     State          state_          = State::Form;
@@ -336,6 +355,8 @@ private:
     tk::Label*     discovery_error_lbl_ = nullptr;
     tk::Button*    sign_in_btn_     = nullptr;
     tk::Button*    cancel_btn_      = nullptr;
+    tk::Button*    settings_btn_    = nullptr;
+    void update_settings_visibility_();
     tk::Button*    register_link_   = nullptr;
     tk::Label*     status_lbl_      = nullptr;
 

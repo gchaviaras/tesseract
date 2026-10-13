@@ -103,6 +103,12 @@ void LoginView::set_on_success(std::function<void()> cb)
         shared_->set_on_success(std::move(cb));
 }
 
+void LoginView::set_on_open_settings(std::function<void()> cb)
+{
+    if (shared_)
+        shared_->set_on_open_settings(std::move(cb));
+}
+
 void LoginView::set_on_cancel(std::function<void()> cb)
 {
     if (shared_)

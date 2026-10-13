@@ -3907,6 +3907,7 @@ void MainWindow::ensure_login_view_()
         {
             on_login_cancelled();
         });
+    login_view_->set_on_open_settings([this] { open_settings_from_login_(); });
     ShowWindow(login_view_->hwnd(), SW_HIDE);
 }
 
@@ -4007,6 +4008,15 @@ void MainWindow::open_settings_()
                                      my_avatar_url_);
     settings_view_->set_image_provider(make_avatar_image_provider_());
     settings_view_->load_persisted_settings();
+    settings_view_->set_signed_out_mode(settings_from_login_());
+    if (settings_from_login_())
+    {
+        // Settings replaces the login view for now; close_settings_()
+        // brings it back.
+        login_visible_ = false;
+        if (login_view_ && login_view_->hwnd())
+            ShowWindow(login_view_->hwnd(), SW_HIDE);
+    }
     // load_persisted_settings() seeded the checkbox from the cached
     // Settings::launch_at_login; refresh_launch_at_login_pref_() re-queries the
     // real OS state off the UI thread and pushes it in when it returns, so the
@@ -4053,19 +4063,37 @@ void MainWindow::open_settings_()
     on_size(rc.right, rc.bottom);
 }
 
+void MainWindow::rebind_login_client_ui_()
+{
+    if (!login_view_)
+        return;
+    login_view_->set_client(reset_pending_login_client_());
+    // Re-run the homeserver check against the new client (a failed lookup made
+    // before the proxy was fixed would otherwise stay on screen).
+    login_view_->reset();
+}
+
 void MainWindow::close_settings_()
 {
+    // Opened from the login screen: go back to it, not the main content.
+    const bool to_login = take_settings_from_login_() && login_view_;
     set_app_settings_open_(false);
     stop_search_index_stats_poll_();
     if (settings_surface_ && settings_surface_->hwnd())
     {
         ShowWindow(settings_surface_->hwnd(), SW_HIDE);
     }
-    if (main_app_surface_ && main_app_surface_->hwnd())
+    if (!to_login && main_app_surface_ && main_app_surface_->hwnd())
     {
         ShowWindow(main_app_surface_->hwnd(), SW_SHOW);
     }
     teardown_settings_view_();
+
+    if (to_login)
+    {
+        show_login_view();
+        return;
+    }
 
     RECT rc;
     GetClientRect(hwnd_, &rc);

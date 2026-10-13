@@ -1,6 +1,7 @@
 #include "LoginView.h"
 
 #include "AlertDialog.h"
+#include "icons.h"
 #include "tk/i18n.h"
 
 #include <algorithm>
@@ -192,6 +193,19 @@ void LoginView::rebuild_tree()
 
     card_ = add_child(std::move(card));
 
+    auto settings = tk::create_widget<tk::Button>(
+        this, "", std::function<void()>{}, tk::Button::Variant::Icon);
+    settings->set_icon(kWrenchSvg, 18.0f);
+    settings->set_accessible_name(tk::tr("Settings"));
+    settings->set_on_click(
+        [this]
+        {
+            if (on_open_settings_)
+                on_open_settings_();
+        });
+    settings_btn_ = add_child(std::move(settings));
+    update_settings_visibility_();
+
     auto alert_dlg = std::make_unique<AlertDialog>();
     alert_dlg->on_layout_changed = [this] { if (relayout_) relayout_(); };
     alert_ = add_child(std::move(alert_dlg));
@@ -201,9 +215,17 @@ void LoginView::rebuild_tree()
 // Visual state
 // ---------------------------------------------------------------------------
 
+void LoginView::update_settings_visibility_()
+{
+    if (settings_btn_)
+        settings_btn_->set_visible(mode_ == Mode::Initial &&
+                                   state_ == State::Form);
+}
+
 void LoginView::set_state(State s)
 {
     state_ = s;
+    update_settings_visibility_();
     if (!sign_in_btn_ || !cancel_btn_)
         return;
     sign_in_btn_->set_visible(s == State::Form && oauth_available_);
@@ -218,6 +240,7 @@ void LoginView::set_state(State s)
 void LoginView::set_mode(Mode m)
 {
     mode_ = m;
+    update_settings_visibility_();
     if (cancel_btn_)
         cancel_btn_->set_visible(m == Mode::AddAccount || state_ == State::Waiting);
     if (relayout_)
@@ -980,6 +1003,17 @@ void LoginView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     float card_x = bounds.x + (bounds.w - card_w) * 0.5f;
     float card_y = bounds.y + (bounds.h - max_card_h) * 0.5f;
     card_->arrange(ctx, {card_x, card_y, card_w, card_h});
+
+    if (settings_btn_)
+    {
+        constexpr float kSettingsBtnSize = 36.0f;
+        constexpr float kSettingsBtnInset = 12.0f;
+        settings_btn_->measure(ctx, {kSettingsBtnSize, kSettingsBtnSize});
+        settings_btn_->arrange(
+            ctx, {bounds.x + bounds.w - kSettingsBtnSize - kSettingsBtnInset,
+                  bounds.y + kSettingsBtnInset, kSettingsBtnSize,
+                  kSettingsBtnSize});
+    }
 
     if (alert_) alert_->arrange(ctx, bounds);
 }

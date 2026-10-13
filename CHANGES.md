@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-13
 
+- feat(login): a settings button on the first-login screen opens Settings with only Network, Language and About, so a proxy can be set before the first sign-in; a proxy change made there applies immediately (no restart) and Settings closes back to the login screen. `SideTabView` re-clamps its scroll offset when tabs are hidden; the replaced login client is retired (not freed) while discovery workers may still use it, and discovery re-runs after a proxy change; an invalid Manual proxy URL now fails closed instead of falling back to the system proxy. Qt6 + GTK4 build, ctest 3267/3267, cargo net_proxy
 - fix(windows): avatar initials render through BetterText (cached static-label captures) so emoji use the bundled Noto Color Emoji instead of Segoe UI Emoji; plain DirectWrite remains the fallback. Windows build, user-verified
 - feat(login): the login view's default homeserver can be provisioned (Windows registry `DefaultHomeserver`, macOS preference, Linux `/etc/tesseract/provisioning.json`); the NSIS installer writes it from `/DEFAULT_HOMESERVER=<host>`. Windows build + NSIS installer user-verified; macOS/Linux loaders unbuilt
 - fix(send): animated images (GIF, WebP, APNG, AVIF, JXL) are no longer recompressed to JPEG and stills only when smaller (new Settings → Media toggle); metadata is always stripped from every format that carries it, and an image whose metadata can't be stripped is never sent. Qt6 build, ctest 3259/3259, cargo 1055

@@ -213,6 +213,12 @@ void ShellBase::open_settings_to_account_tab_()
         stats_settings_view_->show_account_section();
 }
 
+void ShellBase::open_settings_from_login_()
+{
+    settings_opened_from_login_ = true;
+    open_app_settings_ui_();
+}
+
 void ShellBase::dispatch_launch_action_(LaunchAction action, std::string room_id)
 {
     if (action == LaunchAction::None)

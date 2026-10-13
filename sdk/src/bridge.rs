@@ -48,6 +48,10 @@ pub fn set_proxy(mode: u8, url: &str) -> bool {
     super::net_proxy::set_proxy(mode, url)
 }
 
+pub fn set_proxy_live(mode: u8, url: &str) -> bool {
+    super::net_proxy::set_proxy_live(mode, url)
+}
+
 pub fn validate_proxy_url(url: &str) -> bool {
     super::net_proxy::validate_proxy_url(url)
 }
@@ -2142,6 +2146,10 @@ pub mod ffi {
         /// falls back to system if the mode/URL is invalid. Call at launch
         /// before any client is built.
         fn set_proxy(mode: u8, url: &str) -> bool;
+        /// Like `set_proxy` but safe once runtime threads exist: it leaves the
+        /// process environment alone, so only clients built afterwards pick
+        /// it up.
+        fn set_proxy_live(mode: u8, url: &str) -> bool;
         fn validate_proxy_url(url: &str) -> bool;
 
         /// Compare a received file's name, declared mime and leading bytes

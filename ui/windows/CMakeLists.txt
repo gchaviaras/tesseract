@@ -264,6 +264,7 @@ endif()
 
 # Copy .mo catalogs next to the exe for developer builds
 if(DEFINED _mo_files AND _mo_files)
+    add_dependencies(tesseract_win32 i18n-compile)
     add_custom_command(TARGET tesseract_win32 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:tesseract_win32>/i18n"

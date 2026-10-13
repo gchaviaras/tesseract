@@ -57,7 +57,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: . -> build/linux-release
+          workspaces: . -> build/linux-release/cargo/build
 
       - name: Configure screenshot-only build
         run: >-
@@ -131,7 +131,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: . -> build/macos-appkit-arm64-release
+          workspaces: . -> build/macos-appkit-arm64-release/cargo/build
 
       - name: Configure screenshot-only build
         run: >-
@@ -181,7 +181,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: . -> build/windows-release
+          workspaces: . -> build/windows-release/cargo/build
 
       # resvg-py 0.3.2 only ships wheels up to cp312, so pin Python 3.12 and
       # hand that exact interpreter to CMake below.

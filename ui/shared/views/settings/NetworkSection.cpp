@@ -136,17 +136,27 @@ void NetworkSection::load_()
 void NetworkSection::set_restart_pending(bool pending)
 {
     restart_pending_ = pending;
-    if (restart_row_)
-    {
-        restart_row_->set_visible(pending);
-    }
+    update_restart_row_();
     update_restart_note_();
 }
 
 void NetworkSection::set_applies_immediately(bool immediately)
 {
     applies_immediately_ = immediately;
+    update_restart_row_();
     update_restart_note_();
+}
+
+void NetworkSection::update_restart_row_()
+{
+    // Signed out (applied live) there is nothing running that needs a restart,
+    // so no Restart button; the note still says calls use the new proxy after
+    // one. Signed in, the button shows while the setting differs from the
+    // launch-time proxy.
+    if (restart_row_)
+    {
+        restart_row_->set_visible(restart_pending_ && !applies_immediately_);
+    }
 }
 
 void NetworkSection::update_restart_note_()

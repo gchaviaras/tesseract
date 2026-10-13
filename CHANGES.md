@@ -9,7 +9,7 @@ Tagged releases summarize all changes since the previous tag.
 
 - fix(send): the metadata strip now runs on every real send path, single images (animated too), files and gallery items, not only the sync/gallery ones; a photo sent as a file loses its EXIF/GPS while TIFF/RAW, SVG, BMP and JPEG 2000 files go byte-identical, TIFF is never truncated, and PNG/WebP keep only rendering chunks (C2PA and private chunks are dropped). Qt6 build, ctest 3277/3277, cargo 1065
 - fix(send): the "can be stripped?" check no longer runs when a smaller recompression wins, and a crafted HEIC can't stall it. A gallery with any refused image sends nothing and keeps the composer. Qt6 build, ctest 3277/3277, cargo 1065
-- fix(login): a retired login client is freed only when no worker is running (a lookup in flight when the proxy changed could use it after free), and a live proxy change keeps "Restart now" because calls still use the launch proxy. Qt6 build, ctest 3277/3277
+- fix(login): a retired login client is freed only when no worker is running (a lookup in flight when the proxy changed could use it after free). Qt6 build, ctest 3277/3277
 - fix(accounts): soft-logout recovery restores with the stored store key off the UI thread and never wipes the account when it fails (it used to destroy the crypto store). Qt6 build, ctest 3277/3277
 - fix(encryption): Enable recovery asks before replacing an existing server key backup instead of deleting it. Qt6 build, ctest 3277/3277, cargo 1065
 - fix(settings): `app_settings.json` is saved atomically with a `.last-good` copy, and an unreadable file is moved to `.corrupt` and recovered instead of being overwritten with defaults. Qt6 build, ctest 3277/3277

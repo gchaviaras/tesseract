@@ -426,3 +426,25 @@ TEST_CASE("NetworkSection: the note says changes apply now when signed out",
     section.set_applies_immediately(false);
     CHECK(section.restart_note_text() == restart);
 }
+
+TEST_CASE("NetworkSection: the Restart button is hidden when the change applies live",
+          "[settings-view]")
+{
+    tesseract::views::SettingBinder binder;
+    tesseract::views::NetworkSection section(binder);
+
+    // Signed in: a pending change needs a restart, so the button shows.
+    section.set_restart_pending(true);
+    CHECK(section.restart_row_visible());
+
+    // Signed out (opened from the login screen): applied live, no button,
+    // even though the setting still differs from the launch-time proxy.
+    section.set_applies_immediately(true);
+    CHECK(section.restart_pending_for_test());
+    CHECK_FALSE(section.restart_row_visible());
+
+    section.set_applies_immediately(false);
+    CHECK(section.restart_row_visible());
+    section.set_restart_pending(false);
+    CHECK_FALSE(section.restart_row_visible());
+}

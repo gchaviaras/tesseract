@@ -2831,9 +2831,9 @@ void MainWindow::rebind_login_client_ui_()
     if (!login_view_)
         return;
     login_view_->set_client(reset_pending_login_client_());
-    // Re-run the homeserver check against the new client (a failed lookup made
-    // before the proxy was fixed would otherwise stay on screen).
-    login_view_->reset();
+    // Swap only. Settings is open on top of the login view, and reset() would
+    // refocus its homeserver field mid-typing; the homeserver check is re-run
+    // by leaving Settings (take_login_recheck_()).
 }
 
 void MainWindow::leave_settings_()
@@ -2841,7 +2841,13 @@ void MainWindow::leave_settings_()
     // Opened from the login screen: go back to it (the view is still alive
     // in the stack) instead of the main content, which would tear it down.
     if (take_settings_from_login_() && login_view_)
+    {
         gtk_stack_set_visible_child_name(GTK_STACK(content_stack_), "login");
+        // A proxy change made in Settings replaced the client: re-run the
+        // homeserver check against it.
+        if (take_login_recheck_())
+            login_view_->reset();
+    }
     else
         show_main_content_();
     set_app_settings_open_(false);

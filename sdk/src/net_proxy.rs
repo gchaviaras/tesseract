@@ -33,6 +33,50 @@ const BLOCKED_PROXY: &str = "http://proxy.invalid:9";
 
 static PROXY: RwLock<ProxyMode> = RwLock::new(ProxyMode::System);
 
+/// The proxy environment as it was before [`set_proxy`] rewrote it for a
+/// non-System launch setting (so LiveKit sees the chosen proxy). Without it a
+/// later live switch back to System would be answered by reqwest's own
+/// environment lookup, i.e. by the proxy we just wrote there, until a restart.
+/// `None` while the environment is untouched (System launch).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct OriginalEnv {
+    https: Option<String>,
+    http: Option<String>,
+    no_proxy: Option<String>,
+}
+
+static ORIGINAL_ENV: RwLock<Option<OriginalEnv>> = RwLock::new(None);
+
+fn first_set(names: &[&str]) -> Option<String> {
+    names
+        .iter()
+        .find_map(|n| std::env::var(n).ok().filter(|v| !v.trim().is_empty()))
+}
+
+fn capture_original_env() -> OriginalEnv {
+    OriginalEnv {
+        https: first_set(&["HTTPS_PROXY", "https_proxy"]),
+        http: first_set(&["HTTP_PROXY", "http_proxy"]),
+        no_proxy: first_set(&["NO_PROXY", "no_proxy"]),
+    }
+}
+
+/// System mode over an environment we have overwritten: reqwest's automatic
+/// lookup is replaced by the proxies the environment held originally (none ->
+/// no proxy, which is what System means on Linux; the OS proxy settings of
+/// macOS/Windows are only honoured again after a restart).
+fn system_from_original(o: &OriginalEnv, b: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    let mut b = b.no_proxy();
+    let np = || o.no_proxy.as_deref().and_then(reqwest::NoProxy::from_string);
+    if let Some(Ok(p)) = o.https.as_deref().map(reqwest::Proxy::https) {
+        b = b.proxy(p.no_proxy(np()));
+    }
+    if let Some(Ok(p)) = o.http.as_deref().map(reqwest::Proxy::http) {
+        b = b.proxy(p.no_proxy(np()));
+    }
+    b
+}
+
 const ENV_VARS: [&str; 4] = ["HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"];
 
 /// True if `url` is an http/https proxy URL reqwest accepts.
@@ -91,6 +135,11 @@ fn store(mode: u8, url: &str, touch_env: bool) -> bool {
         None => (fallback(mode), false),
     };
     if touch_env {
+        if !matches!(parsed, ProxyMode::System) {
+            if let Ok(mut g) = ORIGINAL_ENV.write() {
+                g.get_or_insert_with(capture_original_env);
+            }
+        }
         match &parsed {
             ProxyMode::System => {}
             ProxyMode::None => {
@@ -128,7 +177,10 @@ pub(crate) fn is_manual() -> bool {
 
 fn apply_mode(mode: &ProxyMode, b: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
     match mode {
-        ProxyMode::System => b,
+        ProxyMode::System => match ORIGINAL_ENV.read().ok().and_then(|g| g.clone()) {
+            Some(orig) => system_from_original(&orig, b),
+            None => b,
+        },
         ProxyMode::None => b.no_proxy(),
         ProxyMode::Manual(url) => match reqwest::Proxy::all(url.as_str()) {
             Ok(p) => b.no_proxy().proxy(p),
@@ -189,6 +241,54 @@ mod tests {
         ] {
             assert!(apply_mode(&m, reqwest::Client::builder()).build().is_ok());
         }
+    }
+
+    #[test]
+    fn system_over_an_overwritten_environment_uses_the_original_proxies() {
+        let orig = OriginalEnv {
+            https: Some("http://corp.example:3128".into()),
+            http: Some("http://corp.example:3128".into()),
+            no_proxy: Some("localhost,.internal".into()),
+        };
+        assert!(system_from_original(&orig, reqwest::Client::builder()).build().is_ok());
+        // Nothing was set originally: no proxy at all, never the launch one.
+        assert!(system_from_original(&OriginalEnv::default(), reqwest::Client::builder())
+            .build()
+            .is_ok());
+        // A junk original value is skipped rather than failing every request open.
+        let junk = OriginalEnv { https: Some("not a url".into()), ..Default::default() };
+        assert!(system_from_original(&junk, reqwest::Client::builder()).build().is_ok());
+    }
+
+    #[tokio::test]
+    async fn system_mode_after_an_overridden_launch_goes_through_the_original_proxy() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let seen = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0u8; 2048];
+            let n = sock.read(&mut buf).await.unwrap();
+            let _ = sock
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok")
+                .await;
+            String::from_utf8_lossy(&buf[..n]).into_owned()
+        });
+
+        // The launch setting was Manual (environment overwritten), the original
+        // environment named this proxy, and the user then switched to System.
+        *ORIGINAL_ENV.write().unwrap() = Some(OriginalEnv {
+            http: Some(format!("http://{addr}")),
+            ..Default::default()
+        });
+        let client = apply_mode(&ProxyMode::System, reqwest::Client::builder()).build().unwrap();
+        let resp = client.get("http://target.example.invalid/x").send().await;
+        *ORIGINAL_ENV.write().unwrap() = None;
+
+        assert!(resp.is_ok(), "{resp:?}");
+        let request = seen.await.unwrap();
+        // An absolute-form request line is what a client sends to a proxy.
+        assert!(request.starts_with("GET http://target.example.invalid/x "), "{request}");
     }
 
     #[test]

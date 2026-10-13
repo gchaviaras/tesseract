@@ -2146,9 +2146,9 @@ void MainWindow::rebind_login_client_ui_()
     if (!loginView_)
         return;
     loginView_->set_client(reset_pending_login_client_());
-    // Re-run the homeserver check against the new client (a failed lookup made
-    // before the proxy was fixed would otherwise stay on screen).
-    loginView_->reset();
+    // Swap only. Settings is open on top of the login view, and reset() would
+    // refocus its homeserver field mid-typing; the homeserver check is re-run
+    // by leaving Settings (take_login_recheck_()).
 }
 
 void MainWindow::leaveSettings_()
@@ -2156,7 +2156,14 @@ void MainWindow::leaveSettings_()
     // Opened from the login screen: go back to it (the view is still alive
     // in the stack) instead of the main content, which would tear it down.
     if (take_settings_from_login_() && loginView_)
+    {
         contentStack_->setCurrentWidget(loginView_);
+        // A proxy change made in Settings replaced the client: re-run the
+        // homeserver check against it (a failed lookup made before the proxy
+        // was fixed would otherwise stay on screen).
+        if (take_login_recheck_())
+            loginView_->reset();
+    }
     else
         showMainContent_();
     set_app_settings_open_(false);

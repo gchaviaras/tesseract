@@ -554,6 +554,7 @@ void ShellBase::handle_setting_changed_(views::SettingKey key)
                     tesseract::proxy_changed_since_launch(s.proxy_mode,
                                                           s.proxy_url));
             rebind_login_client_ui_();
+            login_recheck_pending_ = true;
         }
         break;
     case K::Theme:

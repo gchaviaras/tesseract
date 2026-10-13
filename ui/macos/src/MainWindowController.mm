@@ -579,6 +579,7 @@ public:
     void open_settings_from_login() { open_settings_from_login_(); }
     bool settings_from_login() const { return settings_from_login_(); }
     bool take_settings_from_login() { return take_settings_from_login_(); }
+    bool take_login_recheck() { return take_login_recheck_(); }
 
     // Public method to call the protected send_current_location_ method.
     void send_current_location(const std::string& room_id)
@@ -5527,7 +5528,13 @@ private:
     NSView* mainAppView = (__bridge NSView*)_mainAppSurface->view_handle();
     mainAppView.hidden = toLogin ? YES : NO;
     if (toLogin)
+    {
         _loginView.hidden = NO;
+        // A proxy change made in Settings replaced the client: re-run the
+        // homeserver check against it.
+        if (_shell->take_login_recheck())
+            [_loginView reset];
+    }
     ((__bridge NSView*)_settingsSurface->view_handle()).hidden = YES;
     _shell->set_app_settings_open(false);
     [self _teardownSettingsView];
@@ -5561,9 +5568,9 @@ private:
 {
     if (_loginView && _shell)
     {
+        // Swap only: Settings is open on top, and reset would refocus the
+        // homeserver field mid-typing. The check re-runs when Settings closes.
         [_loginView setClient:_shell->reset_pending_login_client()];
-        // Re-run the homeserver check against the new client.
-        [_loginView reset];
     }
 }
 

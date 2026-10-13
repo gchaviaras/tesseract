@@ -674,6 +674,7 @@ protected:
     // "Tesseract" instead of "Tesseract - <room>".
     bool app_settings_open_ = false;
     bool settings_opened_from_login_ = false;
+    bool login_recheck_pending_ = false;
     // Most-recently-visited room IDs in visit order (front = most recent),
     // recorded in after_active_room_changed_(). Feeds the Ctrl+K quick
     // switcher's "Recent" strip and the Ctrl+Tab MRU switcher. Persisted per
@@ -3688,7 +3689,10 @@ protected:
     virtual void close_app_settings_ui_() {}
     /// Give the login view a freshly built pending-login `Client`
     /// (`reset_pending_login_client_()`), so a proxy change made from the login
-    /// screen reaches the HTTP client its sign-in will use. Default no-op.
+    /// screen reaches the HTTP client its sign-in will use. Must only swap the
+    /// client: Settings is open on top of the login view, so it must not
+    /// refocus or re-run anything there (the homeserver check is re-run by
+    /// `take_login_recheck_()` once the login view is shown again). Default no-op.
     virtual void rebind_login_client_ui_() {}
     /// Open settings and land on the Account tab — wired to the sidebar
     /// status line's `on_status_clicked`.
@@ -3700,6 +3704,15 @@ protected:
     /// True while settings was opened from the login screen. Shells pass it
     /// to `SettingsView::set_signed_out_mode` when showing settings.
     bool settings_from_login_() const { return settings_opened_from_login_; }
+    /// True once (then cleared) if the login view's client was replaced while
+    /// Settings was open, i.e. its homeserver check should be re-run now that
+    /// the login view is back on screen.
+    bool take_login_recheck_()
+    {
+        const bool v = login_recheck_pending_;
+        login_recheck_pending_ = false;
+        return v;
+    }
     /// Returns whether settings was opened from login and clears the flag.
     /// Shells call it on every "leave settings" path: true → show the login
     /// view again, false → show the main content.

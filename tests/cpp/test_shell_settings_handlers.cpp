@@ -80,6 +80,13 @@ struct SettingsShell : tesseract::test::TestShellBase
     using ShellBase::current_theme_;
     using ShellBase::emoji_skin_tone_;
     using ShellBase::handle_setting_changed_;
+    using ShellBase::open_settings_from_login_;
+    using ShellBase::take_login_recheck_;
+    using ShellBase::take_settings_from_login_;
+
+    // The login view's client is only swapped while Settings is open.
+    void rebind_login_client_ui_() override { ++login_rebinds; }
+    int login_rebinds = 0;
     using ShellBase::last_system_accent_;
     using ShellBase::low_power_active;
     using ShellBase::low_power_available;
@@ -417,4 +424,40 @@ TEST_CASE("apply_low_power_mode_ pushes to every account client",
     s.account_manager_.add_account(sess);
     CHECK_NOTHROW(s.apply_low_power_mode_(true));
     CHECK_NOTHROW(s.apply_low_power_mode_(false));
+}
+
+TEST_CASE("a proxy change from the login screen swaps the client and defers the re-check",
+          "[shell][settings_handlers][login]")
+{
+    tesseract::test::SettingsGuard guard;
+    SettingsShell s;
+    s.open_settings_from_login_();
+    Settings::instance().proxy_mode = Settings::ProxyMode::None;
+    changed(s, tesseract::views::SettingKey::Proxy);
+
+    // The login view is only handed the new client (no reset, so its homeserver
+    // field keeps its hands off the focus while the user types in Settings).
+    CHECK(s.login_rebinds == 1);
+
+    // Restore the process-wide SDK proxy this test touched (still signed out,
+    // so it is applied live).
+    Settings::instance().proxy_mode = Settings::ProxyMode::System;
+    changed(s, tesseract::views::SettingKey::Proxy);
+
+    // Leaving Settings is when the homeserver check is re-run, exactly once.
+    REQUIRE(s.take_settings_from_login_());
+    CHECK(s.take_login_recheck_());
+    CHECK_FALSE(s.take_login_recheck_());
+}
+
+TEST_CASE("a proxy change while signed in never touches the login view",
+          "[shell][settings_handlers][login]")
+{
+    tesseract::test::SettingsGuard guard;
+    SettingsShell s;
+    Settings::instance().proxy_mode = Settings::ProxyMode::None;
+    changed(s, tesseract::views::SettingKey::Proxy);
+    CHECK(s.login_rebinds == 0);
+    CHECK_FALSE(s.take_login_recheck_());
+    Settings::instance().proxy_mode = Settings::ProxyMode::System;
 }

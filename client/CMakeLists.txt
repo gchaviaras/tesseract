@@ -27,7 +27,17 @@ add_library(tesseract_client STATIC
     src/autolink.cpp
     src/maps_link.cpp
     src/crash_handler.cpp
+    src/provisioning.cpp
 )
+
+# ── Provisioning: platform source for installer/admin-provisioned defaults ──
+if(WIN32)
+    target_sources(tesseract_client PRIVATE src/provisioning_windows.cpp)
+elseif(APPLE)
+    target_sources(tesseract_client PRIVATE src/provisioning_macos.cpp)
+else()
+    target_sources(tesseract_client PRIVATE src/provisioning_linux.cpp)
+endif()
 
 # ── SecretStore: platform credential backend ────────────────────────────────
 if(WIN32)
@@ -102,7 +112,8 @@ if(WIN32)
 endif()
 
 if(APPLE)
-    target_link_libraries(tesseract_client PRIVATE "-framework Security")
+    target_link_libraries(tesseract_client PRIVATE "-framework Security"
+                                                   "-framework CoreFoundation")
 endif()
 
 target_sources(tesseract_client PRIVATE src/CallSession.cpp)

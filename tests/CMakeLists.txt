@@ -22,6 +22,7 @@ add_executable(tesseract_tests
     cpp/test_session_store.cpp
     cpp/test_types.cpp
     cpp/test_paths.cpp
+    cpp/test_provisioning.cpp
     cpp/test_emoji.cpp
     cpp/test_client_recent.cpp
     cpp/test_url_preview.cpp

@@ -54,6 +54,13 @@ The installer lands at
 - Registers an uninstaller under *Settings → Apps* / *Add or Remove Programs*.
 - `CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL` is on, so re-running the
   installer cleanly removes the previous version first.
+- Accepts `/DEFAULT_HOMESERVER=<host>` (unquoted, also with `/S`), which writes
+  `HKLM\Software\Tesseract-Matrix\DefaultHomeserver`; the login view then uses
+  that server instead of `matrix.org`. A per-user `HKCU\Software\Tesseract-Matrix` value
+  overrides it. The uninstaller removes the value, so pass the switch again
+  when upgrading. macOS reads the `DefaultHomeserver` preference (e.g. an MDM
+  profile); Linux reads `default_homeserver` from
+  `/etc/tesseract/provisioning.json`.
 
 ### Code signing (optional)
 

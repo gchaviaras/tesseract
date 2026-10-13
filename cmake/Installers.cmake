@@ -37,6 +37,57 @@ if(WIN32)
         "CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\Tesseract.lnk' '$INSTDIR\\\\bin\\\\Tesseract.exe'")
     set(CPACK_NSIS_DELETE_ICONS_EXTRA
         "Delete '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\Tesseract.lnk'")
+
+    # Installer switch /DEFAULT_HOMESERVER=<host> (works with /S): written to
+    # HKLM\Software\Tesseract-Matrix\DefaultHomeserver, read by the app's login view
+    # (client/include/tesseract/provisioning.h).
+    #
+    # Plain NSIS (no FileFunc macros, no ${...}): CPack expands ${...} as CMake
+    # variables, and CPACK_NSIS_DEFINES is generator-owned so FileFunc.nsh can't
+    # be included. CPack writes this value into CPackConfig.cmake inside a quoted
+    # string without escaping, so it must hold no double quote (the value is
+    # therefore taken unquoted, up to the next space) and every backslash must
+    # already be doubled.
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [==[
+    Push $R0
+    Push $R1
+    Push $R2
+    Push $R3
+    StrCpy $R0 $CMDLINE
+    StrLen $R1 $R0
+    StrCpy $R2 0
+    hs_find:
+    IntCmp $R2 $R1 hs_done hs_cont hs_done
+    hs_cont:
+    StrCpy $R3 $R0 20 $R2
+    StrCmp $R3 '/DEFAULT_HOMESERVER=' hs_found
+    IntOp $R2 $R2 + 1
+    Goto hs_find
+    hs_found:
+    IntOp $R2 $R2 + 20
+    StrCpy $R0 $R0 '' $R2
+    StrCpy $R2 0
+    hs_scan:
+    StrCpy $R3 $R0 1 $R2
+    StrCmp $R3 '' hs_write
+    StrCmp $R3 ' ' hs_write
+    IntOp $R2 $R2 + 1
+    Goto hs_scan
+    hs_write:
+    StrCpy $R0 $R0 $R2
+    StrCmp $R0 '' hs_done
+    SetRegView 64
+    WriteRegStr HKLM 'Software\\Tesseract-Matrix' 'DefaultHomeserver' $R0
+    hs_done:
+    Pop $R3
+    Pop $R2
+    Pop $R1
+    Pop $R0
+]==])
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
+        "SetRegView 64
+    DeleteRegValue HKLM 'Software\\\\Tesseract-Matrix' 'DefaultHomeserver'
+    DeleteRegKey /ifempty HKLM 'Software\\\\Tesseract-Matrix'")
 endif()
 
 if(APPLE)

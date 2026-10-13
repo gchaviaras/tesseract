@@ -8,6 +8,7 @@
 #include <thread>
 
 #include <tesseract/client.h>
+#include <tesseract/provisioning.h>
 #include <tesseract/version.h>
 
 #include "views/text_util.h"
@@ -29,14 +30,17 @@ constexpr float kHSFieldHeight = 36.0f;
 constexpr float kButtonHeight  = 36.0f;
 constexpr float kBrandIconDiameter = 56.0f;
 
-// The homeserver field shows this as a placeholder rather than real text
-// (see finish_init()); an empty field is treated as if the user had typed
-// this, both for discovery and for sign-in.
-constexpr const char* kDefaultHomeserver = "matrix.org";
+// Built-in default when no homeserver is provisioned. The homeserver field
+// shows the default as a placeholder rather than real text (see
+// finish_init()); an empty field is treated as if the user had typed it, both
+// for discovery and for sign-in.
+constexpr const char* kBuiltinDefaultHomeserver = "matrix.org";
 
 } // namespace
 
 LoginView::LoginView()
+    : default_homeserver_(tesseract::provisioned_default_homeserver().value_or(
+          kBuiltinDefaultHomeserver))
 {
     rebuild_tree();
 }
@@ -309,7 +313,9 @@ void LoginView::set_discovery_state(DiscoveryState s, std::string detail)
 
 void LoginView::finish_init()
 {
-    hs_field_->set_placeholder(tk::tr("matrix.org"));
+    hs_field_->set_placeholder(default_homeserver_ == kBuiltinDefaultHomeserver
+                                   ? tk::tr("matrix.org")
+                                   : default_homeserver_);
     hs_field_->set_on_submit([this] { submit_homeserver_(); });
     hs_field_->set_on_changed(
         [this](const std::string& text) { hs_changed_(text); });
@@ -408,7 +414,7 @@ void LoginView::start_oauth_(bool register_account)
         return;
     std::string hs_raw = tesseract::text::trim(hs_field_->text());
     if (hs_raw.empty())
-        hs_raw = kDefaultHomeserver; // empty field shows the placeholder default
+        hs_raw = default_homeserver_; // empty field shows the placeholder default
 
     // Use the pre-resolved URL when available; extract server name from a
     // raw MXID so begin_oauth() doesn't receive "@user:server".
@@ -619,7 +625,7 @@ void LoginView::hs_changed_(const std::string& text)
     // An empty field shows the "matrix.org" placeholder (see finish_init()),
     // so treat it as if the user had typed that — discovery still runs and
     // confirms it, rather than leaving the field looking unvalidated.
-    const std::string effective = text.empty() ? kDefaultHomeserver : text;
+    const std::string effective = text.empty() ? default_homeserver_ : text;
 
     uint32_t gen = ++discovery_gen_;
     // A different server: an Enter pressed for the old one no longer applies.
@@ -856,7 +862,7 @@ void LoginView::submit_password_()
         hs = hs_raw;
     }
     if (hs.empty())
-        hs = kDefaultHomeserver; // empty field shows the placeholder default
+        hs = default_homeserver_; // empty field shows the placeholder default
 
     set_status("");
     hs_field_->set_enabled(false);

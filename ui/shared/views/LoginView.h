@@ -305,6 +305,9 @@ private:
     std::thread                          worker_;
     std::atomic<bool>                    cancelled_{false};
     std::atomic<uint32_t>                discovery_gen_{0};
+    // Server an empty homeserver field stands for: the provisioned one
+    // (tesseract/provisioning.h) or "matrix.org".
+    std::string                          default_homeserver_;
     std::function<void()>                on_begin_oauth_;
     std::function<void()>                on_success_;
     std::function<void()>                on_cancel_done_;

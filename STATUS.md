@@ -2,24 +2,43 @@
 
 Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**. 3277 C++ + 1065 Rust tests.
 
-> **Settings from the login screen (2026-10-13).**
+> **Provisioned default homeserver and smaller additions (2026-10-13, v0.9.3).**
+> The login view's default homeserver can be provisioned: Windows registry
+> `DefaultHomeserver` (the NSIS installer writes it from
+> `/DEFAULT_HOMESERVER=<host>`, kept across silent upgrades), the macOS
+> `DefaultHomeserver` preference, or `/etc/tesseract/provisioning.json` on
+> Linux. The Bubbles layout can show your own name and avatar; Ukrainian and
+> Norwegian Bokmål translations; the call lobby disables Join (with the reason)
+> when you can't start a call; the offline banner says "Can't reach the server"
+> when only the homeserver is down; an upgraded room is hidden only once its
+> successor is joined. Qt6 build, ctest 3277/3277.
+
+> **Review hardening (2026-10-13, v0.9.3).**
+> Settings are saved atomically with a last-good copy; soft-logout recovery
+> uses the stored store key and never wipes the account when it fails; Enable
+> recovery asks before replacing an existing key backup; history export takes
+> image extensions from the bytes; another member's SFU URL must be public
+> https (max 4 per call); a login client is freed only when no worker still
+> uses it. Qt6 build, ctest 3277/3277, cargo 1065.
+
+> **Settings from the login screen (2026-10-13, v0.9.3).**
 > A wrench button on the first-login screen opens Settings with only Network,
 > Language and About, so a proxy can be set before the first sign-in. A proxy
 > change made there applies immediately (call signalling picks it up on the
 > next launch); Settings closes back to the login screen. Qt6 + GTK4 build,
 > ctest 3267/3267.
 
-> **Image send (2026-10-13).**
+> **Image send (2026-10-13, v0.9.3).**
 > Animated images are never recompressed and stills only when smaller (toggle
 > in Settings → Media); photo formats are stripped of metadata on every send
 > path (single, animated, file, gallery), other files are sent as they are, and
 > an image that can't be stripped is never sent as an image. Qt6 build, ctest 3277/3277, cargo 1065.
 
-> **JPEG XL images (2026-10-12).**
+> **JPEG XL images (2026-10-12, v0.9.3).**
 > `.jxl` stills and animations render on all platforms via a Rust decoder.
 > Qt6 build, ctest 3259/3259, cargo 1055.
 
-> **Configurable fonts (2026-10-11).**
+> **Configurable fonts (2026-10-11, v0.9.3).**
 > Settings → Appearance → Fonts: a base size that scales every text role
 > together, UI and monospace families, per-category size and family overrides
 > (Messages, Secondary text, Room list, Headings, Buttons, Emoji), a live
@@ -28,7 +47,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**
 > draggable-scrollbar popup; settings sections now have a rule under their
 > titles. Qt6 + GTK4 build, ctest 3217/3217.
 
-> **Compact room list and external media viewers (2026-10-11).**
+> **Compact room list and external media viewers (2026-10-11, v0.9.3).**
 > Settings → Appearance → Layout offers Normal / Compact room rows (name only,
 > small avatar) with a live preview, using the new `tk::RadioGroup` (also used
 > by the Theme selector). Media can open in the OS default viewer (Settings →
@@ -36,7 +55,7 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**
 > folder wiped at startup/exit, with an extension/mime/contents check that
 > warns on mismatch and refuses executables. Qt6 build, ctest 3198/3198.
 
-> **Galleries and the unified media viewer (2026-10-10).**
+> **Galleries and the unified media viewer (2026-10-10, v0.9.3).**
 > MSC4274 gallery messages send (composer takes up to 20 attachments) and
 > display as a grid; the room list previews "sent a gallery". Clicking an item
 > opens the one media viewer (image, video, audio, file pages) which steps through
@@ -44,14 +63,14 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**
 > Left/Right; galleries up to 200 items. Viewer playback stops inline timeline
 > audio. Qt6 + GTK4 build, ctest 3180/3181, cargo 987.
 
-> **Polls (2026-10-09).**
+> **Polls (2026-10-09, v0.9.3).**
 > MSC3381 polls (unstable event types) show in the timeline with live results;
 > vote, end a poll you created (or any poll with redact power) behind a confirm
 > dialog, create one with `/poll`. Undisclosed polls hide counts until ended;
 > keyboard/screen-reader operable; thread-panel polls read-only. Qt6 build +
 > ctest 2369/2369, cargo 818.
 
-> **Live location display (2026-10-09).**
+> **Live location display (2026-10-09, v0.9.3).**
 > MSC3489 live shares show the latest position on the map, move with each
 > update, and flip to "ended" on stop or timeout; display only. Qt6 build +
 > ctest 2338/2338.

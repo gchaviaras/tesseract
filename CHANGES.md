@@ -3,9 +3,9 @@
 Newest first. Unreleased work is listed per day, one bullet per change.
 Tagged releases summarize all changes since the previous tag.
 
-## Unreleased
+## v0.9.3 — 2026-10-13
 
-### 2026-10-13
+### Summary
 
 - fix(send): the metadata strip now runs on every real send path, single images (animated too), files and gallery items, not only the sync/gallery ones; a photo sent as a file loses its EXIF/GPS while TIFF/RAW, SVG, BMP and JPEG 2000 files go byte-identical, TIFF is never truncated, and PNG/WebP keep only rendering chunks (C2PA and private chunks are dropped). Qt6 build, ctest 3277/3277, cargo 1065
 - fix(send): the "can be stripped?" check no longer runs when a smaller recompression wins, and a crafted HEIC can't stall it. A gallery with any refused image sends nothing and keeps the composer. Qt6 build, ctest 3277/3277, cargo 1065
@@ -17,14 +17,10 @@ Tagged releases summarize all changes since the previous tag.
 - fix(calls): another member's SFU service must be public https (no redirects, no internal addresses), at most 4 remote SFUs per call, and server error bodies are no longer logged. cargo 1065
 - fix(rooms): an upgraded room is hidden from the room list and quick switcher only once its successor is joined. Qt6 build, ctest 3277/3277
 - fix(packaging): a silent uninstall (what an upgrade runs) keeps the provisioned `DefaultHomeserver`. NSIS script only; not built here
-
 - feat(login): a settings button on the first-login screen opens Settings with only Network, Language and About, so a proxy can be set before the first sign-in; a proxy change made there applies immediately (no restart) and Settings closes back to the login screen. `SideTabView` re-clamps its scroll offset when tabs are hidden; the replaced login client is retired (not freed) while discovery workers may still use it, and discovery re-runs after a proxy change; an invalid Manual proxy URL now fails closed instead of falling back to the system proxy. Qt6 + GTK4 build, ctest 3267/3267, cargo net_proxy
 - fix(windows): avatar initials render through BetterText (cached static-label captures) so emoji use the bundled Noto Color Emoji instead of Segoe UI Emoji; plain DirectWrite remains the fallback. Windows build, user-verified
 - feat(login): the login view's default homeserver can be provisioned (Windows registry `DefaultHomeserver`, macOS preference, Linux `/etc/tesseract/provisioning.json`); the NSIS installer writes it from `/DEFAULT_HOMESERVER=<host>`. Windows build + NSIS installer user-verified; macOS/Linux loaders unbuilt
 - fix(send): animated images (GIF, WebP, APNG, AVIF, JXL) are no longer recompressed to JPEG and stills only when smaller (new Settings → Media toggle); photo formats are stripped of metadata on upload and an image that can't be stripped is never sent as an image. Qt6 build, ctest 3259/3259, cargo 1055
-
-### 2026-10-12
-
 - feat(images): JPEG XL stills and animations render on every platform via a Rust `jxl-oxide` decoder. Qt6 build, ctest 3259/3259, cargo 1055
 - fix(ui): the offline banner says "Can’t reach the server" when the OS still has a network and only the homeserver is unreachable; "No internet connection" is shown only when `is_network_available()` agrees. Qt6 build, i18n catalogs, user-verified Qt6
 - refactor(settings): preference controls bind straight to `Settings` fields (`SettingBinder`), and the settings view reports one `on_setting_changed(SettingKey)` instead of ~35 per-preference callbacks; `ShellBase::handle_setting_changed_` saves once and applies side effects per key. Qt6 build, ctest 3222/3222
@@ -34,9 +30,6 @@ Tagged releases summarize all changes since the previous tag.
 - fix(room-list): upgraded (tombstoned) rooms are hidden from the room list (the open one stays until you leave it). Qt6 build
 - fix(calls): joining a dedicated call room no longer rings the other members, and incoming rings in call rooms are ignored. cargo 1014
 - fix(encryption): a cancelled verification shows plain wording (e.g. "Another of your devices already took this request") instead of the Matrix protocol text; the SDK now forwards the cancel code to `on_verification_cancelled`. Qt6 + GTK4 build, ctest 67/67 (verification/overlay/i18n subset)
-
-### 2026-10-11
-
 - fix(jump-to-date): Jump to date works on servers whose cached `/versions` is stale (e.g. right after a homeserver upgrade); the SDK's cached version set picked the unstable MSC3030 path and got `M_UNRECOGNIZED`. Server info now reads versions and feature flags from the SDK (no separate `/versions` request) and resets its cache on each fetch. Qt6 build, cargo 1013, user-verified Qt6 (zendrite)
 - refactor(sdk): `get_server_info` / `on_server_info_ready` carry a typed `ServerInfoFfi` instead of a JSON string (`SpecVersion`/`ServerInfo` moved to `types.h`, `ServerInfo::from_json` removed). Qt6 build, ctest 3215/3215
 - feat(settings): configurable fonts (Appearance → Fonts): a base size that scales every text role together, UI and monospace families, per-category size and family overrides (Messages, Secondary text, Room list, Headings, Buttons, Emoji), a live preview and Reset to defaults; applied live to every window. Qt6 + GTK4 build, ctest 3217/3217
@@ -47,9 +40,6 @@ Tagged releases summarize all changes since the previous tag.
 - feat(settings): compact room rows show the last message as a hover tooltip, and the collapsed (icon-only) sidebar column is narrower with a smaller user-strip avatar. Qt6 build + ctest
 - feat(viewer): media viewer buttons show hover tooltips. Qt6 build
 - feat(media): temp files opened in the OS app get the macOS quarantine flag, like a browser download. Linux build only
-
-### 2026-10-10
-
 - fix(stickers): animated stickers in the picker no longer animate erratically while an animated image is in the timeline; partial animation repaints now track the picker's own cache key (`AnimDamageSink::note_image` takes a `CacheKey`). Qt6 + GTK4 build, user-verified Qt6
 - fix(images): the image GC now re-measures decoded-image caches (including per-size scaled copies) and enforces their byte ceilings, and drops scaled copies of images nothing has painted recently (`Image::trim_derived`, Qt6 + GTK4). Qt6 + GTK4 build, pixmap-cache tests, user-verified Qt6
 - fix(calls): remote audio tracks (mic plus screen-share audio, or several speakers) are mixed into one stream instead of interleaving into distorted audio. Cargo 990, Windows build
@@ -58,11 +48,7 @@ Tagged releases summarize all changes since the previous tag.
 - fix(sdk): duplicate-content media uploads no longer wedge the send queue (workaround wrapping the SQLite media store's `replace_media_key`; upstream bug remains). Cargo 987, Qt6 build
 - fix(viewer): galleries over 20 items can be browsed in the viewer (up to 200; the timeline grid still shows 20 plus "+N"), a loading or failed video no longer swallows the arrow keys, an undecodable audio clip shows "Unable to play audio", re-opening the viewer while full-screen leaves full-screen, a late video fetch can't cancel the current item's download, and suggested save names carry a proper extension. The save-dialog hook is shared by all shells. Qt6 + GTK4 build, ctest 3180/3181 (one known intermittent)
 - fix(gallery): clicking a hidden (MSC4278) gallery's placeholder reveals it, and stale gallery click geometry is cleared on room switch. Qt6 build + ctest
-
 - feat(i18n): Norwegian Bokmål translation (`nb.po`, Element Web terminology) and a Language picker entry. `msgfmt -c` clean, Qt6/GTK4 build + `i18n_catalogs_complete`
-
-### 2026-10-09
-
 - feat(i18n): add a complete Ukrainian translation and expose Ukrainian in the language selector. Gettext format checks and catalog completeness checks pass; initial live UI review pass.
 - fix(stickers): the sticker picker decodes stickers at its cell size (96 px × display scale) into its own cache entry instead of the timeline's 256 px one, and no longer goes through the pre-paint prefetch; shells share the downloaded bytes. Qt6 build + ctest 2372/2372, user-verified Qt6
 - fix(stickers): opening the sticker picker with many animated stickers no longer decodes every frame of every visible one; the picker now loads stickers through the timeline's windowed decode and repaints as they land, and uncached stickers no longer get stuck blank behind the pre-paint prefetch guard. Qt6 build + ctest 2371/2371, user-verified Qt6

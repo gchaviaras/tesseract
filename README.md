@@ -127,6 +127,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - Progressive video streaming (starts playing while still downloading)
 - GIF search and send via `/gif` (animated preview strip in the picker; works in encrypted rooms)
 - Animated GIF / WebP / APNG in the timeline
+- JPEG XL images and animations
 - Animated stickers, including bridged stickers
 - Media captions
 - Send images and files by clipboard paste or drag-and-drop
@@ -195,6 +196,9 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - In-flight request indicator in the status bar
 - Low power mode (Auto / On / Off) — pauses background work (backfill, prefetch, cache GC, search indexing) while keeping sync live
 - Light / dark / system themes
+- Configurable fonts (base size, UI and monospace families, per-category overrides) and a compact room list, under Settings → Appearance
+- Open images, videos and files in the system's default viewer (opt-in, Settings → Media)
+- Photos are stripped of EXIF/GPS and other metadata on upload, whether sent as an image, a file or in a gallery
 - HTTP proxy: system (default), none or manual, under Settings → Network (reachable from the login screen before signing in)
 - Animated avatars (GIF, animated WebP, APNG), switchable under Appearance → Timeline
 - Windows: installable via the Microsoft Store or an NSIS installer; taskbar unread/mention overlays, thumbnail controls, and Jump Lists

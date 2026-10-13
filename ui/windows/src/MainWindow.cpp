@@ -3408,6 +3408,7 @@ void MainWindow::on_destroy()
     };
     com_drain(pool_);
     com_drain(mut_pool_);
+    com_drain(media_prefetch_pool_);
 }
 
 // run_async_ is implemented in tesseract::ShellBase.

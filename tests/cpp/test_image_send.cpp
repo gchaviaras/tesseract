@@ -20,9 +20,14 @@ struct FakeHost
 
     // Whether the SDK can strip the original (image_metadata_strippable).
     bool strippable = true;
+    int strippable_calls = 0;
     tesseract::StrippableFn ok()
     {
-        return [this](std::span<const std::uint8_t>, std::string_view) { return strippable; };
+        return [this](std::span<const std::uint8_t>, std::string_view)
+        {
+            ++strippable_calls;
+            return strippable;
+        };
     }
 
     tesseract::EncodeForSendFn fn()
@@ -81,6 +86,9 @@ TEST_CASE("prepare_image_for_send: smaller recompression wins", "[image-send]")
     CHECK(p.width == 40);
     CHECK(p.height == 20);
     CHECK_FALSE(p.is_animated);
+    // A recompressed result carries no metadata, so the (UI-thread, full-strip)
+    // strippable check is never needed.
+    CHECK(host.strippable_calls == 0);
 }
 
 TEST_CASE("prepare_image_for_send: a recompression that is not smaller sends the original", "[image-send]")

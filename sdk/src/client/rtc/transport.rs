@@ -228,9 +228,10 @@ pub async fn fetch_livekit_jwt(
 
     if sfu_resp.status() != reqwest::StatusCode::NOT_FOUND {
         if !sfu_resp.status().is_success() {
+            // The body comes from a server a call member may control: status
+            // only, never its text.
             let status = sfu_resp.status();
-            let body = sfu_resp.text().await.unwrap_or_default();
-            return Err(anyhow!("POST {sfu_url} → {status} — body: {body}"));
+            return Err(anyhow!("POST {sfu_url} → {status}"));
         }
         let tok: GetTokenResponse = sfu_resp.json().await.context("parse sfu/get response")?;
         return Ok(LiveKitTransport {
@@ -261,8 +262,7 @@ pub async fn fetch_livekit_jwt(
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(anyhow!("POST {token_url} → {status} — body: {body}"));
+        return Err(anyhow!("POST {token_url} → {status}"));
     }
 
     let tok: GetTokenResponse = resp.json().await.context("parse livekit jwt response")?;
@@ -560,7 +560,8 @@ mod tests {
     async fn fetch_jwt_reports_non_404_failure_without_fallback() {
         let (base, seen) = serve(vec![(500, "boom")]).await;
         let e = call_jwt(&base).await.unwrap_err().to_string();
-        assert!(e.contains("500") && e.contains("boom"), "{e}");
+        // The status is reported; the body (server-controlled) is not.
+        assert!(e.contains("500") && !e.contains("boom"), "{e}");
         assert_eq!(seen.await.unwrap().len(), 1);
     }
 
@@ -568,7 +569,7 @@ mod tests {
     async fn fetch_jwt_reports_legacy_failure() {
         let (base, _seen) = serve(vec![(404, ""), (403, "denied")]).await;
         let e = call_jwt(&base).await.unwrap_err().to_string();
-        assert!(e.contains("/get_token") && e.contains("403") && e.contains("denied"), "{e}");
+        assert!(e.contains("/get_token") && e.contains("403") && !e.contains("denied"), "{e}");
     }
 
     #[tokio::test]

@@ -57,8 +57,9 @@ The installer lands at
 - Accepts `/DEFAULT_HOMESERVER=<host>` (unquoted, also with `/S`), which writes
   `HKLM\Software\Tesseract-Matrix\DefaultHomeserver`; the login view then uses
   that server instead of `matrix.org`. A per-user `HKCU\Software\Tesseract-Matrix` value
-  overrides it. The uninstaller removes the value, so pass the switch again
-  when upgrading. macOS reads the `DefaultHomeserver` preference (e.g. an MDM
+  overrides it. An interactive uninstall removes the value; a silent one
+  (`/S`, which is also what an upgrade runs) keeps it, so upgrades do not reset
+  the default. macOS reads the `DefaultHomeserver` preference (e.g. an MDM
   profile); Linux reads `default_homeserver` from
   `/etc/tesseract/provisioning.json`.
 

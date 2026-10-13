@@ -74,13 +74,15 @@ pub(super) async fn download_images(
     let planned: Vec<(ImageDescriptor, String)> = descriptors
         .into_iter()
         .map(|d| {
-            let name = unique_file_name(&d.original_name, used_names);
-            (d, name)
+            // A sender controls the name, so its extension is never kept: the
+            // on-disk extension comes from the downloaded bytes (below).
+            let stem = unique_file_name(&extensionless_stem(&d.original_name), used_names);
+            (d, stem)
         })
         .collect();
 
     stream::iter(planned)
-        .map(|(desc, file_name)| {
+        .map(|(desc, stem)| {
             let client = client.clone();
             let media_dir = media_dir.to_path_buf();
             let cancel = Arc::clone(cancel);
@@ -102,24 +104,16 @@ pub(super) async fn download_images(
                     super::super::media::MediaFetchOutcome::TooLarge => (desc, ImageOutcome::TooLarge),
                     super::super::media::MediaFetchOutcome::Ok(bytes) => {
                         // `download_media_outcome` returns raw bytes, no
-                        // content-type — the pre-assigned `file_name` (see
-                        // `unique_file_name` above) already carries a real
-                        // extension for most message images (their
-                        // original upload filename), but an avatar's
-                        // `original_name` is a sender display name with
-                        // none at all. Sniffing from magic bytes only
-                        // fills that gap; it never touches an already-
-                        // extensioned name, so the pre-assigned
-                        // uniqueness above still holds — each task only
-                        // appends to its own unique base name.
-                        let final_name = if has_extension(&file_name) {
-                            file_name
-                        } else {
-                            match sniff_image_extension(&bytes) {
-                                Some(ext) => format!("{file_name}.{ext}"),
-                                None => file_name,
-                            }
+                        // content-type. A sender chooses the name, so a
+                        // "photo.html" or "x.svg" must never be written out
+                        // under that extension (the export links straight to
+                        // the saved file): the extension is derived from the
+                        // magic bytes, and anything that isn't a browser-safe
+                        // raster image is not saved at all.
+                        let Some(ext) = sniff_image_extension(&bytes) else {
+                            return (desc, ImageOutcome::Failed);
                         };
+                        let final_name = format!("{stem}.{ext}");
                         match tokio::fs::write(media_dir.join(&final_name), &bytes).await {
                             Ok(()) => (desc, ImageOutcome::Saved { rel_path: final_name }),
                             Err(_) => (desc, ImageOutcome::Failed),
@@ -167,18 +161,18 @@ fn insert_disambiguator(name: &str, n: u32) -> String {
     }
 }
 
-/// Same "does this name really have an extension" rule `insert_disambiguator`
-/// uses (a leading dot with nothing before it, e.g. ".jpg", doesn't count).
-fn has_extension(name: &str) -> bool {
-    matches!(name.rfind('.'), Some(idx) if idx > 0)
+/// A sender-supplied name made safe to use as a file stem: sanitized, with
+/// every '.' replaced so no sender-chosen extension survives
+/// ("invoice.html" -> "invoice_html"; the real extension is added from the
+/// downloaded bytes).
+fn extensionless_stem(original_name: &str) -> String {
+    sanitize_component(original_name).replace('.', "_")
 }
 
-/// Sniffs an image file extension from its magic bytes. Only for the
-/// gap `unique_file_name` can't fill on its own: an avatar's
-/// `original_name` is a sender display name, which never carries a real
-/// extension the way a message image's original upload filename usually
-/// does. `download_media_outcome` returns raw bytes with no content-type,
-/// so this is the only signal available.
+/// Sniffs a browser-safe raster image extension from its magic bytes. This is
+/// the only source of the saved file's extension (`download_media_outcome`
+/// returns raw bytes with no content-type, and the sender's name is
+/// untrusted). Deliberately has no SVG/HTML entry: those can carry script.
 fn sniff_image_extension(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some("png")
@@ -188,6 +182,13 @@ fn sniff_image_extension(bytes: &[u8]) -> Option<&'static str> {
         Some("gif")
     } else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
         Some("webp")
+    } else if bytes.len() >= 12
+        && &bytes[4..8] == b"ftyp"
+        && (&bytes[8..12] == b"avif" || &bytes[8..12] == b"avis")
+    {
+        Some("avif")
+    } else if bytes.starts_with(b"BM") && bytes.len() >= 26 {
+        Some("bmp")
     } else {
         None
     }
@@ -230,21 +231,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn has_extension_true_for_a_real_extension() {
-        assert!(has_extension("photo.jpg"));
-    }
-
-    #[test]
-    fn has_extension_false_with_no_dot() {
-        assert!(!has_extension("Alice"));
-    }
-
-    #[test]
-    fn has_extension_false_for_a_dotfile_style_leading_dot() {
-        assert!(!has_extension(".jpg"));
-    }
-
-    #[test]
     fn sniff_image_extension_recognizes_png() {
         let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
         bytes.extend_from_slice(&[0, 0, 0, 0]);
@@ -272,6 +258,42 @@ mod tests {
     #[test]
     fn sniff_image_extension_unknown_bytes_returns_none() {
         assert_eq!(sniff_image_extension(b"not an image"), None);
+    }
+
+    #[test]
+    fn extensionless_stem_drops_sender_chosen_extensions() {
+        assert_eq!(extensionless_stem("invoice.html"), "invoice_html");
+        assert_eq!(extensionless_stem("x.svg"), "x_svg");
+        assert_eq!(extensionless_stem("evil.exe.png"), "evil_exe_png");
+        assert_eq!(extensionless_stem("Dr. Smith"), "Dr_ Smith");
+        assert_eq!(extensionless_stem("Alice"), "Alice");
+        assert_eq!(extensionless_stem("../../etc/passwd"), "____etc_passwd");
+    }
+
+    #[test]
+    fn extensionless_stems_stay_unique_across_different_sender_extensions() {
+        // "a.png" and "a.html" used to be distinct names; once the extension
+        // comes from the bytes they must still not collide.
+        let mut used = HashSet::new();
+        let a = unique_file_name(&extensionless_stem("a.png"), &mut used);
+        let b = unique_file_name(&extensionless_stem("a.html"), &mut used);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn sniff_image_extension_has_no_svg_or_html() {
+        assert_eq!(sniff_image_extension(b"<svg xmlns='http://www.w3.org/2000/svg'/>"), None);
+        assert_eq!(sniff_image_extension(b"<html><script>alert(1)</script>"), None);
+    }
+
+    #[test]
+    fn sniff_image_extension_recognizes_avif_and_bmp() {
+        let mut avif = vec![0, 0, 0, 0x1c];
+        avif.extend_from_slice(b"ftypavif");
+        assert_eq!(sniff_image_extension(&avif), Some("avif"));
+        let mut bmp = b"BM".to_vec();
+        bmp.resize(30, 0);
+        assert_eq!(sniff_image_extension(&bmp), Some("bmp"));
     }
 
     #[test]

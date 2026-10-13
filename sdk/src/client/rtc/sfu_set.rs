@@ -25,6 +25,42 @@ use super::{
 /// member rejoining (or a briefly stale state read) doesn't cause churn.
 const DROP_GRACE: Duration = Duration::from_secs(10);
 
+/// Most foreign SFUs one call will connect to. Their URLs come from other
+/// members' state events, so a member could otherwise make us dial an
+/// unbounded number of servers.
+const MAX_REMOTE_SFUS: usize = 4;
+
+/// Whether a remote member's advertised `livekit_service_url` may receive our
+/// OpenID token: plain https, no credentials in the URL, and not an
+/// IP-literal loopback/private/link-local/metadata address. Hostnames are
+/// vetted at connect time by the guarded client's resolver.
+pub(crate) fn remote_service_url_ok(raw: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(raw) else {
+        return false;
+    };
+    url.scheme() == "https"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && crate::net_guard::url_is_fetchable(&url)
+}
+
+/// The LiveKit websocket URL a remote service returned (also untrusted):
+/// `wss` only, public host.
+pub(crate) fn remote_ws_url_to_check(raw: &str) -> Option<reqwest::Url> {
+    let url = reqwest::Url::parse(raw).ok()?;
+    if url.scheme() != "wss" || !url.username().is_empty() || url.password().is_some() {
+        return None;
+    }
+    // The guard speaks http(s); the host and port are what matter.
+    let https = reqwest::Url::parse(&format!(
+        "https://{}{}",
+        url.host_str()?,
+        url.port().map(|p| format!(":{p}")).unwrap_or_default()
+    ))
+    .ok()?;
+    crate::net_guard::url_is_fetchable(&https).then_some(https)
+}
+
 /// What is needed to obtain a token and connect to another SFU.
 pub struct SfuContext {
     pub client: matrix_sdk::Client,
@@ -157,6 +193,14 @@ impl SfuSet {
             if retries.get(service_url).is_some_and(|r| Instant::now() < r.next_attempt) {
                 return;
             }
+            // Bound the bookkeeping a member can force with distinct URLs.
+            if !retries.contains_key(service_url) && retries.len() >= MAX_REMOTE_SFUS * 4 {
+                return;
+            }
+        }
+        if self.remotes.lock().len() >= MAX_REMOTE_SFUS {
+            warn!("rtc: not connecting to remote SFU {service_url}: too many remote SFUs");
+            return;
         }
         info!("rtc: connecting to remote SFU {service_url}");
         match self.try_connect_remote(service_url).await {
@@ -186,9 +230,17 @@ impl SfuSet {
 
     async fn try_connect_remote(&self, service_url: &str) -> anyhow::Result<RemoteSfuRoom> {
         let c = &self.ctx;
+        // The URL is another member's choice and is sent our OpenID token, so
+        // it must be a public https service, reached through the guarded
+        // client (no redirects, resolver refuses internal addresses).
+        if !remote_service_url_ok(service_url) {
+            anyhow::bail!("remote SFU service URL rejected");
+        }
+        let http = crate::net_guard::guarded_client(Duration::from_secs(20))
+            .ok_or_else(|| anyhow::anyhow!("could not build the guarded HTTP client"))?;
         let openid = get_openid_token(&c.client).await?;
         let transport = fetch_livekit_jwt(
-            &c.http,
+            &http,
             service_url,
             &c.room_id,
             &c.slot_id,
@@ -200,6 +252,12 @@ impl SfuSet {
             &c.user_id,
         )
         .await?;
+        // The service also chooses the websocket we then connect to.
+        let ws_host = remote_ws_url_to_check(&transport.server_url)
+            .ok_or_else(|| anyhow::anyhow!("remote SFU returned a disallowed LiveKit URL"))?;
+        if !crate::net_guard::host_is_safe(&ws_host).await {
+            anyhow::bail!("remote SFU LiveKit host resolves to a disallowed address");
+        }
         RemoteSfuRoom::connect(
             &transport.server_url,
             &transport.jwt,
@@ -244,6 +302,41 @@ mod tests {
 
     fn set(items: &[&str]) -> BTreeSet<String> {
         items.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn remote_service_urls_must_be_public_https() {
+        assert!(remote_service_url_ok("https://lk-jwt.example.org"));
+        assert!(remote_service_url_ok("https://lk-jwt.example.org:8443/path"));
+        for bad in [
+            "http://lk-jwt.example.org",
+            "https://127.0.0.1/",
+            "https://[::1]/",
+            "https://10.0.0.5/",
+            "https://169.254.169.254/latest/meta-data",
+            "https://user:pw@lk-jwt.example.org",
+            "ftp://lk-jwt.example.org",
+            "not a url",
+            "",
+        ] {
+            assert!(!remote_service_url_ok(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn remote_livekit_urls_must_be_public_wss() {
+        assert!(remote_ws_url_to_check("wss://sfu.example.org").is_some());
+        assert!(remote_ws_url_to_check("wss://sfu.example.org:7881/rtc").is_some());
+        for bad in [
+            "ws://sfu.example.org",
+            "https://sfu.example.org",
+            "wss://127.0.0.1",
+            "wss://192.168.1.10:7881",
+            "wss://u:p@sfu.example.org",
+            "",
+        ] {
+            assert!(remote_ws_url_to_check(bad).is_none(), "{bad}");
+        }
     }
 
     #[test]

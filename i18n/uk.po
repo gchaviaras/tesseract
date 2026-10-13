@@ -7029,9 +7029,6 @@ msgstr "Повторно стискати зображення перед над
 msgid "This image can't be sent because its metadata can't be removed."
 msgstr "Це зображення не можна надіслати, бо його метадані неможливо видалити."
 
-#: ui/shared/app/RoomPane.cpp
-msgid "Some images weren't sent because their metadata can't be removed."
-msgstr "Деякі зображення не було надіслано, бо їхні метадані неможливо видалити."
 
 #: ui/shared/views/LoginView.cpp
 msgid "Settings"
@@ -7040,3 +7037,22 @@ msgstr "Налаштування"
 #: ui/shared/views/settings/NetworkSection.cpp
 msgid "Applied now. Calls use the new proxy after a restart."
 msgstr "Застосовано одразу. Дзвінки використовуватимуть новий проксі після перезапуску."
+
+#: ui/shared/app
+msgid "Couldn't reconnect your session. Check your connection, or sign out and back in from Settings."
+msgstr "Не вдалося відновити ваш сеанс. Перевірте з’єднання або вийдіть і знову увійдіть через Налаштування."
+
+#: ui/shared/app
+msgid "Replace backup"
+msgstr "Замінити резервну копію"
+
+#: ui/shared/app
+msgid "This account already has a key backup on the server. Replacing it can make older messages unreadable on your other devices. Only continue if you can't use your old recovery key."
+msgstr "Цей обліковий запис уже має резервну копію ключів на сервері. Якщо її замінити, старіші повідомлення можуть стати нечитабельними на ваших інших пристроях. Продовжуйте, лише якщо не можете скористатися старим ключем відновлення."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "{0} image can't be sent because its metadata can't be removed. Remove it to send the rest."
+msgid_plural "{0} images can't be sent because their metadata can't be removed. Remove them to send the rest."
+msgstr[0] "{0} зображення не можна надіслати, бо його метадані неможливо видалити. Приберіть його, щоб надіслати решту."
+msgstr[1] "{0} зображення не можна надіслати, бо їхні метадані неможливо видалити. Приберіть їх, щоб надіслати решту."
+msgstr[2] "{0} зображень не можна надіслати, бо їхні метадані неможливо видалити. Приберіть їх, щоб надіслати решту."

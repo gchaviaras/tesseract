@@ -125,11 +125,9 @@ const std::string& launch_language();
 bool proxy_changed_since_launch(Settings::ProxyMode mode, const std::string& url);
 
 /// Apply a proxy change immediately (used while signed out, when no client
-/// holds the old proxy). Moves the launch baseline to the new setting, so
-/// `proxy_changed_since_launch` stops reporting a pending restart — except
-/// when the launch proxy was Manual and the new one is System, because the
-/// launch-time proxy variables stay in the process environment and System
-/// would keep reading them until a restart.
+/// holds the old proxy). Only HTTP clients built afterwards pick it up; call
+/// signalling keeps the launch-time proxy, so the launch baseline does not move
+/// and `proxy_changed_since_launch` keeps reporting a pending restart.
 void apply_proxy_live(Settings::ProxyMode mode, const std::string& url);
 
 /// Arguments for a process that replaces this one: the active --profile

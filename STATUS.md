@@ -1,6 +1,6 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**. 3267 C++ + 1055 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**. 3277 C++ + 1065 Rust tests.
 
 > **Settings from the login screen (2026-10-13).**
 > A wrench button on the first-login screen opens Settings with only Network,
@@ -11,8 +11,9 @@ Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**
 
 > **Image send (2026-10-13).**
 > Animated images are never recompressed and stills only when smaller (toggle
-> in Settings → Media); metadata is always stripped from every format that
-> carries it; an image that can't be stripped is never sent. Qt6 build, ctest 3259/3259, cargo 1055.
+> in Settings → Media); photo formats are stripped of metadata on every send
+> path (single, animated, file, gallery), other files are sent as they are, and
+> an image that can't be stripped is never sent as an image. Qt6 build, ctest 3277/3277, cargo 1065.
 
 > **JPEG XL images (2026-10-12).**
 > `.jxl` stills and animations render on all platforms via a Rust decoder.

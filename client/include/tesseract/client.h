@@ -2184,7 +2184,11 @@ public:
     /// Pass an empty `passphrase` to generate a random recovery key; non-empty
     /// to derive the key from the passphrase. Progress is reported via
     /// IEventHandler::on_enable_recovery_progress before this call returns.
-    Result enable_recovery(const std::string& passphrase);
+    /// If the server already holds a key backup this device can't use, nothing
+    /// is deleted: progress step 7 fires and the result is `{false,
+    /// "backup_exists"}`. Pass `replace_existing_backup = true` only after the
+    /// user confirmed replacing it.
+    Result enable_recovery(const std::string& passphrase, bool replace_existing_backup = false);
 
     /// Turn recovery off: delete the server-side key backup and secret
     /// storage, and mark backup as not to be re-enabled automatically.

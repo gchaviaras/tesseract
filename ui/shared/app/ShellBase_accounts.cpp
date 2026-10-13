@@ -1415,7 +1415,9 @@ Client* ShellBase::reset_pending_login_client_()
     // LoginView's discovery/probe workers capture the old client by raw
     // pointer and may still be mid-call on it: retire it instead of
     // destroying it here.
-    if (pool_.pending_count() == 0 && mut_pool_.pending_count() == 0)
+    // idle(), not pending_count(): a worker that is already running (blocked
+    // inside a discovery call) is no longer queued but still uses the client.
+    if (pool_.idle() && mut_pool_.idle())
         retired_login_clients_.clear();
     if (pending_login_client_)
         retired_login_clients_.push_back(std::move(pending_login_client_));
@@ -1715,34 +1717,66 @@ void ShellBase::handle_sync_error_impl_(std::string context,
     {
         if (soft_logout && affected && affected->client)
         {
-            if (auto saved =
-                    tesseract::SessionStore::load_account(affected->user_id))
+            // load_account_with_key(), not load_account(): the latter returns
+            // the raw SecretStore blob, which for a store-key account is the
+            // wrapper {"tesseract_store_key_wrapper":…} that restore_session
+            // rejects ("missing field `client_id`") — so recovery always failed
+            // and fell through to wiping the account's crypto store.
+            auto loaded = tesseract::SessionStore::load_account_with_key(affected->user_id);
+            if (loaded)
             {
                 show_status_message_(tk::tr("Reconnecting session\xe2\x80\xa6"));
-                if (affected->client->restore_session(*saved))
-                {
-                    // Re-fetch identity onto the AccountSession. This is the
-                    // piece macOS used to skip, leaving a stale display name.
-                    affected->display_name =
-                        affected->client->get_display_name();
-                    affected->avatar_url = affected->client->get_avatar_url();
-                    // Re-bind this window's identity strip when the affected
-                    // account is the one currently shown here.
-                    if (active_account_ && affected == active_account_)
+                // restore_session is network + SQLite work: off the UI thread, on
+                // the serialised pool like the other restore paths.
+                run_async_mut_(
+                    [this, sess = affected, loaded = std::move(*loaded)]() mutable
                     {
-                        my_user_id_ = affected->user_id;
-                        my_display_name_ = affected->display_name;
-                        my_avatar_url_ = affected->avatar_url;
-                        refresh_user_strip_();
-                    }
-                    affected->sync_started = true;
-                    affected->client->start_sync(affected->bridge.get());
-                    show_status_message_(tk::tr("Reconnected"));
-                    return;
-                }
+                        if (!loaded.store_key.empty())
+                            sess->client->set_store_key(loaded.store_key);
+                        const bool restored = static_cast<bool>(
+                            sess->client->restore_session(loaded.session_json));
+                        post_to_ui_alive_(
+                            [this, sess, restored]
+                            {
+                                if (!restored)
+                                {
+                                    // Never wipe the account automatically: the
+                                    // failure may just be the network, and the keys
+                                    // here may be the only copy. Signing out is the
+                                    // user's explicit action.
+                                    sess->sync_started = false;
+                                    show_status_message_(
+                                        tk::tr("Couldn't reconnect your session. Check your "
+                                               "connection, or sign out and back in from "
+                                               "Settings."));
+                                    return;
+                                }
+                                // Re-fetch identity onto the AccountSession. This is
+                                // the piece macOS used to skip, leaving a stale
+                                // display name.
+                                sess->display_name = sess->client->get_display_name();
+                                sess->avatar_url = sess->client->get_avatar_url();
+                                // Re-bind this window's identity strip when the
+                                // affected account is the one currently shown here.
+                                if (active_account_ && sess == active_account_)
+                                {
+                                    my_user_id_ = sess->user_id;
+                                    my_display_name_ = sess->display_name;
+                                    my_avatar_url_ = sess->avatar_url;
+                                    refresh_user_strip_();
+                                }
+                                sess->sync_started = true;
+                                sess->client->start_sync(sess->bridge.get());
+                                show_status_message_(tk::tr("Reconnected"));
+                            });
+                    });
+                return;
             }
+            // No stored credentials at all: nothing can be restored, so this
+            // falls through to the sign-in path below.
         }
-        // Unrecoverable: clear the stored account, stop sync, relogin.
+        // No usable stored session (or a hard logout, where the server has
+        // revoked it): clear the stored account, stop sync, relogin.
         if (affected)
         {
             tesseract::SessionStore::clear_account(affected->user_id);

@@ -97,12 +97,12 @@ void ShellBase::wire_encryption_setup_callbacks_(
 {
     tk::Host* host_ptr = &host;
 
-    ov.on_enable_recovery = [this](std::string passphrase) {
+    auto start_enable_recovery = [this](std::string passphrase, bool replace_backup) {
         auto sess = active_account_;
         if (!sess) return;
         dialog_recovery_setup_users_.insert(sess->user_id);
-        run_async_mut_([this, sess, passphrase]() {
-            if (sess->client) sess->client->enable_recovery(passphrase);
+        run_async_mut_([this, sess, passphrase, replace_backup]() {
+            if (sess->client) sess->client->enable_recovery(passphrase, replace_backup);
             // Its progress events (a final step 4 or 5 included) were posted
             // before it returned; an early error posts none, so clear the
             // mark here rather than relying on them.
@@ -110,6 +110,14 @@ void ShellBase::wire_encryption_setup_callbacks_(
                 dialog_recovery_setup_users_.erase(uid);
             });
         });
+    };
+    ov.on_enable_recovery = [start_enable_recovery](std::string passphrase) {
+        start_enable_recovery(std::move(passphrase), /*replace_backup=*/false);
+    };
+    // The dialog found an existing server backup and the user confirmed
+    // replacing it.
+    ov.on_replace_backup = [start_enable_recovery](std::string passphrase) {
+        start_enable_recovery(std::move(passphrase), /*replace_backup=*/true);
     };
 
     ov.on_recover = [this](std::string key) {
@@ -452,6 +460,14 @@ void ShellBase::run_silent_enable_recovery_(std::shared_ptr<AccountSession> sess
 void ShellBase::handle_silent_recovery_progress_(const std::string& uid, uint8_t step,
                                                  const std::string& key_or_error)
 {
+    if (step == 7)
+    {
+        // The account already has a server backup this device can't use.
+        // Silent setup never replaces it; enable_recovery()'s result reports
+        // the failure once, and the interactive dialog asks the user.
+        std::fprintf(stderr, "[encryption] silent recovery setup skipped: a key backup already exists\n");
+        return;
+    }
     if (step == 5)
     {
         std::fprintf(stderr, "[encryption] silent recovery setup failed: %s\n",

@@ -16,8 +16,10 @@
 #include <tesseract/settings.h>
 
 #include <chrono>
+#include <condition_variable>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -116,6 +118,9 @@ struct AsShell : tesseract::test::TestShellBase
     using ShellBase::skip_unsaved_key_check_for_next_sign_out_;
     using ShellBase::is_pinned_window;
     using ShellBase::mut_pool_;
+    using ShellBase::pool_;
+    using ShellBase::retired_login_clients_;
+    using ShellBase::run_async_;
     using ShellBase::unread_prefetch_fingerprint_;
     using ShellBase::bridge_check_fingerprint_;
     using ShellBase::current_room_knock_requests_;
@@ -509,6 +514,42 @@ TEST_CASE("pending login client and temp dir helpers", "[shell][account_switch]"
     CHECK(s.pending_login_temp_dir_ == dir);
     s.reset_pending_login_client_();
     CHECK(s.pending_login_temp_dir_.empty());
+}
+
+TEST_CASE("a retired login client outlives a worker that is still running",
+          "[shell][account_switch][login]")
+{
+    AsShell s;
+    s.reset_pending_login_client_();
+
+    std::mutex mu;
+    std::condition_variable cv;
+    bool started = false;
+    bool release = false;
+    s.run_async_([&] {
+        std::unique_lock<std::mutex> lk(mu);
+        started = true;
+        cv.notify_all();
+        cv.wait(lk, [&] { return release; });
+    });
+    {
+        std::unique_lock<std::mutex> lk(mu);
+        cv.wait(lk, [&] { return started; }); // running, no longer queued
+    }
+    REQUIRE(s.pool_.pending_count() == 0);
+
+    s.reset_pending_login_client_(); // retires the first client
+    s.reset_pending_login_client_(); // would free it if running work were ignored
+    CHECK(s.retired_login_clients_.size() == 2);
+
+    {
+        std::lock_guard<std::mutex> lk(mu);
+        release = true;
+    }
+    cv.notify_all();
+    REQUIRE(s.pool_.wait_idle(std::chrono::seconds(5)));
+    s.reset_pending_login_client_(); // idle: retired clients are freed
+    CHECK(s.retired_login_clients_.size() == 1);
 }
 
 TEST_CASE("restart_sdk_begin_ needs a client and a stored session",

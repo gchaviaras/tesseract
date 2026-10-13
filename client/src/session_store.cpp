@@ -1,6 +1,7 @@
 #include "tesseract/session_store.h"
 #include "tesseract/secret_store.h"
 #include "tesseract/paths.h"
+#include "fs_util.h"
 #include "json_util.h"
 #include "session_persist_queue.h"
 
@@ -104,133 +105,10 @@ static std::string extract_string(std::string_view json, std::string_view key)
     return {};
 }
 
-// ---------------------------------------------------------------------------
-// Atomic file write helper (tmp + rename, with a fall-back path for older
-// filesystems that can't atomically replace an existing destination).
-// ---------------------------------------------------------------------------
-
-// Write `content` to `path` via a private temp file that is fsync'd before
-// being atomically renamed into place. The file holds live OAuth tokens, so:
-//   * it is created mode 0600 (never world-readable, even mid-write);
-//   * the bytes are flushed to disk (fsync) before the rename, so a crash or
-//     power loss can't leave a renamed-but-empty session file;
-//   * the rename never deletes the destination first — on a filesystem that
-//     rejects replace-rename the old file is moved aside and restored on
-//     failure, so there is no window with no session file at all.
-static bool write_all_fd(int fd, std::string_view content)
-{
-    const char* p = content.data();
-    size_t left = content.size();
-    while (left > 0)
-    {
-#if defined(_WIN32)
-        int n = _write(
-            fd, p,
-            static_cast<unsigned>(left > 0x7fffffff ? 0x7fffffff : left));
-#else
-        ssize_t n = ::write(fd, p, left);
-        if (n < 0 && errno == EINTR)
-        {
-            continue;
-        }
-#endif
-        if (n <= 0)
-        {
-            return false;
-        }
-        p += n;
-        left -= static_cast<size_t>(n);
-    }
-    return true;
-}
-
-static bool atomic_write(const fs::path& p, std::string_view content)
-{
-    std::error_code ec;
-    fs::create_directories(p.parent_path(), ec);
-    if (ec)
-    {
-        return false;
-    }
-
-    fs::path tmp = p;
-    tmp += ".tmp";
-
-    {
-#if defined(_WIN32)
-        int fd = -1;
-        _wsopen_s(&fd, tmp.wstring().c_str(),
-                  _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _SH_DENYNO,
-                  _S_IREAD | _S_IWRITE);
-#else
-        // A leftover .tmp (crash, or planted) would keep its own mode under
-        // O_TRUNC; start from a fresh file so 0600 always applies.
-        ::unlink(tmp.c_str());
-        int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
-#endif
-        if (fd < 0)
-        {
-            return false;
-        }
-        bool ok = write_all_fd(fd, content);
-#if defined(_WIN32)
-        if (ok)
-        {
-            ok = (_commit(fd) == 0);
-        }
-        _close(fd);
-#else
-        if (ok)
-        {
-            ok = (::fsync(fd) == 0);
-        }
-        ::close(fd);
-#endif
-        if (!ok)
-        {
-            std::error_code rm;
-            fs::remove(tmp, rm);
-            return false;
-        }
-    }
-
-    fs::rename(tmp, p, ec);
-    if (ec)
-    {
-        // Filesystem rejected replace-rename. Move the existing file aside
-        // first so a crash here still leaves a recoverable session, then
-        // restore it if the final rename fails.
-        fs::path bak = p;
-        bak += ".bak";
-        std::error_code be;
-        fs::remove(bak, be);
-        const bool had_old = fs::exists(p, be);
-        if (had_old)
-        {
-            fs::rename(p, bak, be);
-        }
-        fs::rename(tmp, p, ec);
-        if (ec)
-        {
-            if (had_old)
-            {
-                std::error_code re;
-                fs::rename(bak, p, re);
-            }
-            std::error_code ec2;
-            fs::remove(tmp, ec2);
-            return false;
-        }
-        std::error_code re;
-        fs::remove(bak, re);
-    }
-    return true;
-}
-
 // Serialises every write to an account's credentials (SecretStore entry +
 // session.json). The persist queue's worker, the login-time save and logout's
 // clear_account() otherwise run on different threads and share the fixed
-// session.json.tmp name used by atomic_write().
+// session.json.tmp name used by atomic_write_file().
 static std::mutex& credential_write_mutex()
 {
     static std::mutex m;
@@ -277,7 +155,7 @@ std::optional<std::string> SessionStore::load()
 
 bool SessionStore::save(const std::string& json)
 {
-    return atomic_write(fs::path(path()), json);
+    return atomic_write_file(fs::path(path()), json);
 }
 
 void SessionStore::clear()
@@ -425,7 +303,7 @@ SessionStore::AccountIndex SessionStore::load_index()
             idx.corrupt = true;
             return idx;
         }
-        // Absent. atomic_write()'s replace fallback moves the old file to
+        // Absent. atomic_write_file()'s replace fallback moves the old file to
         // .bak before installing the new one, so a crash between those two
         // renames leaves only the backup — recover it.
         fs::path bak = p;
@@ -566,7 +444,7 @@ bool SessionStore::save_index(const AccountIndex& idx)
         }
     }
 
-    return atomic_write(p, serialize_index(idx));
+    return atomic_write_file(p, serialize_index(idx));
 }
 
 std::optional<std::string>
@@ -608,7 +486,7 @@ SessionStore::load_account(const std::string& user_id)
     {
         std::lock_guard<std::mutex> lk(credential_write_mutex());
         if (SecretStore::save(user_id, s))
-            atomic_write(p, kMigratedSentinel);
+            atomic_write_file(p, kMigratedSentinel);
     }
 
     return s;
@@ -625,7 +503,7 @@ bool SessionStore::save_account(const std::string& user_id,
     {
         // Sentinel write is best-effort: if it fails, SecretStore remains
         // authoritative on the next load (step 1 of load_account).
-        atomic_write(account_dir(user_id) / "session.json", kMigratedSentinel);
+        atomic_write_file(account_dir(user_id) / "session.json", kMigratedSentinel);
         return true;
     }
 
@@ -639,7 +517,7 @@ bool SessionStore::save_account(const std::string& user_id,
     // isn't authoritative and the save must not report success.
     SecretStore::remove(user_id);
     const bool written =
-        atomic_write(account_dir(user_id) / "session.json", json);
+        atomic_write_file(account_dir(user_id) / "session.json", json);
     if (SecretStore::load(user_id))
     {
         std::fprintf(stderr,

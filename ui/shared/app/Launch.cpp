@@ -21,9 +21,6 @@ namespace
 std::string g_launch_language;
 Settings::ProxyMode g_launch_proxy_mode = Settings::ProxyMode::System;
 std::string g_launch_proxy_url;
-// The launch-time proxy was Manual, so the proxy variables set then stay in
-// the process environment (a live change cannot clear them).
-bool g_launch_env_proxy = false;
 
 std::string help_for(std::string_view id)
 {
@@ -169,7 +166,6 @@ LaunchPlan prepare_launch(const std::vector<std::string>& args,
         const bool manual = s.proxy_mode == Settings::ProxyMode::Manual;
         g_launch_proxy_mode = (ok || manual) ? s.proxy_mode : Settings::ProxyMode::System;
         g_launch_proxy_url = (ok || manual) ? s.proxy_url : std::string();
-        g_launch_env_proxy = manual;
     }
     {
         std::string lang = Settings::instance().language;
@@ -232,13 +228,10 @@ bool proxy_changed_since_launch(Settings::ProxyMode mode, const std::string& url
 
 void apply_proxy_live(Settings::ProxyMode mode, const std::string& url)
 {
+    // HTTP clients built from now on use the new proxy. The launch baseline is
+    // deliberately left alone: call signalling reads the process environment
+    // set at launch, so a restart stays pending until the setting matches it.
     Client::set_proxy_live(mode, url);
-    if (mode == Settings::ProxyMode::System && g_launch_env_proxy)
-    {
-        return; // stale launch-time environment: keep the restart pending
-    }
-    g_launch_proxy_mode = mode;
-    g_launch_proxy_url = url;
 }
 
 std::vector<std::string> relaunch_args()

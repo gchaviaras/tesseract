@@ -415,11 +415,13 @@ TEST_CASE("NetworkSection: the note says changes apply now when signed out",
     section.set_applies_immediately(true);
     CHECK(section.restart_note_text() != restart);
 
-    // A restart that is still pending (e.g. Manual -> System) brings it back.
+    // A pending restart (calls still use the launch-time proxy) keeps the
+    // "applied now" wording; the Restart button is what shows up.
+    const std::string applied = section.restart_note_text();
     section.set_restart_pending(true);
-    CHECK(section.restart_note_text() == restart);
+    CHECK(section.restart_note_text() == applied);
     section.set_restart_pending(false);
-    CHECK(section.restart_note_text() != restart);
+    CHECK(section.restart_note_text() == applied);
 
     section.set_applies_immediately(false);
     CHECK(section.restart_note_text() == restart);

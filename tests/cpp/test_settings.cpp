@@ -805,3 +805,62 @@ TEST_CASE("Settings fonts default to empty and round-trip by name")
     s.fonts = {};
     fs::remove_all(dir);
 }
+
+TEST_CASE("Settings: a corrupt file is moved aside and the last good copy is used")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("corrupt_recovery");
+    auto& s = tesseract::Settings::instance();
+
+    s.theme_pref = tesseract::Settings::ThemePreference::Dark;
+    s.save_to_disk(dir);
+    s.theme_pref = tesseract::Settings::ThemePreference::Light;
+    s.save_to_disk(dir); // keeps the Dark version as the last good copy
+    CHECK(fs::exists(dir / "app_settings.json.last-good"));
+    CHECK_FALSE(fs::exists(dir / "app_settings.json.tmp")); // atomic write leaves no temp
+
+    // A crash / disk-full leaves a truncated file.
+    write_file(dir / "app_settings.json", "{\"theme\": \"li");
+
+    reset_settings();
+    s.load_from_disk(dir);
+    CHECK(s.theme_pref == tesseract::Settings::ThemePreference::Dark); // last good
+    CHECK(fs::exists(dir / "app_settings.json.corrupt"));              // kept for inspection
+    CHECK_FALSE(fs::exists(dir / "app_settings.json"));                // not left to be overwritten
+
+    fs::remove_all(dir);
+}
+
+TEST_CASE("Settings: a corrupt file without a last good copy falls back to defaults")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("corrupt_no_backup");
+    write_file(dir / "app_settings.json", "not json at all");
+
+    auto& s = tesseract::Settings::instance();
+    s.load_from_disk(dir);
+    CHECK(s.theme_pref == tesseract::Settings::ThemePreference::System);
+    CHECK(fs::exists(dir / "app_settings.json.corrupt"));
+
+    // The next ordinary save writes a fresh, valid file.
+    s.theme_pref = tesseract::Settings::ThemePreference::Dark;
+    s.save_to_disk(dir);
+    reset_settings();
+    s.load_from_disk(dir);
+    CHECK(s.theme_pref == tesseract::Settings::ThemePreference::Dark);
+
+    fs::remove_all(dir);
+}
+
+TEST_CASE("Settings: an empty or non-object file is treated as corrupt")
+{
+    for (const char* body : {"", "42", "[1,2]"})
+    {
+        reset_settings();
+        auto dir = make_tmp_dir("corrupt_shapes");
+        write_file(dir / "app_settings.json", body);
+        tesseract::Settings::instance().load_from_disk(dir);
+        CHECK(fs::exists(dir / "app_settings.json.corrupt"));
+        fs::remove_all(dir);
+    }
+}

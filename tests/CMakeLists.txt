@@ -58,6 +58,7 @@ add_executable(tesseract_tests
     cpp/test_room_list_autoscroll.cpp
     cpp/test_room_list_preview_emoji.cpp
     cpp/test_room_list_density.cpp
+    cpp/test_room_list_tombstone.cpp
     cpp/test_open_media.cpp
     cpp/test_room_list_context_menu.cpp
     cpp/test_resizable_sidebar.cpp

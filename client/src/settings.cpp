@@ -1,6 +1,9 @@
 #include "tesseract/settings.h"
 
+#include "fs_util.h"
+
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
@@ -10,21 +13,51 @@
 namespace tesseract
 {
 
-void Settings::load_from_disk(const std::filesystem::path& config_dir)
+namespace
 {
-    auto path = config_dir / "app_settings.json";
-    std::ifstream f(path);
-    if (!f.is_open())
-        return;
 
-    nlohmann::json j;
+// Parses `p` as a JSON object. False when it can't be opened or isn't one.
+bool read_json_object(const std::filesystem::path& p, nlohmann::json& out)
+{
+    std::ifstream f(p);
+    if (!f.is_open())
+        return false;
     try
     {
-        f >> j;
+        f >> out;
     }
     catch (const nlohmann::json::exception&)
     {
-        return;
+        return false;
+    }
+    return out.is_object();
+}
+
+} // namespace
+
+void Settings::load_from_disk(const std::filesystem::path& config_dir)
+{
+    auto path = config_dir / "app_settings.json";
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec))
+        return; // first run
+
+    nlohmann::json j;
+    if (!read_json_object(path, j))
+    {
+        // Unreadable or not a JSON object. Never leave it where the next save
+        // would overwrite it with defaults: move it aside, then fall back to
+        // the last good copy kept by save_to_disk(), else to the defaults.
+        auto corrupt = path;
+        corrupt += ".corrupt";
+        std::error_code mv;
+        std::filesystem::rename(path, corrupt, mv);
+        std::fprintf(stderr, "tesseract: %s is corrupt; moved to %s\n",
+                     path.string().c_str(), corrupt.string().c_str());
+        auto last_good = path;
+        last_good += ".last-good";
+        if (!read_json_object(last_good, j))
+            return;
     }
 
     try
@@ -431,10 +464,21 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
     }
 
     auto path = config_dir / "app_settings.json";
-    std::ofstream f(path, std::ios::trunc);
-    if (!f.is_open())
-        return;
-    f << j.dump(4) << '\n';
+    // Keep the previous version as a last-good copy before replacing it, so a
+    // file that later turns out unreadable can be recovered (see load).
+    {
+        std::error_code ec;
+        if (std::filesystem::exists(path, ec))
+        {
+            auto last_good = path;
+            last_good += ".last-good";
+            std::filesystem::copy_file(
+                path, last_good, std::filesystem::copy_options::overwrite_existing, ec);
+        }
+    }
+    // Tmp + fsync + rename: a crash can't leave a truncated settings file.
+    if (!atomic_write_file(path, j.dump(4) + "\n"))
+        std::fprintf(stderr, "tesseract: could not save %s\n", path.string().c_str());
 }
 
 const char* close_action_to_string(Settings::CloseAction action)

@@ -28,6 +28,8 @@ use std::sync::atomic::Ordering;
 #[cfg(not(test))]
 use std::sync::Arc;
 
+use super::strip_meta::StripScope;
+
 #[cfg(not(test))]
 fn begin_upload_progress(
     handler: &Option<Arc<parking_lot::Mutex<super::SendHandler>>>,
@@ -72,19 +74,28 @@ fn begin_upload_progress(
 // `mod.rs`).
 // ---------------------------------------------------------------------------
 
-/// Metadata-stripped bytes for one gallery item. Images and files are
-/// stripped (an "image" or "file" item can carry any image format); audio and
-/// video are passed through. Content-based, so the declared mime is only a
-/// fallback hint.
-pub(crate) fn strip_gallery_item_bytes(kind: &str, bytes: Vec<u8>, mime_type: &str) -> Vec<u8> {
-    if !matches!(kind, "image" | "file") {
-        return bytes;
+/// `bytes` with the privacy-sensitive metadata of photo formats removed; the
+/// original is returned untouched when there is nothing to remove or the file
+/// cannot be confidently parsed (the C++ send policy refuses unstrippable
+/// images before they get here). `scope` decides how much may be rewritten, see
+/// [`StripScope`].
+pub(crate) fn strip_owned(bytes: Vec<u8>, mime_type: &str, scope: StripScope) -> Vec<u8> {
+    match super::strip_meta::strip_for_upload(&bytes, mime_type, scope) {
+        std::borrow::Cow::Owned(v) => v,
+        std::borrow::Cow::Borrowed(_) => bytes,
     }
-    let stripped = match super::strip_meta::strip_image_metadata(&bytes, mime_type) {
-        std::borrow::Cow::Owned(v) => Some(v),
-        std::borrow::Cow::Borrowed(_) => None,
-    };
-    stripped.unwrap_or(bytes)
+}
+
+/// Metadata-stripped bytes for one gallery item. An "image" item is a picture
+/// the user meant to share as such (full stripper); a "file" item only loses
+/// metadata if it is a photo container; audio and video are passed through.
+/// Content-based, so the declared mime is only a fallback hint.
+pub(crate) fn strip_gallery_item_bytes(kind: &str, bytes: Vec<u8>, mime_type: &str) -> Vec<u8> {
+    match kind {
+        "image" => strip_owned(bytes, mime_type, StripScope::Image),
+        "file" => strip_owned(bytes, mime_type, StripScope::File),
+        _ => bytes,
+    }
 }
 
 /// Build the raw `m.room.message` content object for an animated image
@@ -1130,7 +1141,7 @@ impl ClientFfi {
             #[cfg(debug_assertions)]
             "send/image".to_string(),
         );
-        let bytes = &*super::strip_meta::strip_image_metadata(bytes, mime_type);
+        let bytes = &*super::strip_meta::strip_for_upload(bytes, mime_type, StripScope::Image);
 
         // Animated GIF/WebP path: `send_attachment` strips the MSC4230
         // `is_animated` flag and the `fi.mau.gif` vendor hint, so we
@@ -1268,7 +1279,7 @@ impl ClientFfi {
             #[cfg(debug_assertions)]
             "send/file".to_string(),
         );
-        let bytes = &*super::strip_meta::strip_image_metadata(bytes, mime_type);
+        let bytes = &*super::strip_meta::strip_for_upload(bytes, mime_type, StripScope::File);
 
         let info = AttachmentInfo::File(BaseFileInfo {
             size: UInt::new(bytes.len() as u64),
@@ -1538,6 +1549,10 @@ impl ClientFfi {
                     return;
                 }
             };
+            // The UI sends the original bytes whenever re-encoding would not
+            // help (animated images, recompression off, not smaller), so the
+            // metadata is removed here, for every branch below.
+            let bytes = strip_owned(bytes, &mime_type, StripScope::Image);
 
             if is_animated {
                 use super::gif::GifMedia;
@@ -1689,6 +1704,9 @@ impl ClientFfi {
                     return;
                 }
             };
+            // A photo sent as a file must not keep its EXIF/GPS; anything that
+            // is not a photo container is sent byte-identical.
+            let bytes = strip_owned(bytes, &mime_type, StripScope::File);
             let info = AttachmentInfo::File(BaseFileInfo {
                 size: UInt::new(bytes.len() as u64),
             });
@@ -3875,21 +3893,34 @@ mod gallery_fallback_body_tests {
 
 #[cfg(test)]
 mod gallery_strip_tests {
-    use super::strip_gallery_item_bytes;
+    use super::{strip_gallery_item_bytes, strip_owned, StripScope};
+
+    const TIFF: &[u8] = include_bytes!("../../tests/fixtures/meta/meta.tif");
+    const SVG: &[u8] = include_bytes!("../../tests/fixtures/meta/meta.svg");
+
+    fn has(b: &[u8], needle: &[u8]) -> bool {
+        b.windows(needle.len()).any(|w| w == needle)
+    }
 
     #[test]
-    fn gallery_images_and_files_are_stripped_but_not_audio_video() {
-        let tiff = include_bytes!("../../tests/fixtures/meta/meta.tif").to_vec();
-        let has = |b: &[u8]| b.windows(10).any(|w| w == b"SECRETMAKE");
-        assert!(has(&tiff));
-        for kind in ["image", "file"] {
-            // Generic mime: content decides.
-            assert!(!has(&strip_gallery_item_bytes(kind, tiff.clone(), "application/octet-stream")), "{kind}");
-        }
+    fn gallery_images_are_stripped_files_only_if_photos_audio_video_never() {
+        assert!(has(TIFF, b"SECRETMAKE"));
+        // An image item gets the full stripper (content decides, not the mime).
+        assert!(!has(&strip_gallery_item_bytes("image", TIFF.to_vec(), "application/octet-stream"), b"SECRETMAKE"));
+        // A file item that is not a photo container is sent byte-identical.
+        assert_eq!(strip_gallery_item_bytes("file", TIFF.to_vec(), "image/tiff"), TIFF);
+        assert_eq!(strip_gallery_item_bytes("file", SVG.to_vec(), "image/svg+xml"), SVG);
         for kind in ["audio", "video"] {
-            assert!(has(&strip_gallery_item_bytes(kind, tiff.clone(), "image/tiff")), "{kind}");
+            assert_eq!(strip_gallery_item_bytes(kind, TIFF.to_vec(), "image/tiff"), TIFF, "{kind}");
         }
         // Nothing to strip: bytes come back unchanged.
         assert_eq!(strip_gallery_item_bytes("image", b"plain".to_vec(), "image/png"), b"plain");
+    }
+
+    #[test]
+    fn upload_helper_scopes_match_the_send_paths() {
+        // send_image_async / send_file_async both go through strip_owned.
+        assert!(!has(&strip_owned(TIFF.to_vec(), "image/tiff", StripScope::Image), b"SECRETMAKE"));
+        assert_eq!(strip_owned(TIFF.to_vec(), "image/tiff", StripScope::File), TIFF);
     }
 }

@@ -8,7 +8,7 @@
 
 use img_parts::jpeg::{markers, Jpeg, JpegSegment};
 use img_parts::png::Png;
-use img_parts::webp::{WebP, CHUNK_XMP};
+use img_parts::webp::WebP;
 use img_parts::{Bytes, ImageEXIF};
 use little_exif::exif_tag::ExifTag;
 use little_exif::filetype::FileExtension;
@@ -16,10 +16,53 @@ use little_exif::metadata::Metadata;
 use std::borrow::Cow;
 
 const ICC_PREFIX: &[u8] = b"ICC_PROFILE\0";
-const PNG_TEXT_CHUNKS: [[u8; 4]; 4] = [*b"tEXt", *b"zTXt", *b"iTXt", *b"tIME"];
+/// PNG chunks that describe the pixels. Everything else (text, time, EXIF/XMP,
+/// C2PA `caBX`, vendor chunks) is dropped; the orientation is rewritten as a
+/// minimal `eXIf` chunk afterwards.
+const PNG_KEEP_CHUNKS: [[u8; 4]; 19] = [
+    *b"IHDR", *b"PLTE", *b"IDAT", *b"IEND", *b"tRNS", *b"cHRM", *b"gAMA", *b"iCCP", *b"sBIT",
+    *b"sRGB", *b"cICP", *b"mDCV", *b"cLLI", *b"pHYs", *b"bKGD", *b"hIST", *b"acTL", *b"fcTL",
+    *b"fdAT",
+];
+/// WebP chunks that describe the pixels (EXIF, XMP and anything unknown go).
+const WEBP_KEEP_CHUNKS: [[u8; 4]; 7] =
+    [*b"VP8 ", *b"VP8L", *b"VP8X", *b"ALPH", *b"ANIM", *b"ANMF", *b"ICCP"];
+
+/// What the user chose to send, which decides how much of the file may be
+/// rewritten. `Image` is a picture the user meant to share as such: every
+/// recognised format is stripped. `File` is an arbitrary attachment: only the
+/// photo containers cameras and phones produce are stripped (so a geotagged
+/// JPEG sent as a file doesn't leak its GPS); TIFF/RAW, SVG, BMP, JPEG 2000 and
+/// everything else are sent byte-identical, because rewriting them can destroy
+/// data the recipient needs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum StripScope {
+    Image,
+    File,
+}
+
+/// The single entry point every upload path uses.
+pub(super) fn strip_for_upload<'a>(bytes: &'a [u8], mime: &str, scope: StripScope) -> Cow<'a, [u8]> {
+    if scope == StripScope::File && !is_photo_container(bytes) {
+        return Cow::Borrowed(bytes);
+    }
+    strip_image_metadata(bytes, mime)
+}
 
 pub(super) fn strip_image_metadata<'a>(bytes: &'a [u8], mime: &str) -> Cow<'a, [u8]> {
     strip_checked(bytes, mime).unwrap_or(Cow::Borrowed(bytes))
+}
+
+/// JPEG, PNG, WebP, GIF, HEIF/AVIF/HEIC and JPEG XL, recognised from the
+/// bytes alone (never from the declared mime).
+fn is_photo_container(b: &[u8]) -> bool {
+    b.starts_with(&[0xFF, 0xD8, 0xFF])
+        || b.starts_with(b"\x89PNG\r\n\x1a\n")
+        || (b.len() >= 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP")
+        || b.starts_with(b"GIF8")
+        || is_heif(b)
+        || is_jxl_container(b)
+        || b.starts_with(&[0xFF, 0x0A])
 }
 
 /// True when the metadata of `bytes` can be (and, via `strip_image_metadata`,
@@ -198,9 +241,7 @@ fn strip_png(bytes: &[u8]) -> Option<Vec<u8>> {
     let mut png = Png::from_bytes(Bytes::copy_from_slice(bytes)).ok()?;
     // Keep only the orientation, rewritten as a minimal standard `eXIf` chunk.
     let orientation = png.exif().and_then(|e| tiff_orientation(&e));
-    for kind in PNG_TEXT_CHUNKS {
-        png.remove_chunks_by_type(kind);
-    }
+    png.chunks_mut().retain(|c| PNG_KEEP_CHUNKS.contains(&c.kind()));
     png.set_exif(None);
     if let Some(o) = orientation {
         png.set_exif(Some(Bytes::from(minimal_exif_orientation(o))));
@@ -241,7 +282,7 @@ fn minimal_exif_orientation(o: u16) -> Vec<u8> {
 
 fn strip_webp(bytes: &[u8]) -> Option<Vec<u8>> {
     let mut webp = WebP::from_bytes(Bytes::copy_from_slice(bytes)).ok()?;
-    webp.remove_chunks_by_id(CHUNK_XMP);
+    webp.chunks_mut().retain(|c| WEBP_KEEP_CHUNKS.contains(&c.id()));
     // Also re-derives the VP8X flags after the EXIF chunk is dropped.
     webp.set_exif(None);
     Some(webp.encoder().bytes().to_vec())
@@ -429,13 +470,11 @@ fn strip_heif(b: &[u8]) -> Option<Vec<u8>> {
 
     // Whole-box metadata: XMP `uuid` boxes at the top level, `xml ` in `meta`.
     let mut out = b.to_vec();
-    let mut changed = false;
     for bx in top.iter().chain(kids.iter()) {
         let xmp_uuid = &bx.ty == b"uuid" && b.get(bx.payload..bx.payload + 16) == Some(&XMP_UUID[..]);
         if xmp_uuid || &bx.ty == b"xml " {
             out[bx.payload..bx.end].fill(0);
             out[bx.start + 4..bx.start + 8].copy_from_slice(b"free");
-            changed = true;
         }
     }
 
@@ -475,7 +514,6 @@ fn strip_heif(b: &[u8]) -> Option<Vec<u8>> {
         }
     }
     if targets.is_empty() {
-        let _ = changed;
         return Some(out); // parsed fine; nothing (more) to scrub
     }
 
@@ -491,6 +529,16 @@ fn strip_heif(b: &[u8]) -> Option<Vec<u8>> {
     let sizes2 = *b.get(iloc.payload + 5)?;
     let base_size = (sizes2 >> 4) as usize;
     let index_size = if v == 1 || v == 2 { (sizes2 & 15) as usize } else { 0 };
+    // Extents that occupy no bytes would let a crafted file make the loops
+    // below spin without consuming input; field widths above 8 are not valid.
+    if (offset_size == 0 && length_size == 0)
+        || offset_size > 8
+        || length_size > 8
+        || base_size > 8
+        || index_size > 8
+    {
+        return None;
+    }
     let (items, mut p) = if v < 2 {
         (be16(b, iloc.payload + 6)?, iloc.payload + 8)
     } else {
@@ -618,77 +666,6 @@ impl Tiff<'_> {
         self.zero(off, 2 + 12 * n + 4)
     }
 
-    /// Reads `count` SHORT/LONG values (as usize) of an entry whose data starts
-    /// at `at`; None for other types or absurd counts.
-    fn read_values(&self, ty: u16, count: u32, at: usize) -> Option<Vec<usize>> {
-        if count > (1 << 22) {
-            return None;
-        }
-        (0..count as usize)
-            .map(|i| match ty {
-                3 => self.u16(at + 2 * i).map(usize::from),
-                4 => self.u32(at + 4 * i).map(|v| v as usize),
-                _ => None,
-            })
-            .collect()
-    }
-
-    /// End of the highest byte the file structure refers to: IFD tables,
-    /// out-of-line values, strips/tiles, the JPEG interchange blob and SubIFDs.
-    /// None when it cannot be bounded (then nothing is truncated).
-    fn content_end(&self, first_ifd: usize) -> Option<usize> {
-        let mut end = 8usize;
-        let mut stack = vec![(first_ifd, 0u32)];
-        let mut seen = std::collections::HashSet::new();
-        while let Some((off, depth)) = stack.pop() {
-            if off == 0 || !seen.insert(off) {
-                continue;
-            }
-            if seen.len() > TIFF_MAX_SUB_IFDS || depth > 4 {
-                return None;
-            }
-            let n = self.u16(off)? as usize;
-            end = end.max(off + 2 + 12 * n + 4);
-            let (mut so, mut sc, mut to, mut tc) = (vec![], vec![], vec![], vec![]);
-            let (mut ji, mut jl) = (0usize, 0usize);
-            for i in 0..n {
-                let e = off + 2 + 12 * i;
-                let (tag, ty, count) = (self.u16(e)?, self.u16(e + 2)?, self.u32(e + 4)?);
-                let len = self.value_len(ty, count);
-                let at = if len > 4 {
-                    let at = self.u32(e + 8)? as usize;
-                    end = end.max(at.checked_add(len)?);
-                    at
-                } else {
-                    e + 8
-                };
-                match tag {
-                    273 => so = self.read_values(ty, count, at)?,
-                    279 => sc = self.read_values(ty, count, at)?,
-                    324 => to = self.read_values(ty, count, at)?,
-                    325 => tc = self.read_values(ty, count, at)?,
-                    513 => ji = self.u32(e + 8)? as usize,
-                    514 => jl = self.u32(e + 8)? as usize,
-                    330 => {
-                        for sub in self.read_values(ty, count, at)? {
-                            stack.push((sub, depth + 1));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if so.len() != sc.len() || to.len() != tc.len() {
-                return None; // data extents not fully described
-            }
-            for (o, c) in so.iter().zip(&sc).chain(to.iter().zip(&tc)) {
-                end = end.max(o.checked_add(*c)?);
-            }
-            end = end.max(ji.checked_add(jl)?);
-            stack.push((self.u32(off + 2 + 12 * n)? as usize, depth));
-        }
-        Some(end)
-    }
-
     /// Removes the unwanted entries of the IFD at `off` in place and returns
     /// (next IFD offset, whether anything was removed).
     fn clean_ifd(&mut self, off: usize) -> Option<(usize, bool)> {
@@ -741,27 +718,16 @@ fn strip_tiff(b: &[u8]) -> Option<Vec<u8>> {
     let mut out = b.to_vec();
     let mut t = Tiff { b: &mut out, le, wiped: Default::default() };
     let mut off = t.u32(4)? as usize;
-    let mut changed = false;
     let mut seen = Vec::new();
     while off != 0 && seen.len() < 64 && !seen.contains(&off) {
         seen.push(off);
-        let (next, did) = t.clean_ifd(off)?;
-        changed |= did;
+        let (next, _) = t.clean_ifd(off)?;
         off = next;
     }
-    let _ = changed;
-    // Drop anything past the last byte the file structure refers to.
-    let first = u32_at(&out, le, 4)? as usize;
-    let end = Tiff { b: &mut out, le, wiped: Default::default() }.content_end(first);
-    if let Some(end) = end.filter(|e| *e < out.len()) {
-        out.truncate(end);
-    }
+    // The file is deliberately not truncated: TIFF-based camera RAW keeps data
+    // behind tags this walker doesn't model, and cutting at "the last byte we
+    // know about" would destroy it.
     Some(out)
-}
-
-fn u32_at(b: &[u8], le: bool, at: usize) -> Option<u32> {
-    let v: [u8; 4] = b.get(at..at + 4)?.try_into().ok()?;
-    Some(if le { u32::from_le_bytes(v) } else { u32::from_be_bytes(v) })
 }
 
 // ---- SVG --------------------------------------------------------------------
@@ -978,6 +944,7 @@ fn remove_element(s: &str, tag: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use img_parts::webp::CHUNK_XMP;
     use img_parts::jpeg::JpegSegment;
     use img_parts::png::PngChunk;
     use img_parts::riff::{RiffChunk, RiffContent};
@@ -1475,11 +1442,12 @@ mod tests {
         ] {
             assert!(!contains(&strip_image_metadata(&file, mime), tail), "{name}");
         }
-        // TIFF: past the last referenced byte; the image itself still parses.
+        // TIFF is never truncated: camera RAW keeps data behind tags the walker
+        // does not model, so bytes past the last known structure are kept.
         let tiff = with_tail(TIFF.to_vec());
         let out = strip_image_metadata(&tiff, "image/tiff");
-        assert!(!contains(&out, tail));
-        assert!(out.len() <= TIFF.len() && out.len() > TIFF.len() / 2);
+        assert!(contains(&out, tail));
+        assert_eq!(out.len(), tiff.len());
         // BMP: beyond the declared file size.
         let mut bmp = b"BM".to_vec();
         bmp.extend_from_slice(&80u32.to_le_bytes()); // declared size
@@ -1583,4 +1551,93 @@ mod tests {
         let jpeg = jpeg_fixture();
         let _ = strip_image_metadata(&jpeg[..20], "image/jpeg");
     }
+
+    // ---- scope, allow-lists and bounds --------------------------------------
+
+    #[test]
+    fn file_scope_strips_photo_containers_only() {
+        // A photo sent as a file loses its metadata.
+        let jpeg = with_exif(jpeg_fixture(), FileExtension::JPEG, 6);
+        assert!(contains(&jpeg, b"SECRETMAKE"));
+        let out = strip_for_upload(&jpeg, "application/octet-stream", StripScope::File);
+        assert!(!contains(&out, b"SECRETMAKE") && !contains(&out, b"SECRETCOMMENT"));
+        let png_bytes = png_fixture();
+        let png = strip_for_upload(&png_bytes, "application/octet-stream", StripScope::File);
+        assert!(!contains(&png, b"SECRETTEXT"));
+
+        // Everything else is byte-identical, whatever the declared mime says.
+        for (name, bytes, mime) in [
+            ("tiff", TIFF.to_vec(), "image/tiff"),
+            ("jp2", JP2.to_vec(), "image/jp2"),
+            ("svg", b"<?xml version=\"1.0\"?><!-- keep me --><svg xmlns=\"http://www.w3.org/2000/svg\" data-x=\"1\"/>".to_vec(), "image/svg+xml"),
+            ("bmp", { let mut b = b"BM".to_vec(); b.extend_from_slice(&40u32.to_le_bytes()); b.resize(60, 0); b }, "image/bmp"),
+        ] {
+            let out = strip_for_upload(&bytes, mime, StripScope::File);
+            assert!(matches!(out, Cow::Borrowed(_)), "{name} was rewritten");
+            assert_eq!(&*out, &bytes[..], "{name}");
+        }
+        // The same TIFF *is* stripped when the user sent it as an image.
+        assert_ne!(&*strip_for_upload(TIFF, "image/tiff", StripScope::Image), TIFF);
+    }
+
+    #[test]
+    fn png_private_chunks_are_dropped_but_rendering_chunks_stay() {
+        let mut png = Png::from_bytes(Bytes::from(png_fixture())).unwrap();
+        let end = png.chunks().len() - 1;
+        png.chunks_mut().insert(end, PngChunk::new(*b"caBX", Bytes::from_static(b"C2PA-MANIFEST-AUTHOR")));
+        png.chunks_mut().insert(end, PngChunk::new(*b"pHYs", Bytes::from_static(&[0, 0, 0x0b, 0x13, 0, 0, 0x0b, 0x13, 1])));
+        let bytes = png.encoder().bytes().to_vec();
+        assert!(contains(&bytes, b"caBX"));
+        let out = strip_image_metadata(&bytes, "image/png");
+        assert!(!contains(&out, b"caBX") && !contains(&out, b"C2PA-MANIFEST"));
+        assert!(contains(&out, b"pHYs") && contains(&out, b"IDAT"));
+    }
+
+    #[test]
+    fn webp_unknown_chunks_are_dropped_but_icc_and_animation_stay() {
+        let riff = RiffChunk::new(
+            *b"RIFF",
+            RiffContent::List {
+                kind: Some(*b"WEBP"),
+                subchunks: vec![
+                    RiffChunk::new(*b"VP8L", RiffContent::Data(Bytes::from_static(b"\x2f\0\0\0\0pixels"))),
+                    RiffChunk::new(*b"ICCP", RiffContent::Data(Bytes::from_static(b"ICCDATA"))),
+                    RiffChunk::new(*b"C2PA", RiffContent::Data(Bytes::from_static(b"SECRETMANIFEST"))),
+                ],
+            },
+        );
+        let bytes = WebP::new(riff).unwrap().encoder().bytes().to_vec();
+        let out = strip_image_metadata(&bytes, "image/webp");
+        assert!(!contains(&out, b"SECRETMANIFEST"));
+        assert!(contains(&out, b"ICCDATA"));
+    }
+
+    #[test]
+    fn heif_with_zero_width_extents_is_rejected_quickly() {
+        // iloc with all field widths zero and 65535 extents per item used to
+        // spin for ~0.2 ms per item without consuming input.
+        let mut ftyp = b"heic".to_vec();
+        ftyp.extend_from_slice(&[0, 0, 0, 0]);
+        ftyp.extend_from_slice(b"heic");
+        let mut infe = vec![2, 0, 0, 0, 0, 1, 0, 0];
+        infe.extend_from_slice(b"Exif");
+        let mut iinf = vec![0, 0, 0, 0, 0, 1];
+        iinf.extend_from_slice(&iso_box(b"infe", &infe));
+        let items: u16 = 4000;
+        let mut iloc = vec![0, 0, 0, 0, 0x00, 0x00];
+        iloc.extend_from_slice(&items.to_be_bytes());
+        for _ in 0..items {
+            iloc.extend_from_slice(&[0, 1, 0, 0, 0xFF, 0xFF]);
+        }
+        let mut meta = vec![0, 0, 0, 0];
+        meta.extend_from_slice(&iso_box(b"iinf", &iinf));
+        meta.extend_from_slice(&iso_box(b"iloc", &iloc));
+        let mut file = iso_box(b"ftyp", &ftyp);
+        file.extend_from_slice(&iso_box(b"meta", &meta));
+
+        let t = std::time::Instant::now();
+        assert!(!is_strippable(&file, "image/heic"));
+        assert!(t.elapsed() < std::time::Duration::from_secs(1), "{:?}", t.elapsed());
+    }
+
 }

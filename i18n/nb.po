@@ -4752,9 +4752,6 @@ msgstr "Komprimer bilder på nytt før sending (animerte bilder endres aldri)"
 msgid "This image can't be sent because its metadata can't be removed."
 msgstr "Dette bildet kan ikke sendes fordi metadataene ikke kan fjernes."
 
-#: ui/shared/app/RoomPane.cpp
-msgid "Some images weren't sent because their metadata can't be removed."
-msgstr "Noen bilder ble ikke sendt fordi metadataene ikke kan fjernes."
 
 #: ui/shared/views/LoginView.cpp
 msgid "Settings"
@@ -4763,3 +4760,21 @@ msgstr "Innstillinger"
 #: ui/shared/views/settings/NetworkSection.cpp
 msgid "Applied now. Calls use the new proxy after a restart."
 msgstr "Brukt med en gang. Samtaler bruker den nye proxyen etter en omstart."
+
+#: ui/shared/app
+msgid "Couldn't reconnect your session. Check your connection, or sign out and back in from Settings."
+msgstr "Kunne ikke koble til økten din på nytt. Sjekk tilkoblingen, eller logg ut og inn igjen fra Innstillinger."
+
+#: ui/shared/app
+msgid "Replace backup"
+msgstr "Erstatt sikkerhetskopi"
+
+#: ui/shared/app
+msgid "This account already has a key backup on the server. Replacing it can make older messages unreadable on your other devices. Only continue if you can't use your old recovery key."
+msgstr "Denne kontoen har allerede en nøkkelsikkerhetskopi på serveren. Hvis du erstatter den, kan eldre meldinger bli uleselige på de andre enhetene dine. Fortsett bare hvis du ikke kan bruke den gamle gjenopprettingsnøkkelen."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "{0} image can't be sent because its metadata can't be removed. Remove it to send the rest."
+msgid_plural "{0} images can't be sent because their metadata can't be removed. Remove them to send the rest."
+msgstr[0] "{0} bilde kan ikke sendes fordi metadataene ikke kan fjernes. Fjern det for å sende resten."
+msgstr[1] "{0} bilder kan ikke sendes fordi metadataene ikke kan fjernes. Fjern dem for å sende resten."

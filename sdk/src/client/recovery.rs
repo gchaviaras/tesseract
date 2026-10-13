@@ -15,6 +15,9 @@ use crate::ffi::{BackupProgress, OpResult};
 #[cfg(not(test))]
 use std::sync::atomic::Ordering;
 
+/// `OpResult.message` of an `enable_recovery` that stopped at an existing server backup.
+pub(crate) const BACKUP_EXISTS: &str = "backup_exists";
+
 impl ClientFfi {
     // -----------------------------------------------------------------------
     // Recovery / key backup (Step 6)
@@ -231,8 +234,13 @@ impl ClientFfi {
     /// the key from this passphrase (the raw key is NOT reported via the callback
     /// in that case — `recovery_key` in the Done callback will be empty).
     /// Progress is reported via `on_enable_recovery_progress` before this returns.
+    ///
+    /// When the server already holds a key backup this device can't use, nothing
+    /// is touched: progress step 7 is reported and `backup_exists` returned, so
+    /// the UI can ask. Only `replace_existing_backup == true` (the user
+    /// confirmed) deletes that backup and retries.
     #[cfg(not(test))]
-    pub fn enable_recovery(&self, passphrase: &str) -> OpResult {
+    pub fn enable_recovery(&self, passphrase: &str, replace_existing_backup: bool) -> OpResult {
         use futures_util::StreamExt as _;
         use matrix_sdk::encryption::recovery::{EnableProgress, RecoveryError};
 
@@ -293,9 +301,10 @@ impl ClientFfi {
 
             // `recovery().enable()` refuses to run when a key backup already
             // exists on the server but is not enabled on this device, returning
-            // BackupExistsOnServer. That happens with an orphaned backup left by
-            // a prior reset; it is unreachable from this device (no secret
-            // storage / backup key), so delete it and retry once.
+            // BackupExistsOnServer. That can be an orphan left by a prior reset
+            // or a live backup made by another client; either way it is
+            // unreachable from this device, so deleting it needs the user's
+            // explicit go-ahead (`replace_existing_backup`).
             let mut deleted_stale_backup = false;
 
             loop {
@@ -340,10 +349,22 @@ impl ClientFfi {
                         let _ = progress_task.await;
                         return ok(""); // key delivered via progress step=4
                     }
+                    Err(RecoveryError::BackupExistsOnServer) if !replace_existing_backup => {
+                        progress_task.abort();
+                        let _ = progress_task.await;
+                        // Not ours to delete: it may be the only server copy of
+                        // the user's room keys (made by another client). Ask.
+                        {
+                            let g = handler.lock();
+                            g.on_enable_recovery_progress(7, "", 0, 0);
+                        }
+                        return err(BACKUP_EXISTS);
+                    }
                     Err(RecoveryError::BackupExistsOnServer) if !deleted_stale_backup => {
                         progress_task.abort();
                         let _ = progress_task.await;
-                        // Delete the orphaned server backup, then retry enable().
+                        // The user confirmed replacing it: delete the server
+                        // backup, then retry enable().
                         if let Err(e) = client.encryption().backups().disable_and_delete().await {
                             {
                                 let g = handler.lock();
@@ -444,7 +465,7 @@ impl ClientFfi {
     }
 
     #[cfg(test)]
-    pub fn enable_recovery(&self, _passphrase: &str) -> OpResult {
+    pub fn enable_recovery(&self, _passphrase: &str, _replace_existing_backup: bool) -> OpResult {
         err("not logged in")
     }
 

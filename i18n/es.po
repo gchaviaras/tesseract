@@ -6259,9 +6259,6 @@ msgstr "Recomprimir las imágenes antes de enviarlas (las imágenes animadas nun
 msgid "This image can't be sent because its metadata can't be removed."
 msgstr "Esta imagen no se puede enviar porque no se pueden eliminar sus metadatos."
 
-#: ui/shared/app/RoomPane.cpp
-msgid "Some images weren't sent because their metadata can't be removed."
-msgstr "Algunas imágenes no se enviaron porque no se pueden eliminar sus metadatos."
 
 #: ui/shared/views/LoginView.cpp
 msgid "Settings"
@@ -6270,3 +6267,21 @@ msgstr "Ajustes"
 #: ui/shared/views/settings/NetworkSection.cpp
 msgid "Applied now. Calls use the new proxy after a restart."
 msgstr "Aplicado ahora. Las llamadas usarán el nuevo proxy después de reiniciar."
+
+#: ui/shared/app
+msgid "Couldn't reconnect your session. Check your connection, or sign out and back in from Settings."
+msgstr "No se pudo reconectar tu sesión. Comprueba tu conexión o cierra sesión y vuelve a iniciarla desde Ajustes."
+
+#: ui/shared/app
+msgid "Replace backup"
+msgstr "Reemplazar copia de seguridad"
+
+#: ui/shared/app
+msgid "This account already has a key backup on the server. Replacing it can make older messages unreadable on your other devices. Only continue if you can't use your old recovery key."
+msgstr "Esta cuenta ya tiene una copia de seguridad de claves en el servidor. Si la reemplazas, los mensajes antiguos pueden dejar de ser legibles en tus otros dispositivos. Continúa solo si no puedes usar tu clave de recuperación anterior."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "{0} image can't be sent because its metadata can't be removed. Remove it to send the rest."
+msgid_plural "{0} images can't be sent because their metadata can't be removed. Remove them to send the rest."
+msgstr[0] "No se puede enviar {0} imagen porque no se pueden eliminar sus metadatos. Quítala para enviar el resto."
+msgstr[1] "No se pueden enviar {0} imágenes porque no se pueden eliminar sus metadatos. Quítalas para enviar el resto."

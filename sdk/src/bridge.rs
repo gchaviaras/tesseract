@@ -4269,7 +4269,15 @@ pub mod ffi {
         /// Empty `passphrase` → generate a random recovery key.
         /// Non-empty → derive key from passphrase (reported key is "").
         /// Progress events fire via `on_enable_recovery_progress` before return.
-        fn enable_recovery(self: &ClientFfi, passphrase: &str) -> OpResult;
+        /// If the server already has a key backup this device can't use,
+        /// nothing is deleted: progress step 7 fires and the result message is
+        /// `backup_exists`; retry with `replace_existing_backup = true` once
+        /// the user confirmed.
+        fn enable_recovery(
+            self: &ClientFfi,
+            passphrase: &str,
+            replace_existing_backup: bool,
+        ) -> OpResult;
 
         /// Turn recovery off: delete the server-side key backup, clear secret
         /// storage and mark backup as not to be re-enabled automatically.

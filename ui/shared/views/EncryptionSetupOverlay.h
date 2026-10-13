@@ -80,6 +80,9 @@ public:
     // ── Callbacks wired by ShellBase ──────────────────────────────────────
     std::function<void()>              on_close;
     std::function<void(std::string)>   on_enable_recovery; // passphrase or ""
+    // The account already has a key backup on the server; the user confirmed
+    // replacing it. Same passphrase as the on_enable_recovery call it retries.
+    std::function<void(std::string)>   on_replace_backup;
     std::function<void(std::string)>   on_recover;         // key or passphrase
     std::function<void()>              on_request_sas;
     std::function<void(std::string)>   on_copy_to_clipboard;
@@ -220,6 +223,9 @@ public:
     Mode        mode()          const { return mode_; }
     std::string recovery_key()  const { return recovery_key_; }
     std::string error_msg()     const { return error_msg_; }
+    // True after setup found an existing server backup and is waiting for the
+    // user to confirm replacing it.
+    bool        replace_backup_pending() const { return replace_backup_pending_; }
     std::string progress_label()const { return progress_label_; }
     DoneKind    done_kind()     const { return done_kind_; }
     const VerificationSas& sas() const { return sas_; }
@@ -294,9 +300,12 @@ public:
         save_status_.clear();
         key_saved_checked_   = false;
         passphrase_mode_     = false;
+        replace_backup_pending_ = false;
+        enable_passphrase_.clear();
         // Clear all callbacks so the caller can re-wire fresh ones.
         on_close             = {};
         on_enable_recovery   = {};
+        on_replace_backup    = {};
         on_recover           = {};
         on_request_sas       = {};
         on_copy_to_clipboard = {};
@@ -392,6 +401,11 @@ private:
     bool        save_failed_        = false;
     bool        key_saved_checked_  = false;
     bool        passphrase_mode_    = false;
+    // setup hit an existing server backup (progress step 7): the next primary
+    // press replaces it, via on_replace_backup. enable_passphrase_ is what the
+    // interrupted attempt was using.
+    bool        replace_backup_pending_ = false;
+    std::string enable_passphrase_;
     DoneKind    done_kind_          = DoneKind::Protected;
     bool        has_other_device_   = false;
     VerificationSas sas_;

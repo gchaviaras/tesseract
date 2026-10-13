@@ -9,7 +9,9 @@
 
 #include <tesseract/account_session.h>
 #include <tesseract/client.h>
+#include <tesseract/session_store.h>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
@@ -89,6 +91,7 @@ struct AccountsShell : tesseract::test::TestShellBase
     using ShellBase::claim_dedicated_for_active_;
     using ShellBase::client_;
     using ShellBase::handle_sync_error_impl_;
+    using ShellBase::mut_pool_;
     using ShellBase::is_pinned_window_;
     using ShellBase::is_secondary_window_startup_;
     using ShellBase::my_user_id_;
@@ -161,6 +164,36 @@ TEST_CASE("a soft logout with no stored session falls through to relogin",
     s.account_manager_.add_account(a);
     s.handle_sync_error_impl_("sync_auth_error", "@nostored:x", "", true);
     CHECK(s.relogins == std::vector<std::string>{"@nostored:x"});
+}
+
+TEST_CASE("a soft logout whose restore fails keeps the account and its stored keys",
+          "[shell][accounts][sync_error][keychain]")
+{
+    // A store-key account (the wrapper form). restore_session fails here (no
+    // network, bogus session), which used to wipe the account's crypto store
+    // and force a fresh login; now it must leave everything in place.
+    const std::string uid = "@softlogout:x";
+    REQUIRE(tesseract::SessionStore::save_account_with_key(uid, R"({"bogus":true})",
+                                                           {1, 2, 3, 4}));
+    {
+        AccountsShell s;
+        auto a = acct(uid, true);
+        a->sync_started = true;
+        s.account_manager_.add_account(a);
+
+        s.handle_sync_error_impl_("sync_auth_error", uid, "", true);
+        REQUIRE(s.mut_pool_.wait_idle(std::chrono::seconds(10)));
+
+        CHECK(s.relogins.empty());
+        CHECK_FALSE(a->sync_started);
+        REQUIRE_FALSE(s.status.empty());
+        CHECK(s.status.back().find("Couldn't reconnect") != std::string::npos);
+        // Credentials and the store key are untouched.
+        auto kept = tesseract::SessionStore::load_account_with_key(uid);
+        REQUIRE(kept.has_value());
+        CHECK(kept->store_key == std::vector<uint8_t>{1, 2, 3, 4});
+    }
+    tesseract::SessionStore::clear_account(uid);
 }
 
 TEST_CASE("an auth error for an unknown account still requests relogin",

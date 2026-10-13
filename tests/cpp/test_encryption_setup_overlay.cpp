@@ -1035,3 +1035,51 @@ TEST_CASE("Verify: cancel codes map to plain wording", "[encryption][overlay]")
     CHECK(ov->error_msg().find("m.") == std::string::npos);
     CHECK(ov->error_msg().find("Another of your devices") != std::string::npos);
 }
+
+TEST_CASE("Fresh: an existing server backup asks before it is replaced",
+          "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(nullptr, EncryptionSetupOverlay::Mode::Fresh);
+    st.run(*ov, {0, 0, 800, 600});
+    int enable_calls = 0;
+    std::vector<std::string> replace_calls;
+    ov->on_enable_recovery = [&](std::string) { ++enable_calls; };
+    ov->on_replace_backup = [&](std::string p) { replace_calls.push_back(p); };
+
+    ov->simulate_primary_action(); // Create recovery key → Progress
+    REQUIRE(ov->step() == EncryptionSetupOverlay::Step::Progress);
+    REQUIRE(enable_calls == 1);
+
+    // Setup stopped at a backup it must not delete on its own.
+    ov->advance_progress(7, "", 0, 0);
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::Intro);
+    CHECK(ov->replace_backup_pending());
+    CHECK(ov->error_msg().find("key backup") != std::string::npos);
+    CHECK(replace_calls.empty());
+
+    // Only the explicit confirmation replaces it, and it does not re-run the
+    // plain enable.
+    ov->simulate_primary_action();
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::Progress);
+    CHECK(enable_calls == 1);
+    REQUIRE(replace_calls.size() == 1);
+    CHECK(replace_calls[0].empty());
+
+    // Done clears the pending state.
+    ov->advance_progress(4, "KEY", 0, 0);
+    CHECK_FALSE(ov->replace_backup_pending());
+}
+
+TEST_CASE("Fresh: dismissing the replace-backup prompt forgets it", "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(nullptr, EncryptionSetupOverlay::Mode::Fresh);
+    st.run(*ov, {0, 0, 800, 600});
+    ov->on_enable_recovery = [](std::string) {};
+    ov->simulate_primary_action();
+    ov->advance_progress(7, "", 0, 0);
+    REQUIRE(ov->replace_backup_pending());
+    ov->set_visible(false);
+    CHECK_FALSE(ov->replace_backup_pending());
+}

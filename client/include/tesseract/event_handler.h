@@ -160,7 +160,9 @@ public:
 
     /// Fired as `Client::enable_recovery()` progresses through setup stages.
     /// `step` encodes EnableProgress: 0=Starting 1=CreatingBackup
-    /// 2=CreatingRecoveryKey 3=BackingUp 4=Done 5=Error 6=RoomKeyUploadError.
+    /// 2=CreatingRecoveryKey 3=BackingUp 4=Done 5=Error 6=RoomKeyUploadError
+    /// 7=BackupExistsOnServer (setup stopped; nothing was deleted, the user
+    /// must confirm before it is replaced).
     /// Step 6 is non-fatal — the SDK will retry backup automatically.
     /// When step==4, `recovery_key` holds the generated key (empty if
     /// passphrase mode was chosen). When step==3, `backed_up`/`total`

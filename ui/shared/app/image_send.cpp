@@ -48,23 +48,36 @@ PreparedImage prepare_image_for_send(std::vector<std::uint8_t> bytes, std::strin
         return p;
     };
 
-    // Can the SDK vouch for stripping the original's metadata on upload?
-    const bool original_ok = !strippable || strippable(bytes, mime);
+    // Can the SDK vouch for stripping the original's metadata on upload? The
+    // check runs the whole strip (this is the UI thread), so it is evaluated
+    // only where the original is actually a candidate: never when a smaller
+    // recompression wins, which is the common case for photos.
+    bool original_ok_known = false;
+    bool original_ok_value = true;
+    const auto original_ok = [&]
+    {
+        if (!original_ok_known)
+        {
+            original_ok_value = !strippable || strippable(bytes, mime);
+            original_ok_known = true;
+        }
+        return original_ok_value;
+    };
 
     // An animation cannot be recompressed without flattening it, so one whose
     // metadata cannot be stripped is not sent at all.
     if (animated)
-        return original_ok ? original() : refuse();
+        return original_ok() ? original() : refuse();
 
     if (!encode)
-        return original_ok ? original() : refuse();
-    if (!recompress && original_ok)
+        return original_ok() ? original() : refuse();
+    if (!recompress && original_ok())
         return original();
 
     auto enc = encode(bytes.data(), bytes.size(), /*compress=*/true);
     if (enc.bytes.empty())
-        return original_ok ? original() : refuse();
-    if (enc.bytes.size() >= bytes.size() && original_ok)
+        return original_ok() ? original() : refuse();
+    if (enc.bytes.size() >= bytes.size() && original_ok())
         return original();
 
     out.mime = std::move(enc.mime);

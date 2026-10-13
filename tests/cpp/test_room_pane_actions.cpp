@@ -516,6 +516,31 @@ TEST_CASE("an image whose metadata cannot be stripped is refused, not sent",
     CHECK(f.view->compose_bar()->current_text() == "caption"); // nothing was sent
 }
 
+TEST_CASE("a gallery with a refused image sends nothing and keeps the composer",
+          "[roompane][media]")
+{
+    RpFx f;
+    f.view->set_current_text("caption");
+    using PA = tesseract::views::ComposeBar::PendingAttachment;
+    std::vector<PA> items;
+    PA bad;
+    bad.kind = PA::Kind::Image;
+    bad.bytes = {1, 2, 3}; // flagged animated, not a parseable image: unstrippable
+    bad.mime = "image/gif";
+    bad.filename = "a.gif";
+    bad.is_animated = true;
+    items.push_back(std::move(bad));
+    PA also;
+    also.kind = PA::Kind::Image;
+    also.bytes = {4, 5, 6};
+    also.mime = "image/gif";
+    also.filename = "b.gif";
+    also.is_animated = true;
+    items.push_back(std::move(also));
+    f.view->on_send_gallery(std::move(items), "cap", "");
+    CHECK(f.view->compose_bar()->current_text() == "caption");
+}
+
 TEST_CASE("sticker picks send through the client and drop the reply",
           "[roompane][sticker]")
 {

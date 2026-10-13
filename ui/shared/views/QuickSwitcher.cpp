@@ -317,9 +317,10 @@ void QuickSwitcher::open()
                                  : std::vector<tesseract::RoomInfo>{};
     recent_ = recent_provider_ ? recent_provider_()
                                : std::vector<tesseract::RoomInfo>{};
-    // Upgraded (tombstoned) rooms are dead ends; their successor is the target.
+    // An upgraded (tombstoned) room is a dead end once its successor is
+    // joined; until then it is the only way to reach the new room.
     const auto tombstoned = [](const tesseract::RoomInfo& r)
-    { return !r.successor_room_id.empty(); };
+    { return !r.successor_room_id.empty() && r.successor_joined; };
     std::erase_if(all_rooms_, tombstoned);
     std::erase_if(recent_, tombstoned);
     query_.clear();

@@ -2201,9 +2201,11 @@ void RoomListView::rebuild_items()
 
     for (const auto& r : rooms_)
     {
-        // Upgraded (tombstoned) rooms are dead ends; their successor is the
-        // target. Keep the open one so the selection doesn't vanish under it.
-        if (!r.successor_room_id.empty() && r.id != selected_room_id_cache_)
+        // An upgraded (tombstoned) room is a dead end once its successor is
+        // joined; until then it stays listed (its banner offers "Join the new
+        // room"). Keep the open one so the selection doesn't vanish under it.
+        if (!r.successor_room_id.empty() && r.successor_joined &&
+            r.id != selected_room_id_cache_)
         {
             continue;
         }

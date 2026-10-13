@@ -44,6 +44,14 @@ struct WorkerPool
         });
     }
 
+    // True when nothing is queued or executing. Unlike pending_count() (queue
+    // only), this stays false while a task is still running, so it is the
+    // right test before freeing something a running task may still be using.
+    bool idle() const
+    {
+        return in_flight_.load(std::memory_order_relaxed) == 0;
+    }
+
     // Number of tasks waiting in the queue (not yet executing).
     // Lock-free read; acceptable to see a slightly stale count for display.
     std::size_t pending_count() const

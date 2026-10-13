@@ -7,10 +7,21 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-13
 
+- fix(send): the metadata strip now runs on every real send path, single images (animated too), files and gallery items, not only the sync/gallery ones; a photo sent as a file loses its EXIF/GPS while TIFF/RAW, SVG, BMP and JPEG 2000 files go byte-identical, TIFF is never truncated, and PNG/WebP keep only rendering chunks (C2PA and private chunks are dropped). Qt6 build, ctest 3277/3277, cargo 1065
+- fix(send): the "can be stripped?" check no longer runs when a smaller recompression wins, and a crafted HEIC can't stall it. A gallery with any refused image sends nothing and keeps the composer. Qt6 build, ctest 3277/3277, cargo 1065
+- fix(login): a retired login client is freed only when no worker is running (a lookup in flight when the proxy changed could use it after free), and a live proxy change keeps "Restart now" because calls still use the launch proxy. Qt6 build, ctest 3277/3277
+- fix(accounts): soft-logout recovery restores with the stored store key off the UI thread and never wipes the account when it fails (it used to destroy the crypto store). Qt6 build, ctest 3277/3277
+- fix(encryption): Enable recovery asks before replacing an existing server key backup instead of deleting it. Qt6 build, ctest 3277/3277, cargo 1065
+- fix(settings): `app_settings.json` is saved atomically with a `.last-good` copy, and an unreadable file is moved to `.corrupt` and recovered instead of being overwritten with defaults. Qt6 build, ctest 3277/3277
+- fix(export): history export takes an image's file extension from its bytes, never from the sender's file name, and skips anything that isn't a raster image. cargo 1065
+- fix(calls): another member's SFU service must be public https (no redirects, no internal addresses), at most 4 remote SFUs per call, and server error bodies are no longer logged. cargo 1065
+- fix(rooms): an upgraded room is hidden from the room list and quick switcher only once its successor is joined. Qt6 build, ctest 3277/3277
+- fix(packaging): a silent uninstall (what an upgrade runs) keeps the provisioned `DefaultHomeserver`. NSIS script only; not built here
+
 - feat(login): a settings button on the first-login screen opens Settings with only Network, Language and About, so a proxy can be set before the first sign-in; a proxy change made there applies immediately (no restart) and Settings closes back to the login screen. `SideTabView` re-clamps its scroll offset when tabs are hidden; the replaced login client is retired (not freed) while discovery workers may still use it, and discovery re-runs after a proxy change; an invalid Manual proxy URL now fails closed instead of falling back to the system proxy. Qt6 + GTK4 build, ctest 3267/3267, cargo net_proxy
 - fix(windows): avatar initials render through BetterText (cached static-label captures) so emoji use the bundled Noto Color Emoji instead of Segoe UI Emoji; plain DirectWrite remains the fallback. Windows build, user-verified
 - feat(login): the login view's default homeserver can be provisioned (Windows registry `DefaultHomeserver`, macOS preference, Linux `/etc/tesseract/provisioning.json`); the NSIS installer writes it from `/DEFAULT_HOMESERVER=<host>`. Windows build + NSIS installer user-verified; macOS/Linux loaders unbuilt
-- fix(send): animated images (GIF, WebP, APNG, AVIF, JXL) are no longer recompressed to JPEG and stills only when smaller (new Settings → Media toggle); metadata is always stripped from every format that carries it, and an image whose metadata can't be stripped is never sent. Qt6 build, ctest 3259/3259, cargo 1055
+- fix(send): animated images (GIF, WebP, APNG, AVIF, JXL) are no longer recompressed to JPEG and stills only when smaller (new Settings → Media toggle); photo formats are stripped of metadata on upload and an image that can't be stripped is never sent as an image. Qt6 build, ctest 3259/3259, cargo 1055
 
 ### 2026-10-12
 

@@ -6121,9 +6121,6 @@ msgstr "Recompresser les images avant l'envoi (les images animées ne sont jamai
 msgid "This image can't be sent because its metadata can't be removed."
 msgstr "Cette image ne peut pas être envoyée car ses métadonnées ne peuvent pas être supprimées."
 
-#: ui/shared/app/RoomPane.cpp
-msgid "Some images weren't sent because their metadata can't be removed."
-msgstr "Certaines images n'ont pas été envoyées car leurs métadonnées ne peuvent pas être supprimées."
 
 #: ui/shared/views/LoginView.cpp
 msgid "Settings"
@@ -6132,3 +6129,21 @@ msgstr "Paramètres"
 #: ui/shared/views/settings/NetworkSection.cpp
 msgid "Applied now. Calls use the new proxy after a restart."
 msgstr "Appliqué immédiatement. Les appels utilisent le nouveau proxy après un redémarrage."
+
+#: ui/shared/app
+msgid "Couldn't reconnect your session. Check your connection, or sign out and back in from Settings."
+msgstr "Impossible de rétablir votre session. Vérifiez votre connexion, ou déconnectez-vous puis reconnectez-vous depuis les Paramètres."
+
+#: ui/shared/app
+msgid "Replace backup"
+msgstr "Remplacer la sauvegarde"
+
+#: ui/shared/app
+msgid "This account already has a key backup on the server. Replacing it can make older messages unreadable on your other devices. Only continue if you can't use your old recovery key."
+msgstr "Ce compte possède déjà une sauvegarde de clés sur le serveur. La remplacer peut rendre les anciens messages illisibles sur vos autres appareils. Ne continuez que si vous ne pouvez pas utiliser votre ancienne clé de récupération."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "{0} image can't be sent because its metadata can't be removed. Remove it to send the rest."
+msgid_plural "{0} images can't be sent because their metadata can't be removed. Remove them to send the rest."
+msgstr[0] "{0} image ne peut pas être envoyée, car ses métadonnées ne peuvent pas être supprimées. Retirez-la pour envoyer le reste."
+msgstr[1] "{0} images ne peuvent pas être envoyées, car leurs métadonnées ne peuvent pas être supprimées. Retirez-les pour envoyer le reste."

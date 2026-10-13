@@ -84,10 +84,16 @@ if(WIN32)
     Pop $R1
     Pop $R0
 ]==])
+    # Silent uninstall (/S) is what an upgrade runs (uninstall-before-install)
+    # and what managed tooling uses: keep the provisioning then, so an upgrade
+    # does not silently reset the fleet to matrix.org. Only an interactive
+    # uninstall removes it.
     set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS
         "SetRegView 64
+    IfSilent hs_keep
     DeleteRegValue HKLM 'Software\\\\Tesseract-Matrix' 'DefaultHomeserver'
-    DeleteRegKey /ifempty HKLM 'Software\\\\Tesseract-Matrix'")
+    DeleteRegKey /ifempty HKLM 'Software\\\\Tesseract-Matrix'
+    hs_keep:")
 endif()
 
 if(APPLE)

@@ -283,6 +283,19 @@ void EncryptionSetupOverlay::advance_progress(uint8_t step,
                                                uint32_t backed_up,
                                                uint32_t total)
 {
+    if (step == 7) // an existing key backup on the server: ask before replacing it
+    {
+        replace_backup_pending_ = true;
+        advance_step_(Step::Intro);
+        error_msg_ = tk::tr("This account already has a key backup on the server. "
+                            "Replacing it can make older messages unreadable on your "
+                            "other devices. Only continue if you can't use your old "
+                            "recovery key.");
+        announce_(error_msg_, true);
+        return;
+    }
+    if (step == 4 || step == 5)
+        replace_backup_pending_ = false;
     update_progress_label_(step, backed_up, total);
     if (step == 4) // Done
     {
@@ -383,8 +396,16 @@ void EncryptionSetupOverlay::fire_primary_()
                 advance_step_(Step::Choose);
                 break;
             }
+            if (replace_backup_pending_)
+            {
+                // Confirmed: replace the backup that setup stopped at.
+                advance_step_(Step::Progress);
+                if (on_replace_backup) on_replace_backup(enable_passphrase_);
+                break;
+            }
             // Fresh: the default path generates a recovery key straight away.
             passphrase_mode_ = false;
+            enable_passphrase_.clear();
             advance_step_(Step::Progress);
             if (on_enable_recovery) on_enable_recovery(std::string());
             break;
@@ -393,8 +414,13 @@ void EncryptionSetupOverlay::fire_primary_()
         {
             if (!passphrases_match_()) return;
             std::string pass = passphrase_field_->text();
+            enable_passphrase_ = pass;
             advance_step_(Step::Progress);
-            if (on_enable_recovery)
+            if (replace_backup_pending_)
+            {
+                if (on_replace_backup) on_replace_backup(std::move(pass));
+            }
+            else if (on_enable_recovery)
                 on_enable_recovery(std::move(pass));
             break;
         }
@@ -710,7 +736,11 @@ void EncryptionSetupOverlay::on_theme_changed(const tk::Theme& t)
 void EncryptionSetupOverlay::set_visible(bool v)
 {
     tk::Widget::set_visible(v);
-    if (!v) hide_native_fields();
+    if (!v)
+    {
+        hide_native_fields();
+        replace_backup_pending_ = false; // dismissed without confirming
+    }
 }
 
 // ── Field-rect accessors ──────────────────────────────────────────────────────
@@ -774,7 +804,7 @@ float EncryptionSetupOverlay::step_card_height_() const
 {
     switch (step_)
     {
-        case Step::Intro:        return mode_ == Mode::Fresh     ? 290.0f
+        case Step::Intro:        return mode_ == Mode::Fresh     ? (replace_backup_pending_ ? 370.0f : 290.0f)
                                       : mode_ == Mode::SaveKey
                                           ? (before_sign_out_ ? 380.0f : 310.0f)
                                       : mode_ == Mode::AutoSetupNotice ? 310.0f
@@ -1205,6 +1235,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                           tk::tr("Use a passphrase instead"));
 
             const std::string prim = notice     ? tk::tr("OK")
+                                     : fresh && replace_backup_pending_ ? tk::tr("Replace backup")
                                      : fresh    ? tk::tr("Create recovery key")
                                      : save_key ? tk::tr("Show my recovery key")
                                                 : tk::tr("Continue");

@@ -287,3 +287,37 @@ TEST_CASE("QuickSwitcher: set_user_results is ignored once out of user mode")
     REQUIRE(h.selected_room.has_value());
     CHECK(*h.selected_room == "!a:srv");
 }
+
+TEST_CASE("QuickSwitcher: an upgraded room is hidden only once its successor is joined")
+{
+    auto qs_owner = tk::create_root_widget<QuickSwitcher>(nullptr);
+    QuickSwitcher& qs = *qs_owner;
+    TkQuickSwitcherStage stage;
+    std::optional<std::string> selected;
+    qs.on_room_selected = [&](const std::string& id) { selected = id; };
+    qs.set_rooms_provider(
+        []() -> std::vector<RoomInfo>
+        {
+            RoomInfo joined = make_room("!oldj:srv", "Gone Joined");
+            joined.successor_room_id = "!newj:srv";
+            joined.successor_joined = true;
+            RoomInfo unjoined = make_room("!oldu:srv", "Gone Unjoined");
+            unjoined.successor_room_id = "!newu:srv";
+            unjoined.successor_joined = false;
+            return {joined, unjoined};
+        });
+    qs.open();
+
+    // Successor joined: dead end, not offered.
+    qs.set_query("Gone Joined");
+    stage.run(qs, {0, 0, 640, 600});
+    qs.activate_selected();
+    CHECK_FALSE(selected.has_value());
+
+    // Successor not joined: still reachable (its banner offers "Join").
+    qs.set_query("Gone Unjoined");
+    stage.run(qs, {0, 0, 640, 600});
+    qs.activate_selected();
+    REQUIRE(selected.has_value());
+    CHECK(*selected == "!oldu:srv");
+}

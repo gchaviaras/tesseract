@@ -6119,9 +6119,6 @@ msgstr "Bilder vor dem Senden neu komprimieren (animierte Bilder bleiben unverä
 msgid "This image can't be sent because its metadata can't be removed."
 msgstr "Dieses Bild kann nicht gesendet werden, weil seine Metadaten nicht entfernt werden können."
 
-#: ui/shared/app/RoomPane.cpp
-msgid "Some images weren't sent because their metadata can't be removed."
-msgstr "Einige Bilder wurden nicht gesendet, weil ihre Metadaten nicht entfernt werden können."
 
 #: ui/shared/views/LoginView.cpp
 msgid "Settings"
@@ -6130,3 +6127,21 @@ msgstr "Einstellungen"
 #: ui/shared/views/settings/NetworkSection.cpp
 msgid "Applied now. Calls use the new proxy after a restart."
 msgstr "Sofort angewendet. Anrufe verwenden den neuen Proxy nach einem Neustart."
+
+#: ui/shared/app
+msgid "Couldn't reconnect your session. Check your connection, or sign out and back in from Settings."
+msgstr "Die Sitzung konnte nicht wiederhergestellt werden. Prüfe deine Verbindung oder melde dich in den Einstellungen ab und wieder an."
+
+#: ui/shared/app
+msgid "Replace backup"
+msgstr "Backup ersetzen"
+
+#: ui/shared/app
+msgid "This account already has a key backup on the server. Replacing it can make older messages unreadable on your other devices. Only continue if you can't use your old recovery key."
+msgstr "Dieses Konto hat bereits ein Schlüssel-Backup auf dem Server. Wird es ersetzt, können ältere Nachrichten auf deinen anderen Geräten unlesbar werden. Fahre nur fort, wenn du deinen alten Wiederherstellungsschlüssel nicht verwenden kannst."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "{0} image can't be sent because its metadata can't be removed. Remove it to send the rest."
+msgid_plural "{0} images can't be sent because their metadata can't be removed. Remove them to send the rest."
+msgstr[0] "{0} Bild kann nicht gesendet werden, weil seine Metadaten nicht entfernt werden können. Entferne es, um den Rest zu senden."
+msgstr[1] "{0} Bilder können nicht gesendet werden, weil ihre Metadaten nicht entfernt werden können. Entferne sie, um den Rest zu senden."

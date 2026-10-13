@@ -6456,7 +6456,7 @@ private:
 
     std::vector<tesseract::GalleryItemOut> out_items;
     out_items.reserve(items.size());
-    bool any_refused = false;
+    int refused_count = 0;
     for (auto& pa : items)
     {
         tesseract::GalleryItemOut item;
@@ -6481,7 +6481,7 @@ private:
                 { return tesseract::image_metadata_strippable(b, m); });
             if (prepared.refused)
             {
-                any_refused = true; // never sent: its metadata cannot be stripped
+                ++refused_count; // never sent: its metadata cannot be stripped
                 continue;
             }
             if (prepared.bytes.empty())
@@ -6510,10 +6510,22 @@ private:
         out_items.push_back(std::move(item));
     }
 
-    if (any_refused)
+    // One refused image aborts the whole send and leaves the composer as it
+    // was, so nothing is silently dropped and the user can remove it.
+    if (refused_count > 0)
     {
-        _shell->show_status_message(
-            tk::tr("Some images weren't sent because their metadata can't be removed."));
+        _shell->show_status_message(tk::trf(
+            tk::trn("{0} image can't be sent because its metadata can't be removed. "
+                    "Remove it to send the rest.",
+                    "{0} images can't be sent because their metadata can't be removed. "
+                    "Remove them to send the rest.",
+                    static_cast<long>(refused_count)),
+            {std::to_string(refused_count)}));
+        return;
+    }
+    if (out_items.empty())
+    {
+        return;
     }
     if (_roomTextArea)
     {
@@ -6522,10 +6534,6 @@ private:
     if (_roomView)
     {
         _roomView->set_current_text({});
-    }
-    if (out_items.empty())
-    {
-        return;
     }
     _shell->client_->send_gallery_async(0, _shell->current_room_id_, out_items,
                                         caption, reply_event_id);

@@ -152,11 +152,11 @@ void NetworkSection::set_applies_immediately(bool immediately)
 void NetworkSection::update_restart_note_()
 {
     // Applied live (signed out): HTTP requests use the new proxy at once, but
-    // call signalling still reads the launch-time one. Otherwise, or while a
-    // restart is still pending, everything waits for a restart.
+    // call signalling still reads the launch-time one. Otherwise everything
+    // waits for a restart.
     if (restart_note_)
     {
-        restart_note_->set_text(applies_immediately_ && !restart_pending_
+        restart_note_->set_text(applies_immediately_
                                     ? tk::tr("Applied now. Calls use the new proxy after a restart.")
                                     : tk::tr("Changes take effect after restart."));
     }

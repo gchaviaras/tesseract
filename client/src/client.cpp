@@ -3136,14 +3136,14 @@ bool Client::has_devices_to_verify_against() const
     return impl_->ffi->has_devices_to_verify_against();
 }
 
-Result Client::enable_recovery(const std::string& passphrase)
+Result Client::enable_recovery(const std::string& passphrase, bool replace_existing_backup)
 {
     if (!impl_)
     {
         return {false, "not logged in"};
     }
     SH_FFI;
-    return from_ffi(impl_->ffi->enable_recovery(passphrase));
+    return from_ffi(impl_->ffi->enable_recovery(passphrase, replace_existing_backup));
 }
 
 Result Client::disable_recovery()

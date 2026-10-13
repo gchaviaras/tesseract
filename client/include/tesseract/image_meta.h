@@ -10,7 +10,8 @@ namespace tesseract
 /// XMP, comments) on upload: the format is recognised and parsed, or is known
 /// to carry none (BMP, QOI, bare JPEG XL). False for formats with no stripper
 /// and for recognised files that fail to parse. Content-based; `mime_type` is
-/// only a fallback hint. Header scans only.
+/// only a fallback hint. This runs the complete strip (no output kept), so
+/// callers on the UI thread should ask only when the answer is needed.
 bool image_metadata_strippable(std::span<const std::uint8_t> bytes, std::string_view mime_type);
 
 } // namespace tesseract

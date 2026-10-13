@@ -243,6 +243,7 @@ fn preferred_ext(mime: &str) -> Option<&'static str> {
         "image/png" => "png",
         "image/gif" => "gif",
         "image/webp" => "webp",
+        "image/jxl" => "jxl",
         "image/tiff" => "tiff",
         "image/svg+xml" => "svg",
         "audio/mpeg" => "mp3",
@@ -326,6 +327,10 @@ fn sniff(head: &[u8]) -> (String, bool) {
     if head.len() >= 4 && MACHO.iter().any(|m| head[..4] == m[..]) {
         // 0xCAFEBABE is also a Java class file; both are code.
         return ("application/x-mach-binary".to_owned(), true);
+    }
+    // JPEG XL: bare codestream or ISOBMFF container (infer has no matcher).
+    if head.starts_with(&[0xFF, 0x0A]) || head.starts_with(b"\0\0\0\x0cJXL \r\n\x87\n") {
+        return ("image/jxl".to_owned(), false);
     }
     match infer::get(head) {
         Some(t) => {
@@ -489,6 +494,21 @@ mod tests {
     fn jpg_alias_and_params_are_normalised() {
         assert_eq!(check("a.jpg", "image/jpg", JPEG).verdict, Verdict::Ok);
         assert_eq!(check("a.JPEG", "IMAGE/JPEG; charset=x", JPEG).verdict, Verdict::Ok);
+    }
+
+    #[test]
+    fn jxl_is_recognised_by_content() {
+        let codestream: &[u8] = &[0xFF, 0x0A, 0x00, 0x00];
+        let container: &[u8] = b"\0\0\0\x0cJXL \r\n\x87\n";
+        for head in [codestream, container] {
+            let r = check("photo.jxl", "image/jxl", head);
+            assert_eq!(r.verdict, Verdict::Ok, "{r:?}");
+            assert_eq!(r.sniffed_mime, "image/jxl");
+        }
+        // A JXL sent under a .png name is a content mismatch with a .jxl suggestion.
+        let r = check("cat.png", "image/png", codestream);
+        assert_eq!(r.verdict, Verdict::ContentMismatch);
+        assert_eq!(r.suggested_ext, "jxl");
     }
 
     #[test]

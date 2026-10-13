@@ -4743,3 +4743,15 @@ msgstr "Du har ikke tillatelse til å bli med i samtaler i dette rommet."
 #: ui/shared/app/ShellBase_navigation.cpp
 msgid "A moderator needs to start the call."
 msgstr "En moderator må starte samtalen."
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Recompress images before sending (animated images are never changed)"
+msgstr "Komprimer bilder på nytt før sending (animerte bilder endres aldri)"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "This image can't be sent because its metadata can't be removed."
+msgstr "Dette bildet kan ikke sendes fordi metadataene ikke kan fjernes."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Some images weren't sent because their metadata can't be removed."
+msgstr "Noen bilder ble ikke sendt fordi metadataene ikke kan fjernes."

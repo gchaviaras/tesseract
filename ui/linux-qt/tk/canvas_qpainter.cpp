@@ -1,5 +1,6 @@
 #include "canvas_qpainter.h"
 #include "pill.h"
+#include "app/jxl_decode.h"
 #include "tk/image_sniff.h"
 
 #include <QtWidgets/QApplication>
@@ -1100,6 +1101,8 @@ public:
         {
             return nullptr;
         }
+        if (tesseract::is_jxl_data(bytes))
+            return tesseract::jxl::decode_still(*this, bytes);
         if (!tk::decode_size_allowed(bytes, /*animated=*/false))
             return nullptr;
         QImage img;
@@ -1139,6 +1142,8 @@ public:
     decode_animated_image(std::span<const std::uint8_t> bytes,
                           int max_px) override
     {
+        if (tesseract::is_jxl_data(bytes))
+            return tesseract::jxl::decode_animated(*this, bytes, max_px);
         if (!tk::decode_size_allowed(bytes, /*animated=*/true))
             return nullptr;
         std::vector<std::unique_ptr<Image>> frames;
@@ -1750,6 +1755,13 @@ std::unique_ptr<CanvasFactory> make_factory()
 std::unique_ptr<Image> make_image(QImage img)
 {
     return std::make_unique<QtImage>(std::move(img));
+}
+
+std::unique_ptr<Image> make_image_rgba(const std::uint8_t* rgba, int w, int h)
+{
+    if (!rgba || w <= 0 || h <= 0)
+        return nullptr;
+    return std::make_unique<QtImage>(QImage(rgba, w, h, w * 4, QImage::Format_RGBA8888).copy());
 }
 
 NativeImageHandle to_native_image(const Image& img)

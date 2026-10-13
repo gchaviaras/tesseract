@@ -14,7 +14,7 @@ using Kind = ComposeBar::PendingAttachment::Kind;
 namespace
 {
 // Records the arguments of the per-shell media-info probe so tests can assert
-// it ran (gif/webp/video/audio) or stayed idle (plain image / file).
+// it ran (video/audio) or stayed idle (images / files).
 struct ProbeSpy
 {
     int calls = 0;
@@ -90,21 +90,67 @@ TEST_CASE("route_file_drop_to_compose_bar queues a still image without probing",
     CHECK(spy.calls == 0); // plain images need no background probe
 }
 
-TEST_CASE("route_file_drop_to_compose_bar probes a gif for animation", "[view][media_drop]")
+namespace
+{
+// 1x1 GIF with `frames` image blocks.
+std::vector<std::uint8_t> gif_with_frames(int frames)
+{
+    std::vector<std::uint8_t> b{'G', 'I', 'F', '8', '9', 'a', 1, 0, 1, 0, 0, 0, 0};
+    for (int i = 0; i < frames; ++i)
+        for (std::uint8_t v : {0x2C, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 0x01, 0})
+            b.push_back(v);
+    b.push_back(0x3B);
+    return b;
+}
+} // namespace
+
+TEST_CASE("route_file_drop_to_compose_bar flags an animated gif at attach time, no probe",
+          "[view][media_drop]")
 {
     auto bar_owner = tk::create_root_widget<ComposeBar>(nullptr);
     ComposeBar& bar = *bar_owner;
     ProbeSpy spy;
-    std::vector<std::uint8_t> bytes{0x47, 0x49, 0x46}; // "GIF"
-    auto out =
-        route_file_drop_to_compose_bar(bar, bytes, "image/gif", "a.gif", 0, spy.fn());
+    auto out = route_file_drop_to_compose_bar(bar, gif_with_frames(3), "image/gif", "a.gif", 0,
+                                              spy.fn());
     CHECK(out == FileDropOutcome::Accepted);
     REQUIRE(bar.pending_for_test() != nullptr);
     CHECK(bar.pending_for_test()->kind == Kind::Image);
-    REQUIRE(spy.calls == 1);
-    CHECK(spy.mime == "image/gif");
-    CHECK(spy.bytes == bytes.size());
-    CHECK(spy.gen == bar.pending_gen()); // probe keyed to the queued generation
+    CHECK(bar.pending_for_test()->is_animated);
+    CHECK(spy.calls == 0);
+}
+
+TEST_CASE("route_file_drop_to_compose_bar treats a single-frame gif as still", "[view][media_drop]")
+{
+    auto bar_owner = tk::create_root_widget<ComposeBar>(nullptr);
+    ComposeBar& bar = *bar_owner;
+    ProbeSpy spy;
+    route_file_drop_to_compose_bar(bar, gif_with_frames(1), "image/gif", "a.gif", 0, spy.fn());
+    REQUIRE(bar.pending_for_test() != nullptr);
+    CHECK_FALSE(bar.pending_for_test()->is_animated);
+}
+
+TEST_CASE("route_file_drop_to_compose_bar flags an animated webp and a still webp correctly",
+          "[view][media_drop]")
+{
+    const auto webp = [](std::uint8_t flags)
+    {
+        std::vector<std::uint8_t> b{'R', 'I', 'F', 'F', 0x1a, 0, 0, 0, 'W', 'E', 'B', 'P',
+                                    'V', 'P', '8', 'X', 10, 0, 0, 0, flags};
+        b.resize(b.size() + 9, 0);
+        return b;
+    };
+    {
+        auto bar_owner = tk::create_root_widget<ComposeBar>(nullptr);
+        route_file_drop_to_compose_bar(*bar_owner, webp(0x02), "image/webp", "a.webp", 0, nullptr);
+        REQUIRE(bar_owner->pending_for_test() != nullptr);
+        CHECK(bar_owner->pending_for_test()->is_animated);
+    }
+    {
+        auto bar_owner = tk::create_root_widget<ComposeBar>(nullptr);
+        route_file_drop_to_compose_bar(*bar_owner, webp(0x10), "image/webp", "a.webp", 0, nullptr);
+        REQUIRE(bar_owner->pending_for_test() != nullptr);
+        CHECK_FALSE(bar_owner->pending_for_test()->is_animated);
+    }
 }
 
 TEST_CASE("route_file_drop_to_compose_bar queues a video and probes it",
@@ -154,7 +200,7 @@ TEST_CASE("route_file_drop_to_compose_bar tolerates a null probe", "[view][media
 {
     auto bar_owner = tk::create_root_widget<ComposeBar>(nullptr);
     ComposeBar& bar = *bar_owner;
-    // gif path would call the probe; null must be a safe no-op.
+    // Video/audio call the probe; a null probe must be a safe no-op.
     auto out = route_file_drop_to_compose_bar(bar, {0x47, 0x49, 0x46}, "image/gif", "a.gif",
                                   0, nullptr);
     CHECK(out == FileDropOutcome::Accepted);

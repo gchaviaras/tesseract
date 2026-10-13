@@ -65,6 +65,12 @@ set(_tk_sources
     app/SlashCommands.h
     app/shell_helpers.h
     app/shell_helpers.cpp
+    app/jxl_decode.h
+    app/jxl_decode.cpp
+    app/image_animation.h
+    app/image_animation.cpp
+    app/image_send.h
+    app/image_send.cpp
     app/SendPipeline.h
     app/SendPipeline.cpp
     app/WorkerPool.h

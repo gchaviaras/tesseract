@@ -1,4 +1,5 @@
-pub use super::client::ClientFfi;
+pub use super::client::{image_metadata_strippable, ClientFfi};
+pub use super::jxl::{jxl_decoder_new, jxl_is_animated, jxl_is_data, JxlDecoder};
 pub use super::webp_anim::{webp_anim_decoder_new, webp_is_data, WebpAnimDecoder};
 
 pub fn client_create(log_level: &str, filter_override: &str) -> Box<ClientFfi> {
@@ -2216,6 +2217,28 @@ pub mod ffi {
         fn frame_pixels(self: &WebpAnimDecoder) -> &[u8];
         fn frame_timestamp_ms(self: &WebpAnimDecoder) -> i32;
         fn reset(self: &mut WebpAnimDecoder);
+
+        // ----- JPEG XL decode (all canvases) -----
+
+        type JxlDecoder;
+        fn jxl_is_data(bytes: &[u8]) -> bool;
+        /// True when the image's metadata can be confidently stripped (format
+        /// recognised and parsed, or known metadata-free).
+        fn image_metadata_strippable(bytes: &[u8], mime_type: &str) -> bool;
+        /// Header-only: true when the JXL header declares an animation.
+        fn jxl_is_animated(bytes: &[u8]) -> bool;
+        /// Never throws; check `valid()`. Output is downscaled to fit max_w x max_h.
+        fn jxl_decoder_new(bytes: &[u8], max_w: u32, max_h: u32) -> Box<JxlDecoder>;
+        fn valid(self: &JxlDecoder) -> bool;
+        fn width(self: &JxlDecoder) -> u32;
+        fn height(self: &JxlDecoder) -> u32;
+        fn frame_count(self: &JxlDecoder) -> u32;
+        fn has_more_frames(self: &JxlDecoder) -> bool;
+        fn next_frame(self: &mut JxlDecoder) -> bool;
+        /// Straight RGBA8; valid until the next `next_frame`/`reset`.
+        fn frame_pixels(self: &JxlDecoder) -> &[u8];
+        fn frame_delay_ms(self: &JxlDecoder) -> i32;
+        fn reset(self: &mut JxlDecoder);
 
         // ----- Markdown -----
 

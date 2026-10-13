@@ -64,6 +64,12 @@ MediaSection::MediaSection(SettingBinder& binder)
     open_external_cb_ = group->add_widget(std::move(external_cb));
     binder.bind(open_external_cb_, &S::open_media_externally, SettingKey::OpenExternal);
 
+    auto recompress_cb = tk::create_widget<tk::CheckButton>(
+        this, tk::tr("Recompress images before sending (animated images are never changed)"),
+        s.recompress_images_on_send);
+    recompress_cb_ = group->add_widget(std::move(recompress_cb));
+    binder.bind(recompress_cb_, &S::recompress_images_on_send, SettingKey::RecompressImages);
+
     // ── Capture devices ─────────────────────────────────────────────────────
     auto* dev_group = add_group(tk::tr("Capture devices"));
     auto* dev_form  = dev_group->add_widget(tk::create_widget<tk::FormLayout>(this));

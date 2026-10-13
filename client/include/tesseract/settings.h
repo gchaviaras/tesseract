@@ -130,17 +130,10 @@ public:
     int mark_as_read_delay_ms = 2000;
 
     // ── Image send ───────────────────────────────────────────────────
-    // Image-sending quality. Read by the per-platform shell on each
-    // image send to decide whether to re-encode before upload.
-    //   Compressed → cap to 1600×1200 (keep aspect ratio), re-encode
-    //                as image/jpeg quality 75.
-    //   Unmodified → pass clipboard bytes through unchanged.
-    enum class ImageQuality
-    {
-        Compressed,
-        Unmodified
-    };
-    ImageQuality image_quality = ImageQuality::Compressed;
+    // Re-encode still images before upload (cap to 1600x1200, JPEG quality
+    // 75), keeping the original when that is not smaller. Animated images
+    // are never recompressed. Read on each image send (app/image_send.h).
+    bool recompress_images_on_send = true;
 
     // ── Theme preference ─────────────────────────────────────────────
     // System → follow the OS light/dark setting (default).

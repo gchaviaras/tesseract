@@ -41,6 +41,11 @@ std::unique_ptr<CanvasFactory> make_factory();
 // views without re-decoding on every paint.
 std::unique_ptr<Image> make_image(struct _cairo_surface* surface);
 
+// Copy straight RGBA8 pixels (stride = w * 4) into a premultiplied-ARGB32
+// tk::Image. Worker-thread safe; used by the shared JPEG XL decode glue
+// (app/jxl_decode.h).
+std::unique_ptr<Image> make_image_rgba(const std::uint8_t* rgba, int w, int h);
+
 // The reverse of make_image() — extract the underlying native bitmap from
 // a tk::Image so it can be embedded into a platform-native rich-text
 // control (e.g. a GtkPicture anchored via gtk_text_view_add_child_at_anchor

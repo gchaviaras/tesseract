@@ -101,11 +101,121 @@ std::optional<ImageDims> probe_jpeg(std::span<const std::uint8_t> b)
     return std::nullopt;
 }
 
+// LSB-first bit reader for the JPEG XL size header; nullopt past the end.
+class BitReader
+{
+public:
+    explicit BitReader(std::span<const std::uint8_t> b) : b_(b) {}
+    std::optional<std::uint32_t> read(int n)
+    {
+        std::uint64_t v = 0;
+        for (int i = 0; i < n; ++i, ++pos_)
+        {
+            if (pos_ / 8 >= b_.size())
+                return std::nullopt;
+            v |= static_cast<std::uint64_t>((b_[pos_ / 8] >> (pos_ % 8)) & 1u) << i;
+        }
+        return static_cast<std::uint32_t>(v);
+    }
+
+private:
+    std::span<const std::uint8_t> b_;
+    std::size_t pos_ = 0;
+};
+
+constexpr std::uint8_t kJxlSignatureBox[12] = {0, 0, 0, 0x0C, 'J', 'X', 'L', ' ', 0x0D, 0x0A, 0x87, 0x0A};
+
+// The codestream inside `b`, past its `FF 0A` signature: the bare file itself,
+// or the payload of the first `jxlc` / `jxlp` box of a container. Empty when absent.
+std::span<const std::uint8_t> jxl_codestream(std::span<const std::uint8_t> b)
+{
+    if (b.size() >= 2 && b[0] == 0xFF && b[1] == 0x0A)
+        return b.subspan(2);
+    std::size_t pos = 0;
+    while (pos + 8 <= b.size())
+    {
+        std::uint64_t size = rd_be32(b, pos);
+        std::size_t hdr = 8;
+        if (size == 1)
+        {
+            if (pos + 16 > b.size())
+                return {};
+            size = (std::uint64_t{rd_be32(b, pos + 8)} << 32) | rd_be32(b, pos + 12);
+            hdr = 16;
+        }
+        else if (size == 0)
+            size = b.size() - pos; // box runs to the end of the file
+        if (size < hdr)
+            return {};
+        const bool jxlc = has_prefix(b, "jxlc", pos + 4);
+        const bool jxlp = has_prefix(b, "jxlp", pos + 4);
+        if (jxlc || jxlp)
+        {
+            const std::size_t start = pos + hdr + (jxlp ? 4 : 0); // jxlp: 4-byte sequence index
+            if (start + 2 > b.size() || b[start] != 0xFF || b[start + 1] != 0x0A)
+                return {};
+            return b.subspan(start + 2); // the box payload carries the FF 0A signature too
+        }
+        if (size > b.size() - pos)
+            return {};
+        pos += static_cast<std::size_t>(size);
+    }
+    return {};
+}
+
+// Reads the SizeHeader at the start of a JPEG XL codestream.
+std::optional<ImageDims> probe_jxl(std::span<const std::uint8_t> file)
+{
+    const auto cs = jxl_codestream(file);
+    BitReader r(cs);
+    const auto read_size = [&](bool div8) -> std::optional<std::uint32_t>
+    {
+        if (div8)
+        {
+            const auto v = r.read(5);
+            return v ? std::optional<std::uint32_t>((*v + 1) * 8) : std::nullopt;
+        }
+        const auto sel = r.read(2);
+        if (!sel)
+            return std::nullopt;
+        constexpr int kBits[4] = {9, 13, 18, 30};
+        const auto v = r.read(kBits[*sel]);
+        return v ? std::optional<std::uint32_t>(*v + 1) : std::nullopt;
+    };
+    const auto div8 = r.read(1);
+    if (!div8)
+        return std::nullopt;
+    const auto h = read_size(*div8 != 0);
+    const auto ratio = r.read(3);
+    if (!h || !ratio)
+        return std::nullopt;
+    std::optional<std::uint32_t> w;
+    if (*ratio == 0)
+        w = read_size(*div8 != 0);
+    else
+    {
+        constexpr std::uint32_t kNum[8] = {0, 1, 12, 4, 3, 16, 5, 2};
+        constexpr std::uint32_t kDen[8] = {0, 1, 10, 3, 2, 9, 4, 1};
+        w = static_cast<std::uint32_t>(std::uint64_t{*h} * kNum[*ratio] / kDen[*ratio]);
+    }
+    if (!w)
+        return std::nullopt;
+    return ImageDims{*w, *h};
+}
+
 } // namespace
+
+bool is_jxl_bytes(std::span<const std::uint8_t> b)
+{
+    return (b.size() >= 2 && b[0] == 0xFF && b[1] == 0x0A) ||
+           (b.size() >= 12 && std::memcmp(b.data(), kJxlSignatureBox, 12) == 0);
+}
 
 bool bytes_may_be_animated(std::span<const std::uint8_t> bytes)
 {
     if (has_prefix(bytes, "GIF8"))
+        return true;
+    if (is_jxl_bytes(bytes))
         return true;
     if (has_prefix(bytes, "RIFF") && has_prefix(bytes, "WEBP", 8) && has_prefix(bytes, "VP8X", 12))
         return bytes.size() > 20 && (bytes[20] & 0x02) != 0; // animation flag
@@ -136,6 +246,8 @@ std::optional<ImageDims> probe_image_dimensions(std::span<const std::uint8_t> b)
     }
     if (b.size() >= 4 && b[0] == 0xFF && b[1] == 0xD8)
         return probe_jpeg(b);
+    if (is_jxl_bytes(b))
+        return probe_jxl(b);
     return std::nullopt;
 }
 

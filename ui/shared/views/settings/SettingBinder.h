@@ -50,6 +50,7 @@ enum class SettingKey
     ImagePreviews,
     Prefetch,
     OpenExternal,
+    RecompressImages,
     MediaPreviews,
     InviteAvatars,
     AudioInput,

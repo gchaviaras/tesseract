@@ -6804,3 +6804,15 @@ msgstr "[ñöÿ döÑ't hàvé pérmïssïöÑ tö jöïÑ Çàlls ïÑ thïs r�
 #: ui/shared/app/ShellBase_navigation.cpp
 msgid "A moderator needs to start the call."
 msgstr "[É mödéràtör Ñééds tö stàrt thé Çàll.xxxxx]"
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Recompress images before sending (animated images are never changed)"
+msgstr "[Réçömpréss ïmàgés béföré séñdïñg (àñïmàtéd ïmàgés àré ñévér çhàñgéd)xxxxxxxxxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "This image can't be sent because its metadata can't be removed."
+msgstr "[Thïs ïmàgé çàñ't bé séñt béçàùsé ïts métàdàtà çàñ't bé rémövéd.xxxxxxxxxxxx]"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Some images weren't sent because their metadata can't be removed."
+msgstr "[Sömé ïmàgés wéréñ't séñt béçàùsé théïr métàdàtà çàñ't bé rémövéd.xxxxxxxxxxxxx]"

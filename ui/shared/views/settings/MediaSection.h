@@ -4,6 +4,7 @@
 //   - "Media previews" selector (MSC4278 media_previews: off / private / on)
 //   - "Show avatars in invites" checkbox (MSC4278 invite_avatars)
 //   - "Pre-load full images while scrolling" checkbox (local prefetch)
+//   - "Recompress images before sending" checkbox (still images only)
 // The MSC4278 rows mirror the global m.media_preview_config account-data event;
 // their change callbacks write it back through the shell. Reads initial state
 // from Settings::instance().
@@ -54,6 +55,7 @@ private:
     tk::CheckButton* invite_avatars_cb_ = nullptr;
     tk::CheckButton* prefetch_cb_       = nullptr;
     tk::CheckButton* open_external_cb_  = nullptr;
+    tk::CheckButton* recompress_cb_     = nullptr;
 
     tk::ComboBox* audio_input_combo_  = nullptr;
     tk::ComboBox* audio_output_combo_ = nullptr;

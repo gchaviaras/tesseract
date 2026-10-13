@@ -231,6 +231,13 @@ std::unique_ptr<Image> make_image_from_bgra(Backend& backend,
                                             const std::uint8_t* pixels, int w,
                                             int h, bool opaque = true);
 
+// Copy straight RGBA8 pixels (stride = w * 4) into a premultiplied-BGRA
+// Image. Worker-thread safe; used by the shared JPEG XL decode glue
+// (app/jxl_decode.h).
+std::unique_ptr<Image> make_image_from_rgba(Backend& backend,
+                                            const std::uint8_t* rgba, int w,
+                                            int h);
+
 // The reverse of make_image_from_bgra()/decode_image() — extract the
 // underlying decoded-pixel WIC bitmap from a tk::Image (the "source of
 // truth" copy D2DImage keeps independent of any render-target-bound

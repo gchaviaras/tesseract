@@ -7020,3 +7020,15 @@ msgstr "У вас немає дозволу приєднуватися до дз
 #: ui/shared/app/ShellBase_navigation.cpp
 msgid "A moderator needs to start the call."
 msgstr "Модератор має розпочати дзвінок."
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Recompress images before sending (animated images are never changed)"
+msgstr "Повторно стискати зображення перед надсиланням (анімовані зображення ніколи не змінюються)"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "This image can't be sent because its metadata can't be removed."
+msgstr "Це зображення не можна надіслати, бо його метадані неможливо видалити."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Some images weren't sent because their metadata can't be removed."
+msgstr "Деякі зображення не було надіслано, бо їхні метадані неможливо видалити."

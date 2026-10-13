@@ -72,6 +72,21 @@ fn begin_upload_progress(
 // `mod.rs`).
 // ---------------------------------------------------------------------------
 
+/// Metadata-stripped bytes for one gallery item. Images and files are
+/// stripped (an "image" or "file" item can carry any image format); audio and
+/// video are passed through. Content-based, so the declared mime is only a
+/// fallback hint.
+pub(crate) fn strip_gallery_item_bytes(kind: &str, bytes: Vec<u8>, mime_type: &str) -> Vec<u8> {
+    if !matches!(kind, "image" | "file") {
+        return bytes;
+    }
+    let stripped = match super::strip_meta::strip_image_metadata(&bytes, mime_type) {
+        std::borrow::Cow::Owned(v) => Some(v),
+        std::borrow::Cow::Borrowed(_) => None,
+    };
+    stripped.unwrap_or(bytes)
+}
+
 /// Build the raw `m.room.message` content object for an animated image
 /// (GIF/WebP). Carries the MSC4230 `org.matrix.msc4230.is_animated` flag and
 /// the `fi.mau.gif` vendor hint so capable clients autoplay/loop the
@@ -2008,7 +2023,10 @@ impl ClientFfi {
             };
 
             let mut gallery_items = Vec::with_capacity(items.len());
-            for item in items {
+            for mut item in items {
+                // Originals can be sent unmodified, so strip EXIF/GPS/XMP here
+                // as the single-image and file paths do (content-based).
+                item.bytes = strip_gallery_item_bytes(&item.kind, std::mem::take(&mut item.bytes), &item.mime_type);
                 let mime: mime::Mime = match item.mime_type.parse() {
                     Ok(m) => m,
                     Err(e) => {
@@ -3852,5 +3870,26 @@ mod gallery_fallback_body_tests {
     #[test]
     fn synthesizes_plural_when_no_caption() {
         assert_eq!(gallery_fallback_body("", 5), "Sent 5 items");
+    }
+}
+
+#[cfg(test)]
+mod gallery_strip_tests {
+    use super::strip_gallery_item_bytes;
+
+    #[test]
+    fn gallery_images_and_files_are_stripped_but_not_audio_video() {
+        let tiff = include_bytes!("../../tests/fixtures/meta/meta.tif").to_vec();
+        let has = |b: &[u8]| b.windows(10).any(|w| w == b"SECRETMAKE");
+        assert!(has(&tiff));
+        for kind in ["image", "file"] {
+            // Generic mime: content decides.
+            assert!(!has(&strip_gallery_item_bytes(kind, tiff.clone(), "application/octet-stream")), "{kind}");
+        }
+        for kind in ["audio", "video"] {
+            assert!(has(&strip_gallery_item_bytes(kind, tiff.clone(), "image/tiff")), "{kind}");
+        }
+        // Nothing to strip: bytes come back unchanged.
+        assert_eq!(strip_gallery_item_bytes("image", b"plain".to_vec(), "image/png"), b"plain");
     }
 }

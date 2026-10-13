@@ -67,6 +67,7 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
     notification_image_previews  = j.value("notification_image_previews",  true);
     notification_hide_content    = j.value("notification_hide_content",    false);
     prefetch_full_media          = j.value("prefetch_full_media",          false);
+    recompress_images_on_send    = j.value("recompress_images_on_send",    true);
     open_media_externally        = j.value("open_media_externally",        false);
     send_maps_urls_as_location  = j.value("send_maps_urls_as_location",   false);
     send_bundled_url_previews    = j.value("send_bundled_url_previews",    true);
@@ -301,6 +302,7 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         {"notification_image_previews",      notification_image_previews},
         {"notification_hide_content",        notification_hide_content},
         {"prefetch_full_media",              prefetch_full_media},
+        {"recompress_images_on_send",        recompress_images_on_send},
         {"open_media_externally",            open_media_externally},
         {"send_maps_urls_as_location",       send_maps_urls_as_location},
         {"send_bundled_url_previews",        send_bundled_url_previews},

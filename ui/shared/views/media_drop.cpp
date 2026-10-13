@@ -1,5 +1,6 @@
 #include "views/media_drop.h"
 
+#include "app/image_animation.h"
 #include "views/ComposeBar.h"
 
 namespace tesseract::views
@@ -18,7 +19,7 @@ FileDropOutcome route_file_drop_to_compose_bar(ComposeBar& cb,
     if (cb.pending_count() >= ComposeBar::kMaxAttachments)
         return FileDropOutcome::TooMany;
 
-    // For gif/webp/video/audio: queue the attachment first (so add_pending_*
+    // For video/audio: queue the attachment first (so add_pending_*
     // bumps pending_gen()), then hand the bytes to the per-shell probe keyed by
     // the fresh generation token — pending_gen() right after add_pending_*
     // equals the just-added item's own PendingAttachment::gen, so this still
@@ -33,16 +34,13 @@ FileDropOutcome route_file_drop_to_compose_bar(ComposeBar& cb,
     // file (see host_win32.cpp/host_macos.mm/host_gtk.cpp/host_qt.cpp's
     // drop loops), so this is the single chokepoint that turns "drop
     // multiple files" into a queued multi-attachment send.
-    if (mime == "image/gif" || mime == "image/webp")
+    if (mime.rfind("image/", 0) == 0)
     {
-        // Show the first frame immediately; detect animation in the background.
-        cb.add_pending_image(bytes, mime, filename, /*is_animated=*/false);
-        probe(std::move(bytes), std::move(mime));
-    }
-    else if (mime.rfind("image/", 0) == 0)
-    {
-        cb.add_pending_image(std::move(bytes), std::move(mime),
-                             std::move(filename), /*is_animated=*/false);
+        // Animation (GIF, WebP, APNG, AVIF, JXL) is read straight from the
+        // header, so the flag is right at attach time: the preview animates
+        // and the send path skips recompression and sets MSC4230 is_animated.
+        const bool animated = is_animated_image(bytes, mime);
+        cb.add_pending_image(std::move(bytes), std::move(mime), std::move(filename), animated);
     }
     else if (mime.rfind("video/", 0) == 0)
     {

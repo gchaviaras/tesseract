@@ -41,6 +41,12 @@ pub(crate) mod search;
 mod send;
 mod session;
 mod strip_meta;
+
+/// True when the image bytes can be confidently stripped of metadata (see
+/// `strip_meta::is_strippable`). Used by the C++ send policy.
+pub fn image_metadata_strippable(bytes: &[u8], mime_type: &str) -> bool {
+    strip_meta::is_strippable(bytes, mime_type)
+}
 #[cfg(not(test))]
 mod sync;
 mod tags;

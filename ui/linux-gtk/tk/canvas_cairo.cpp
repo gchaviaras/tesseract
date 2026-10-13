@@ -1,5 +1,6 @@
 #include "canvas_cairo.h"
 #include "tk/anim_decode_session.h"
+#include "app/jxl_decode.h"
 #include "tk/image_sniff.h"
 #include "pill.h"
 
@@ -890,6 +891,8 @@ public:
         {
             return nullptr;
         }
+        if (tesseract::is_jxl_data(bytes))
+            return tesseract::jxl::decode_still(*this, bytes);
         if (!tk::decode_size_allowed(bytes, /*animated=*/false))
             return nullptr;
         GdkPixbufLoader* loader = gdk_pixbuf_loader_new();
@@ -947,37 +950,7 @@ public:
     std::unique_ptr<Image>
     create_image_rgba(const std::uint8_t* pixels, int w, int h) override
     {
-        if (!pixels || w <= 0 || h <= 0)
-            return nullptr;
-        cairo_surface_t* surface =
-            cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
-        if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
-        {
-            cairo_surface_destroy(surface);
-            return nullptr;
-        }
-        cairo_surface_flush(surface);
-        unsigned char* dst      = cairo_image_surface_get_data(surface);
-        int            stride   = cairo_image_surface_get_stride(surface);
-        for (int y = 0; y < h; ++y)
-        {
-            const std::uint8_t* src_row = pixels + y * w * 4;
-            unsigned char*      dst_row = dst + y * stride;
-            for (int x = 0; x < w; ++x)
-            {
-                unsigned r = src_row[x * 4 + 0];
-                unsigned g = src_row[x * 4 + 1];
-                unsigned b = src_row[x * 4 + 2];
-                unsigned a = src_row[x * 4 + 3];
-                // Premultiply + swizzle RGBA (straight) → BGRA (premultiplied).
-                dst_row[x * 4 + 0] = static_cast<unsigned char>((b * a + 127) / 255);
-                dst_row[x * 4 + 1] = static_cast<unsigned char>((g * a + 127) / 255);
-                dst_row[x * 4 + 2] = static_cast<unsigned char>((r * a + 127) / 255);
-                dst_row[x * 4 + 3] = static_cast<unsigned char>(a);
-            }
-        }
-        cairo_surface_mark_dirty(surface);
-        return std::make_unique<CairoImage>(surface);
+        return make_image_rgba(pixels, w, h);
     }
 
     std::unique_ptr<Image>
@@ -1018,6 +991,8 @@ public:
     {
         if (bytes.empty())
             return nullptr;
+        if (tesseract::is_jxl_data(bytes))
+            return tesseract::jxl::decode_animated(*this, bytes, max_px);
         if (!tk::decode_size_allowed(bytes, /*animated=*/true))
             return nullptr;
 
@@ -1627,6 +1602,40 @@ private:
 std::unique_ptr<CanvasFactory> make_factory()
 {
     return std::make_unique<CairoPangoFactory>();
+}
+
+std::unique_ptr<Image> make_image_rgba(const std::uint8_t* pixels, int w, int h)
+{
+    if (!pixels || w <= 0 || h <= 0)
+        return nullptr;
+    cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+    if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+    {
+        cairo_surface_destroy(surface);
+        return nullptr;
+    }
+    cairo_surface_flush(surface);
+    unsigned char* dst = cairo_image_surface_get_data(surface);
+    int stride = cairo_image_surface_get_stride(surface);
+    for (int y = 0; y < h; ++y)
+    {
+        const std::uint8_t* src_row = pixels + static_cast<std::size_t>(y) * w * 4;
+        unsigned char* dst_row = dst + y * stride;
+        for (int x = 0; x < w; ++x)
+        {
+            unsigned r = src_row[x * 4 + 0];
+            unsigned g = src_row[x * 4 + 1];
+            unsigned b = src_row[x * 4 + 2];
+            unsigned a = src_row[x * 4 + 3];
+            // Premultiply + swizzle RGBA (straight) -> BGRA (premultiplied).
+            dst_row[x * 4 + 0] = static_cast<unsigned char>((b * a + 127) / 255);
+            dst_row[x * 4 + 1] = static_cast<unsigned char>((g * a + 127) / 255);
+            dst_row[x * 4 + 2] = static_cast<unsigned char>((r * a + 127) / 255);
+            dst_row[x * 4 + 3] = static_cast<unsigned char>(a);
+        }
+    }
+    cairo_surface_mark_dirty(surface);
+    return std::make_unique<CairoImage>(surface);
 }
 
 std::unique_ptr<Image> make_image(cairo_surface_t* surface)

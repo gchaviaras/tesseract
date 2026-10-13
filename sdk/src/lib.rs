@@ -27,6 +27,7 @@ mod oauth;
 mod upsert_media_store;
 #[cfg(feature = "legacy_login")]
 mod password_login;
+mod jxl;
 mod recent_emoji;
 mod text_utils;
 mod url_preview;

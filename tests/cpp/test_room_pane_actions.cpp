@@ -463,13 +463,28 @@ TEST_CASE("room-info callbacks degrade gracefully without a client",
     SUCCEED();
 }
 
+namespace roompane_media_test
+{
+// A real 2-frame GIF: animated images must be strippable to be sent at all.
+std::vector<std::uint8_t> animated_gif()
+{
+    std::vector<std::uint8_t> b{'G', 'I', 'F', '8', '9', 'a', 1, 0, 1, 0, 0, 0, 0};
+    for (int i = 0; i < 2; ++i)
+        for (std::uint8_t v : {0x2C, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 0x01, 0})
+            b.push_back(v);
+    b.push_back(0x3B);
+    return b;
+}
+} // namespace roompane_media_test
+
 TEST_CASE("sending media clears the composer and needs a room and client",
           "[roompane][media]")
 {
     RpFx f;
     f.view->set_current_text("caption");
     // Animated images skip the host re-encode.
-    f.view->on_send_image({1, 2, 3}, "image/gif", "a.gif", "cap", 10, 10, true, "");
+    f.view->on_send_image(roompane_media_test::animated_gif(), "image/gif", "a.gif", "cap", 10, 10,
+                          true, "");
     CHECK(f.view->compose_bar()->current_text().empty());
 
     f.view->set_current_text("caption");
@@ -489,6 +504,16 @@ TEST_CASE("sending media clears the composer and needs a room and client",
     none.view->on_send_video({1}, "video/mp4", "v.mp4", "cap", 1, 1, {}, 0, 0, 0, "");
     none.view->on_send_image({1}, "image/gif", "a.gif", "", 1, 1, true, "");
     CHECK(none.view->compose_bar()->current_text() == "caption");
+}
+
+TEST_CASE("an image whose metadata cannot be stripped is refused, not sent",
+          "[roompane][media]")
+{
+    RpFx f;
+    f.view->set_current_text("caption");
+    // Flagged animated but not a parseable image: cannot be stripped or flattened.
+    f.view->on_send_image({1, 2, 3}, "image/gif", "a.gif", "cap", 10, 10, true, "");
+    CHECK(f.view->compose_bar()->current_text() == "caption"); // nothing was sent
 }
 
 TEST_CASE("sticker picks send through the client and drop the reply",

@@ -95,6 +95,8 @@ little_exif = "0.6.23"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 webp = "0.3"
 libwebp-sys = "0.9"
+# JPEG XL decode (pure Rust); no rayon — decode runs on our own worker threads.
+jxl-oxide = { version = "0.12", default-features = false, features = ["moxcms"] }
 infer = "0.22.0"
 mime_guess = "2.0.5"
 

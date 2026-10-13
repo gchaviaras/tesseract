@@ -1,6 +1,7 @@
 #include "canvas_cg.h"
 #include "canvas_cg_webp.h"
 #include "pill.h"
+#include "app/jxl_decode.h"
 #include "tk/image_sniff.h"
 
 #include <CoreFoundation/CoreFoundation.h>
@@ -1504,6 +1505,8 @@ public:
     std::unique_ptr<Image>
     decode_image(std::span<const std::uint8_t> bytes) override
     {
+        if (tesseract::is_jxl_data(bytes))
+            return tesseract::jxl::decode_still(*this, bytes);
         if (bytes.empty())
         {
             return nullptr;
@@ -1534,31 +1537,7 @@ public:
     std::unique_ptr<Image>
     create_image_rgba(const std::uint8_t* pixels, int w, int h) override
     {
-        if (!pixels || w <= 0 || h <= 0)
-            return nullptr;
-        // Copy into CFData so the provider owns the buffer lifetime.
-        CFRetained<CFDataRef> data{
-            CFDataCreate(kCFAllocatorDefault, pixels,
-                         static_cast<CFIndex>(w * h * 4))};
-        if (!data.get())
-            return nullptr;
-        CFRetained<CGDataProviderRef> provider{
-            CGDataProviderCreateWithCFData(data.get())};
-        if (!provider.get())
-            return nullptr;
-        CFRetained<CGColorSpaceRef> cs{CGColorSpaceCreateDeviceRGB()};
-        CGImageRef img = CGImageCreate(
-            static_cast<size_t>(w), static_cast<size_t>(h),
-            8,                  // bits per component
-            32,                 // bits per pixel
-            static_cast<size_t>(w * 4),
-            cs.get(),
-            static_cast<CGBitmapInfo>(kCGImageAlphaLast) | kCGBitmapByteOrderDefault,
-            provider.get(),
-            nullptr, false, kCGRenderingIntentDefault);
-        if (!img)
-            return nullptr;
-        return std::make_unique<CGImageWrapper>(img);
+        return make_image_rgba(pixels, w, h);
     }
 
     std::unique_ptr<Image>
@@ -1575,6 +1554,8 @@ public:
     decode_animated_image(std::span<const std::uint8_t> bytes,
                           int max_px) override
     {
+        if (tesseract::is_jxl_data(bytes))
+            return tesseract::jxl::decode_animated(*this, bytes, max_px);
         if (!tk::decode_size_allowed(bytes, /*animated=*/true))
             return nullptr;
         // Each frame is already downscaled to max_px inside decode_image_bytes
@@ -1992,6 +1973,35 @@ public:
 std::unique_ptr<CanvasFactory> make_factory()
 {
     return std::make_unique<CGFactory>();
+}
+
+std::unique_ptr<Image> make_image_rgba(const std::uint8_t* pixels, int w, int h)
+{
+    if (!pixels || w <= 0 || h <= 0)
+        return nullptr;
+    // Copy into CFData so the provider owns the buffer lifetime.
+    CFRetained<CFDataRef> data{
+        CFDataCreate(kCFAllocatorDefault, pixels,
+                     static_cast<CFIndex>(w) * h * 4)};
+    if (!data.get())
+        return nullptr;
+    CFRetained<CGDataProviderRef> provider{
+        CGDataProviderCreateWithCFData(data.get())};
+    if (!provider.get())
+        return nullptr;
+    CFRetained<CGColorSpaceRef> cs{CGColorSpaceCreateDeviceRGB()};
+    CGImageRef img = CGImageCreate(
+        static_cast<size_t>(w), static_cast<size_t>(h),
+        8,                  // bits per component
+        32,                 // bits per pixel
+        static_cast<size_t>(w * 4),
+        cs.get(),
+        static_cast<CGBitmapInfo>(kCGImageAlphaLast) | kCGBitmapByteOrderDefault,
+        provider.get(),
+        nullptr, false, kCGRenderingIntentDefault);
+    if (!img)
+        return nullptr;
+    return std::make_unique<CGImageWrapper>(img);
 }
 
 std::unique_ptr<Image> make_image(CGImageRef img)

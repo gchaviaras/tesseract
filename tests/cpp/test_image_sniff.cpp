@@ -3,6 +3,8 @@
 #include "tk/image_sniff.h"
 
 #include <cstdint>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -37,7 +39,93 @@ std::vector<std::uint8_t> png_with_chunks(const std::vector<std::string>& types)
     return bytes_of(s);
 }
 
+std::vector<std::uint8_t> read_fixture(const char* name)
+{
+    std::ifstream f(std::string(TESSERACT_TEST_DATA_DIR) + "/jxl/" + name, std::ios::binary);
+    return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
+}
+
+// LSB-first bit packer for hand-built JXL size headers.
+struct BitWriter
+{
+    std::vector<std::uint8_t> out;
+    int nbits = 0;
+    void put(std::uint64_t v, int n)
+    {
+        for (int i = 0; i < n; ++i, ++nbits)
+        {
+            if (nbits % 8 == 0)
+                out.push_back(0);
+            out.back() |= static_cast<std::uint8_t>(((v >> i) & 1u) << (nbits % 8));
+        }
+    }
+};
+
+// Bare codestream declaring a `side` x `side` image (div8=0, 1:1 ratio, U32 selector 3 = 30 bits).
+std::vector<std::uint8_t> jxl_square_header(std::uint32_t side)
+{
+    BitWriter w;
+    w.put(0, 1);        // div8
+    w.put(3, 2);        // ysize selector: Bits(30)
+    w.put(side - 1, 30);
+    w.put(1, 3);        // ratio 1:1
+    std::vector<std::uint8_t> b{0xFF, 0x0A};
+    b.insert(b.end(), w.out.begin(), w.out.end());
+    b.resize(b.size() + 8, 0);
+    return b;
+}
+
+void put_be32(std::vector<std::uint8_t>& v, std::uint32_t x)
+{
+    for (int s = 24; s >= 0; s -= 8)
+        v.push_back(static_cast<std::uint8_t>(x >> s));
+}
+
 } // namespace
+
+TEST_CASE("image sniff: JXL", "[image-sniff]")
+{
+    const auto still = read_fixture("still_rgb.jxl");
+    REQUIRE_FALSE(still.empty());
+    CHECK(tk::is_jxl_bytes(still));
+    CHECK(tk::bytes_may_be_animated(still)); // only the decoder can tell
+    const auto d = tk::probe_image_dimensions(still);
+    REQUIRE(d.has_value());
+    CHECK(d->width == 8);
+    CHECK(d->height == 4);
+    CHECK(tk::probe_image_dimensions(read_fixture("anim3.jxl"))->width == 16);
+    CHECK_FALSE(tk::is_jxl_bytes(bytes_of("GIF89a")));
+    CHECK_FALSE(tk::probe_image_dimensions(std::vector<std::uint8_t>{0xFF, 0x0A}).has_value());
+}
+
+TEST_CASE("image sniff: JXL in an ISOBMFF container", "[image-sniff]")
+{
+    const auto cs = read_fixture("still_rgb.jxl");
+    std::vector<std::uint8_t> c;
+    put_be32(c, 12);
+    c.insert(c.end(), {'J', 'X', 'L', ' ', 0x0D, 0x0A, 0x87, 0x0A});
+    put_be32(c, 20);
+    c.insert(c.end(), {'f', 't', 'y', 'p', 'j', 'x', 'l', ' ', 0, 0, 0, 0, 'j', 'x', 'l', ' '});
+    put_be32(c, static_cast<std::uint32_t>(8 + cs.size()));
+    c.insert(c.end(), {'j', 'x', 'l', 'c'});
+    c.insert(c.end(), cs.begin(), cs.end());
+    CHECK(tk::is_jxl_bytes(c));
+    const auto d = tk::probe_image_dimensions(c);
+    REQUIRE(d.has_value());
+    CHECK(d->width == 8);
+    CHECK(d->height == 4);
+}
+
+TEST_CASE("decode_size_allowed: oversize JXL rejected", "[image-sniff]")
+{
+    CHECK_FALSE(tk::decode_size_allowed(jxl_square_header(60000), false)); // > 32768 side
+    CHECK_FALSE(tk::decode_size_allowed(jxl_square_header(20000), false)); // 400 MP still
+    CHECK(tk::decode_size_allowed(jxl_square_header(4000), false));
+    CHECK_FALSE(tk::decode_size_allowed(jxl_square_header(5000), true));   // > 16 MP animated
+    const auto d = tk::probe_image_dimensions(jxl_square_header(1234));
+    REQUIRE(d.has_value());
+    CHECK(d->width == 1234);
+}
 
 TEST_CASE("bytes_may_be_animated: GIF", "[image-sniff]")
 {

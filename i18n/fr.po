@@ -6112,3 +6112,15 @@ msgstr "Vous n'avez pas la permission de rejoindre les appels dans ce salon."
 #: ui/shared/app/ShellBase_navigation.cpp
 msgid "A moderator needs to start the call."
 msgstr "Un modérateur doit démarrer l'appel."
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Recompress images before sending (animated images are never changed)"
+msgstr "Recompresser les images avant l'envoi (les images animées ne sont jamais modifiées)"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "This image can't be sent because its metadata can't be removed."
+msgstr "Cette image ne peut pas être envoyée car ses métadonnées ne peuvent pas être supprimées."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Some images weren't sent because their metadata can't be removed."
+msgstr "Certaines images n'ont pas été envoyées car leurs métadonnées ne peuvent pas être supprimées."

@@ -1,5 +1,6 @@
 #include "canvas_d2d.h"
 #include "pill.h"
+#include "app/jxl_decode.h"
 #include "tk/image_sniff.h"
 
 #include <d2d1_1.h>
@@ -2218,6 +2219,8 @@ public:
     std::unique_ptr<Image>
     decode_image(std::span<const std::uint8_t> bytes) override
     {
+        if (tesseract::is_jxl_data(bytes))
+            return tesseract::jxl::decode_still(*this, bytes);
         return tk::d2d::decode_image(owner_, bytes);
     }
 
@@ -2257,6 +2260,8 @@ public:
     decode_animated_image(std::span<const std::uint8_t> bytes,
                           int max_px) override
     {
+        if (tesseract::is_jxl_data(bytes))
+            return tesseract::jxl::decode_animated(*this, bytes, max_px);
         if (!tk::decode_size_allowed(bytes, /*animated=*/true))
             return nullptr;
         // Each frame is already downscaled to max_px inside decode_animation
@@ -3011,6 +3016,26 @@ make_image_from_bgra(Backend& b, const std::uint8_t* pixels, int w, int h,
     }
 
     return std::make_unique<D2DImage>(std::move(bmp), w, h, opaque);
+}
+
+std::unique_ptr<Image>
+make_image_from_rgba(Backend& b, const std::uint8_t* rgba, int w, int h)
+{
+    if (!rgba || w <= 0 || h <= 0)
+    {
+        return nullptr;
+    }
+    // Premultiply + swizzle straight RGBA -> premultiplied BGRA for WIC.
+    std::vector<std::uint8_t> bgra(static_cast<size_t>(w) * h * 4);
+    for (size_t i = 0; i < static_cast<size_t>(w) * h; ++i)
+    {
+        const unsigned a = rgba[i * 4 + 3];
+        bgra[i * 4 + 0] = static_cast<std::uint8_t>((rgba[i * 4 + 2] * a + 127) / 255);
+        bgra[i * 4 + 1] = static_cast<std::uint8_t>((rgba[i * 4 + 1] * a + 127) / 255);
+        bgra[i * 4 + 2] = static_cast<std::uint8_t>((rgba[i * 4 + 0] * a + 127) / 255);
+        bgra[i * 4 + 3] = static_cast<std::uint8_t>(a);
+    }
+    return make_image_from_bgra(b, bgra.data(), w, h, /*opaque=*/false);
 }
 
 IWICBitmap* to_native_image(const Image& img)

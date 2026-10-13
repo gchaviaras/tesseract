@@ -6250,3 +6250,15 @@ msgstr "No tienes permiso para unirte a llamadas en esta sala."
 #: ui/shared/app/ShellBase_navigation.cpp
 msgid "A moderator needs to start the call."
 msgstr "Un moderador debe iniciar la llamada."
+
+#: ui/shared/views/settings/MediaSection.cpp
+msgid "Recompress images before sending (animated images are never changed)"
+msgstr "Recomprimir las imágenes antes de enviarlas (las imágenes animadas nunca se modifican)"
+
+#: ui/shared/app/RoomPane.cpp
+msgid "This image can't be sent because its metadata can't be removed."
+msgstr "Esta imagen no se puede enviar porque no se pueden eliminar sus metadatos."
+
+#: ui/shared/app/RoomPane.cpp
+msgid "Some images weren't sent because their metadata can't be removed."
+msgstr "Algunas imágenes no se enviaron porque no se pueden eliminar sus metadatos."

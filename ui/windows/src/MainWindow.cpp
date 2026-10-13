@@ -24,6 +24,7 @@
 #endif
 #include "tk/audio_playback.h"
 #include "tk/i18n.h"
+#include "app/jxl_decode.h"
 #include "tk/image_sniff.h"
 #include "tk/status_icons.h"
 #include "tk/svg.h" // Gdiplus comes in via Theme.h above (NOMINMAX-safe)
@@ -5089,6 +5090,13 @@ MainWindow::DecodedImage
 MainWindow::decode_image_(const std::vector<uint8_t>& bytes, int max_w,
                           int max_h)
 {
+    if (tesseract::is_jxl_data(bytes))
+    {
+        auto& jxl_backend = tk::win32::backend_singleton();
+        return tesseract::jxl::decode_image(bytes, max_w, max_h,
+                                  [&jxl_backend](const std::uint8_t* px, int w, int h)
+                                  { return tk::d2d::make_image_from_rgba(jxl_backend, px, w, h); });
+    }
     // Untrusted bytes: refuse over-budget images before any codec allocates (tk/image_sniff.h).
     if (!tk::decode_size_allowed(bytes, tk::bytes_may_be_animated(bytes)))
         return DecodedImage{};
@@ -5120,6 +5128,14 @@ bool MainWindow::decode_image_streamed_(
     const std::function<void(std::unique_ptr<tk::Image>, int)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (tesseract::is_jxl_data(bytes))
+    {
+        auto& jxl_backend = tk::win32::backend_singleton();
+        return tesseract::jxl::decode_streamed(bytes, max_w, max_h,
+                                  [&jxl_backend](const std::uint8_t* px, int w, int h)
+                                  { return tk::d2d::make_image_from_rgba(jxl_backend, px, w, h); },
+                                  on_first_frame, on_frame);
+    }
     if (!tk::decode_size_allowed(bytes, /*animated=*/true))
         return false;
     if (bytes.empty())
@@ -5147,6 +5163,14 @@ bool MainWindow::decode_image_streamed_windowed_(
                              std::size_t)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (tesseract::is_jxl_data(bytes))
+    {
+        auto& jxl_backend = tk::win32::backend_singleton();
+        return tesseract::jxl::decode_streamed_windowed(bytes, max_w, max_h,
+                                  [&jxl_backend](const std::uint8_t* px, int w, int h)
+                                  { return tk::d2d::make_image_from_rgba(jxl_backend, px, w, h); },
+                                  on_first_frame, on_frame);
+    }
     if (!tk::decode_size_allowed(bytes, /*animated=*/true))
         return false;
     if (bytes.empty())

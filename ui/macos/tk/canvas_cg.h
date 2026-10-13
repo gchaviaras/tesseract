@@ -52,6 +52,10 @@ std::unique_ptr<CanvasFactory> make_factory();
 // re-decoding.
 std::unique_ptr<Image> make_image(CGImageRef img);
 
+// Copy straight RGBA8 pixels (stride = w * 4) into a tk::Image. Worker-thread
+// safe; used by the shared JPEG XL decode glue (app/jxl_decode.h).
+std::unique_ptr<Image> make_image_rgba(const std::uint8_t* rgba, int w, int h);
+
 // Downscale `src` (aspect-ratio-preserving, independent axis limits) to fit
 // within max_w x max_h via an offline CGBitmapContext + CGContextDrawImage.
 // Returns nullptr (caller keeps `src`) if it already fits or max_w/max_h <=

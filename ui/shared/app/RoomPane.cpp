@@ -1,4 +1,5 @@
 #include "app/RoomPane.h"
+#include "app/image_send.h"
 #include "app/ShellBase.h"
 #include "app/SlashCommands.h"
 #include "views/ForwardRoomPicker.h"
@@ -9,6 +10,7 @@
 #include "views/text_util.h"
 #include "tk/i18n.h"
 #include <tesseract/client.h>
+#include <tesseract/image_meta.h>
 #include <tesseract/mentions.h>
 #include <tesseract/open_media.h>
 #include <tesseract/settings.h>
@@ -1213,48 +1215,30 @@ void RoomPane::wire_room_view_()
         if (room_id_.empty() || !pane_client_())
             return;
 
-        std::vector<std::uint8_t> send_bytes;
-        std::string send_mime;
-        std::string send_name;
-        std::uint32_t send_w = static_cast<std::uint32_t>(w < 0 ? 0 : w);
-        std::uint32_t send_h = static_cast<std::uint32_t>(h < 0 ? 0 : h);
-
-        if (is_animated)
+        if (bytes.empty())
+            return;
+        // Animated images go out untouched (and flagged); stills are
+        // recompressed only when enabled and only if that is smaller.
+        auto prepared = tesseract::prepare_image_for_send(
+            std::move(bytes), std::move(mime), std::move(filename),
+            static_cast<std::uint32_t>(w < 0 ? 0 : w), static_cast<std::uint32_t>(h < 0 ? 0 : h),
+            is_animated, tesseract::Settings::instance().recompress_images_on_send,
+            [this](const std::uint8_t* d, std::size_t n, bool compress)
+            { return deps_.host->encode_for_send(d, n, compress); },
+            [](std::span<const std::uint8_t> b, std::string_view m)
+            { return tesseract::image_metadata_strippable(b, m); });
+        if (prepared.refused)
         {
-            send_bytes = std::move(bytes);
-            send_mime  = std::move(mime);
-            send_name  = std::move(filename);
-        }
-        else
-        {
-            const bool compress =
-                tesseract::Settings::instance().image_quality ==
-                tesseract::Settings::ImageQuality::Compressed;
-            auto enc = deps_.host->encode_for_send(bytes.data(), bytes.size(), compress);
-            if (enc.bytes.empty())
-            {
-                shell_show_status_message_(tk::tr("Image decode failed"));
-                return;
-            }
-            send_bytes = std::move(enc.bytes);
-            send_mime  = std::move(enc.mime);
-            send_w     = enc.width;
-            send_h     = enc.height;
-            send_name  = std::move(filename);
-            if (send_mime == "image/jpeg")
-            {
-                auto dot = send_name.find_last_of('.');
-                if (dot != std::string::npos)
-                    send_name = send_name.substr(0, dot);
-                send_name += ".jpg";
-            }
+            shell_show_status_message_(
+                tk::tr("This image can't be sent because its metadata can't be removed."));
+            return;
         }
 
         clear_composer();
         const auto request_id = shell_->account_manager_.next_upload_request_id();
-        pane_client_()->send_image_async(request_id, room_id_, send_bytes, send_mime,
-                                          send_name, caption, send_w, send_h,
-                                          is_animated, reply_event_id,
+        pane_client_()->send_image_async(request_id, room_id_, prepared.bytes, prepared.mime,
+                                          prepared.filename, caption, prepared.width,
+                                          prepared.height, prepared.is_animated, reply_event_id,
                                           active_thread_root_for_send_());
     };
     rv->on_send_video =
@@ -1312,12 +1296,11 @@ void RoomPane::wire_room_view_()
         if (room_id_.empty() || !pane_client_())
             return;
 
-        const bool compress =
-            tesseract::Settings::instance().image_quality ==
-            tesseract::Settings::ImageQuality::Compressed;
+        const bool recompress = tesseract::Settings::instance().recompress_images_on_send;
 
         std::vector<tesseract::GalleryItemOut> out_items;
         out_items.reserve(items.size());
+        bool any_refused = false;
         for (auto& pa : items)
         {
             tesseract::GalleryItemOut item;
@@ -1330,20 +1313,31 @@ void RoomPane::wire_room_view_()
             item.duration_ms = pa.duration_ms;
 
             using Kind = tesseract::views::ComposeBar::PendingAttachment::Kind;
-            if (pa.kind == Kind::Image && !pa.is_animated)
+            if (pa.kind == Kind::Image)
             {
-                // Re-encode per Settings::image_quality, same as the
-                // single-image on_send_image path — a gallery of raw camera
-                // photos would otherwise upload uncompressed.
-                auto enc =
-                    deps_.host->encode_for_send(pa.bytes.data(), pa.bytes.size(), compress);
-                if (enc.bytes.empty())
-                    continue; // skip an item that failed to encode
-                item.bytes = std::move(enc.bytes);
-                item.mime_type = std::move(enc.mime);
-                item.width = enc.width;
-                item.height = enc.height;
-                item.filename = std::move(pa.filename);
+                // Same policy as the single-image path: animated images are
+                // untouched and flagged, stills recompressed only when that
+                // is enabled and smaller.
+                auto prepared = tesseract::prepare_image_for_send(
+                    std::move(pa.bytes), std::move(pa.mime), std::move(pa.filename), pa.width,
+                    pa.height, pa.is_animated, recompress,
+                    [this](const std::uint8_t* d, std::size_t n, bool compress)
+                    { return deps_.host->encode_for_send(d, n, compress); },
+                    [](std::span<const std::uint8_t> b, std::string_view m)
+                    { return tesseract::image_metadata_strippable(b, m); });
+                if (prepared.refused)
+                {
+                    any_refused = true; // never sent: its metadata cannot be stripped
+                    continue;
+                }
+                if (prepared.bytes.empty())
+                    continue; // skip an empty item
+                item.bytes = std::move(prepared.bytes);
+                item.mime_type = std::move(prepared.mime);
+                item.width = prepared.width;
+                item.height = prepared.height;
+                item.filename = std::move(prepared.filename);
+                item.is_animated = prepared.is_animated;
             }
             else
             {
@@ -1362,7 +1356,14 @@ void RoomPane::wire_room_view_()
             out_items.push_back(std::move(item));
         }
 
+        if (any_refused)
+        {
+            shell_show_status_message_(
+                tk::tr("Some images weren't sent because their metadata can't be removed."));
+        }
         clear_composer();
+        if (out_items.empty())
+            return;
         const auto request_id = shell_->account_manager_.next_upload_request_id();
         pane_client_()->send_gallery_async(request_id, room_id_, out_items, caption,
                                            reply_event_id,

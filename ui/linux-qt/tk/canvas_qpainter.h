@@ -41,6 +41,10 @@ void set_link_color(Color c);
 // avatar / image provider lambda.
 std::unique_ptr<Image> make_image(QImage img);
 
+// Copy straight RGBA8 pixels (stride = w * 4) into a tk::Image. Worker-thread
+// safe; used by the shared JPEG XL decode glue (app/jxl_decode.h).
+std::unique_ptr<Image> make_image_rgba(const std::uint8_t* rgba, int w, int h);
+
 // The reverse of make_image() — extract the underlying native bitmap from
 // a tk::Image so it can be embedded into a platform-native rich-text
 // control (e.g. QTextDocument::addResource for an inline composer

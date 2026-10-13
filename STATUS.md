@@ -1,6 +1,15 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-12**. 3222 C++ + 1013 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-12**. 3259 C++ + 1055 Rust tests.
+
+> **Image send (2026-10-13).**
+> Animated images are never recompressed and stills only when smaller (toggle
+> in Settings → Media); metadata is always stripped from every format that
+> carries it; an image that can't be stripped is never sent. Qt6 build, ctest 3259/3259, cargo 1055.
+
+> **JPEG XL images (2026-10-12).**
+> `.jxl` stills and animations render on all platforms via a Rust decoder.
+> Qt6 build, ctest 3259/3259, cargo 1055.
 
 > **Configurable fonts (2026-10-11).**
 > Settings → Appearance → Fonts: a base size that scales every text role

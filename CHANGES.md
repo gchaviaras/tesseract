@@ -5,8 +5,13 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+### 2026-10-13
+
+- fix(send): animated images (GIF, WebP, APNG, AVIF, JXL) are no longer recompressed to JPEG and stills only when smaller (new Settings → Media toggle); metadata is always stripped from every format that carries it, and an image whose metadata can't be stripped is never sent. Qt6 build, ctest 3259/3259, cargo 1055
+
 ### 2026-10-12
 
+- feat(images): JPEG XL stills and animations render on every platform via a Rust `jxl-oxide` decoder. Qt6 build, ctest 3259/3259, cargo 1055
 - fix(ui): the offline banner says "Can’t reach the server" when the OS still has a network and only the homeserver is unreachable; "No internet connection" is shown only when `is_network_available()` agrees. Qt6 build, i18n catalogs, user-verified Qt6
 - refactor(settings): preference controls bind straight to `Settings` fields (`SettingBinder`), and the settings view reports one `on_setting_changed(SettingKey)` instead of ~35 per-preference callbacks; `ShellBase::handle_setting_changed_` saves once and applies side effects per key. Qt6 build, ctest 3222/3222
 - fix(calls): the call lobby disables Join and says why ("A moderator needs to start the call.") when the user lacks the permission to start a call nobody has joined, instead of failing with `M_FORBIDDEN` after the click; re-evaluated on room-info updates. Qt6 build, ctest (call/i18n subset), user-verified Qt6

@@ -10,8 +10,14 @@ namespace tk
 // Cheap header sniff (no decode): true when `bytes` is a GIF (even a
 // single-frame one — only the decoder can tell), a WebP whose VP8X header
 // has the animation flag set, or an APNG (an `acTL` chunk ahead of the first
-// `IDAT`). False for anything else, including truncated input.
+// `IDAT`), or a JPEG XL file (animation lives in the codestream header and
+// only the decoder can tell, so every JXL is treated as possibly animated).
+// False for anything else, including truncated input.
 bool bytes_may_be_animated(std::span<const std::uint8_t> bytes);
+
+// True when `bytes` start with a JPEG XL signature: a bare codestream
+// (`FF 0A`) or an ISOBMFF container (`JXL ` signature box). Pure header sniff.
+bool is_jxl_bytes(std::span<const std::uint8_t> bytes);
 
 struct ImageDims
 {
@@ -19,7 +25,7 @@ struct ImageDims
     std::uint32_t height = 0;
 };
 
-// Width/height read from the header of a PNG, GIF, JPEG or WebP (VP8, VP8L,
+// Width/height read from the header of a PNG, GIF, JPEG, WebP or JPEG XL (VP8, VP8L,
 // or the VP8X canvas) without decoding. nullopt for any other format or for
 // input truncated before the size fields.
 std::optional<ImageDims> probe_image_dimensions(std::span<const std::uint8_t> bytes);

@@ -36,6 +36,9 @@
 #include "tk/emoji_support.h"
 #include "tk/host.h"
 #include "tk/host_macos.h"
+#include "app/image_send.h"
+#include <tesseract/image_meta.h>
+#include "app/jxl_decode.h"
 #include "tk/image_sniff.h"
 #include "tk/theme.h"
 #include "util.h"
@@ -1631,6 +1634,8 @@ tesseract::ShellBase::DecodedImage
 MacShell::decode_image_(const std::vector<uint8_t>& bytes, int max_w,
                         int max_h)
 {
+    if (tesseract::is_jxl_data(bytes))
+        return tesseract::jxl::decode_image(bytes, max_w, max_h, tk::cg::make_image_rgba);
     // Untrusted bytes: refuse over-budget images before any codec allocates (tk/image_sniff.h).
     if (!tk::decode_size_allowed(bytes, tk::bytes_may_be_animated(bytes)))
         return DecodedImage{};
@@ -1648,6 +1653,9 @@ bool MacShell::decode_image_streamed_(
     const std::function<void(std::unique_ptr<tk::Image>, int)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (tesseract::is_jxl_data(bytes))
+        return tesseract::jxl::decode_streamed(bytes, max_w, max_h, tk::cg::make_image_rgba,
+                                               on_first_frame, on_frame);
     if (!tk::decode_size_allowed(bytes, /*animated=*/true))
         return false;
     bool got_first = false;
@@ -1668,6 +1676,9 @@ bool MacShell::decode_image_streamed_windowed_(
                              std::size_t)>& on_first_frame,
     const std::function<void(int, std::unique_ptr<tk::Image>, int)>& on_frame)
 {
+    if (tesseract::is_jxl_data(bytes))
+        return tesseract::jxl::decode_streamed_windowed(bytes, max_w, max_h, tk::cg::make_image_rgba,
+                                                        on_first_frame, on_frame);
     if (!tk::decode_size_allowed(bytes, /*animated=*/true))
         return false;
     bool got_first = false;
@@ -6279,40 +6290,30 @@ private:
     {
         return;
     }
-    tesseract::Result res;
-    if (is_animated)
+    // Animated images go out untouched (and flagged); stills are recompressed
+    // only when enabled and only if that is smaller (app/image_send.h).
+    if (bytes.empty())
     {
-        // Animated GIF/WebP: send the original bytes verbatim via the
-        // MSC4230 raw path. Re-encoding would flatten the animation to a
-        // single frame.
-        res = _shell->client_->send_image(
-            _shell->current_room_id_, bytes, mime, filename, caption, width,
-            height, /*is_animated=*/true, reply_event_id);
+        return;
     }
-    else
+    tk::Host* host = &_mainAppSurface->host();
+    auto prepared = tesseract::prepare_image_for_send(
+        std::move(bytes), std::move(mime), std::move(filename), width, height,
+        is_animated, tesseract::Settings::instance().recompress_images_on_send,
+        [host](const std::uint8_t* d, std::size_t n, bool compress)
+        { return host->encode_for_send(d, n, compress); },
+        [](std::span<const std::uint8_t> b, std::string_view m)
+        { return tesseract::image_metadata_strippable(b, m); });
+    if (prepared.refused)
     {
-        const bool compress = tesseract::Settings::instance().image_quality ==
-                              tesseract::Settings::ImageQuality::Compressed;
-        auto enc = _mainAppSurface->host().encode_for_send(
-            bytes.data(), bytes.size(), compress);
-        if (enc.bytes.empty())
-        {
-            return;
-        }
-        std::string out_name = filename;
-        if (enc.mime == "image/jpeg")
-        {
-            auto dot = out_name.find_last_of('.');
-            if (dot != std::string::npos)
-            {
-                out_name = out_name.substr(0, dot);
-            }
-            out_name += ".jpg";
-        }
-        res = _shell->client_->send_image(
-            _shell->current_room_id_, enc.bytes, enc.mime, out_name, caption,
-            enc.width, enc.height, /*is_animated=*/false, reply_event_id);
+        _shell->show_status_message(
+            tk::tr("This image can't be sent because its metadata can't be removed."));
+        return;
     }
+    tesseract::Result res = _shell->client_->send_image(
+        _shell->current_room_id_, prepared.bytes, prepared.mime, prepared.filename,
+        caption, prepared.width, prepared.height, prepared.is_animated,
+        reply_event_id);
     if (res)
     {
         if (_roomTextArea)
@@ -6418,11 +6419,12 @@ private:
     {
         return;
     }
-    const bool compress = tesseract::Settings::instance().image_quality ==
-                          tesseract::Settings::ImageQuality::Compressed;
+    const bool recompress = tesseract::Settings::instance().recompress_images_on_send;
+    tk::Host* host = &_mainAppSurface->host();
 
     std::vector<tesseract::GalleryItemOut> out_items;
     out_items.reserve(items.size());
+    bool any_refused = false;
     for (auto& pa : items)
     {
         tesseract::GalleryItemOut item;
@@ -6435,17 +6437,29 @@ private:
         item.duration_ms = pa.duration_ms;
 
         using Kind = tesseract::views::ComposeBar::PendingAttachment::Kind;
-        if (pa.kind == Kind::Image && !pa.is_animated)
+        if (pa.kind == Kind::Image)
         {
-            auto enc = _mainAppSurface->host().encode_for_send(
-                pa.bytes.data(), pa.bytes.size(), compress);
-            if (enc.bytes.empty())
-                continue; // skip an item that failed to encode
-            item.bytes = std::move(enc.bytes);
-            item.mime_type = std::move(enc.mime);
-            item.width = enc.width;
-            item.height = enc.height;
-            item.filename = std::move(pa.filename);
+            // Same policy as the single-image path (app/image_send.h).
+            auto prepared = tesseract::prepare_image_for_send(
+                std::move(pa.bytes), std::move(pa.mime), std::move(pa.filename), pa.width,
+                pa.height, pa.is_animated, recompress,
+                [host](const std::uint8_t* d, std::size_t n, bool compress)
+                { return host->encode_for_send(d, n, compress); },
+                [](std::span<const std::uint8_t> b, std::string_view m)
+                { return tesseract::image_metadata_strippable(b, m); });
+            if (prepared.refused)
+            {
+                any_refused = true; // never sent: its metadata cannot be stripped
+                continue;
+            }
+            if (prepared.bytes.empty())
+                continue; // skip an empty item
+            item.bytes = std::move(prepared.bytes);
+            item.mime_type = std::move(prepared.mime);
+            item.width = prepared.width;
+            item.height = prepared.height;
+            item.filename = std::move(prepared.filename);
+            item.is_animated = prepared.is_animated;
         }
         else
         {
@@ -6464,6 +6478,11 @@ private:
         out_items.push_back(std::move(item));
     }
 
+    if (any_refused)
+    {
+        _shell->show_status_message(
+            tk::tr("Some images weren't sent because their metadata can't be removed."));
+    }
     if (_roomTextArea)
     {
         _roomTextArea->set_text("");
@@ -6471,6 +6490,10 @@ private:
     if (_roomView)
     {
         _roomView->set_current_text({});
+    }
+    if (out_items.empty())
+    {
+        return;
     }
     _shell->client_->send_gallery_async(0, _shell->current_room_id_, out_items,
                                         caption, reply_event_id);

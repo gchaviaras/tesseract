@@ -114,6 +114,9 @@ add_executable(tesseract_tests
     cpp/test_anim_image_cache.cpp
     cpp/test_animated_avatars.cpp
     cpp/test_image_sniff.cpp
+    cpp/test_jxl_decode.cpp
+    cpp/test_image_animation.cpp
+    cpp/test_image_send.cpp
     cpp/test_pixmap_cache.cpp
     cpp/test_compressed_image_cache.cpp
     cpp/test_interval_timer.cpp
@@ -572,6 +575,7 @@ target_include_directories(tesseract_tests
 # target and not propagated here) — link the header-only target so its
 # INTERFACE include dir reaches tests too.
 target_link_libraries(tesseract_tests PRIVATE nlohmann_json::nlohmann_json)
+target_compile_definitions(tesseract_tests PRIVATE TESSERACT_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/sdk/tests/fixtures")
 
 # All three archives are mutually dependent (same WHOLE_ARCHIVE pattern used
 # by the UI executables) so every symbol is present regardless of link order.

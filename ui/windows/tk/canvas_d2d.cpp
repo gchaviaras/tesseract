@@ -1,8 +1,10 @@
 #include "canvas_d2d.h"
+#include "host_win32.h"
 #include "pill.h"
 #include "app/jxl_decode.h"
 #include "tk/image_sniff.h"
 
+#include <BetterText/BetterText.h>
 #include <d2d1_1.h>
 #include <d2d1_1helper.h>
 #include <d2d1_3.h>
@@ -1250,6 +1252,228 @@ private:
     ID2D1Brush* fg_;
 };
 
+std::unique_ptr<Image>
+image_from_bgra_impl(Backend::Impl& impl, const std::uint8_t* pixels, int w,
+                     int h, bool opaque);
+
+// ─────────────────────────────────────────────────────────────────────────
+//  InitialsGlyphRenderer — avatar initials drawn through BetterText
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Same technique as the custom title bar: one hidden, non-presenting static
+// BetterText control (BetterTextSetStatic) whose render target is captured to
+// BGRA. That gets the bundled Noto Color Emoji font and COLR glyph support
+// that a plain IDWriteTextFormat lacks. The captures are cached per
+// (text, size, colour) since the capture blocks on the GPU; avatars repeat the
+// same few initials. UI-thread only (paint).
+
+namespace
+{
+
+class InitialsGlyphRenderer
+{
+public:
+    struct Glyph
+    {
+        std::unique_ptr<Image> image;
+        float w_dip = 0;
+        float h_dip = 0;
+        // Horizontal offset (DIPs) of the ink's centre from the image centre,
+        // so the visible glyphs can be centred in the disc (BetterText has no
+        // horizontal alignment).
+        float ink_off_x_dip = 0;
+    };
+
+    // Null when BetterText is unavailable or the capture failed (the caller
+    // falls back to plain DirectWrite). The pointer is valid until the next
+    // call.
+    const Glyph* get(Backend::Impl& impl, const std::wstring& text,
+                     float font_dip, Color fg)
+    {
+        std::wstring key = text;
+        key += L'\x1';
+        key += std::to_wstring(static_cast<int>(std::lround(font_dip * 10.0f)));
+        key += L'\x1';
+        key += std::to_wstring(
+            (static_cast<std::uint32_t>(fg.r) << 24) |
+            (static_cast<std::uint32_t>(fg.g) << 16) |
+            (static_cast<std::uint32_t>(fg.b) << 8) |
+            static_cast<std::uint32_t>(fg.a));
+        if (auto it = cache_.find(key); it != cache_.end())
+        {
+            return &it->second;
+        }
+        if (!ensure_control())
+        {
+            return nullptr;
+        }
+        Glyph g;
+        if (!render(impl, text, font_dip, fg, g))
+        {
+            return nullptr;
+        }
+        // Wholesale clear at a cap, like the emoji bitmap cache above.
+        constexpr std::size_t kMaxGlyphs = 512;
+        if (cache_.size() >= kMaxGlyphs)
+        {
+            cache_.clear();
+        }
+        return &cache_.emplace(std::move(key), std::move(g)).first->second;
+    }
+
+private:
+    static std::uint32_t rgba(Color c)
+    {
+        return (static_cast<std::uint32_t>(c.r) << 24) |
+               (static_cast<std::uint32_t>(c.g) << 16) |
+               (static_cast<std::uint32_t>(c.b) << 8) |
+               static_cast<std::uint32_t>(c.a);
+    }
+
+    bool ensure_control()
+    {
+        if (hwnd_)
+        {
+            return true;
+        }
+        if (failed_)
+        {
+            return false;
+        }
+        failed_ = true;
+        const HINSTANCE inst = GetModuleHandleW(nullptr);
+        static const wchar_t kHostClass[] = L"TesseractInitialsGlyphHost";
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = DefWindowProcW;
+        wc.hInstance = inst;
+        wc.lpszClassName = kHostClass;
+        RegisterClassW(&wc); // already-registered is fine
+        // A never-shown popup: BetterText needs a parent HWND, and this
+        // canvas has no window of its own.
+        HWND host = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                    kHostClass, L"", WS_POPUP, 0, 0, 1, 1,
+                                    nullptr, nullptr, inst, nullptr);
+        if (!host)
+        {
+            return false;
+        }
+        BetterTextRegisterControl(inst);
+        hwnd_ = CreateWindowExW(0, BETTERTEXT_CLASS_NAME, L"",
+                                WS_CHILD | WS_VISIBLE, 0, 0, 10, 10, host,
+                                nullptr, inst, nullptr);
+        if (!hwnd_)
+        {
+            DestroyWindow(host);
+            return false;
+        }
+        // Non-visual, as in CustomTitleBar / BetterTextField: empty region
+        // and no swap chain; pixels come from the capture API only.
+        SetWindowRgn(hwnd_, CreateRectRgn(0, 0, 0, 0), TRUE);
+        BetterTextSetPresentEnabled(hwnd_, FALSE);
+        BetterTextSetStatic(hwnd_, TRUE);
+        BetterTextSetPadding(hwnd_, 0.0f, 0.0f);
+        BetterTextSetFontProvider(hwnd_, &win32::noto_emoji_font_provider());
+        failed_ = false;
+        return true;
+    }
+
+    bool render(Backend::Impl& impl, const std::wstring& text, float font_dip,
+                Color fg, Glyph& out)
+    {
+        const UINT dpi = GetDpiForWindow(hwnd_);
+        const float scale = dpi > 0 ? static_cast<float>(dpi) / 96.0f : 1.0f;
+
+        // Style and theme before the text: BetterText bakes each run's
+        // colour in when the text is inserted (see CustomTitleBar::paint).
+        BetterTextTextStyle style{};
+        style.font_family = L"Segoe UI Variable Text";
+        style.font_size = font_dip;
+        style.font_weight = FW_SEMIBOLD;
+        BetterTextSetDefaultTextStyle(hwnd_, &style);
+
+        BetterTextTheme theme{};
+        theme.background_rgba = 0;
+        theme.foreground_rgba = rgba(fg);
+        theme.selection_rgba = theme.foreground_rgba;
+        theme.caret_rgba = theme.foreground_rgba;
+        theme.placeholder_rgba = theme.foreground_rgba;
+        BetterTextSetTheme(hwnd_, &theme);
+        BetterTextSetText(hwnd_, text.c_str());
+
+        // Wide enough that a static control never ellipsizes 1-2 glyphs.
+        const int w_px = static_cast<int>(std::ceil(font_dip * 6.0f * scale));
+        const int h_px = std::max(
+            1, static_cast<int>(
+                   std::ceil(BetterTextGetContentHeight(hwnd_) * scale)));
+        // Each WM_SIZE rebuilds BetterText's render target; skip when unchanged.
+        if (w_px != last_w_px_ || h_px != last_h_px_)
+        {
+            SetWindowPos(hwnd_, nullptr, 0, 0, w_px, h_px,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+            last_w_px_ = w_px;
+            last_h_px_ = h_px;
+        }
+
+        int w = 0, h = 0;
+        if (!BetterTextRequestCaptureBGRA(hwnd_, &w, &h) || w <= 0 || h <= 0)
+        {
+            return false;
+        }
+        std::vector<std::uint8_t> px(static_cast<std::size_t>(w) * h * 4);
+        if (!BetterTextReadCaptureBGRA(hwnd_, px.data(),
+                                       static_cast<int>(px.size()), &w, &h))
+        {
+            return false;
+        }
+
+        int min_x = w, max_x = -1;
+        for (int y = 0; y < h; ++y)
+        {
+            const std::uint8_t* row = px.data() + static_cast<std::size_t>(y) * w * 4;
+            for (int x = 0; x < w; ++x)
+            {
+                if (row[x * 4 + 3] != 0)
+                {
+                    min_x = std::min(min_x, x);
+                    max_x = std::max(max_x, x);
+                }
+            }
+        }
+        if (max_x < min_x)
+        {
+            return false; // nothing rendered
+        }
+
+        out.image = image_from_bgra_impl(impl, px.data(), w, h,
+                                         /*opaque=*/false);
+        if (!out.image)
+        {
+            return false;
+        }
+        out.w_dip = static_cast<float>(w) / scale;
+        out.h_dip = static_cast<float>(h) / scale;
+        const float ink_cx = (static_cast<float>(min_x + max_x) + 1.0f) * 0.5f;
+        out.ink_off_x_dip = (ink_cx - static_cast<float>(w) * 0.5f) / scale;
+        return true;
+    }
+
+    HWND hwnd_ = nullptr;
+    bool failed_ = false;
+    int last_w_px_ = 0;
+    int last_h_px_ = 0;
+    std::unordered_map<std::wstring, Glyph> cache_;
+};
+
+InitialsGlyphRenderer& initials_glyph_renderer()
+{
+    // Deliberately never destroyed: avoids tearing BetterText windows down
+    // during static destruction at process exit.
+    static auto* instance = new InitialsGlyphRenderer();
+    return *instance;
+}
+
+} // namespace
+
 // ─────────────────────────────────────────────────────────────────────────
 //  D2DCanvas — tk::Canvas implementation
 // ─────────────────────────────────────────────────────────────────────────
@@ -1500,6 +1724,19 @@ public:
         // Pick a font size proportional to the diameter — matches the
         // GDI+ initials-disc code that used to live in MainWindow.cpp.
         float font_dip = diameter * kAvatarInitialsFontRatio;
+        if (initials.empty())
+        {
+            return;
+        }
+        if (const auto* g =
+                initials_glyph_renderer().get(backend_, initials, font_dip, fg))
+        {
+            draw_image(*g->image,
+                       Rect{centre.x - g->w_dip * 0.5f - g->ink_off_x_dip,
+                            centre.y - g->h_dip * 0.5f, g->w_dip, g->h_dip});
+            return;
+        }
+        // BetterText unavailable: plain DirectWrite.
         ComPtr<IDWriteTextFormat> tf;
         HRESULT hr = backend_.dwrite->CreateTextFormat(
             L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
@@ -2980,11 +3217,17 @@ std::unique_ptr<Image>
 make_image_from_bgra(Backend& b, const std::uint8_t* pixels, int w, int h,
                      bool opaque)
 {
+    return image_from_bgra_impl(b.impl(), pixels, w, h, opaque);
+}
+
+std::unique_ptr<Image>
+image_from_bgra_impl(Backend::Impl& impl, const std::uint8_t* pixels, int w,
+                     int h, bool opaque)
+{
     if (!pixels || w <= 0 || h <= 0)
     {
         return nullptr;
     }
-    Backend::Impl& impl = b.impl();
     if (!impl.wic)
     {
         return nullptr;

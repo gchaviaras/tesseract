@@ -1,6 +1,7 @@
 #include "tk_test_surface.h"
 #include "tk/canvas_d2d.h"
 
+#include <BetterText/BetterText.h>
 #include <d2d1.h>
 #include <d2d1_1.h>
 #include <wincodec.h>
@@ -119,3 +120,29 @@ std::unique_ptr<TestSurface> TestSurface::create(int w, int h)
 {
     return std::make_unique<D2DTestSurface>(w, h);
 }
+
+// canvas_d2d.cpp (avatar initials) references the host's BetterText emoji
+// provider, which lives in host_win32.cpp and is not part of the test binary.
+// A provider with no collection makes BetterText use its own default font.
+namespace tk::win32
+{
+namespace
+{
+class NullFontProvider final : public IBetterTextFontProvider
+{
+public:
+    HRESULT CreateFontCollection(IDWriteFactory*, IDWriteFontCollection** collection) override
+    {
+        *collection = nullptr;
+        return E_FAIL;
+    }
+    const wchar_t* EmojiFallbackFamily() const override { return L"Segoe UI Emoji"; }
+};
+} // namespace
+
+IBetterTextFontProvider& noto_emoji_font_provider()
+{
+    static NullFontProvider instance;
+    return instance;
+}
+} // namespace tk::win32

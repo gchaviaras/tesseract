@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### 2026-10-13
 
+- fix(windows): avatar initials render through BetterText (cached static-label captures) so emoji use the bundled Noto Color Emoji instead of Segoe UI Emoji; plain DirectWrite remains the fallback. Windows build, user-verified
 - feat(login): the login view's default homeserver can be provisioned (Windows registry `DefaultHomeserver`, macOS preference, Linux `/etc/tesseract/provisioning.json`); the NSIS installer writes it from `/DEFAULT_HOMESERVER=<host>`. Windows build + NSIS installer user-verified; macOS/Linux loaders unbuilt
 - fix(send): animated images (GIF, WebP, APNG, AVIF, JXL) are no longer recompressed to JPEG and stills only when smaller (new Settings → Media toggle); metadata is always stripped from every format that carries it, and an image whose metadata can't be stripped is never sent. Qt6 build, ctest 3259/3259, cargo 1055
 

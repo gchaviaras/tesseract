@@ -38,6 +38,9 @@ set(CMAKE_MT           llvm-mt)
 # (webrtc-sys, cxx, aws-lc-sys, bundled SQLite) — see the root CMakeLists.txt.
 set(TESSERACT_MSVC_CROSS_CFLAGS
     "--target=x86_64-pc-windows-msvc /imsvc${_xwin}/crt/include /imsvc${_xwin}/sdk/include/ucrt /imsvc${_xwin}/sdk/include/um /imsvc${_xwin}/sdk/include/shared /imsvc${_xwin}/sdk/include/winrt /imsvc${_xwin}/sdk/include/cppwinrt")
+# clang-cl (unlike MSVC) rejects SSE4.1/SSSE3 intrinsics without the feature
+# flag, and libwebp-sys's *_sse41.c files rely on the compiler allowing them.
+set(TESSERACT_MSVC_CROSS_CFLAGS "${TESSERACT_MSVC_CROSS_CFLAGS} -msse4.1")
 set(CMAKE_C_FLAGS_INIT   "${TESSERACT_MSVC_CROSS_CFLAGS}")
 # Diagnostics clang-cl reports but the native MSVC build doesn't (COM overrides
 # without noexcept, CRT getenv/localtime deprecation,

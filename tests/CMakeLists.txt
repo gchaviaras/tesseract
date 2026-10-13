@@ -417,6 +417,8 @@ elseif(_TESSERACT_TEST_UI STREQUAL "win32")
         UNICODE _UNICODE
         WIN32_LEAN_AND_MEAN NOMINMAX)
     target_link_libraries(tesseract_tests PRIVATE
+        # canvas_d2d.cpp renders avatar initials through BetterText.
+        bettertext
         d2d1
         d3d11
         dxgi

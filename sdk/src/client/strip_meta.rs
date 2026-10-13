@@ -8,6 +8,7 @@
 
 use img_parts::jpeg::{markers, Jpeg, JpegSegment};
 use img_parts::png::Png;
+use img_parts::riff::{RiffChunk, RiffContent};
 use img_parts::webp::WebP;
 use img_parts::{Bytes, ImageEXIF};
 use little_exif::exif_tag::ExifTag;
@@ -25,6 +26,8 @@ const PNG_KEEP_CHUNKS: [[u8; 4]; 19] = [
     *b"fdAT",
 ];
 /// WebP chunks that describe the pixels (EXIF, XMP and anything unknown go).
+/// VP8X flag bits for the EXIF (0x08) and XMP (0x04) chunks.
+const WEBP_VP8X_EXIF_XMP: u8 = 0x0C;
 const WEBP_KEEP_CHUNKS: [[u8; 4]; 7] =
     [*b"VP8 ", *b"VP8L", *b"VP8X", *b"ALPH", *b"ANIM", *b"ANMF", *b"ICCP"];
 
@@ -282,9 +285,23 @@ fn minimal_exif_orientation(o: u16) -> Vec<u8> {
 
 fn strip_webp(bytes: &[u8]) -> Option<Vec<u8>> {
     let mut webp = WebP::from_bytes(Bytes::copy_from_slice(bytes)).ok()?;
+    // Keeps only the chunks that describe the pixels, which drops EXIF, XMP
+    // and anything private.
     webp.chunks_mut().retain(|c| WEBP_KEEP_CHUNKS.contains(&c.id()));
-    // Also re-derives the VP8X flags after the EXIF chunk is dropped.
-    webp.set_exif(None);
+    // The VP8X header says which of those exist (ICC, alpha, animation, EXIF,
+    // XMP). Clear only the EXIF and XMP bits. img-parts' own `set_exif(None)`
+    // is not usable here: it re-infers the container kind and, when there is
+    // no ICC/EXIF chunk, deletes VP8X outright, turning every animated or
+    // alpha WebP into an invalid file.
+    for chunk in webp.chunks_mut().iter_mut() {
+        if chunk.id() != *b"VP8X" {
+            continue;
+        }
+        let data = chunk.content().data().filter(|d| d.len() >= 10)?;
+        let mut flags = data.to_vec();
+        flags[0] &= !WEBP_VP8X_EXIF_XMP;
+        *chunk = RiffChunk::new(*b"VP8X", RiffContent::Data(Bytes::from(flags)));
+    }
     Some(webp.encoder().bytes().to_vec())
 }
 
@@ -433,9 +450,93 @@ fn is_jp2(b: &[u8]) -> bool {
 }
 
 /// JPEG 2000: drops the `xml ` boxes and every `uuid` box (XMP, EXIF and
-/// GeoJP2 all live there). Colour (`colr`, incl. ICC) and the codestream stay.
+/// GeoJP2 all live there) and the comment (`COM`) segments inside the
+/// codestream. Colour (`colr`, incl. ICC) and the image data stay.
 fn strip_jp2(b: &[u8]) -> Option<Vec<u8>> {
-    drop_iso_boxes(b, |bx| &bx.ty == b"xml " || &bx.ty == b"uuid")
+    let mut out = Vec::with_capacity(b.len());
+    for bx in iso_boxes(b, 0, b.len())? {
+        if &bx.ty == b"xml " || &bx.ty == b"uuid" {
+            continue;
+        }
+        if &bx.ty != b"jp2c" {
+            out.extend_from_slice(&b[bx.start..bx.end]);
+            continue;
+        }
+        let cs = strip_j2k_comments(&b[bx.payload..bx.end])?;
+        // Rewrite the box header for the new payload length. A box that runs
+        // to the end of the file (size 0) keeps saying so.
+        if be32(b, bx.start)? == 0 {
+            out.extend_from_slice(&b[bx.start..bx.payload]);
+        } else if bx.payload - bx.start == 16 {
+            out.extend_from_slice(&1u32.to_be_bytes());
+            out.extend_from_slice(b"jp2c");
+            out.extend_from_slice(&((16 + cs.len()) as u64).to_be_bytes());
+        } else {
+            out.extend_from_slice(&u32::try_from(8 + cs.len()).ok()?.to_be_bytes());
+            out.extend_from_slice(b"jp2c");
+        }
+        out.extend_from_slice(&cs);
+    }
+    Some(out)
+}
+
+/// A JPEG 2000 codestream without its `COM` (0xFF64) marker segments. Comments
+/// are allowed in the main header and in tile-part headers; the former are cut
+/// out, but a tile-part header would need its `Psot` length rewritten, so a
+/// comment there makes the file "not confidently clean" (None).
+fn strip_j2k_comments(cs: &[u8]) -> Option<Vec<u8>> {
+    const SOC: usize = 0xFF4F;
+    const SOT: usize = 0xFF90;
+    const SOD: usize = 0xFF93;
+    const EOC: usize = 0xFFD9;
+    const COM: usize = 0xFF64;
+    if be16(cs, 0)? != SOC {
+        return None;
+    }
+    let mut out = vec![0xFF, 0x4F];
+    let mut pos = 2usize;
+    // Main header: marker segments up to the first SOT.
+    while be16(cs, pos)? != SOT {
+        let marker = be16(cs, pos)?;
+        if marker < 0xFF00 {
+            return None;
+        }
+        let len = be16(cs, pos + 2)?;
+        let end = pos.checked_add(2 + len).filter(|e| len >= 2 && *e <= cs.len())?;
+        if marker != COM {
+            out.extend_from_slice(&cs[pos..end]);
+        }
+        pos = end;
+    }
+    let tiles_start = pos;
+    // Tile-parts: only inspected, copied verbatim.
+    while be16(cs, pos)? == SOT {
+        let psot = be32(cs, pos + 6)?;
+        let tile_end = if psot == 0 { cs.len() } else { pos.checked_add(psot)? };
+        if tile_end > cs.len() || tile_end < pos + 14 {
+            return None;
+        }
+        let mut h = pos + 12;
+        while be16(cs, h)? != SOD {
+            if be16(cs, h)? == COM {
+                return None;
+            }
+            let len = be16(cs, h + 2)?;
+            h = h.checked_add(2 + len).filter(|_| len >= 2)?;
+            if h > tile_end {
+                return None;
+            }
+        }
+        pos = tile_end;
+        if pos >= cs.len() {
+            break;
+        }
+    }
+    if pos < cs.len() && be16(cs, pos)? != EOC {
+        return None;
+    }
+    out.extend_from_slice(&cs[tiles_start..]);
+    Some(out)
 }
 
 /// HEIF family (AVIF, HEIC, HEIX, ...): an `ftyp` whose major or compatible
@@ -1638,6 +1739,121 @@ mod tests {
         let t = std::time::Instant::now();
         assert!(!is_strippable(&file, "image/heic"));
         assert!(t.elapsed() < std::time::Duration::from_secs(1), "{:?}", t.elapsed());
+    }
+
+
+    // ---- WebP with a VP8X header (animation, alpha, ...) ---------------------
+
+    const WEBP_ANIM: &[u8] = include_bytes!("../../tests/fixtures/meta/anim_meta.webp");
+    const WEBP_ALPHA: &[u8] = include_bytes!("../../tests/fixtures/meta/alpha_lossy_meta.webp");
+
+    fn webp_ids(b: &[u8]) -> Vec<[u8; 4]> {
+        WebP::from_bytes(Bytes::copy_from_slice(b)).unwrap().chunks().iter().map(|c| c.id()).collect()
+    }
+
+    fn vp8x_flags(b: &[u8]) -> u8 {
+        let w = WebP::from_bytes(Bytes::copy_from_slice(b)).unwrap();
+        w.chunk_by_id(*b"VP8X").expect("VP8X chunk").content().data().unwrap()[0]
+    }
+
+    #[test]
+    fn animated_webp_stays_a_valid_animation_after_the_strip() {
+        assert!(contains(WEBP_ANIM, b"SECRETMAKE") && contains(WEBP_ANIM, b"SECRETXMP"));
+        let out = strip_image_metadata(WEBP_ANIM, "image/webp");
+        assert!(!contains(&out, b"SECRETMAKE") && !contains(&out, b"SECRETXMP"));
+
+        // The VP8X header (which marks the file as animated) must survive,
+        // with only the EXIF/XMP flags cleared.
+        let ids = webp_ids(&out);
+        assert_eq!(ids[0], *b"VP8X");
+        assert!(ids.contains(b"ANIM"));
+        assert_eq!(ids.iter().filter(|i| **i == *b"ANMF").count(), 3);
+        assert!(!ids.contains(b"XMP ") && !ids.contains(b"EXIF"));
+        let flags = vp8x_flags(&out);
+        assert!(flags & 0x02 != 0, "animation flag lost: {flags:#x}");
+        assert!(flags & 0x04 == 0, "XMP flag still set: {flags:#x}");
+
+        // An independent decoder still sees a 3-frame animation.
+        use image::AnimationDecoder;
+        let dec = image::codecs::webp::WebPDecoder::new(std::io::Cursor::new(&out[..])).unwrap();
+        assert!(dec.has_animation());
+        assert_eq!(dec.into_frames().collect::<Result<Vec<_>, _>>().unwrap().len(), 3);
+
+        // (EXIF orientation is not read from animated WebP at all, before or
+        // after, and renderers ignore it there.)
+    }
+
+    #[test]
+    fn webp_with_alpha_keeps_its_vp8x_header() {
+        assert!(contains(WEBP_ALPHA, b"SECRETMAKE"));
+        let out = strip_image_metadata(WEBP_ALPHA, "image/webp");
+        assert!(!contains(&out, b"SECRETMAKE") && !contains(&out, b"SECRETXMP"));
+        let ids = webp_ids(&out);
+        assert_eq!(ids[0], *b"VP8X");
+        assert!(ids.contains(b"ALPH"));
+        assert!(vp8x_flags(&out) & 0x10 != 0, "alpha flag lost");
+        let img = image::load_from_memory_with_format(&out, image::ImageFormat::WebP).unwrap();
+        assert!(img.color().has_alpha());
+        // The orientation tag of a still image is kept.
+        assert_eq!(read_orientation(&out, &FileExtension::WEBP), Some(6));
+    }
+
+    #[test]
+    fn webp_strip_is_a_noop_in_size_terms_for_clean_animations() {
+        // Stripping an already clean animation must not damage it either.
+        let once = strip_image_metadata(WEBP_ANIM, "image/webp").into_owned();
+        let twice = strip_image_metadata(&once, "image/webp");
+        assert_eq!(webp_ids(&twice), webp_ids(&once));
+    }
+
+
+    // ---- JPEG 2000 codestream comments ---------------------------------------
+
+    const JP2_COMMENT: &[u8] = include_bytes!("../../tests/fixtures/meta/jp2_comment.jp2");
+
+    /// (marker, length) of the main-header segments of the first `jp2c` box.
+    fn j2k_main_header(b: &[u8]) -> Vec<(u16, usize)> {
+        let boxes = iso_boxes(b, 0, b.len()).unwrap();
+        let cs = &b[boxes.iter().find(|x| &x.ty == b"jp2c").unwrap().payload..];
+        assert_eq!(&cs[..2], &[0xFF, 0x4F]);
+        let (mut pos, mut v) = (2usize, Vec::new());
+        while be16(cs, pos).unwrap() != 0xFF90 {
+            let m = be16(cs, pos).unwrap() as u16;
+            let len = be16(cs, pos + 2).unwrap();
+            v.push((m, len));
+            pos += 2 + len;
+        }
+        v
+    }
+
+    #[test]
+    fn jp2_codestream_comments_are_removed_and_the_file_stays_well_formed() {
+        assert!(contains(JP2_COMMENT, b"SECRETCOMMENT"));
+        assert!(j2k_main_header(JP2_COMMENT).iter().any(|(m, _)| *m == 0xFF64));
+        let out = strip_image_metadata(JP2_COMMENT, "image/jp2");
+        assert!(!contains(&out, b"SECRETCOMMENT"));
+        // Still a valid box tiling whose codestream has no COM, and whose
+        // other main-header segments (SIZ, COD, QCD) are untouched.
+        let hdr = j2k_main_header(&out);
+        assert!(!hdr.iter().any(|(m, _)| *m == 0xFF64), "{hdr:?}");
+        let orig: Vec<_> = j2k_main_header(JP2_COMMENT).into_iter().filter(|(m, _)| *m != 0xFF64).collect();
+        assert_eq!(hdr, orig);
+        // The jp2c box size matches its new payload.
+        let boxes = iso_boxes(&out, 0, out.len()).unwrap();
+        assert_eq!(boxes.last().unwrap().end, out.len());
+        assert!(out.len() < JP2_COMMENT.len());
+    }
+
+    #[test]
+    fn jp2_with_a_comment_in_a_tile_part_header_is_not_confidently_clean() {
+        // SOT (Lsot 10, Isot 0, Psot 20, TPsot 0, TNsot 1), COM, SOD + 2 data bytes.
+        let mut tile = vec![0xFF, 0x90, 0, 10, 0, 0, 0, 0, 0, 20, 0, 1];
+        tile.extend_from_slice(&[0xFF, 0x64, 0, 4, 0, 1]); // COM
+        tile.extend_from_slice(&[0xFF, 0x93, 0xAA, 0xBB]); // SOD + data
+        let mut cs = vec![0xFF, 0x4F, 0xFF, 0x51, 0, 4, 0, 0];
+        cs.extend_from_slice(&tile);
+        cs.extend_from_slice(&[0xFF, 0xD9]);
+        assert!(strip_j2k_comments(&cs).is_none());
     }
 
 }

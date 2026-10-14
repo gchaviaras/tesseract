@@ -5,6 +5,7 @@
 #include "views/settings/bcp47_languages.h"
 
 #include "tk/host.h"
+#include "tk/hover_area.h"
 #include "tk/i18n.h"
 #include "tk/theme.h"
 
@@ -25,6 +26,17 @@ namespace {
 
 UserProfilePanel::UserProfilePanel()
 {
+    // Hover ring + pointer cursor + click for the avatar; keyboard/a11y stays
+    // with avatar_target_ below.
+    avatar_area_ = add_child(
+        tk::create_widget<tk::HoverArea>(this, tk::HoverStyle::Ring, kAvatarD * 0.5f));
+    avatar_area_->set_on_click(
+        [this]
+        {
+            if (on_avatar_clicked && !avatar_url_.empty())
+                on_avatar_clicked(avatar_url_, display_name_);
+        });
+
     avatar_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
     avatar_target_->set_accessible_name(tk::tr("View avatar"));
     avatar_target_->set_focus_ring_radius(kAvatarD * 0.5f);
@@ -278,8 +290,10 @@ void UserProfilePanel::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     const float av_x = card_rect_.x + (kCardW - kAvatarD) * 0.5f;
     const float av_y = card_rect_.y + kHeaderH;
     avatar_rect_     = {av_x, av_y, kAvatarD, kAvatarD};
-    avatar_target_->arrange(lc, !avatar_url_.empty() && on_avatar_clicked ? avatar_rect_
-                                                                          : tk::Rect{});
+    const tk::Rect avatar_hit =
+        !avatar_url_.empty() && on_avatar_clicked ? avatar_rect_ : tk::Rect{};
+    avatar_target_->arrange(lc, avatar_hit);
+    avatar_area_->arrange(lc, avatar_hit);
 
     // Buttons: full inner width, stacked below text rows (and extended fields).
     const float btn_x = card_rect_.x + kPadX;
@@ -448,6 +462,7 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
         draw_avatar(cv, av_img, av_centre, kAvatarD, disp, pal.accent,
                     tk::Color{255, 255, 255, 255});
     }
+    avatar_area_->paint(ctx); // hover ring over the avatar
 
     // Display name (Title, centred, ellipsis).
     constexpr float kNameH = 20.0f;
@@ -573,16 +588,6 @@ bool UserProfilePanel::on_pointer_down(tk::Point local)
 
     const tk::Point w{local.x + bounds().x, local.y + bounds().y};
 
-    // Avatar click: open lightbox with the full-size avatar. Only react when
-    // we actually have an avatar URL and a wired callback — otherwise fall
-    // through so the (initials-only) center of the card behaves like before.
-    if (rect_contains(avatar_rect_, w) && !avatar_url_.empty()
-        && on_avatar_clicked)
-    {
-        press_avatar_ = true;
-        return true;
-    }
-
     if (rect_contains(card_rect_, w))
     {
         // Let the child dispatch (buttons) handle events inside the card.
@@ -596,20 +601,6 @@ bool UserProfilePanel::on_pointer_down(tk::Point local)
 
 void UserProfilePanel::on_pointer_up(tk::Point local, bool inside_self)
 {
-    if (press_avatar_)
-    {
-        press_avatar_ = false;
-        if (inside_self)
-        {
-            const tk::Point w{local.x + bounds().x, local.y + bounds().y};
-            if (rect_contains(avatar_rect_, w) && on_avatar_clicked)
-            {
-                on_avatar_clicked(avatar_url_, display_name_);
-            }
-        }
-        return;
-    }
-
     if (!press_backdrop_)
     {
         return;
@@ -670,7 +661,6 @@ bool UserProfilePanel::on_pointer_move(tk::Point local)
 void UserProfilePanel::on_pointer_leave()
 {
     press_backdrop_ = false;
-    press_avatar_   = false;
     if (hover_pronouns_ && host()) host()->hide_tooltip(this);
     hover_pronouns_ = false;
 }

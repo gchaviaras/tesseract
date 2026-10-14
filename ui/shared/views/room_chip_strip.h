@@ -7,6 +7,7 @@
 // implementation instead of two copies of the same loop.
 
 #include "tk/canvas.h"
+#include "tk/hover_area.h"
 #include "tk/widget.h"
 
 #include <tesseract/types.h>
@@ -58,5 +59,37 @@ void paint_room_chips(tk::PaintCtx& ctx, tk::Rect strip,
                       const ChipAvatarNeeded& on_avatar_needed,
                       const RoomChipStripStyle& style,
                       std::vector<std::pair<tk::Rect, std::string>>& out_chips);
+
+// Pointer side of the chip strip: one tk::HoverArea per painted chip, as
+// children of the overlay that owns the strip, so each chip gets the standard
+// hover/press fill, pointer cursor and click handling from the widget tree.
+// The chip rects are only known while painting, so the owner calls paint()
+// BEFORE paint_room_chips() (fill behind the avatar + label, using the rects
+// placed by the previous frame) and sync() right AFTER it. Keyboard / a11y
+// stays with whatever tk::KeyboardTarget the owner already provides (the
+// areas are pointer-only).
+class RoomChipAreas
+{
+public:
+    // Fired on a click on chip `index` (0-based, in strip order).
+    using OnChip = std::function<void(std::size_t index, const std::string& room_id)>;
+
+    // Hover/press fill for every placed chip.
+    void paint(tk::PaintCtx& ctx);
+
+    // Parks every area (empty rect → unhittable); for when the strip is hidden.
+    void park();
+
+    // Places one area per chip in `chips` (creating them under `owner` on
+    // demand) and parks the rest.
+    void sync(tk::Widget& owner,
+              const std::vector<std::pair<tk::Rect, std::string>>& chips,
+              OnChip on_chip);
+
+private:
+    std::vector<tk::HoverArea*> areas_;
+    std::vector<std::string> room_ids_;
+    OnChip on_chip_;
+};
 
 } // namespace tesseract::views

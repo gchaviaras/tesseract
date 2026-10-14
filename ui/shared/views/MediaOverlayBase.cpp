@@ -33,16 +33,16 @@ static constexpr tk::Color kDarkPillFillPressed = tk::Color::rgba(95, 95, 95, 20
 
 void MediaOverlayBase::add_tooltip_(tk::Button* b)
 {
-    b->on_hover_enter = [this, b]
+    b->set_on_hover_enter([this, b]
     {
         if (host())
             host()->show_tooltip(b, b->access_name(), b->bounds());
-    };
-    b->on_hover_leave = [this, b]
+    });
+    b->set_on_hover_leave([this, b]
     {
         if (host())
             host()->hide_tooltip(b);
-    };
+    });
 }
 
 MediaOverlayBase::MediaOverlayBase()

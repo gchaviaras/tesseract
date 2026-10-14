@@ -2678,6 +2678,25 @@ public:
     {
     }
 
+    // Cursor requested by the hovered tk widget (Widget::cursor()); set on
+    // the surface overlay, the same widget the shells' link hooks write to.
+    void apply_cursor_(tk::CursorShape shape) override
+    {
+        if (!overlay_)
+            return;
+        const char* name = "default";
+        switch (shape)
+        {
+        case tk::CursorShape::Default:  name = "default"; break;
+        case tk::CursorShape::Pointer:  name = "pointer"; break;
+        case tk::CursorShape::Text:     name = "text"; break;
+        case tk::CursorShape::Grab:     name = "grab"; break;
+        case tk::CursorShape::Grabbing: name = "grabbing"; break;
+        case tk::CursorShape::ResizeH:  name = "col-resize"; break;
+        }
+        gtk_widget_set_cursor_from_name(overlay_, name);
+    }
+
     void request_repaint() override
     {
         if (drawing_area_)

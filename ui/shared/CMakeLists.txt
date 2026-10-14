@@ -162,6 +162,7 @@ set(_tk_sources
     tk/compressed_image_cache.h
     tk/compressed_image_cache.cpp
     tk/interval_timer.h
+    tk/hover_area.h
     tk/keyboard_target.h
     tk/keyboard_target.cpp
     tk/key_chord.h

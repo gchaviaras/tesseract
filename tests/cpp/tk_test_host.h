@@ -25,6 +25,17 @@ public:
 
     void request_repaint() override { ++repaint_count; }
 
+    // Records every cursor the shared hover logic hands to the backend.
+    void apply_cursor_(tk::CursorShape shape) override
+    {
+        cursor_log.push_back(shape);
+    }
+    std::vector<tk::CursorShape> cursor_log;
+    tk::CursorShape last_cursor() const
+    {
+        return cursor_log.empty() ? tk::CursorShape::Default : cursor_log.back();
+    }
+
     // Every real backend's request_relayout() also repaints (see
     // host_qt.cpp/host_gtk.cpp/host_win32.cpp/host_macos.mm), so bump
     // repaint_count too — keeps existing repaint_count-only assertions valid
@@ -121,6 +132,7 @@ public:
     using tk::Host::dispatch_pointer_up;
     using tk::Host::native_drag_hovered_widget_;
     using tk::Host::hovered_widget_;
+    using tk::Host::hover_feedback_;
     using tk::Host::pressed_widget_;
     using tk::Host::paint_tooltip_overlay;
     using tk::Host::paint_focus_overlay;

@@ -3,7 +3,6 @@
 #include "access_tree.h" // find_topmost_modal (modal-scoped Tab traversal)
 #include "key_chord.h"
 #include "scrollable_base.h" // keyboard paging fallback (scroll_by_key)
-#include "controls.h" // tk::Button (dynamic_cast + set_hovered in hover tracking)
 #include "widget.h"
 
 // Shared pointer-dispatch state machine + popup input/hover routing for every
@@ -204,12 +203,11 @@ void Host::dispatch_pointer_move(Point world)
     // the normal tree handles everything outside.
     if (auto p = popup_.lock(); p && p->contains_world(world))
     {
-        // Clear any Button hover state — popup is above buttons.
-        if (auto hb = hovered_btn_.lock())
-        {
-            hb->set_hovered(false);
-            hovered_btn_.reset();
-        }
+        // The popup is above everything else: hover feedback comes from the
+        // popup's own subtree, never from the tree behind it.
+        bool fb_changed = false;
+        const CursorShape want = begin_hover_feedback_(
+            hover_target_for_(p->hit_test(world)), &fb_changed);
         // Recursive dispatch (see dispatch_pointer_down's comment above) so
         // hover reaches whichever child of the popup is actually under the
         // pointer, not just the popup widget itself.
@@ -222,34 +220,16 @@ void Host::dispatch_pointer_move(Point world)
                 hw->on_pointer_leave();
             hovered_widget_ = track(moved);
         }
-        if (widget_changed || dirty)
+        end_hover_feedback_(want);
+        if (fb_changed || widget_changed || dirty)
             request_repaint();
         return;
     }
 
-    Widget* hit = root->hit_test(world);
-    Button* hovered = dynamic_cast<Button*>(hit);
-    if (hovered && !hovered->enabled())
-    {
-        // hit_test() doesn't consider enabled_ — Button::paint() already
-        // ignores hover for a disabled button, but keep hovered_btn_/
-        // hovered() from ever reporting true for one too.
-        hovered = nullptr;
-    }
-    bool btn_changed = (hovered != hovered_btn_.lock().get());
-    if (btn_changed)
-    {
-        if (auto hb = hovered_btn_.lock())
-        {
-            hb->set_hovered(false);
-        }
-        hovered_btn_ = track(hovered);
-        if (hovered)
-        {
-            hovered->set_hovered(true);
-        }
-    }
-    // Non-Button widget-level hover dispatch (chip hover, etc.).
+    bool fb_changed = false;
+    const CursorShape want =
+        begin_hover_feedback_(hover_target_for_(root->hit_test(world)), &fb_changed);
+    // Widget-level hover/move dispatch (views that track their own regions).
     bool dirty = false;
     Widget* moved = root->dispatch_pointer_move(world, &dirty);
     bool widget_changed = (moved != hovered_widget_.lock().get());
@@ -261,9 +241,83 @@ void Host::dispatch_pointer_move(Point world)
         }
         hovered_widget_ = track(moved);
     }
-    if (btn_changed || widget_changed || dirty)
-    {
+    end_hover_feedback_(want);
+    if (fb_changed || widget_changed || dirty)
         request_repaint();
+}
+
+// The widget that should show hover for a pointer over `hit`: the nearest
+// hoverable ancestor-or-self. A disabled hit widget is opaque to input (see
+// Widget::hit_test), so it shows no hover and neither do its ancestors.
+Widget* Host::hover_target_for_(Widget* hit)
+{
+    if (!hit || !hit->enabled())
+        return nullptr;
+    for (Widget* w = hit; w; w = w->parent())
+    {
+        if (w->hoverable())
+            return w->enabled() ? w : nullptr;
+    }
+    return nullptr;
+}
+
+// First half of the hover-feedback update, run BEFORE the widget-level move
+// dispatch: moves hover to `target` and releases the cursor if the new target
+// wants none, so a view that sets its own (link) cursor during the dispatch
+// that follows is not overwritten. Returns the cursor `target` wants, to be
+// applied by end_hover_feedback_() AFTER the dispatch (and after the previous
+// hovered widget's on_pointer_leave, which may clear link cursors).
+CursorShape Host::begin_hover_feedback_(Widget* target, bool* changed)
+{
+    if (target != hover_feedback_.lock().get())
+    {
+        if (changed)
+            *changed = true;
+        if (auto old = hover_feedback_.lock())
+            old->set_hovered(false);
+        hover_feedback_ = track(target);
+        if (target)
+            target->set_hovered(true);
+    }
+    const CursorShape want = target ? target->cursor() : CursorShape::Default;
+    if (want == CursorShape::Default && applied_cursor_ != CursorShape::Default)
+    {
+        applied_cursor_ = CursorShape::Default;
+        apply_cursor_(CursorShape::Default);
+    }
+    return want;
+}
+
+void Host::revalidate_hover_feedback_()
+{
+    if (hover_feedback_.expired())
+        return;
+    auto target = hover_feedback_.lock();
+    if (!target)
+        return;
+    bool inert = !target->visible();
+    for (Widget* w = target.get(); w && !inert; w = w->parent())
+        inert = !w->enabled();
+    if (!inert)
+        return;
+    // Reset before notifying: on_hover_leave may itself hide/disable widgets
+    // and re-enter here.
+    hover_feedback_.reset();
+    target->set_hovered(false);
+    if (applied_cursor_ != CursorShape::Default)
+    {
+        applied_cursor_ = CursorShape::Default;
+        apply_cursor_(CursorShape::Default);
+    }
+    request_repaint();
+}
+
+void Host::end_hover_feedback_(CursorShape want)
+{
+    if (want != CursorShape::Default && want != applied_cursor_)
+    {
+        applied_cursor_ = want;
+        apply_cursor_(want);
     }
 }
 
@@ -367,10 +421,15 @@ void Host::dispatch_pointer_leave()
     // already resets pressed_widget_, so the pressed-widget cleanup below
     // becomes a no-op afterward.
     cancel_drag();
-    if (auto hb = hovered_btn_.lock())
+    if (auto hf = hover_feedback_.lock())
     {
-        hb->set_hovered(false);
-        hovered_btn_.reset();
+        hf->set_hovered(false);
+        hover_feedback_.reset();
+    }
+    if (applied_cursor_ != CursorShape::Default)
+    {
+        applied_cursor_ = CursorShape::Default;
+        apply_cursor_(CursorShape::Default);
     }
     if (auto hw = hovered_widget_.lock())
     {

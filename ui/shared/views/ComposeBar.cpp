@@ -939,24 +939,9 @@ void ComposeBar::paint_gallery_chips_(tk::PaintCtx& ctx) const
         }
         ctx.canvas.pop_clip();
 
-        // Per-chip × remove badge, top-right corner.
-        if (i < chip_remove_rects_.size())
-        {
-            const tk::Rect& xr = chip_remove_rects_[i];
-            bool pressed = press_chip_remove_ && press_chip_remove_index_ == i;
-            ctx.canvas.fill_rounded_rect(xr, xr.h * 0.5f,
-                                         tk::Color::rgba(0, 0, 0, pressed ? 200 : 150));
-            tk::TextStyle xs{};
-            xs.role = tk::FontRole::Small;
-            if (auto xlo = ctx.factory.build_text(std::string("\xC3\x97"), xs))
-            {
-                tk::Size sz = xlo->measure();
-                ctx.canvas.draw_text(
-                    *xlo,
-                    {xr.x + (xr.w - sz.w) * 0.5f, xr.y + (xr.h - sz.h) * 0.5f},
-                    tk::Color::rgba(255, 255, 255, 255));
-            }
-        }
+        // Per-chip × remove badge, top-right corner (a real Button).
+        if (i < chip_remove_btns_.size() && chip_remove_btns_[i]->visible())
+            chip_remove_btns_[i]->paint(ctx);
     }
 }
 
@@ -1273,6 +1258,8 @@ void ComposeBar::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
         preview_image_rect_ = {};
         remove_btn_rect_ = {};
     }
+
+    sync_chip_remove_buttons_(ctx);
 
     float text_strip_h = bounds.y + bounds.h - text_top;
 
@@ -1751,9 +1738,9 @@ tk::Widget* ComposeBar::hit_test(tk::Point world)
 
     if (pending_.size() >= 2)
     {
-        // Multi-attachment mode has no child-widget sub-targets (chip
-        // removal is hit-tested manually in on_pointer_down/up, matching
-        // reply/edit cancel) — the whole band just claims itself.
+        // Multi-attachment mode: each chip's × is a child Button, already
+        // found by the base hit_test above — the rest of the band (the
+        // thumbnails themselves) just claims itself.
         if (world.x >= preview_band_rect_.x &&
             world.x < preview_band_rect_.x + preview_band_rect_.w &&
             world.y >= preview_band_rect_.y &&
@@ -1824,27 +1811,45 @@ std::vector<std::pair<std::string, tk::Rect>> ComposeBar::access_texts_() const
     return out;
 }
 
+void ComposeBar::sync_chip_remove_buttons_(tk::LayoutCtx& ctx)
+{
+    const std::size_t n = chip_remove_rects_.size();
+    while (chip_remove_btns_.size() < n)
+    {
+        const std::size_t idx = chip_remove_btns_.size();
+        auto b = tk::create_widget<tk::Button>(this, std::string{},
+                                               std::function<void()>{},
+                                               tk::Button::Variant::Icon);
+        b->set_icon(kCloseSvg, 10.0f);
+        b->set_icon_color_override(tk::Color::rgba(255, 255, 255, 255));
+        b->set_fill_override(tk::Button::FillOverride{tk::Color::rgba(0, 0, 0, 150),
+                                                      tk::Color::rgba(0, 0, 0, 205),
+                                                      tk::Color::rgba(0, 0, 0, 230)});
+        b->set_min_size({0.0f, 0.0f});
+        b->set_accessible_name(tk::tr("Remove attachment"));
+        b->set_on_click([this, idx] { remove_pending(idx); });
+        b->set_visible(false);
+        chip_remove_btns_.push_back(add_child(std::move(b)));
+    }
+    for (std::size_t i = 0; i < chip_remove_btns_.size(); ++i)
+    {
+        tk::Button* b = chip_remove_btns_[i];
+        const bool shown = i < n;
+        b->set_visible(shown);
+        if (shown)
+        {
+            b->set_corner_radius(chip_remove_rects_[i].h * 0.5f);
+            b->arrange(ctx, chip_remove_rects_[i]);
+        }
+    }
+}
+
 bool ComposeBar::on_pointer_down(tk::Point local)
 {
     const tk::Point world{bounds_.x + local.x, bounds_.y + local.y};
-    press_chip_remove_ = false;
-    // The banner / recording "×" buttons are real children the host
-    // dispatches directly.
-    // Multi-attachment mode: check per-chip × remove rects first.
-    if (pending_.size() >= 2)
-    {
-        for (std::size_t i = 0; i < chip_remove_rects_.size(); ++i)
-        {
-            const tk::Rect& xr = chip_remove_rects_[i];
-            if (world.x >= xr.x && world.x < xr.x + xr.w &&
-                world.y >= xr.y && world.y < xr.y + xr.h)
-            {
-                press_chip_remove_ = true;
-                press_chip_remove_index_ = i;
-                return true;
-            }
-        }
-    }
+    // The banner / recording / per-chip "×" buttons are real children the
+    // host dispatches directly.
+    // (Multi-attachment mode's per-chip × buttons are real children too.)
     // Absorb clicks on the floating preview (image/video thumbnail, or the
     // multi-attachment chip grid).
     if (!pending_.empty() && !preview_band_rect_.empty())
@@ -1875,34 +1880,6 @@ bool ComposeBar::on_pointer_down(tk::Point local)
     if (!recording_)
         focus();
     return tk::Widget::on_pointer_down(local);
-}
-
-void ComposeBar::on_pointer_up(tk::Point local, bool inside_self)
-{
-    const tk::Point world{bounds_.x + local.x, bounds_.y + local.y};
-    if (press_chip_remove_)
-    {
-        press_chip_remove_ = false;
-        std::size_t idx = press_chip_remove_index_;
-        // Deliberately does NOT gate on `inside_self`: Host::dispatch_pointer_up
-        // (host.cpp) computes it from a raw `bounds()` rect check, which
-        // knows nothing about ComposeBar's contains_world() override for
-        // the floating multi-chip band (which sits above bounds_, so any
-        // click there produces a negative local y and inside_self is always
-        // false). The exact world-vs-xr comparison below is this check's
-        // real containment test.
-        if (idx < chip_remove_rects_.size())
-        {
-            const tk::Rect& xr = chip_remove_rects_[idx];
-            if (world.x >= xr.x && world.x < xr.x + xr.w &&
-                world.y >= xr.y && world.y < xr.y + xr.h)
-            {
-                remove_pending(idx);
-            }
-        }
-        return;
-    }
-    tk::Widget::on_pointer_up(local, inside_self);
 }
 
 tk::Widget* ComposeBar::dispatch_pointer_move(tk::Point world, bool* dirty)

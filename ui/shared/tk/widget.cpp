@@ -105,8 +105,125 @@ void Widget::arrange(LayoutCtx& ctx, Rect bounds)
     }
 }
 
+namespace
+{
+constexpr float kHoverFadeMs = 110.0f;
+} // namespace
+
+float Widget::hover_fade()
+{
+    auto& fade_state = hover_data_ensure_().fade;
+    fade_state.set_target(hovered_ ? 1.0f : 0.0f);
+    const float fade = fade_state.step(kHoverFadeMs);
+    if (fade_state.still_animating())
+    {
+        if (auto* h = host())
+            h->request_repaint();
+    }
+    return fade;
+}
+
+void Widget::set_hovered(bool h)
+{
+    if (h == hovered_)
+        return;
+    hovered_ = h;
+    if (!hover_data_)
+        return;
+    // Copy: a callback may reconfigure or destroy this widget.
+    if (h)
+    {
+        if (auto cb = hover_data_->on_enter)
+            cb();
+    }
+    else if (auto cb = hover_data_->on_leave)
+    {
+        cb();
+    }
+}
+
+void Widget::notify_host_input_state_changed_()
+{
+    if (host_)
+        host_->revalidate_hover_feedback_();
+}
+
+void Widget::click()
+{
+    if (enabled_ && hover_data_ && hover_data_->on_click)
+    {
+        // Copy the handler before invoking — a handler that destroys this
+        // widget (e.g. by rebuilding its parent's children) would otherwise
+        // free the std::function while operator() is still executing.
+        auto cb = hover_data_->on_click;
+        cb();
+    }
+}
+
+bool Widget::on_pointer_down(Point /*local*/)
+{
+    if (!enabled_ || !clickable())
+        return false;
+    pressed_ = true;
+    return true;
+}
+
+void Widget::on_pointer_up(Point /*local*/, bool inside_self)
+{
+    const bool was_pressed = pressed_;
+    pressed_ = false;
+    if (was_pressed && inside_self)
+        click();
+}
+
+bool Widget::on_key_down(const KeyEvent& event)
+{
+    if (clickable() && !pointer_only_ && enabled_ && has_focus_ &&
+        (event.key == Key::Enter || event.key == Key::Space))
+    {
+        click();
+        return true;
+    }
+    return false;
+}
+
+void Widget::paint_hover_fill(PaintCtx& ctx)
+{
+    if (!hoverable_ || !hover_data_ ||
+        (hover_data_->style != HoverStyle::Fill &&
+         hover_data_->style != HoverStyle::Ring))
+        return;
+    const HoverStyle style = hover_data_->style;
+    const float radius = hover_data_->radius;
+    const auto& pal = ctx.theme.palette;
+    const float fade = hover_fade();
+    if (style == HoverStyle::Ring)
+    {
+        const float amount = enabled_ ? (pressed_ ? 1.0f : fade) : 0.0f;
+        if (amount > 0.0f)
+        {
+            ctx.canvas.stroke_rounded_rect(
+                bounds_, radius,
+                pal.accent.with_alpha(static_cast<std::uint8_t>(255.0f * amount)),
+                2.0f);
+        }
+        return;
+    }
+    if (enabled_ && pressed_)
+    {
+        ctx.canvas.fill_rounded_rect(bounds_, radius, pal.subtle_pressed);
+    }
+    else if (enabled_ && fade > 0.0f)
+    {
+        ctx.canvas.fill_rounded_rect(
+            bounds_, radius,
+            Color::lerp(pal.subtle_hover.with_alpha(0), pal.subtle_hover, fade));
+    }
+}
+
 void Widget::paint(PaintCtx& ctx)
 {
+    paint_hover_fill(ctx);
     paint_before_children(ctx);
     paint_children(ctx);
     paint_after_children(ctx);
@@ -134,6 +251,7 @@ void Widget::set_enabled(bool enabled)
     {
         host()->request_repaint_rect(bounds_);
     }
+    notify_host_input_state_changed_();
 }
 
 bool Widget::contains_world(Point world) const

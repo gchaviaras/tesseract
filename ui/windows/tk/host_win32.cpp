@@ -3502,6 +3502,23 @@ public:
             if (c) DestroyCursor(c);
     }
 
+    // Cursor requested by the hovered tk widget (Widget::cursor()); goes
+    // through the same sticky slot the shells' link hooks and the native
+    // text-field hover use (re-applied on every WM_SETCURSOR). Win32 has no
+    // stock grab cursors, so Grab/Grabbing show the hand.
+    void apply_cursor_(tk::CursorShape shape) override
+    {
+        switch (shape)
+        {
+        case tk::CursorShape::Default:  set_cursor(Cursor::Default); break;
+        case tk::CursorShape::Pointer:
+        case tk::CursorShape::Grab:
+        case tk::CursorShape::Grabbing: set_cursor(Cursor::Pointer); break;
+        case tk::CursorShape::Text:     set_cursor(Cursor::IBeam); break;
+        case tk::CursorShape::ResizeH:  set_cursor(Cursor::SizeWE); break;
+        }
+    }
+
     void request_repaint() override
     {
         if (hwnd_)

@@ -146,6 +146,7 @@ Other C++ conventions:
 - Member variables suffixed with `_` (e.g. `state_`)
 - `nullptr` over `NULL`, `using` over `typedef`
 - `auto` for iterators and template types; explicit types elsewhere
+- A region that reacts to a click must be a widget that opts into the toolkit's hover feature (`set_hoverable()` + `set_on_click()`, or a `tk::Button` / `tk::HoverArea`), never a rect with a hand-written press flag in `on_pointer_down` — otherwise it gets no hover feedback, pointer cursor or keyboard path. Adapter-painted rows (timeline) are the exception
 - [add project-specific rules here]
 
 ---

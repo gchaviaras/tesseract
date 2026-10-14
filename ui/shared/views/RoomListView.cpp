@@ -1560,6 +1560,38 @@ RoomListView::RoomListView()
     };
     list_ = add_child(std::move(list));
 
+    // Header buttons. They must not take keyboard focus on click: "×" would
+    // pull focus out of the search field it just cleared.
+    {
+        auto join = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
+                                                  tk::Button::Variant::Icon);
+        join->set_icon(kJoinSvg, 18.0f);
+        join->set_accessible_name(tk::tr("Join a Room"));
+        join->set_focus_on_click(false);
+        join->set_on_click(
+            [this]
+            {
+                if (on_add_room_requested)
+                    on_add_room_requested();
+            });
+        join_btn_ = add_child(std::move(join));
+        join_btn_->set_visible(false);
+
+        auto clear = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
+                                                   tk::Button::Variant::Icon);
+        clear->set_icon(kCloseSvg, 14.0f);
+        clear->set_accessible_name(tk::tr("Clear"));
+        clear->set_focus_on_click(false);
+        clear->set_on_click(
+            [this]
+            {
+                if (on_search_clear)
+                    on_search_clear();
+            });
+        clear_btn_ = add_child(std::move(clear));
+        clear_btn_->set_visible(false);
+    }
+
     if (host())
     {
         auto search = tk::create_widget<tk::TextField>(
@@ -2396,6 +2428,10 @@ void RoomListView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
             search_field_->set_visible(true);
             search_field_->arrange(ctx, search_field_rect_);
         }
+        join_btn_->set_visible(true);
+        join_btn_->arrange(ctx, join_room_rect_);
+        clear_btn_->set_visible(!search_clear_rect_.empty());
+        clear_btn_->arrange(ctx, search_clear_rect_);
 
         tk::Rect list_bounds{
             bounds.x,
@@ -2412,6 +2448,8 @@ void RoomListView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
         search_field_rect_ = {};
         search_clear_rect_ = {};
         join_room_rect_ = {};
+        join_btn_->set_visible(false);
+        clear_btn_->set_visible(false);
         // Icon-only mode: the list fills the whole strip (no search header).
         list_->arrange(ctx, bounds);
     }
@@ -2837,42 +2875,10 @@ void RoomListView::paint_before_children(tk::PaintCtx& ctx)
                                            ctx.theme.palette.border_strong, 1.0f);
         }
 
-        // Clear (×) button — shown only when the search query is non-empty.
-        if (!search_clear_rect_.empty())
-        {
-            tk::TextStyle xs{};
-            xs.role = tk::FontRole::Body;
-            // U+00D7 MULTIPLICATION SIGN (×)
-            auto x_lo = ctx.factory.build_text(std::string("\xC3\x97"), xs);
-            if (x_lo)
-            {
-                tk::Size sz = x_lo->measure();
-                tk::Color col = press_search_clear_
-                                    ? ctx.theme.palette.text_primary
-                                    : ctx.theme.palette.text_muted;
-                ctx.canvas.draw_text(*x_lo,
-                                     {search_clear_rect_.x +
-                                          (search_clear_rect_.w - sz.w) * 0.5f,
-                                      search_clear_rect_.y +
-                                          (search_clear_rect_.h - sz.h) * 0.5f},
-                                     col);
-            }
-        }
-
-        // Join room "+" button — always in the far right of the header.
-        if (!join_room_rect_.empty())
-        {
-            if (press_join_room_)
-            {
-                ctx.canvas.fill_rounded_rect(join_room_rect_, 4.0f,
-                                             ctx.theme.palette.sidebar_hover);
-            }
-            // Lucide join (+) icon, tinted accent (or text_primary when pressed).
-            join_icon_.draw(ctx.canvas, ctx.factory, kJoinSvg, join_room_rect_,
-                            18.0f,
-                            press_join_room_ ? ctx.theme.palette.text_primary
-                                             : ctx.theme.palette.accent);
-        }
+        // Accent "+" and muted "×" glyphs; the buttons paint themselves
+        // (hover/press fill included) as ordinary children.
+        join_btn_->set_icon_color_override(ctx.theme.palette.accent);
+        clear_btn_->set_icon_color_override(ctx.theme.palette.text_muted);
     }
 }
 
@@ -2910,29 +2916,6 @@ bool RoomListView::on_pointer_down(tk::Point local)
     {
         return false;
     }
-    press_search_clear_ = false;
-    press_join_room_ = false;
-
-    // Join room "+" button — highest priority, always in header.
-    if (!join_room_rect_.empty() && local.x >= join_room_rect_.x &&
-        local.x < join_room_rect_.x + join_room_rect_.w &&
-        local.y >= join_room_rect_.y &&
-        local.y < join_room_rect_.y + join_room_rect_.h)
-    {
-        press_join_room_ = true;
-        return true;
-    }
-
-    // Clear (×) button.
-    if (!search_clear_rect_.empty() && local.x >= search_clear_rect_.x &&
-        local.x < search_clear_rect_.x + search_clear_rect_.w &&
-        local.y >= search_clear_rect_.y &&
-        local.y < search_clear_rect_.y + search_clear_rect_.h)
-    {
-        press_search_clear_ = true;
-        return true;
-    }
-
     if (local.y < search_header_h())
     {
         return false;
@@ -2956,38 +2939,6 @@ void RoomListView::on_pointer_up(tk::Point local, bool inside_self)
             if (s.section == sec && sticky_band_contains_(s, world))
             {
                 toggle_section_collapsed_(sec);
-            }
-        }
-        return;
-    }
-    if (press_join_room_)
-    {
-        press_join_room_ = false;
-        if (inside_self && !join_room_rect_.empty() &&
-            local.x >= join_room_rect_.x &&
-            local.x < join_room_rect_.x + join_room_rect_.w &&
-            local.y >= join_room_rect_.y &&
-            local.y < join_room_rect_.y + join_room_rect_.h)
-        {
-            if (on_add_room_requested)
-            {
-                on_add_room_requested();
-            }
-        }
-        return;
-    }
-    if (press_search_clear_)
-    {
-        press_search_clear_ = false;
-        if (inside_self && !search_clear_rect_.empty() &&
-            local.x >= search_clear_rect_.x &&
-            local.x < search_clear_rect_.x + search_clear_rect_.w &&
-            local.y >= search_clear_rect_.y &&
-            local.y < search_clear_rect_.y + search_clear_rect_.h)
-        {
-            if (on_search_clear)
-            {
-                on_search_clear();
             }
         }
         return;

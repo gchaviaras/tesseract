@@ -509,7 +509,6 @@ public:
     bool contains_world(tk::Point world) const override;
     tk::Widget* hit_test(tk::Point world) override;
     bool on_pointer_down(tk::Point local) override;
-    void on_pointer_up(tk::Point local, bool inside_self) override;
     tk::Widget* dispatch_pointer_move(tk::Point world, bool* dirty) override;
     bool on_pointer_move(tk::Point local) override;
     void on_pointer_leave() override;
@@ -528,8 +527,7 @@ private:
     void paint_two_line_chip_(tk::PaintCtx& ctx) const;
     // Multi-attachment mode (pending_.size() >= 2): paints the small
     // thumbnail grid at chip_rects_, each with a corner × at
-    // chip_remove_rects_[i] — see press_chip_remove_/on_pointer_down/up for
-    // the manual (non-Button) click handling, matching reply/edit cancel.
+    // chip_remove_rects_[i], which chip_remove_btns_[i] sits on.
     void paint_gallery_chips_(tk::PaintCtx& ctx) const;
     static std::string make_filename(const std::string& mime);
     // Cached layout used to paint the filename (and a second line for size or
@@ -582,8 +580,10 @@ private:
     // remove_btn_rect_ above unchanged.
     std::vector<tk::Rect> chip_rects_;
     std::vector<tk::Rect> chip_remove_rects_;
-    bool press_chip_remove_ = false;
-    std::size_t press_chip_remove_index_ = 0;
+    // One real "×" button per multi-attachment chip (pooled; extras stay
+    // hidden), arranged onto chip_remove_rects_[i] by sync_chip_remove_buttons_().
+    std::vector<tk::Button*> chip_remove_btns_;
+    void sync_chip_remove_buttons_(tk::LayoutCtx& ctx);
 
     // Pre-clamp natural height reported by the NativeTextArea. Starts at
     // 0 so the initial clamp() in recompute_height() floors to kMinHeight

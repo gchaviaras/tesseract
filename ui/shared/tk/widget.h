@@ -6,6 +6,7 @@
 // is the classic two-pass measure-then-arrange model: measure() returns
 // the desired size, arrange() commits the final bounds.
 
+#include "animator.h"
 #include "cache_key.h"
 #include "canvas.h"
 #include "drag_drop.h"
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <new>
 #include <optional>
@@ -285,6 +287,44 @@ struct AccessValue
     double now     = 0.0;
 };
 
+// Mouse-cursor shapes a widget can ask the host for while it is the widget
+// under the pointer (see Widget::cursor()). Default = leave the cursor to
+// whoever else sets it (the shells' link/sidebar hooks, native text controls).
+enum class CursorShape
+{
+    Default,
+    Pointer,
+    Text,
+    Grab,
+    Grabbing,
+    ResizeH,
+};
+
+// How a hoverable widget's base class paints its own hover feedback.
+enum class HoverStyle
+{
+    None, // track state only; the subclass paints from hovered()/pressed()
+    Fill, // rounded subtle_hover / subtle_pressed fill behind the content
+    Ring, // accent outline that eases in (round avatars: radius = diameter / 2)
+};
+
+namespace detail
+{
+// The hover/click feature's heavier state, allocated on first use (see
+// Widget::set_hoverable / set_on_click) so the vast majority of widgets —
+// labels, rows, containers — don't carry three std::functions and a tween.
+struct HoverData
+{
+    HoverStyle style = HoverStyle::Fill;
+    float radius = 4.0f;
+    CursorShape cursor = CursorShape::Default;
+    std::function<void()> on_click;
+    std::function<void()> on_enter;
+    std::function<void()> on_leave;
+    FloatTween fade;
+};
+} // namespace detail
+
 class Widget : public EnableWeakSelf<Widget>
 {
 public:
@@ -444,18 +484,17 @@ public:
     // Pointer-down. Return true to claim ownership of the subsequent
     // pointer_up. The host remembers the claimer so a release outside
     // the widget still routes back to it (with inside_self=false).
-    virtual bool on_pointer_down(Point /*local*/)
-    {
-        return false;
-    }
+    // Default: a clickable() enabled widget claims the press (see
+    // set_on_click()); every other widget declines.
+    virtual bool on_pointer_down(Point /*local*/);
 
     // Pointer-up on the widget that consumed the matching pointer_down.
     // `inside_self` tells the widget whether the release landed inside
     // its own bounds — Button uses this to fire on_click only when the
     // user released on the same control they pressed.
-    virtual void on_pointer_up(Point /*local*/, bool /*inside_self*/)
-    {
-    }
+    // Default: fires on_click for a press this widget claimed, when the
+    // release landed inside it.
+    virtual void on_pointer_up(Point /*local*/, bool /*inside_self*/);
 
     // Pointer-drag: the host forwards every pointer-move after a
     // pointer-down that this widget claimed, until the matching
@@ -468,9 +507,9 @@ public:
 
     // Pointer-move without a press. Called via `dispatch_pointer_move`
     // on the deepest hit widget so views can update per-element hover
-    // state (reaction chips, row-hover affordances, etc.). Buttons
-    // continue to handle their own hover via the host's Button-hover
-    // bookkeeping — this is the generic widget-level hook.
+    // state (reaction chips, row-hover affordances, etc.). Plain hover
+    // feedback (fill, cursor) does not need this: opt in with
+    // set_hoverable() and the host drives it separately from here.
     // Returns true if visual state changed and a repaint is needed.
     virtual bool on_pointer_move(Point /*local*/)
     {
@@ -594,17 +633,19 @@ public:
     // shared shape, then dispatch from the root or focused widget. Return true
     // to consume. The default dispatcher gives visible children first refusal
     // in reverse paint order, then calls on_key_down() on this widget.
-    virtual bool on_key_down(const KeyEvent&)
-    {
-        return false;
-    }
+    // Default: a focused clickable() widget activates on Enter/Space. Gated
+    // on has_focus(): this is also reachable via Host::dispatch_key_down's
+    // root-wide broadcast fallback (fired whenever the ACTUALLY focused widget
+    // doesn't consume a key) — without the gate any other unfocused clickable
+    // widget in the tree would silently "click" on a stray Enter/Space.
+    virtual bool on_key_down(const KeyEvent&);
     virtual bool dispatch_key_down(const KeyEvent&);
 
     // Focus hooks for keyboard-capable widgets. Surface-level focus ownership
     // will call these as platform key routing is migrated into tk.
     virtual bool focusable() const
     {
-        return false;
+        return clickable() && enabled_ && !pointer_only_;
     }
 
     // Whether an ordinary mouse click that this widget claims (i.e. it's
@@ -622,7 +663,12 @@ public:
     // to focusable() before calling request_focus().
     virtual bool focus_on_click() const
     {
-        return true;
+        return focus_on_click_;
+    }
+    Widget& set_focus_on_click(bool f)
+    {
+        focus_on_click_ = f;
+        return *this;
     }
 
     // While this widget is the Host's registered popup (register_popup()),
@@ -660,7 +706,7 @@ public:
     // ...) don't need to opt in just to avoid breaking the tree.
     virtual Role access_role() const
     {
-        return Role::None;
+        return clickable() && !pointer_only_ ? Role::Button : Role::None;
     }
     // Accessible name (screen-reader-announced label). Must be produced via
     // tk::tr()/trn()/trf() at the call site that sets whatever backs this,
@@ -719,7 +765,13 @@ public:
     // something" from "this node has no default action."
     virtual bool access_default_action()
     {
-        return false;
+        // Decided before click(): the handler may disable (or destroy) us.
+        const bool acts =
+            clickable() && !pointer_only_ && enabled_ && hover_data_ && hover_data_->on_click;
+        if (!acts)
+            return false;
+        click();
+        return true;
     }
 
     // Widgets this one owns and paints (typically via paint_overlay) but
@@ -855,6 +907,7 @@ public:
         for (auto& ch : children_)
             ch->apply_parent_visible_(eff);
         mark_relayout_needed_();
+        notify_host_input_state_changed_();
     }
 
     // Retained as a synonym for visible() now that visibility cascades — the
@@ -917,6 +970,117 @@ public:
     // happens to touch them. Defined out-of-line in widget.cpp: Host is only
     // forward-declared here, and request_repaint_rect() needs its full type.
     virtual void set_enabled(bool enabled);
+
+    // ── Hover / click feature ────────────────────────────────────────────
+    // Opt-in per widget; a widget that sets none of this behaves exactly as
+    // before. The Host tracks the nearest hoverable() && enabled() widget
+    // under the pointer (walking up from the hit widget) and drives
+    // set_hovered() on it, so a container can light up while the pointer is
+    // over one of its non-hoverable children.
+    //
+    // Hover feedback is separate from pointer-move routing
+    // (dispatch_pointer_move / on_pointer_move / on_pointer_leave): a view
+    // may still claim move events for itself without affecting this.
+    Widget& set_hoverable(bool on = true, HoverStyle style = HoverStyle::Fill)
+    {
+        hoverable_ = on;
+        if (on)
+            hover_data_ensure_().style = style;
+        return *this;
+    }
+    bool hoverable() const
+    {
+        return hoverable_;
+    }
+    // Corner radius for HoverStyle::Fill.
+    Widget& set_hover_radius(float r)
+    {
+        hover_data_ensure_().radius = r;
+        return *this;
+    }
+
+    // Makes the widget claim presses and fire `f` on a press+release that
+    // both land inside it (also on Enter/Space while focused, and as the
+    // accessibility default action). The handler may destroy the widget.
+    Widget& set_on_click(std::function<void()> f)
+    {
+        if (f || hover_data_)
+            hover_data_ensure_().on_click = std::move(f);
+        return *this;
+    }
+    // Claim presses even with no on_click handler (Button: a handler may be
+    // installed later and the press must still be swallowed meanwhile).
+    Widget& set_clickable(bool c)
+    {
+        clickable_ = c;
+        return *this;
+    }
+    bool clickable() const
+    {
+        return clickable_ || (hover_data_ && hover_data_->on_click);
+    }
+    // For a clickable widget whose keyboard / accessibility path is already
+    // provided elsewhere (typically a tk::KeyboardTarget over the same area):
+    // pointer hover/press/click only — not focusable, no access role, no
+    // Enter/Space activation of its own.
+    Widget& set_pointer_only(bool p)
+    {
+        pointer_only_ = p;
+        return *this;
+    }
+    // Synthetic click — bypasses pointer state. Used by tests and by the
+    // keyboard / accessibility activation paths.
+    void click();
+
+    // Cursor the host shows while this widget is the hover target.
+    // Pointer for an enabled clickable() widget unless overridden.
+    Widget& set_cursor(CursorShape c)
+    {
+        if (c != CursorShape::Default || hover_data_)
+            hover_data_ensure_().cursor = c;
+        return *this;
+    }
+    virtual CursorShape cursor() const
+    {
+        if (!enabled_)
+            return CursorShape::Default;
+        if (hover_data_ && hover_data_->cursor != CursorShape::Default)
+            return hover_data_->cursor;
+        return clickable() ? CursorShape::Pointer : CursorShape::Default;
+    }
+
+    bool hovered() const
+    {
+        return hovered_;
+    }
+    bool pressed() const
+    {
+        return pressed_;
+    }
+    // Host-driven. Fires on_hover_enter / on_hover_leave on a real change.
+    void set_hovered(bool h);
+    // Steps the eased hover amount (0..1) toward hovered_ and schedules a
+    // repaint while it is still moving. Call once per paint.
+    float hover_fade();
+    // Paints the HoverStyle::Fill / Ring feedback (a no-op for other styles or
+    // when idle). Widget::paint() calls this first; a widget that overrides
+    // paint() but still wants the base hover fill calls it itself.
+    void paint_hover_fill(PaintCtx&);
+
+    // Optional hover callbacks — e.g. to drive a Host::show_tooltip /
+    // hide_tooltip pair. Unset by default.
+    Widget& set_on_hover_enter(std::function<void()> f)
+    {
+        if (f || hover_data_)
+            hover_data_ensure_().on_enter = std::move(f);
+        return *this;
+    }
+    Widget& set_on_hover_leave(std::function<void()> f)
+    {
+        if (f || hover_data_)
+            hover_data_ensure_().on_leave = std::move(f);
+        return *this;
+    }
 
     // Whether this widget instance currently holds tk-level keyboard focus.
     // Host is the sole writer (via set_focused_(), below); widgets only
@@ -1043,6 +1207,23 @@ private:
     Widget* parent_ = nullptr;
     std::vector<std::unique_ptr<Widget>> children_;
     bool has_focus_ = false;
+    bool hoverable_ = false;
+    bool clickable_ = false;
+    bool pointer_only_ = false;
+    bool focus_on_click_ = true;
+    bool hovered_ = false;
+    bool pressed_ = false;
+    std::unique_ptr<detail::HoverData> hover_data_;
+    detail::HoverData& hover_data_ensure_()
+    {
+        if (!hover_data_)
+            hover_data_ = std::make_unique<detail::HoverData>();
+        return *hover_data_;
+    }
+    // Tells the Host a widget's visibility/enabled state changed so it can
+    // drop a hover target that just became inert (see Host::
+    // revalidate_hover_feedback_). Out of line: Host is incomplete here.
+    void notify_host_input_state_changed_();
     int z_order_ = 0;
     std::optional<Color> background_color_;
 

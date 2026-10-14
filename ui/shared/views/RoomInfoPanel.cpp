@@ -24,6 +24,14 @@ RoomInfoPanelBody::RoomInfoPanelBody()
     // Keyboard stand-ins first, so they never precede a real control in
     // reverse-order pointer dispatch (they're pointer-transparent anyway).
     badge_flow_ = add_child(tk::create_widget<tk::BadgeFlow>(this));
+    avatar_area_ = add_child(
+        tk::create_widget<tk::HoverArea>(this, tk::HoverStyle::Ring, kAvatarD * 0.5f));
+    avatar_area_->set_on_click(
+        [this]
+        {
+            if (on_avatar_clicked && !avatar_url_.empty())
+                on_avatar_clicked(avatar_url_, display_name_);
+        });
     avatar_target_ = add_child(tk::create_widget<tk::KeyboardTarget>(this));
     avatar_target_->set_accessible_name(tk::tr("View room avatar"));
     avatar_target_->set_focus_ring_radius(kAvatarD * 0.5f);
@@ -660,7 +668,10 @@ void RoomInfoPanelBody::place_keyboard_targets_(tk::LayoutCtx& lc)
     { return tk::Rect{r.x + 4.0f, r.y + 1.0f, r.w - 8.0f, r.h - 2.0f}; };
 
     const bool can_view_avatar = !avatar_url_.empty() && on_avatar_clicked;
-    avatar_target_->arrange(lc, can_view_avatar && open_ ? world(avatar_rect_) : tk::Rect{});
+    const tk::Rect avatar_hit =
+        can_view_avatar && open_ ? world(avatar_rect_) : tk::Rect{};
+    avatar_target_->arrange(lc, avatar_hit);
+    avatar_area_->arrange(lc, avatar_hit);
 
     if (topic_links_html_ != topic_html_)
     {
@@ -1097,13 +1108,6 @@ bool RoomInfoPanelBody::on_pointer_down(tk::Point local)
     // compare against the content-local rects computed in arrange().
     const tk::Point c{local.x, local.y + scroll_y_};
 
-    // Avatar click → open lightbox. Falls through when no URL or no
-    // callback so initials-only rooms keep the current no-op behaviour.
-    if (rect_contains(avatar_rect_, c) && !avatar_url_.empty() && on_avatar_clicked)
-    {
-        press_avatar_ = true;
-        return true;
-    }
     // Hit-test topic links before member rows.
     if (topic_layout_ && rect_contains(topic_rect_, c))
     {
@@ -1157,19 +1161,6 @@ void RoomInfoPanelBody::on_pointer_up(tk::Point local, bool inside_self)
                 const tk::Point ll{c.x - topic_rect_.x, c.y - topic_rect_.y};
                 if (topic_layout_->link_at(ll) == url)
                     on_link_clicked(url);
-            }
-        }
-        return;
-    }
-
-    if (press_avatar_)
-    {
-        press_avatar_ = false;
-        if (inside_self)
-        {
-            if (rect_contains(avatar_rect_, c) && on_avatar_clicked)
-            {
-                on_avatar_clicked(avatar_url_, display_name_);
             }
         }
         return;
@@ -1294,7 +1285,6 @@ bool RoomInfoPanelBody::on_pointer_move(tk::Point local)
 
 void RoomInfoPanelBody::on_pointer_leave()
 {
-    press_avatar_   = false;
     hover_member_   = -1;
     press_member_   = -1;
     hover_media_    = false;

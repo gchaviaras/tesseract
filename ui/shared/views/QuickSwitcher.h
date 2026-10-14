@@ -22,6 +22,7 @@
 // rest of the app uses (returns a decoded tk::Image* for an mxc_url, or
 // nullptr for the initials-disc fallback).
 
+#include "room_chip_strip.h"
 #include "tk/canvas.h"
 #include "tk/host.h"
 #include "tk/keyboard_target.h"
@@ -226,8 +227,8 @@ private:
     std::vector<std::pair<tk::Rect, std::string>> recent_chips_;
     // Keyboard stand-ins for the Recent chips (Tab stops), placed each paint.
     std::vector<tk::KeyboardTarget*> chip_targets_;
-    // Index of the chip currently pressed (-1 = none).
-    int pressed_chip_ = -1;
+    // Hover/press/click for the Recent chips.
+    RoomChipAreas chip_areas_;
     // True while a pointer-down landed on the dim backdrop (outside the card);
     // a pointer-up that also lands outside dismisses the overlay.
     bool press_outside_ = false;

@@ -170,9 +170,13 @@ public:
 protected:
     explicit Button(std::string label, std::function<void()> on_click = {},
                     Variant variant = Variant::Primary)
-        : label_(std::move(label)), on_click_(std::move(on_click)),
-          variant_(variant)
+        : label_(std::move(label)), variant_(variant)
     {
+        // Hover/press/click/keyboard activation/cursor live on Widget; the
+        // Button only paints its variant look from hovered()/pressed().
+        set_hoverable(true, HoverStyle::None);
+        set_clickable(true); // claim presses even before a handler is set
+        Widget::set_on_click(std::move(on_click));
     }
     TK_WIDGET_FACTORY_FRIEND(Button)
 
@@ -185,7 +189,7 @@ public:
     }
     Button& set_on_click(std::function<void()> f)
     {
-        on_click_ = std::move(f);
+        Widget::set_on_click(std::move(f));
         return *this;
     }
     Button& set_variant(Variant v)
@@ -196,6 +200,13 @@ public:
     Button& set_min_size(Size s)
     {
         min_size_ = s;
+        return *this;
+    }
+    // Corner radius of the fill; unset = the standard control radius. A
+    // radius of half the button's side makes a circular badge.
+    Button& set_corner_radius(float r)
+    {
+        corner_radius_ = r;
         return *this;
     }
 
@@ -249,14 +260,6 @@ public:
         return *this;
     }
 
-    bool hovered() const
-    {
-        return hovered_;
-    }
-    bool pressed() const
-    {
-        return pressed_;
-    }
     const std::string& label() const
     {
         return label_;
@@ -275,48 +278,16 @@ public:
         return *this;
     }
 
-    // Synthetic click — bypasses pointer state. Used by tests and by the
-    // host when keyboard activation triggers the button.
-    void click();
-
     Size measure(LayoutCtx&, Size constraints) override;
     void paint(PaintCtx&) override;
-    bool on_pointer_down(Point local) override;
-    void on_pointer_up(Point local, bool inside_self) override;
 
-    // Keyboard-focusable whenever enabled; Enter/Space triggers the same
-    // synthetic click() used by pointer activation.
+    // Keyboard-focusable whenever enabled (even with no handler yet);
+    // Enter/Space triggers the same synthetic click() as pointer activation
+    // (Widget::on_key_down).
     bool focusable() const override
     {
         return enabled_;
     }
-    // Gated on has_focus(): without it, this is reachable not only as the
-    // genuinely tk-focused widget but also via Host::dispatch_key_down's
-    // root-wide broadcast fallback (fired whenever the ACTUALLY focused
-    // widget doesn't consume a key) — any other unfocused Button in the
-    // tree would silently "click" on a stray Enter/Space meant elsewhere.
-    bool on_key_down(const KeyEvent& event) override
-    {
-        if (has_focus() && (event.key == Key::Enter || event.key == Key::Space))
-        {
-            click();
-            return true;
-        }
-        return false;
-    }
-
-    // Hover is driven externally by the host's "topmost hovered button"
-    // tracking — see Host::on_pointer_move (shared, ui/shared/tk/host.cpp).
-    // Pressed is managed here via on_pointer_down/up. Fires on_hover_enter/
-    // on_hover_leave below on actual state transitions, mirroring
-    // CheckButton::on_pointer_move/on_pointer_leave.
-    void set_hovered(bool h);
-
-    // Optional hover callbacks — e.g. to drive a Host::show_tooltip/
-    // hide_tooltip pair, as AdvancedSection does for CheckButton. Unset by
-    // default; most buttons don't need them.
-    std::function<void()> on_hover_enter;
-    std::function<void()> on_hover_leave;
 
     Role access_role() const override
     {
@@ -336,17 +307,6 @@ public:
         const bool icon_only = variant_ == Variant::Icon ||
                                (!icon_svg_.empty() && !icon_leading_);
         return icon_only ? accessible_name_ : std::string{};
-    }
-    // click() already guards on enabled_/on_click_, matching the pointer
-    // and Enter/Space activation paths — nothing extra needed here beyond
-    // reporting whether it actually had something to invoke.
-    bool access_default_action() override
-    {
-        // Decided before click(): the handler may disable (or destroy) this
-        // button, e.g. a "next" button on the last page.
-        const bool acts = enabled_ && static_cast<bool>(on_click_);
-        click();
-        return acts;
     }
 
 protected:
@@ -368,15 +328,10 @@ private:
 
     std::string label_;
     std::string accessible_name_; // see set_accessible_name()
-    std::function<void()> on_click_;
     Variant variant_ = Variant::Primary;
-    bool hovered_ = false;
-    bool pressed_ = false;
     Size min_size_{0, 32};
+    std::optional<float> corner_radius_;
     std::optional<FillOverride> fill_override_;
-    // Eases the hover fill in/out instead of snapping; pressed stays an
-    // instant override on top (see paint()).
-    FloatTween hover_fade_;
 
     std::span<const std::uint8_t> icon_svg_;
     float icon_logical_px_ = 20.0f;

@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "tk/canvas.h"
+#include "tk/controls.h"
 #include "tk/theme.h"
 #include "tk/widget.h"
 #include "tk_test_surface.h"
@@ -215,4 +216,79 @@ TEST_CASE("search button does NOT fire if release leaves the button rect",
     REQUIRE(claimer != nullptr);
     claimer->on_pointer_up(claimer->world_to_local(outside), false);
     CHECK_FALSE(clicked);
+}
+
+// ── Clickable title block (Widget hover/click feature) ──────────────────
+
+#include "tesseract/types.h"
+#include "tk_test_host.h"
+
+TEST_CASE("Hovering the room name lights the title block; clicking it opens room info",
+          "[room_header][hover]")
+{
+    TkRoomHeaderStage st;
+    RoomHeader h;
+    tesseract::RoomInfo info{};
+    info.id = "!r:example.org";
+    info.name = "Design";
+    h.set_room(info);
+    st.arrange(h, {0, 0, 800, 60});
+    TestHost host(&h);
+
+    int opened = 0;
+    h.on_info_requested = [&] { ++opened; };
+
+    const tk::Point on_name{120.0f, 30.0f};
+    host.dispatch_pointer_move(on_name);
+    REQUIRE(host.hover_feedback_.lock() != nullptr);
+    tk::Widget* title_block = host.hover_feedback_.lock().get();
+    CHECK(title_block->hovered());
+    CHECK_FALSE(dynamic_cast<tk::Button*>(title_block)); // not an action button
+    CHECK(host.last_cursor() == tk::CursorShape::Pointer);
+
+    host.dispatch_pointer_down(on_name);
+    host.dispatch_pointer_up(on_name);
+    CHECK(opened == 1);
+
+    host.dispatch_pointer_move({400.0f, 100.0f}); // off the header entirely
+    CHECK_FALSE(title_block->hovered());
+}
+
+TEST_CASE("The title block adds no extra Tab stop beside its keyboard target",
+          "[room_header][hover][keyboard]")
+{
+    TkRoomHeaderStage st;
+    RoomHeader h;
+    tesseract::RoomInfo info{};
+    info.name = "Design";
+    h.set_room(info);
+    st.arrange(h, {0, 0, 800, 60});
+    TestHost host(&h);
+
+    host.dispatch_key_down({tk::Key::Tab});
+    CHECK(host.focused_widget() == h.title_target());
+}
+
+TEST_CASE("The title block keeps the name and topic labels where RoomHeader placed them",
+          "[room_header][hover]")
+{
+    // The labels are children of the hoverable title block; arranging that
+    // block must not reset them to its own rect (base Widget::arrange would).
+    TkRoomHeaderStage st;
+    RoomHeader h;
+    tesseract::RoomInfo info{};
+    info.name = "Design";
+    info.topic = "Weekly sync";
+    h.set_room(info);
+    st.arrange(h, {0, 0, 800, 60});
+
+    const tk::Rect title = h.title_target()->bounds();
+    const tk::Rect name = h.name_label_rect_for_test();
+    const tk::Rect topic = h.topic_label_rect_for_test();
+    REQUIRE(title.w > 0.0f);
+    REQUIRE(name.w > 0.0f);
+    REQUIRE(topic.w > 0.0f);
+    CHECK(name.h < title.h);            // not stretched to the whole block
+    CHECK(topic.y > name.y);            // topic sits below the name
+    CHECK(name.y + name.h <= topic.y + 0.5f);
 }

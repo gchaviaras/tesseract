@@ -279,20 +279,15 @@ TEST_CASE("ComposeBar caps attachments at kMaxAttachments",
 }
 
 TEST_CASE("ComposeBar multi-attachment chip remove works even though the "
-          "floating chip grid sits outside the widget's own bounds "
-          "(Host::dispatch_pointer_up's inside_self is unreliable there)",
+          "floating chip grid sits outside the widget's own bounds",
           "[tk][view][compose][media][gallery]")
 {
     // Regression test: the multi-chip preview grid floats ABOVE
     // ComposeBar's normal bounds_ (like the single-image preview always
-    // has), so a click there produces a *negative* local y. Host::
-    // dispatch_pointer_up (host.cpp) computes inside_self from a raw
-    // `ws.y >= 0 && ws.y < bounds().h` check against bounds() — which is
-    // false for any point in the floating region, regardless of
-    // ComposeBar's own contains_world() override. Chip removal must not
-    // depend on that framework-supplied inside_self flag; it has its own
-    // exact geometric check against chip_remove_rects_ and must rely on
-    // that alone.
+    // has), so a click there lands outside bounds_. Each chip's × is a real
+    // tk::Button child; the press must reach it through ComposeBar's
+    // contains_world() override, and the release is judged against the
+    // button's own bounds (never the bar's).
     ComposeBarMediaStage st;
     auto bar_owner = tk::create_root_widget<ComposeBar>(nullptr);
     ComposeBar& bar = *bar_owner;
@@ -309,15 +304,10 @@ TEST_CASE("ComposeBar multi-attachment chip remove works even though the "
     REQUIRE(xr.y < bounds.y); // confirms the chip floats above bounds_
 
     const tk::Point world_click{xr.x + xr.w * 0.5f, xr.y + xr.h * 0.5f};
-    const tk::Point local{world_click.x - bounds.x, world_click.y - bounds.y};
-    REQUIRE(local.y < 0.0f); // negative local y — the crux of the bug
-
-    REQUIRE(bar.on_pointer_down(local)); // claims the press
-
-    // Host::dispatch_pointer_up would compute inside_self=false here (see
-    // the comment above) — pass it explicitly to prove removal doesn't
-    // depend on it.
-    bar.on_pointer_up(local, /*inside_self=*/false);
+    tk::Widget* claimer = bar.dispatch_pointer_down(world_click);
+    REQUIRE(claimer != nullptr);
+    REQUIRE(claimer != &bar); // the chip's × button, not the bar itself
+    claimer->on_pointer_up(claimer->world_to_local(world_click), /*inside_self=*/true);
 
     REQUIRE(bar.pending_count() == 1);
     CHECK(bar.pending_for_test(0)->filename == "b.zip"); // the image was removed

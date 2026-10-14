@@ -42,7 +42,6 @@ void MruSwitcher::begin_cycle()
     }
 
     selected_ = 1;
-    pressed_chip_ = -1;
     press_outside_ = false;
     is_open_ = true;
     set_visible(true);
@@ -95,7 +94,6 @@ void MruSwitcher::close_()
     is_open_ = false;
     selected_ = -1;
     rooms_.clear();
-    pressed_chip_ = -1;
     press_outside_ = false;
     set_visible(false);
 }
@@ -167,8 +165,15 @@ void MruSwitcher::paint(tk::PaintCtx& ctx)
     style.highlight_border = true;
     style.highlight_border_color = ctx.theme.palette.accent;
 
+    chip_areas_.paint(ctx); // hover/press fill, behind the chips
     paint_room_chips(ctx, card_rect_, rooms_, avatar_provider_,
                      on_room_avatar_needed, style, chips_);
+    chip_areas_.sync(*this, chips_,
+                     [this](std::size_t index, const std::string&)
+                     {
+                         selected_ = static_cast<int>(index);
+                         commit();
+                     });
 }
 
 bool MruSwitcher::on_pointer_down(tk::Point local)
@@ -184,41 +189,14 @@ bool MruSwitcher::on_pointer_down(tk::Point local)
         return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
     };
 
-    pressed_chip_ = -1;
-    for (int i = 0; i < static_cast<int>(chips_.size()); ++i)
-    {
-        if (contains(chips_[static_cast<std::size_t>(i)].first, world))
-        {
-            pressed_chip_ = i;
-            press_outside_ = false;
-            return true;
-        }
-    }
-
+    // A press on a chip never reaches here: each chip is a tk::HoverArea
+    // child (RoomChipAreas) that claims it first.
     press_outside_ = !contains(card_rect_, world);
     return true;
 }
 
 void MruSwitcher::on_pointer_up(tk::Point local, bool inside_self)
 {
-    if (pressed_chip_ >= 0)
-    {
-        const int chip = pressed_chip_;
-        pressed_chip_ = -1;
-        const tk::Point world{local.x + bounds_.x, local.y + bounds_.y};
-        if (chip < static_cast<int>(chips_.size()))
-        {
-            const auto& [rect, room_id] = chips_[static_cast<std::size_t>(chip)];
-            const bool on_chip = world.x >= rect.x && world.x < rect.x + rect.w &&
-                                 world.y >= rect.y && world.y < rect.y + rect.h;
-            if (on_chip)
-            {
-                selected_ = chip;
-                commit();
-            }
-        }
-        return;
-    }
     if (press_outside_)
     {
         press_outside_ = false;

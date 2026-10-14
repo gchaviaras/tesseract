@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- feat(ui): clickable regions now show hover feedback and a pointing-hand cursor. `tk::Widget` gains opt-in hover/click (`set_hoverable`, `set_on_click`, `cursor()`) and `tk::Button` is built on it; the room header title, profile/room-info avatars, room-list +/×, composer chip × and the switcher chips use it. Qt6 + GTK4 build, ctest 3321/3321
 - refactor(ui): crypto wording follows MSC4161 (message keys, key storage, confirmed devices, digital identity, recovery passphrase, Devices tab, linking a device); English strings only, catalogs follow. Windows build
 
 ## v0.9.3 — 2026-10-13

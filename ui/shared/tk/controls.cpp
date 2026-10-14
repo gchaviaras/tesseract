@@ -110,7 +110,6 @@ constexpr float kBtnMinHeight = 32.0f;
 constexpr float kBtnIconPad = 6.0f;
 constexpr float kBtnIconMinSize = 28.0f;
 constexpr float kBtnIconLabelGap = 8.0f;
-constexpr float kControlsHoverFadeMs = 110.0f;
 
 TextStyle button_text_style()
 {
@@ -244,7 +243,7 @@ Size Button::measure(LayoutCtx& ctx, Size constraints)
 void Button::paint(PaintCtx& ctx)
 {
     Color fill;
-    if (!enabled_ || pressed_)
+    if (!enabled_ || pressed())
     {
         // Disabled has its own flat fill; pressed is a deliberate,
         // immediate action (like selection elsewhere) — neither eases.
@@ -254,20 +253,12 @@ void Button::paint(PaintCtx& ctx)
         }
         else
         {
-            fill = button_fill(variant_, ctx.theme, enabled_, hovered_, pressed_);
+            fill = button_fill(variant_, ctx.theme, enabled_, hovered(), pressed());
         }
     }
     else
     {
-        hover_fade_.set_target(hovered_ ? 1.0f : 0.0f);
-        const float fade = hover_fade_.step(kControlsHoverFadeMs);
-        if (hover_fade_.still_animating())
-        {
-            if (auto* h = host())
-            {
-                h->request_repaint();
-            }
-        }
+        const float fade = hover_fade();
         Color base, hov;
         if (fill_override_)
         {
@@ -281,7 +272,7 @@ void Button::paint(PaintCtx& ctx)
         }
         fill = Color::lerp(base, hov, fade);
     }
-    ctx.canvas.fill_rounded_rect(bounds_, kControlsBtnRadius, fill);
+    ctx.canvas.fill_rounded_rect(bounds_, corner_radius_.value_or(kControlsBtnRadius), fill);
 
     if (!paints_content())
     {
@@ -318,8 +309,8 @@ void Button::paint(PaintCtx& ctx)
         return;
     }
     Color text_color = button_text(variant_, ctx.theme, enabled_);
-    if (variant_ == Variant::Link && enabled_ && (pressed_ || hovered_))
-        text_color = pressed_ ? ctx.theme.palette.accent_pressed : ctx.theme.palette.accent_hover;
+    if (variant_ == Variant::Link && enabled_ && (pressed() || hovered()))
+        text_color = pressed() ? ctx.theme.palette.accent_pressed : ctx.theme.palette.accent_hover;
     const bool leading_icon = icon_leading_ && !icon_svg_.empty();
     // Centre the whole icon + gap + label group, so a leading-icon button
     // lines up with plain-label buttons of the same width.
@@ -336,7 +327,7 @@ void Button::paint(PaintCtx& ctx)
         tx += icon_w;
     }
     ctx.canvas.draw_text(*cached_, {tx, ty}, text_color);
-    if (variant_ == Variant::Link && enabled_ && hovered_)
+    if (variant_ == Variant::Link && enabled_ && hovered())
     {
         const float uy = ty + cached_size_.h - 1.0f;
         ctx.canvas.draw_line({tx, uy}, {tx + cached_size_.w, uy}, text_color, 1.0f);
@@ -385,57 +376,6 @@ void BusyButton::paint(PaintCtx& ctx)
     if (auto* h = host())
     {
         h->request_repaint();
-    }
-}
-
-void Button::click()
-{
-    if (enabled_ && on_click_)
-    {
-        // Copy the handler before invoking — a handler that destroys this
-        // button (e.g. by rebuilding its parent's children) would otherwise
-        // free the std::function while operator() is still executing.
-        auto cb = on_click_;
-        cb();
-    }
-}
-
-bool Button::on_pointer_down(Point /*local*/)
-{
-    if (!enabled_)
-    {
-        return false;
-    }
-    pressed_ = true;
-    return true;
-}
-
-void Button::on_pointer_up(Point /*local*/, bool inside_self)
-{
-    bool was_pressed = pressed_;
-    pressed_ = false;
-    if (was_pressed && inside_self && enabled_ && on_click_)
-    {
-        // See Button::click() — copy before invoking so the handler can
-        // safely free this button.
-        auto cb = on_click_;
-        cb();
-    }
-}
-
-void Button::set_hovered(bool h)
-{
-    if (h == hovered_)
-        return;
-    hovered_ = h;
-    if (h)
-    {
-        if (on_hover_enter)
-            on_hover_enter();
-    }
-    else if (on_hover_leave)
-    {
-        on_hover_leave();
     }
 }
 

@@ -3,6 +3,7 @@
 #include <tesseract/client.h>
 #include "tk/canvas.h"
 #include "tk/controls.h"
+#include "tk/hover_area.h"
 #include "tk/keyboard_target.h"
 #include "tk/svg.h"
 #include "tk/widget.h"
@@ -134,6 +135,8 @@ private:
     tk::Rect avatar_rect_{};
     // Keyboard stand-in for the avatar (opens the full-size lightbox).
     tk::KeyboardTarget* avatar_target_ = nullptr;
+    // Pointer side of the same action: hover ring, pointer cursor, click.
+    tk::HoverArea* avatar_area_ = nullptr;
 
     // Cached text layouts (rebuilt lazily in paint)
     tk::CachedTextLayout name_layout_;
@@ -154,7 +157,6 @@ private:
     tk::CachedTextLayout call_value_layout_;
 
     bool press_backdrop_ = false;
-    bool press_avatar_   = false;
 
     // Pronouns row hover → tooltip listing every configured language/pronoun
     // pair (only shown when there's more than one; see pronouns_tooltip_text_).

@@ -77,6 +77,34 @@ public:
         return cached;
     }
 
+    // Cursor requested by the hovered tk widget (Widget::cursor()). Same
+    // NSCursor push/pop discipline as the shells' link hooks: ours is popped
+    // before the dispatch that may push a link cursor, and pushed after the
+    // previous widget's leave popped it (see Host::begin_hover_feedback_).
+    void apply_cursor_(tk::CursorShape shape) override
+    {
+        if (cursor_pushed_)
+        {
+            [NSCursor pop];
+            cursor_pushed_ = false;
+        }
+        NSCursor* c = nil;
+        switch (shape)
+        {
+        case tk::CursorShape::Default:  break;
+        case tk::CursorShape::Pointer:  c = [NSCursor pointingHandCursor]; break;
+        case tk::CursorShape::Text:     c = [NSCursor IBeamCursor]; break;
+        case tk::CursorShape::Grab:     c = [NSCursor openHandCursor]; break;
+        case tk::CursorShape::Grabbing: c = [NSCursor closedHandCursor]; break;
+        case tk::CursorShape::ResizeH:  c = [NSCursor resizeLeftRightCursor]; break;
+        }
+        if (c)
+        {
+            [c push];
+            cursor_pushed_ = true;
+        }
+    }
+
     void request_repaint() override;
     // Scoped repaint for canvas-drawn native text controls (see
     // NativeTextField::set_on_repaint_needed's doc comment in host.h) —
@@ -250,6 +278,7 @@ protected:
 
 private:
     TKSurfaceView* view_;
+    bool cursor_pushed_ = false;
     const Theme* theme_;
     std::unique_ptr<CanvasFactory> factory_;
     bool transparent_ = false;

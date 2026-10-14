@@ -326,7 +326,6 @@ void QuickSwitcher::open()
     query_.clear();
     mode_ = Mode::Room;
     user_results_.clear();
-    pressed_chip_ = -1;
     is_open_ = true;
     set_visible(true);
     if (search_field_)
@@ -646,6 +645,13 @@ void QuickSwitcher::paint(tk::PaintCtx& ctx)
     {
         paint_recent_strip_(ctx);
     }
+    else
+    {
+        // Strip hidden (a query is typed, or user mode): the chip areas must
+        // not keep their old rects, or they'd still take clicks over the
+        // result rows now drawn there.
+        chip_areas_.park();
+    }
 
     if (active_count_() == 0)
     {
@@ -690,11 +696,16 @@ void QuickSwitcher::paint_recent_strip_(tk::PaintCtx& ctx)
     style.avatar_size = kRecentAvatar;
     style.pad_x = kQuickSwitcherPadX;
     style.caption = tk::tr("Recent");
-    style.highlight_index = pressed_chip_;
-    style.highlight_fill = ctx.theme.palette.sidebar_hover;
-
+    chip_areas_.paint(ctx); // hover/press fill, behind the chips
     paint_room_chips(ctx, strip, recent_, avatar_provider_, on_room_avatar_needed,
                      style, recent_chips_);
+    chip_areas_.sync(*this, recent_chips_,
+                     [this](std::size_t, const std::string& room_id)
+                     {
+                         if (on_room_selected)
+                             on_room_selected(room_id);
+                         close();
+                     });
 
     while (chip_targets_.size() < recent_chips_.size())
     {
@@ -743,18 +754,8 @@ bool QuickSwitcher::on_pointer_down(tk::Point local)
         return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
     };
 
-    // Recent strip chip?
-    pressed_chip_ = -1;
-    for (int i = 0; i < static_cast<int>(recent_chips_.size()); ++i)
-    {
-        if (contains(recent_chips_[static_cast<std::size_t>(i)].first, world))
-        {
-            pressed_chip_ = i;
-            press_outside_ = false;
-            return true;
-        }
-    }
-
+    // (A press on a Recent chip never reaches here: each chip is a
+    // tk::HoverArea child — RoomChipAreas — that claims it first.)
     press_outside_ = !contains(card_rect_, world);
     // Always consume so the press never falls through to widgets behind the
     // modal backdrop.
@@ -763,28 +764,6 @@ bool QuickSwitcher::on_pointer_down(tk::Point local)
 
 void QuickSwitcher::on_pointer_up(tk::Point local, bool inside_self)
 {
-    if (pressed_chip_ >= 0)
-    {
-        const int chip = pressed_chip_;
-        pressed_chip_ = -1;
-        const tk::Point world{local.x + bounds_.x, local.y + bounds_.y};
-        if (chip < static_cast<int>(recent_chips_.size()))
-        {
-            const auto& [rect, room_id] =
-                recent_chips_[static_cast<std::size_t>(chip)];
-            const bool on_chip = world.x >= rect.x && world.x < rect.x + rect.w &&
-                                 world.y >= rect.y && world.y < rect.y + rect.h;
-            if (on_chip)
-            {
-                if (on_room_selected)
-                {
-                    on_room_selected(room_id);
-                }
-                close();
-            }
-        }
-        return;
-    }
     if (press_outside_)
     {
         press_outside_ = false;

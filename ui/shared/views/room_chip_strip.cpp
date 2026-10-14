@@ -96,4 +96,48 @@ void paint_room_chips(tk::PaintCtx& ctx, tk::Rect strip,
     }
 }
 
+void RoomChipAreas::paint(tk::PaintCtx& ctx)
+{
+    for (tk::HoverArea* a : areas_)
+        if (a->bounds().w > 0.0f)
+            a->paint(ctx);
+}
+
+void RoomChipAreas::park()
+{
+    for (tk::HoverArea* a : areas_)
+        a->set_rect({});
+}
+
+void RoomChipAreas::sync(tk::Widget& owner,
+                         const std::vector<std::pair<tk::Rect, std::string>>& chips,
+                         OnChip on_chip)
+{
+    on_chip_ = std::move(on_chip);
+    room_ids_.clear();
+    for (const auto& c : chips)
+        room_ids_.push_back(c.second);
+
+    while (areas_.size() < chips.size())
+    {
+        const std::size_t idx = areas_.size();
+        auto* a = owner.add_child(
+            tk::create_widget<tk::HoverArea>(&owner, tk::HoverStyle::Fill, 8.0f));
+        a->set_on_click(
+            [this, idx]
+            {
+                // Copy first: the handler closes the overlay, which may
+                // rebuild this strip.
+                if (idx >= room_ids_.size() || !on_chip_)
+                    return;
+                const std::string id = room_ids_[idx];
+                auto cb = on_chip_;
+                cb(idx, id);
+            });
+        areas_.push_back(a);
+    }
+    for (std::size_t i = 0; i < areas_.size(); ++i)
+        areas_[i]->set_rect(i < chips.size() ? chips[i].first : tk::Rect{});
+}
+
 } // namespace tesseract::views

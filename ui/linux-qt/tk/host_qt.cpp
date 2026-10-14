@@ -2466,6 +2466,25 @@ public:
         return cached;
     }
 
+    // Cursor requested by the hovered tk widget (Widget::cursor()); the
+    // shells' link/sidebar hooks write to the same Surface cursor slot.
+    void apply_cursor_(tk::CursorShape shape) override
+    {
+        if (!surface_)
+            return;
+        Qt::CursorShape c = Qt::ArrowCursor;
+        switch (shape)
+        {
+        case tk::CursorShape::Default:  c = Qt::ArrowCursor; break;
+        case tk::CursorShape::Pointer:  c = Qt::PointingHandCursor; break;
+        case tk::CursorShape::Text:     c = Qt::IBeamCursor; break;
+        case tk::CursorShape::Grab:     c = Qt::OpenHandCursor; break;
+        case tk::CursorShape::Grabbing: c = Qt::ClosedHandCursor; break;
+        case tk::CursorShape::ResizeH:  c = Qt::SplitHCursor; break;
+        }
+        surface_->setCursor(c);
+    }
+
     void request_repaint() override
     {
         if (surface_)

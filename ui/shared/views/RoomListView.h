@@ -442,12 +442,12 @@ private:
     tk::Rect search_clear_rect_{};
     tk::Rect join_room_rect_{};
     bool search_field_visible_ = false;
-    bool press_search_clear_ = false;
-    bool press_join_room_ = false;
 
-    // Lucide join (+) icon, tinted accent / text_primary (pressed); the cache is
-    // tint-aware so it recolors on press and on theme switch.
-    tk::IconCache join_icon_;
+    // Header buttons: "+" (join / create a room) and "×" (clear the search
+    // query, shown only while one is typed). Real tk::Buttons, so they get
+    // hover/press feedback, the pointer cursor and keyboard/a11y for free.
+    tk::Button* join_btn_ = nullptr;
+    tk::Button* clear_btn_ = nullptr;
     // Phone icon drawn in room rows that have an active call.
     tk::IconCache call_icon_;
     // Sticky-header interaction: section pressed on the pinned header (-1 =

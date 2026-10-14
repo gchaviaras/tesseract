@@ -4,6 +4,7 @@
 #include "tk/combobox.h"
 #include "tk/controls.h"
 #include "tk/host.h"
+#include "tk/hover_area.h"
 #include "tk/keyboard_target.h"
 #include "tk/scrollable_base.h"
 #include "tk/badge_flow.h"
@@ -194,6 +195,8 @@ private:
     // member_cursor_ and Up/Down/Home/End move it (Enter opens the profile,
     // the context-menu key the member menu).
     tk::KeyboardTarget* avatar_target_  = nullptr;
+    // Pointer side of the same action: hover ring, pointer cursor, click.
+    tk::HoverArea*      avatar_area_    = nullptr;
     tk::KeyboardTarget* topic_target_   = nullptr;
     tk::KeyboardTarget* media_target_   = nullptr;
     tk::KeyboardTarget* knock_target_   = nullptr;
@@ -251,7 +254,6 @@ private:
     float tags_sep_y_  = 0.0f;
     float tags_row_y_  = 0.0f;
 
-    bool  press_avatar_    = false;
     std::string press_link_url_;
     std::string hover_link_url_; // non-empty while pointer is over a topic link
     int   hover_member_    = -1;

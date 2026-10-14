@@ -22,6 +22,7 @@
 // Mounted as a top-level overlay child of MainAppWidget, alongside
 // QuickSwitcher.
 
+#include "room_chip_strip.h"
 #include "tk/access_tree.h"
 #include "tk/canvas.h"
 #include "tk/host.h"
@@ -137,9 +138,8 @@ private:
     // also lands outside cancels the cycle (matches QuickSwitcher's
     // press_outside_ idiom).
     bool press_outside_ = false;
-    // Index of the chip currently pressed (-1 = none). A release on the
-    // same chip selects + commits it immediately.
-    int pressed_chip_ = -1;
+    // Hover/press/click for the chips; a click selects + commits that room.
+    RoomChipAreas chip_areas_;
 };
 
 } // namespace tesseract::views

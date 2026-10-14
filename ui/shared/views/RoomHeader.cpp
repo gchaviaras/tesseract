@@ -68,10 +68,57 @@ void draw_thread_unread_dot(tk::PaintCtx& ctx, tk::Rect btn, bool mention)
                                          : ctx.theme.palette.unread_bg);
 }
 
+// The clickable title block (avatar + name + topic): hover fill and a
+// pointer cursor come from tk::Widget. It declines presses that land on a
+// topic hyperlink so RoomHeader's own press/release path opens the link
+// instead of room info. Keyboard/a11y stays with RoomHeader::title_target_.
+class InfoArea : public tk::Widget
+{
+public:
+    std::function<bool(tk::Point world)> declines_press;
+
+    tk::Size measure(tk::LayoutCtx&, tk::Size) override { return {0.0f, 0.0f}; }
+
+    // RoomHeader places its name/topic labels (our children) itself; the base
+    // arrange would reset them all to this rect. Only record our own bounds.
+    void arrange(tk::LayoutCtx&, tk::Rect bounds) override { bounds_ = bounds; }
+
+    // RoomHeader paints the avatar and labels itself, in its own order; this
+    // widget only supplies the hover fill behind them.
+    void paint(tk::PaintCtx& ctx) override { paint_hover_fill(ctx); }
+
+    bool on_pointer_down(tk::Point local) override
+    {
+        if (declines_press &&
+            declines_press({bounds_.x + local.x, bounds_.y + local.y}))
+            return false;
+        return tk::Widget::on_pointer_down(local);
+    }
+};
+
 } // namespace
 
 RoomHeader::RoomHeader()
 {
+    // Added first so every other child (action buttons) is hit-tested above
+    // it; the name/topic labels below are its children, so hovering them
+    // lights the whole title block.
+    {
+        auto area = tk::create_widget<InfoArea>(this);
+        area->declines_press = [this](tk::Point world)
+        { return topic_link_at_(world); };
+        area->set_hoverable(true, tk::HoverStyle::Fill)
+            .set_hover_radius(6.0f)
+            .set_pointer_only(true)
+            .set_on_click(
+                [this]
+                {
+                    if (!condensed_ && on_info_requested)
+                        on_info_requested();
+                });
+        info_area_ = add_child(std::move(area));
+    }
+
     // Leading back button — narrow-window layout only, hidden otherwise.
     auto back = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
                                               tk::Button::Variant::Icon);
@@ -84,11 +131,11 @@ RoomHeader::RoomHeader()
 
     auto name = tk::create_widget<tk::Label>(this, "", tk::FontRole::Title);
     name->set_trim(tk::TextTrim::Ellipsis);
-    name_label_ = add_child(std::move(name));
+    name_label_ = info_area_->add_child(std::move(name));
 
     auto topic = tk::create_widget<tk::Label>(this, "", tk::FontRole::SidebarPreview);
     topic->set_trim(tk::TextTrim::Ellipsis);
-    topic_label_ = add_child(std::move(topic));
+    topic_label_ = info_area_->add_child(std::move(topic));
     topic_label_->set_visible(false);
 
     // Calendar / threads action buttons. Icon-variant buttons paint only their
@@ -291,6 +338,8 @@ void RoomHeader::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     bounds_ = bounds;
     // Re-placed over the title area at the end of the full (non-condensed)
     // layout below; condensed mode has no room-info click to stand in for.
+    if (info_area_)
+        info_area_->arrange(ctx, {});
     if (title_target_)
     {
         title_target_->arrange(ctx, {});
@@ -683,8 +732,13 @@ void RoomHeader::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
                 title_right = std::min(title_right, b->bounds().x - 4.0f);
         const float title_x = bounds.x + kRoomHeaderPadX + lead_reserve - 4.0f;
         if (title_right > title_x)
-            title_target_->arrange(ctx, {title_x, bounds.y + 4.0f,
-                                         title_right - title_x, kHeight - 8.0f});
+        {
+            const tk::Rect title_r{title_x, bounds.y + 4.0f, title_right - title_x,
+                                   kHeight - 8.0f};
+            title_target_->arrange(ctx, title_r);
+            if (info_area_)
+                info_area_->arrange(ctx, title_r);
+        }
     }
 
     // Rebuild the overflow item list to match whatever's currently
@@ -768,6 +822,10 @@ void RoomHeader::paint(tk::PaintCtx& ctx)
     {
         back_btn_->paint(ctx);
     }
+
+    // Hover/press fill for the clickable title block, behind avatar + text.
+    if (info_area_)
+        info_area_->paint(ctx);
 
     // Avatar — circle-cropped image or initials disc.
     const tk::Point avatar_centre{
@@ -920,19 +978,30 @@ void RoomHeader::draw_lock_icon(tk::Canvas& canvas, tk::Rect rect,
     canvas.fill_rounded_rect(body, 1.5f, tint);
 }
 
-bool RoomHeader::on_pointer_down(tk::Point /*local*/)
+bool RoomHeader::topic_link_at_(tk::Point world) const
 {
-    // Calendar / threads clicks are claimed by their child tk::Button widgets
-    // before this fires (the host dispatches to the topmost child). This only
-    // runs for the name/avatar/topic area: capture the press in full
-    // (non-condensed) mode so on_pointer_up is delivered and can fire
-    // on_info_requested.
-    if (!condensed_)
-    {
-        press_info_ = true;
-        return true;
-    }
-    return false;
+    // Guard on topic_rect_ before calling link_at: some canvas backends (e.g.
+    // Qt's FuzzyHit) match the nearest character regardless of distance, so an
+    // unbounded call would resolve a press anywhere in the header (room name,
+    // avatar) to whatever topic link happens to be nearest.
+    if (!topic_layout_ || !rect_contains(topic_rect_, world))
+        return false;
+    return !topic_layout_->link_at({world.x - topic_rect_.x, world.y - topic_rect_.y})
+                .empty();
+}
+
+bool RoomHeader::on_pointer_down(tk::Point local)
+{
+    // Action-button clicks are claimed by their child tk::Buttons, and a press
+    // on the name/avatar/topic by info_area_, before this fires. This runs
+    // only for a press on a topic hyperlink (info_area_ declines those):
+    // capture it so on_pointer_up can open the link.
+    if (condensed_)
+        return false;
+    if (!topic_link_at_({bounds_.x + local.x, bounds_.y + local.y}))
+        return false;
+    press_info_ = true;
+    return true;
 }
 
 void RoomHeader::on_pointer_up(tk::Point local, bool inside_self)
@@ -940,36 +1009,19 @@ void RoomHeader::on_pointer_up(tk::Point local, bool inside_self)
     if (!press_info_)
         return;
     press_info_ = false;
-
-    // Topic hyperlink click and name/avatar click.
-    // `local` is widget-local but topic_rect_ is in world coordinates (set in
-    // arrange() from bounds_.{x,y}); convert to world first, exactly like the
-    // calendar-button hit-test above, else links are unhittable on any layout
-    // whose origin isn't (0,0).
     if (!inside_self)
         return;
 
+    // `local` is widget-local but topic_rect_ is in world coordinates (set in
+    // arrange() from bounds_.{x,y}); convert to world first, else links are
+    // unhittable on any layout whose origin isn't (0,0).
     const tk::Point world{bounds_.x + local.x, bounds_.y + local.y};
-
-    // Check for a topic hyperlink hit first. Guard on topic_rect_ before
-    // calling link_at: some canvas backends (e.g. Qt's FuzzyHit) match the
-    // nearest character regardless of distance, so an unbounded call here
-    // would resolve clicks anywhere in the header (room name, avatar) to
-    // whatever topic link happens to be nearest.
-    if (topic_layout_ && rect_contains(topic_rect_, world))
-    {
-        tk::Point ll{world.x - topic_rect_.x, world.y - topic_rect_.y};
-        std::string url = topic_layout_->link_at(ll);
-        if (!url.empty() && on_link_clicked)
-        {
-            on_link_clicked(url);
-            return;
-        }
-    }
-
-    // Click was not on a hyperlink — fire on_info_requested.
-    if (on_info_requested)
-        on_info_requested();
+    if (!topic_link_at_(world))
+        return;
+    const std::string url = topic_layout_->link_at(
+        {world.x - topic_rect_.x, world.y - topic_rect_.y});
+    if (!url.empty() && on_link_clicked)
+        on_link_clicked(url);
 }
 
 tk::Widget* RoomHeader::dispatch_pointer_move(tk::Point world, bool* dirty)

@@ -108,7 +108,7 @@ void LoginView::rebuild_tree()
     hs_field_            = hs_field_row->add_child(std::move(hs_field));
     discovery_icon_lbl_  = hs_field_row->add_child(std::move(discovery_icon));
     hs_help_btn_         = hs_field_row->add_child(std::move(hs_help_btn));
-    hs_help_btn_->on_hover_enter = [this]
+    hs_help_btn_->set_on_hover_enter([this]
     {
         if (host())
             host()->show_tooltip(
@@ -117,11 +117,11 @@ void LoginView::rebuild_tree()
                        "choosing an email provider. Not sure? matrix.org is a good "
                        "default and works with anyone on Matrix."),
                 hs_help_btn_->bounds());
-    };
-    hs_help_btn_->on_hover_leave = [this]
+    });
+    hs_help_btn_->set_on_hover_leave([this]
     {
         if (host()) host()->hide_tooltip(hs_help_btn_);
-    };
+    });
 
     brand_avatar_        = card->add_child(std::move(brand_avatar));
     title_lbl_           = card->add_child(std::move(title));

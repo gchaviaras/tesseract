@@ -731,6 +731,21 @@ public:
     // multiple times — the host coalesces.
     virtual void request_repaint() = 0;
 
+    // Show `shape` as the mouse cursor over this surface. Called only when
+    // the hover target's cursor actually changes, driven by Widget::cursor()
+    // of the hovered widget (Default = hand the cursor back to whoever else
+    // sets it). Default: no-op; each platform backend overrides.
+    virtual void apply_cursor_(CursorShape /*shape*/)
+    {
+    }
+
+    // Called by Widget when any widget's visibility/enabled state changes:
+    // drops the current hover target (clearing its hover state and handing the
+    // cursor back) if it just became hidden or disabled — otherwise it would
+    // keep painting hovered and holding the cursor until the next pointer
+    // move, e.g. a button that hides itself when clicked.
+    void revalidate_hover_feedback_();
+
     // Scoped variant of request_repaint(): `world` is the widget-tree rect
     // that actually needs repainting (e.g. a captured NativeTextField/
     // NativeTextArea's rendered_image_rect(), or just a caret's own small
@@ -1370,9 +1385,16 @@ protected:
     std::weak_ptr<Widget> pending_popup_trigger_;
     std::weak_ptr<Widget> focus_scope_;   // active Tab-traversal scope, if any
 
+    // Hover feedback + cursor (see Widget::set_hoverable / Widget::cursor()).
+    static Widget* hover_target_for_(Widget* hit);
+    // `*changed` is set when the hover target actually changed (repaint).
+    CursorShape begin_hover_feedback_(Widget* target, bool* changed);
+    void end_hover_feedback_(CursorShape want);
+
     // Tracked pointer state, shared by the dispatch_pointer_* state machine.
     std::weak_ptr<Widget> pressed_widget_;      // captured on pointer-down
-    std::weak_ptr<Button> hovered_btn_;         // Button currently under the pointer
+    std::weak_ptr<Widget> hover_feedback_;      // hoverable widget currently showing hover (see Widget::set_hoverable)
+    CursorShape applied_cursor_ = CursorShape::Default; // last cursor handed to apply_cursor_()
     std::weak_ptr<Widget> hovered_widget_;      // widget currently under the pointer
     std::weak_ptr<Widget> native_drag_hovered_widget_; // widget currently claiming drag-hover
     std::weak_ptr<Widget> focused_widget_;      // canvas widget holding tk-level keyboard focus

@@ -262,6 +262,14 @@ public:
     // open (bounds alone can't disambiguate since the overlay covers the
     // same screen area).
     tk::Widget* search_btn_for_test() const { return search_btn_; }
+    tk::Rect name_label_rect_for_test() const
+    {
+        return name_label_ ? name_label_->bounds() : tk::Rect{};
+    }
+    tk::Rect topic_label_rect_for_test() const
+    {
+        return topic_label_ ? topic_label_->bounds() : tk::Rect{};
+    }
 
 private:
 
@@ -277,7 +285,10 @@ private:
     };
     mutable std::vector<AccessRow> access_rows_;
 
-    bool press_info_ = false; // true when header area (not calendar) is pressed
+    bool press_info_ = false; // a topic hyperlink is pressed (info_area_ declines those)
+    bool topic_link_at_(tk::Point world) const;
+    // Hoverable avatar+name+topic block that opens room info on click.
+    tk::Widget* info_area_ = nullptr;
     bool hover_topic_ = false;
     std::string hover_link_url_; // non-empty while pointer is over a topic link
     bool topic_truncated_ = false;

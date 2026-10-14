@@ -956,7 +956,7 @@ public:
         return nullptr;
     }
 
-    // Button hover is driven by Host via hit_test + dynamic_cast<Button*>,
+    // Hover feedback (Widget::set_hoverable) is driven by Host via hit_test,
     // not dispatch_pointer_move above. Without this override, the base
     // Widget::hit_test falls back to claiming `this` whenever no child
     // absorbs the hit, which swallows every button hover in the app since
@@ -1050,8 +1050,8 @@ public:
     }
 
     // Same reasoning as dispatch_pointer_move above, but for the hit_test
-    // path that Host uses to drive Button hover (hit_test + dynamic_cast
-    // <Button*>). Without this override, the base Widget::hit_test falls
+    // path that Host uses to drive hover feedback (hit_test + the nearest
+    // hoverable ancestor). Without this override, the base Widget::hit_test falls
     // back to claiming `this` whenever no child absorbs the hit, which
     // swallows every button hover in the app while this layer exists.
     tk::Widget* hit_test(tk::Point world) override

@@ -1055,7 +1055,7 @@ TEST_CASE("Fresh: an existing server backup asks before it is replaced",
     ov->advance_progress(7, "", 0, 0);
     CHECK(ov->step() == EncryptionSetupOverlay::Step::Intro);
     CHECK(ov->replace_backup_pending());
-    CHECK(ov->error_msg().find("key backup") != std::string::npos);
+    CHECK(ov->error_msg().find("key storage") != std::string::npos);
     CHECK(replace_calls.empty());
 
     // Only the explicit confirmation replaces it, and it does not re-run the

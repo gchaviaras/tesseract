@@ -3938,7 +3938,7 @@ void MainWindow::refreshSyncStatus()
     {
         sync_progress_shown_ = true;
         statusBar()->showMessage(
-            QString::fromStdString(tk::trf(tk::tr("Downloading encryption keys ({0})…"),
+            QString::fromStdString(tk::trf(tk::tr("Downloading message keys ({0})…"),
                                            {std::to_string(last_imported_keys_)})));
         return;
     }

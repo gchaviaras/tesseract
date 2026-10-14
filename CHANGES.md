@@ -3,6 +3,12 @@
 Newest first. Unreleased work is listed per day, one bullet per change.
 Tagged releases summarize all changes since the previous tag.
 
+## Unreleased
+
+### Summary
+
+- refactor(ui): crypto wording follows MSC4161 (message keys, key storage, confirmed devices, digital identity, recovery passphrase, Devices tab, linking a device); English strings only, catalogs follow. Windows build
+
 ## v0.9.3 — 2026-10-13
 
 ### Summary

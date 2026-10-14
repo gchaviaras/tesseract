@@ -213,7 +213,7 @@ PrivacySection::PrivacySection(SettingBinder& binder)
     auto* enc_group = add_group(tk::tr("Encryption"));
 
     auto exclude_cb = tk::create_widget<tk::CheckButton>(
-        this, tk::tr("Exclude insecure devices (takes effect after restart)"),
+        this, tk::tr("Exclude unconfirmed devices (takes effect after restart)"),
         s.exclude_insecure_devices);
     exclude_insecure_cb_ = enc_group->add_widget(std::move(exclude_cb));
     binder.bind(exclude_insecure_cb_, &S::exclude_insecure_devices,
@@ -224,9 +224,9 @@ PrivacySection::PrivacySection(SettingBinder& binder)
             host_->show_tooltip(
                 exclude_insecure_cb_,
                 tk::tr("Only send encrypted messages to devices their owner has "
-                       "verified, and hide messages sent from devices that aren't. "
-                       "This device must be verified to send, and people whose "
-                       "clients don't verify their devices won't see your messages."),
+                       "confirmed, and hide messages sent from devices that aren't. "
+                       "This device must be confirmed to send, and people whose "
+                       "clients don't confirm their devices won't see your messages."),
                 exclude_insecure_cb_->bounds());
     };
     exclude_insecure_cb_->on_hover_leave = [this]
@@ -235,15 +235,15 @@ PrivacySection::PrivacySection(SettingBinder& binder)
     };
 
     enc_group->add_widget(tk::create_widget<tk::Button>(
-        this, tk::tr("Export room keys…"),
+        this, tk::tr("Export message keys…"),
         [this] { if (on_export_keys) on_export_keys(); }));
 
     enc_group->add_widget(tk::create_widget<tk::Button>(
-        this, tk::tr("Import room keys…"),
+        this, tk::tr("Import message keys…"),
         [this] { if (on_import_keys) on_import_keys(); }));
 
     enc_group->add_widget(tk::create_widget<tk::Button>(
-        this, tk::tr("Reset encryption…"),
+        this, tk::tr("Reset digital identity…"),
         [this] { if (on_reset_identity) on_reset_identity(); },
         tk::Button::Variant::Destructive));
 }

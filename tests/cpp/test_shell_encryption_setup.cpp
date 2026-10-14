@@ -586,7 +586,7 @@ TEST_CASE("No setup reminder or second setup while a silent one is pending",
     shell.recovery_state_stub_ = 1;
     shell.check_encryption_setup_();
     REQUIRE(shell.silent_recovery_pending_(scrub.uid));
-    shell.reopen_encryption_setup_(); // e.g. the strip's "Set up recovery"
+    shell.reopen_encryption_setup_(); // e.g. the strip's "Set up key storage"
     CHECK_FALSE(shell.overlay_shown_);
     CHECK(shell.silent_enables_ == 1);
 

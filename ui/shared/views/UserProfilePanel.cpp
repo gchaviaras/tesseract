@@ -193,13 +193,13 @@ void UserProfilePanel::apply_trust_(bool can_verify)
         break;
     case UserTrust::NotVerified:
         text = can_verify ? tk::tr("Not verified")
-                          : tk::tr("Not verified \xc2\xb7 verify this device first");
+                          : tk::tr("Not verified \xc2\xb7 confirm this device first");
         verify_btn_->set_label(tk::tr("Verify"));
         verify_btn_->set_enabled(can_verify);
         button = true;
         break;
     case UserTrust::VerificationViolation:
-        text = tk::tr("Verified identity was reset");
+        text = tk::tr("Verified digital identity was reset");
         verify_btn_->set_label(tk::tr("Withdraw verification"));
         verify_btn_->set_enabled(true);
         button = true;

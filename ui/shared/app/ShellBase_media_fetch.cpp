@@ -1004,7 +1004,7 @@ void ShellBase::clear_all_caches_(
     if (encryption_flow_.has_flow())
     {
         show_status_message_(
-            tk::tr("Finish verifying your device before clearing the cache."));
+            tk::tr("Finish confirming your device before clearing the cache."));
         return;
     }
 

@@ -138,15 +138,15 @@ version) are noted where relevant.
 
 - End-to-end encryption
 - Guided encryption setup for new accounts (cross-signing wizard); a fresh login finishes setup before syncing starts
-- The sidebar avatar warns when the current session is unverified, with a "Verify this session…" menu item to reopen verification
-- Device verification via emoji (SAS)
-- Key backup recovery
-- Room key export / import (standard interoperable format)
+- The sidebar avatar warns when the current device is unconfirmed, with a "Confirm this device…" menu item to reopen confirmation
+- Device confirmation via emoji (SAS)
+- Key storage recovery
+- Message key export / import (standard interoperable format)
 - **Full-text message search** across all rooms, including E2EE (**Ctrl+Shift+F** / **⌘⇧F**): a local SQLite FTS5 index of decrypted message bodies in `search_index.db`. Opt-in (Settings → Privacy → Search, off by default); enabling lazily backfills history and indexes every subsequent message; disabling clears the index. Results show room · sender · snippet; clicking jumps to the message. Settings panel shows live stats (message count, room count, oldest indexed date, on-disk size).
 - Privacy controls, including presence send/poll toggles
-- Device & session management (list sessions with verified status, sign out remote sessions)
+- Device management (list devices with confirmed status, sign out remote devices)
 - Undecryptable-message states surfaced in the UI
-- Cryptographic identity reset
+- Digital identity reset
 - Clear-cache action (excludes the crypto/session store)
 - Optional local crash handler (Settings → Advanced → Diagnostics, off by default, experimental): native and Rust crash handling write a plain-text stack trace to disk; nothing is transmitted anywhere
 
@@ -154,7 +154,7 @@ version) are noted where relevant.
 
 - Login and logout (SDK-based logout removes the device server-side)
 - A clear "No Internet Connection" dialog on cold-start when offline, instead of a raw connection-error message
-- QR-code login (MSC4108; gated on server capability advertisement)
+- Link a device by QR code (MSC4108; gated on server capability advertisement)
 - Profile editing: display name, avatar, and extended fields — pronouns, timezone, and biography (MSC4133)
 - Your own profile updates live when edited on another device (MSC4262; on Synapse this needs `include_profile_updates_in_sync`)
 - User status (MSC4426): a self-set emoji + short text status shown on the profile card and as a third line in the sidebar account strip, plus an automatic "In a call" indicator while in a MatrixRTC call
@@ -163,7 +163,7 @@ version) are noted where relevant.
 ## Settings
 
 - Account
-- Sessions / devices
+- Devices
 - Notifications (per-room; global mentions/@room/general-messages/keywords)
 - Appearance (light / dark / system theme; message layout: Classic/Bubbles/IRC; room-list inactive grouping; auto-scroll to unread rooms)
 - General (launch at login; low power mode: Auto/On/Off)

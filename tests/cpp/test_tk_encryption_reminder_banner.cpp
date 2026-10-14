@@ -63,15 +63,15 @@ TEST_CASE("EncryptionReminderBanner Locked offers Unlock and fires on_open",
     CHECK(opened);
 }
 
-TEST_CASE("EncryptionReminderBanner SetupNeeded offers Set up recovery",
+TEST_CASE("EncryptionReminderBanner SetupNeeded offers Set up key storage",
           "[tk][view][encryption]")
 {
     ReminderBannerStage st;
     EncryptionReminderBanner banner;
     banner.set_kind(EncryptionReminderBanner::Kind::SetupNeeded);
     st.run(banner, {0, 0, 640, 48});
-    CHECK(banner.label_text().find("backed up") != std::string::npos);
-    CHECK(find_button(banner, "Set up recovery") != nullptr);
+    CHECK(banner.label_text().find("Key storage") != std::string::npos);
+    CHECK(find_button(banner, "Set up key storage") != nullptr);
     CHECK(find_button(banner, "Unlock") == nullptr);
 }
 

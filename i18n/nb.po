@@ -87,17 +87,28 @@ msgstr "_OK"
 msgid "Passphrase"
 msgstr "Passfrase"
 
-msgid "Save room keys"
-msgstr "Lagre romnøkler"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:213
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1270
+msgid "Recovery passphrase"
+msgstr "Gjenopprettingsfrase"
 
-msgid "Open room keys"
-msgstr "Åpne romnøkler"
+#: ui/linux-gtk/src/MainWindow.cpp:3171
+msgid "Save message keys"
+msgstr "Lagre meldingsnøkler"
 
-msgid "Room keys exported successfully."
-msgstr "Romnøklene ble eksportert."
+#: ui/linux-gtk/src/MainWindow.cpp:3200
+msgid "Open message keys"
+msgstr "Åpne meldingsnøkler"
 
-msgid "Room keys imported successfully."
-msgstr "Romnøklene ble importert."
+#: ui/linux-gtk/src/MainWindow.cpp:3231 ui/linux-qt/src/SettingsWidget.cpp:176
+#: ui/macos/src/MainWindowController.mm:6748 ui/windows/src/MainWindow.cpp:6440
+msgid "Message keys exported successfully."
+msgstr "Meldingsnøklene ble eksportert."
+
+#: ui/linux-gtk/src/MainWindow.cpp:3247 ui/linux-qt/src/SettingsWidget.cpp:185
+#: ui/macos/src/MainWindowController.mm:6762 ui/windows/src/MainWindow.cpp:6451
+msgid "Message keys imported successfully."
+msgstr "Meldingsnøklene ble importert."
 
 msgid "Select image"
 msgstr "Velg bilde"
@@ -111,8 +122,10 @@ msgstr "Synkroniserer rom…"
 msgid "Reconnecting…"
 msgstr "Kobler til på nytt…"
 
-msgid "Downloading encryption keys ({0})…"
-msgstr "Laster ned krypteringsnøkler ({0})…"
+#: ui/linux-gtk/src/MainWindow.cpp:5252 ui/linux-qt/src/MainWindow.cpp:3941
+#: ui/macos/src/MainWindowController.mm:8031 ui/windows/src/MainWindow.cpp:5750
+msgid "Downloading message keys ({0})…"
+msgstr "Laster ned meldingsnøkler ({0})…"
 
 msgid "Add to Saved Stickers"
 msgstr "Legg til i lagrede klistremerker"
@@ -159,11 +172,15 @@ msgstr "Legg til konto"
 msgid "Signed out of %1"
 msgstr "Logget ut av %1"
 
-msgid "Export room keys"
-msgstr "Eksporter romnøkler"
+#: ui/linux-qt/src/SettingsWidget.cpp:161
+#: ui/shared/app/SettingsController.cpp:795
+msgid "Export message keys"
+msgstr "Eksporter meldingsnøkler"
 
-msgid "Import room keys"
-msgstr "Importer romnøkler"
+#: ui/linux-qt/src/SettingsWidget.cpp:168
+#: ui/shared/app/SettingsController.cpp:841
+msgid "Import message keys"
+msgstr "Importer meldingsnøkler"
 
 msgid "Export complete"
 msgstr "Eksporten er fullført"
@@ -435,8 +452,9 @@ msgstr "Bytt til denne kontoen for å åpne dette rommet."
 msgid "Switch to this account to verify users."
 msgstr "Bytt til denne kontoen for å verifisere brukere."
 
-msgid "Couldn't update the identity: {0}"
-msgstr "Kunne ikke oppdatere identiteten: {0}"
+#: ui/shared/app/RoomPane.cpp:397 ui/shared/app/RoomPane.cpp:2916
+msgid "Couldn't update the digital identity: {0}"
+msgstr "Kunne ikke oppdatere den digitale identiteten: {0}"
 
 msgid "Failed to set topic: {0}"
 msgstr "Kunne ikke angi emne: {0}"
@@ -570,14 +588,16 @@ msgstr "Tesseract {0} er tilgjengelig"
 msgid "Keyboard Shortcuts…"
 msgstr "Hurtigtaster…"
 
-msgid "Verify this session…"
-msgstr "Verifiser denne økten…"
+#: ui/shared/app/ShellBase_profile.cpp:1007
+msgid "Confirm this device…"
+msgstr "Bekreft denne enheten…"
 
 msgid "Add Account…"
 msgstr "Legg til konto…"
 
-msgid "Add device via QR…"
-msgstr "Legg til enhet via QR…"
+#: ui/shared/app/ShellBase_profile.cpp:1010
+msgid "Link a device…"
+msgstr "Koble til en enhet…"
 
 msgid "Log Out {0}"
 msgstr "Logg ut {0}"
@@ -611,8 +631,9 @@ msgstr[1] "{0}, {1} og {2} andre skriver…"
 msgid "End your call before clearing the cache."
 msgstr "Avslutt samtalen før du tømmer hurtigbufferen."
 
-msgid "Finish verifying your device before clearing the cache."
-msgstr "Fullfør verifiseringen av enheten din før du tømmer hurtigbufferen."
+#: ui/shared/app/ShellBase_media_fetch.cpp:1007
+msgid "Finish confirming your device before clearing the cache."
+msgstr "Fullfør bekreftelsen av enheten din før du tømmer hurtigbufferen."
 
 msgid "Couldn't clear the cache: this account's session is missing."
 msgstr "Kunne ikke tømme hurtigbufferen: økten til denne kontoen mangler."
@@ -1323,8 +1344,9 @@ msgstr "Ofte brukt"
 msgid "Remind me later"
 msgstr "Påminn meg senere"
 
-msgid "Your messages aren't backed up yet."
-msgstr "Meldingene dine er ikke sikkerhetskopiert ennå."
+#: ui/shared/views/EncryptionReminderBanner.cpp:52
+msgid "Key storage isn't set up yet."
+msgstr "Nøkkellagring er ikke satt opp ennå."
 
 msgid "Your encrypted messages are locked on this device."
 msgstr "De krypterte meldingene dine er låst på denne enheten."
@@ -1332,8 +1354,9 @@ msgstr "De krypterte meldingene dine er låst på denne enheten."
 msgid "Save your recovery key so you never lose your messages."
 msgstr "Lagre gjenopprettingsnøkkelen din, så mister du aldri meldingene dine."
 
-msgid "Set up recovery"
-msgstr "Sett opp gjenoppretting"
+#: ui/shared/views/EncryptionReminderBanner.cpp:65
+msgid "Set up key storage"
+msgstr "Sett opp nøkkellagring"
 
 msgid "Show me"
 msgstr "Vis meg"
@@ -1347,8 +1370,10 @@ msgstr "Lagre til fil…"
 msgid "Skip for now"
 msgstr "Hopp over foreløpig"
 
-msgid "Use a passphrase instead"
-msgstr "Bruk en passfrase i stedet"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:164
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1235
+msgid "Use a recovery passphrase instead"
+msgstr "Bruk en gjenopprettingsfrase i stedet"
 
 msgid "Back"
 msgstr "Tilbake"
@@ -1362,8 +1387,10 @@ msgstr "Ikke meg"
 msgid "Sign out and delete the key"
 msgstr "Logg ut og slett nøkkelen"
 
-msgid "Turn off backup"
-msgstr "Slå av sikkerhetskopiering"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:172
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1250
+msgid "Turn off key storage"
+msgstr "Slå av nøkkellagring"
 
 msgid "I've saved my recovery key"
 msgstr "Jeg har lagret gjenopprettingsnøkkelen"
@@ -1371,11 +1398,14 @@ msgstr "Jeg har lagret gjenopprettingsnøkkelen"
 msgid "Also keep it on this device"
 msgstr "Behold den også på denne enheten"
 
-msgid "Confirm passphrase"
-msgstr "Bekreft passfrase"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:220
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1274
+msgid "Confirm recovery passphrase"
+msgstr "Bekreft gjenopprettingsfrase"
 
-msgid "Recovery key or passphrase"
-msgstr "Gjenopprettingsnøkkel eller passfrase"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:228
+msgid "Recovery key or recovery passphrase"
+msgstr "Gjenopprettingsnøkkel eller gjenopprettingsfrase"
 
 msgid "Saved."
 msgstr "Lagret."
@@ -1401,8 +1431,9 @@ msgstr "Bekrefter…"
 msgid "The request was cancelled or timed out."
 msgstr "Forespørselen ble avbrutt eller gikk ut på tid."
 
-msgid "Turning off backup…"
-msgstr "Slår av sikkerhetskopiering…"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:645
+msgid "Turning off key storage…"
+msgstr "Slår av nøkkellagring…"
 
 msgid "The codes didn't match, so nothing was confirmed. If you didn't start this, someone else may be trying to get into your account."
 msgstr "Kodene stemte ikke overens, så ingenting ble bekreftet. Hvis du ikke startet dette selv, kan noen andre prøve å få tilgang til kontoen din."
@@ -1419,8 +1450,9 @@ msgstr "Den andre enheten er bekreftet og kan nå lese de krypterte meldingene d
 msgid "Verified. You can trust you're talking to the right person."
 msgstr "Verifisert. Du kan være trygg på at du snakker med riktig person."
 
-msgid "Backup is off. Your encrypted messages are kept only on your devices."
-msgstr "Sikkerhetskopiering er av. De krypterte meldingene dine lagres bare på enhetene dine."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:713
+msgid "Key storage is off. Your encrypted messages are kept only on your devices."
+msgstr "Nøkkellagring er av. De krypterte meldingene dine lagres bare på enhetene dine."
 
 msgid "Confirm it's you"
 msgstr "Bekreft at det er deg"
@@ -1437,17 +1469,22 @@ msgstr "Godkjenn fra en enhet der du allerede er logget inn"
 msgid "Enter recovery key"
 msgstr "Skriv inn gjenopprettingsnøkkel"
 
-msgid "Or the passphrase you chose instead"
-msgstr "Eller passfrasen du valgte i stedet"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1020
+msgid "Or the recovery passphrase you chose instead"
+msgstr "Eller gjenopprettingsfrasen du valgte i stedet"
 
-msgid "Reset encryption?"
-msgstr "Tilbakestille kryptering?"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1032
+#: ui/shared/views/SettingsView.cpp:231
+msgid "Reset digital identity?"
+msgstr "Tilbakestille digital identitet?"
 
-msgid "If you've lost both your recovery key and every other signed-in device, you can start over with a new recovery key. Messages you can't read now will stay unreadable, and people you chat with will see that your security details changed."
-msgstr "Hvis du har mistet både gjenopprettingsnøkkelen og alle andre enheter du er logget inn på, kan du begynne på nytt med en ny gjenopprettingsnøkkel. Meldinger du ikke kan lese nå, forblir uleselige, og de du chatter med, vil se at sikkerhetsdetaljene dine er endret."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1034
+msgid "If you've lost both your recovery key and every other signed-in device, you can start over with a new recovery key. Messages you can't read now will stay unreadable, and people you chat with will see that your digital identity changed."
+msgstr "Hvis du har mistet både gjenopprettingsnøkkelen og alle andre enheter du er logget inn på, kan du begynne på nytt med en ny gjenopprettingsnøkkel. Meldinger du ikke kan lese nå, forblir uleselige, og de du chatter med, vil se at din digitale identitet er endret."
 
-msgid "Reset encryption"
-msgstr "Tilbakestill kryptering"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1041
+msgid "Reset digital identity"
+msgstr "Tilbakestill digital identitet"
 
 msgid "Waiting for {0}"
 msgstr "Venter på {0}"
@@ -1515,8 +1552,9 @@ msgstr "Prøv igjen"
 msgid "Close"
 msgstr "Lukk"
 
-msgid "Your messages are now backed up"
-msgstr "Meldingene dine er nå sikkerhetskopiert"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1184
+msgid "Key storage is now on"
+msgstr "Nøkkellagring er nå slått på"
 
 msgid "Protect your messages"
 msgstr "Beskytt meldingene dine"
@@ -1527,8 +1565,9 @@ msgstr "Lagre gjenopprettingsnøkkelen din før du logger ut"
 msgid "Keep your messages safe"
 msgstr "Hold meldingene dine trygge"
 
-msgid "Tesseract turned on secure backup for your encrypted messages and made a recovery key for your account. You'll need that key to read your messages if you sign in on a new device or lose this one, so a reminder at the top of the window will help you save it."
-msgstr "Tesseract har slått på kryptert sikkerhetskopiering av de krypterte meldingene dine og laget en gjenopprettingsnøkkel for kontoen din. Du trenger nøkkelen for å lese meldingene dine hvis du logger inn på en ny enhet eller mister denne, så en påminnelse øverst i vinduet hjelper deg å lagre den."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1191
+msgid "Tesseract turned on key storage for your encrypted messages and made a recovery key for your account. You'll need that key to read your messages if you sign in on a new device or lose this one, so a reminder at the top of the window will help you save it."
+msgstr "Tesseract har slått på nøkkellagring for de krypterte meldingene dine og laget en gjenopprettingsnøkkel for kontoen din. Du trenger nøkkelen for å lese meldingene dine hvis du logger inn på en ny enhet eller mister denne, så en påminnelse øverst i vinduet hjelper deg å lagre den."
 
 msgid "Your messages are end-to-end encrypted. A recovery key lets you read them again if you sign in on a new device or lose this one."
 msgstr "Meldingene dine er ende-til-ende-krypterte. Med en gjenopprettingsnøkkel kan du lese dem igjen hvis du logger inn på en ny enhet eller mister denne."
@@ -1551,20 +1590,23 @@ msgstr "Vis gjenopprettingsnøkkelen min"
 msgid "Sign out without saving"
 msgstr "Logg ut uten å lagre"
 
-msgid "Choose a passphrase"
-msgstr "Velg en passfrase"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1262
+msgid "Choose a recovery passphrase"
+msgstr "Velg en gjenopprettingsfrase"
 
 msgid "Pick something memorable that you don't use anywhere else."
 msgstr "Velg noe du husker, og som du ikke bruker andre steder."
 
-msgid "The passphrases don't match."
-msgstr "Passfrasene er ikke like."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1285
+msgid "The recovery passphrases don't match."
+msgstr "Gjenopprettingsfrasene er ikke like."
 
 msgid "Enter your recovery key"
 msgstr "Skriv inn gjenopprettingsnøkkelen din"
 
-msgid "If you set a passphrase instead, enter that."
-msgstr "Hvis du har satt en passfrase i stedet, skriver du den inn."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1307
+msgid "If you set a recovery passphrase instead, enter that."
+msgstr "Hvis du har satt en gjenopprettingsfrase i stedet, skriver du den inn."
 
 msgid "{0} {1}%"
 msgstr "{0} {1}%"
@@ -1584,14 +1626,17 @@ msgstr "Tesseract lagrer den i den sikre lagringen på denne datamaskinen, slik 
 msgid "Sign out"
 msgstr "Logg ut"
 
-msgid "Resetting encryption"
-msgstr "Tilbakestiller kryptering"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1532
+msgid "Resetting digital identity"
+msgstr "Tilbakestiller digital identitet"
 
-msgid "Approve the reset in the browser window that just opened. This will continue once you've confirmed."
-msgstr "Godkjenn tilbakestillingen i nettleservinduet som nettopp åpnet seg. Dette fortsetter når du har bekreftet."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1543
+msgid "Approve the digital identity reset in the browser window that just opened. This will continue once you've confirmed."
+msgstr "Godkjenn tilbakestillingen av den digitale identiteten i nettleservinduet som nettopp åpnet seg. Dette fortsetter når du har bekreftet."
 
-msgid "Approve the reset as {0} in the browser window that just opened. If the browser is signed in as a different account, sign out there first, or copy the link into a private window."
-msgstr "Godkjenn tilbakestillingen som {0} i nettleservinduet som nettopp åpnet seg. Hvis nettleseren er logget inn med en annen konto, må du logge ut der først eller kopiere lenken til et privat vindu."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1546
+msgid "Approve the digital identity reset as {0} in the browser window that just opened. If the browser is signed in as a different account, sign out there first, or copy the link into a private window."
+msgstr "Godkjenn tilbakestillingen av den digitale identiteten som {0} i nettleservinduet som nettopp åpnet seg. Hvis nettleseren er logget inn med en annen konto, må du logge ut der først eller kopiere lenken til et privat vindu."
 
 msgid "Still waiting? Check that you approved it as {0}, not another account."
 msgstr "Venter det fortsatt? Sjekk at du godkjente som {0}, ikke som en annen konto."
@@ -1732,11 +1777,13 @@ msgstr "GIF-søket mislyktes"
 msgid "{0} ({1})"
 msgstr "{0} ({1})"
 
-msgid "{0}'s verified identity was reset."
-msgstr "Den verifiserte identiteten til {0} ble tilbakestilt."
+#: ui/shared/views/IdentityChangeBanner.cpp:60
+msgid "{0}'s verified digital identity was reset."
+msgstr "Den verifiserte digitale identiteten til {0} ble tilbakestilt."
 
-msgid "{0}'s identity was reset."
-msgstr "Identiteten til {0} ble tilbakestilt."
+#: ui/shared/views/IdentityChangeBanner.cpp:61
+msgid "{0}'s digital identity was reset."
+msgstr "Den digitale identiteten til {0} ble tilbakestilt."
 
 msgid "Withdraw verification"
 msgstr "Trekk tilbake verifiseringen"
@@ -1966,7 +2013,7 @@ msgstr "Områdets startside"
 msgid "No internet connection — reconnecting…"
 msgstr "Ingen internettilkobling – kobler til på nytt…"
 
-#: ui/shared/views/MainAppWidget.cpp:375
+#: ui/shared/views/MainAppWidget.cpp:376
 msgid "Can’t reach the server — reconnecting…"
 msgstr "Får ikke kontakt med serveren – kobler til på nytt…"
 
@@ -2341,17 +2388,20 @@ msgstr "Hopp til festet melding: {0}"
 msgid "Setting up secure channel…"
 msgstr "Setter opp sikker kanal…"
 
-msgid "Scan this QR code with your Matrix app"
-msgstr "Skann denne QR-koden med Matrix-appen din"
+#: ui/shared/views/QRGrantView.cpp:126
+msgid "Scan this QR code with the device you want to link"
+msgstr "Skann denne QR-koden med enheten du vil koble til"
 
-msgid "Enter the numeric code shown on the new device:"
-msgstr "Skriv inn tallkoden som vises på den nye enheten:"
+#: ui/shared/views/QRGrantView.cpp:134
+msgid "Enter the numeric code shown on the device you are linking:"
+msgstr "Skriv inn tallkoden som vises på enheten du kobler til:"
 
 msgid "Approve the sign-in in your browser…"
 msgstr "Godkjenn innloggingen i nettleseren din…"
 
-msgid "Device added successfully."
-msgstr "Enheten ble lagt til."
+#: ui/shared/views/QRGrantView.cpp:151
+msgid "Device linked successfully."
+msgstr "Enheten ble koblet til."
 
 msgid "Jump to a room, or @user to start a chat…"
 msgstr "Hopp til et rom, eller skriv @bruker for å starte en chat…"
@@ -2714,8 +2764,10 @@ msgstr "← Tilbake"
 msgid "Account"
 msgstr "Konto"
 
-msgid "Sessions"
-msgstr "Økter"
+#: ui/shared/views/SettingsView.cpp:149
+#: ui/shared/views/settings/DevicesSection.cpp:480
+msgid "Devices"
+msgstr "Enheter"
 
 msgid "Appearance"
 msgstr "Utseende"
@@ -2747,8 +2799,9 @@ msgstr "Logg ut"
 msgid "Clear all caches?"
 msgstr "Tømme alle hurtigbuffere?"
 
-msgid "Deletes all downloaded media and cached message history for this account, and closes open tabs and pop-out windows. Your rooms and messages reload from the server afterwards. Your sign-in and encryption keys are kept, so you stay logged in and verified."
-msgstr "Sletter all nedlastet media og hurtigbufret meldingshistorikk for denne kontoen, og lukker åpne faner og frittstående vinduer. Rommene og meldingene dine lastes inn på nytt fra tjeneren etterpå. Innloggingen og krypteringsnøklene beholdes, så du forblir innlogget og verifisert."
+#: ui/shared/views/SettingsView.cpp:214
+msgid "Deletes all downloaded media and cached message history for this account, and closes open tabs and pop-out windows. Your rooms and messages reload from the server afterwards. Your sign-in and message keys are kept, so you stay logged in and confirmed."
+msgstr "Sletter all nedlastet media og hurtigbufret meldingshistorikk for denne kontoen, og lukker åpne faner og frittstående vinduer. Rommene og meldingene dine lastes inn på nytt fra tjeneren etterpå. Innloggingen og meldingsnøklene beholdes, så du forblir innlogget og bekreftet."
 
 msgid "Clear"
 msgstr "Tøm"
@@ -2871,14 +2924,21 @@ msgstr "Åpne direktemelding"
 msgid "Verified"
 msgstr "Verifisert"
 
+#: ui/shared/views/settings/DevicesSection.cpp:125
+#: ui/shared/views/settings/DevicesSection.cpp:330
+msgid "Confirmed"
+msgstr "Bekreftet"
+
 msgid "Not verified"
 msgstr "Ikke verifisert"
 
-msgid "Not verified · verify this device first"
-msgstr "Ikke verifisert · verifiser denne enheten først"
+#: ui/shared/views/UserProfilePanel.cpp:196
+msgid "Not verified · confirm this device first"
+msgstr "Ikke verifisert · bekreft denne enheten først"
 
-msgid "Verified identity was reset"
-msgstr "Den verifiserte identiteten ble tilbakestilt"
+#: ui/shared/views/UserProfilePanel.cpp:202
+msgid "Verified digital identity was reset"
+msgstr "Den verifiserte digitale identiteten ble tilbakestilt"
 
 msgid "In a call"
 msgstr "I en samtale"
@@ -3063,8 +3123,10 @@ msgstr "(uten navn)"
 msgid "This device"
 msgstr "Denne enheten"
 
-msgid "Unverified"
-msgstr "Uverifisert"
+#: ui/shared/views/settings/DevicesSection.cpp:130
+#: ui/shared/views/settings/DevicesSection.cpp:333
+msgid "Unconfirmed"
+msgstr "Ubekreftet"
 
 msgid "Open in browser"
 msgstr "Åpne i nettleser"
@@ -3078,11 +3140,13 @@ msgstr "Fullfør utloggingen i nettleseren, og klikk deretter på \"Jeg har bekr
 msgid "Working…"
 msgstr "Jobber…"
 
-msgid "Loading sessions…"
-msgstr "Laster økter…"
+#: ui/shared/views/settings/DevicesSection.cpp:559
+msgid "Loading devices…"
+msgstr "Laster enheter…"
 
-msgid "No sessions."
-msgstr "Ingen økter."
+#: ui/shared/views/settings/DevicesSection.cpp:566
+msgid "No devices."
+msgstr "Ingen enheter."
 
 msgid "No system tray icon is available on this system, so closing the window always quits Tesseract."
 msgstr "Det finnes ikke noe ikon i systemfeltet på dette systemet, så Tesseract avsluttes alltid når du lukker vinduet."
@@ -3282,20 +3346,25 @@ msgstr "Se etter oppdateringer automatisk"
 msgid "Encryption"
 msgstr "Kryptering"
 
-msgid "Exclude insecure devices (takes effect after restart)"
-msgstr "Utelat usikre enheter (trer i kraft etter omstart)"
+#: ui/shared/views/settings/PrivacySection.cpp:216
+msgid "Exclude unconfirmed devices (takes effect after restart)"
+msgstr "Utelat ubekreftede enheter (trer i kraft etter omstart)"
 
-msgid "Only send encrypted messages to devices their owner has verified, and hide messages sent from devices that aren't. This device must be verified to send, and people whose clients don't verify their devices won't see your messages."
-msgstr "Send krypterte meldinger bare til enheter som eieren har verifisert, og skjul meldinger fra enheter som ikke er verifisert. Denne enheten må være verifisert for å kunne sende, og folk hvis klienter ikke verifiserer enhetene sine, vil ikke se meldingene dine."
+#: ui/shared/views/settings/PrivacySection.cpp:226
+msgid "Only send encrypted messages to devices their owner has confirmed, and hide messages sent from devices that aren't. This device must be confirmed to send, and people whose clients don't confirm their devices won't see your messages."
+msgstr "Send krypterte meldinger bare til enheter som eieren har bekreftet, og skjul meldinger fra enheter som ikke er bekreftet. Denne enheten må være bekreftet for å kunne sende, og folk hvis klienter ikke bekrefter enhetene sine, vil ikke se meldingene dine."
 
-msgid "Export room keys…"
-msgstr "Eksporter romnøkler…"
+#: ui/shared/views/settings/PrivacySection.cpp:238
+msgid "Export message keys…"
+msgstr "Eksporter meldingsnøkler…"
 
-msgid "Import room keys…"
-msgstr "Importer romnøkler…"
+#: ui/shared/views/settings/PrivacySection.cpp:242
+msgid "Import message keys…"
+msgstr "Importer meldingsnøkler…"
 
-msgid "Reset encryption…"
-msgstr "Tilbakestill kryptering…"
+#: ui/shared/views/settings/PrivacySection.cpp:246
+msgid "Reset digital identity…"
+msgstr "Tilbakestill digital identitet…"
 
 msgid "up to date"
 msgstr "oppdatert"
@@ -3405,7 +3474,7 @@ msgstr "Samtaler"
 msgid "Start calls"
 msgstr "Start samtaler"
 
-#: ui/shared/views/settings/RoomPermissionsSection.cpp
+#: ui/shared/views/settings/RoomPermissionsSection.cpp:118
 msgid "Join calls"
 msgstr "Delta i samtaler"
 
@@ -4532,248 +4601,250 @@ msgstr "Kunne ikke spille av lyden"
 msgid "No preview available"
 msgstr "Ingen forhåndsvisning tilgjengelig"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4155
 msgid "Can't open this file"
 msgstr "Kan ikke åpne denne filen"
 
-#: ui/shared/views/settings/AppearanceSection.cpp
+#: ui/shared/views/settings/AppearanceSection.cpp:203
 msgid "Compact"
 msgstr "Kompakt"
 
-#: ui/shared/views/settings/AppearanceSection.cpp
+#: ui/shared/views/settings/AppearanceSection.cpp:209
 msgid "Compact shows only room names, with smaller avatars."
 msgstr "Kompakt viser bare romnavn, med mindre avatarer."
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4086
 msgid "Couldn't download the file"
 msgstr "Kunne ikke laste ned filen"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4107
 msgid "Couldn't open the file"
 msgstr "Kunne ikke åpne filen"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4182
 msgid "Declared by the sender: {0}"
 msgstr "Oppgitt av avsender: {0}"
 
-#: ui/shared/views/settings/RoomListPreview.cpp
+#: ui/shared/views/settings/RoomListPreview.cpp:40
 msgid "Design"
 msgstr "Design"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4179
 msgid "Detected from its contents: {0}"
 msgstr "Gjenkjent fra innholdet: {0}"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4168
 msgid "File contents don't match"
 msgstr "Filinnholdet stemmer ikke"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4185
 msgid "File name extension: {0}"
 msgstr "Filendelse: {0}"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4169
 msgid "File type doesn't match its name"
 msgstr "Filtypen stemmer ikke med navnet"
 
-#: ui/shared/views/settings/RoomListPreview.cpp
+#: ui/shared/views/settings/RoomListPreview.cpp:49
 msgid "Jordan"
 msgstr "Jordan"
 
-#: ui/shared/views/settings/AppearanceSection.cpp
+#: ui/shared/views/settings/AppearanceSection.cpp:202
 msgid "Normal"
 msgstr "Normal"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4187
 msgid "Only open it if you trust the sender."
 msgstr "Åpne den bare hvis du stoler på avsenderen."
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4189
 msgid "Open anyway"
 msgstr "Åpne likevel"
 
-#: ui/shared/views/settings/MediaSection.cpp
+#: ui/shared/views/settings/MediaSection.cpp:62
 msgid "Open images, videos and files in the system's default viewer"
 msgstr "Åpne bilder, videoer og filer i systemets standardviser"
 
-#: ui/shared/views/MediaOverlayBase.cpp
+#: ui/shared/views/MediaOverlayBase.cpp:82
 msgid "Open in default viewer"
 msgstr "Åpne i standardviser"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4193
 msgid "Rename to .{0} and open"
 msgstr "Gi nytt navn til .{0} og åpne"
 
-#: ui/shared/views/settings/RoomListPreview.cpp
+#: ui/shared/views/settings/RoomListPreview.cpp:42
 msgid "Sam"
 msgstr "Sam"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4160
 msgid "Save as…"
 msgstr "Lagre som…"
 
-#: ui/shared/views/settings/RoomListPreview.cpp
+#: ui/shared/views/settings/RoomListPreview.cpp:52
 msgid "See you tomorrow"
 msgstr "Sees i morgen"
 
-#: ui/shared/views/settings/RoomListPreview.cpp
+#: ui/shared/views/settings/RoomListPreview.cpp:43
 msgid "The new icons look great"
 msgstr "De nye ikonene ser flotte ut"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4186
 msgid "none"
 msgstr "ingen"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4183
 msgid "unknown"
 msgstr "ukjent"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4157
 msgid "“{0}” can run programs on your computer, so Tesseract won't open it. You can save it instead."
 msgstr "«{0}» kan kjøre programmer på datamaskinen din, så Tesseract åpner den ikke. Du kan lagre den i stedet."
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4171
 msgid "“{0}” doesn't look like what it claims to be."
 msgstr "«{0}» ser ikke ut som det den utgir seg for å være."
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4173
 msgid "“{0}” has a file extension that doesn't match its type."
 msgstr "«{0}» har en filendelse som ikke stemmer med typen."
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4139
 msgid "Open this file?"
 msgstr "Åpne denne filen?"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4144
 msgid "unknown type"
 msgstr "ukjent type"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/shared/app/RoomPane.cpp:4141
 msgid "“{0}” isn't an image, video, audio or text file ({1}). Files like this can contain macros or run code in the app that opens them. Only open it if you trust the sender."
 msgstr "«{0}» er ikke en bilde-, video-, lyd- eller tekstfil ({1}). Slike filer kan inneholde makroer eller kjøre kode i appen som åpner dem. Åpne den bare hvis du stoler på avsenderen."
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:228
 msgid "Adjust individual text types"
 msgstr "Juster enkelte teksttyper"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:180
+#: ui/shared/views/settings/FontsEditor.cpp:183
 msgid "Base size"
 msgstr "Grunnstørrelse"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:39
 msgid "Buttons"
 msgstr "Knapper"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontFamilyPicker.cpp:18
+#: ui/shared/views/settings/FontsEditor.cpp:193
 msgid "Font"
 msgstr "Skrifttype"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/AppearanceSection.cpp:245
 msgid "Fonts"
 msgstr "Skrifter"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:38
 msgid "Headings"
 msgstr "Overskrifter"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:211
 msgid "Monospace font"
 msgstr "Skrift med fast bredde"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:264
 msgid "Reset to defaults"
 msgstr "Tilbakestill til standard"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:36
 msgid "Secondary text"
 msgstr "Sekundærtekst"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:152
 msgid "Secondary text and hints"
 msgstr "Sekundærtekst og hint"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:338
 msgid "System ({0} pt)"
 msgstr "System ({0} pt)"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:151
 msgid "The quick brown fox jumps over the lazy dog."
 msgstr "Vår sære Zulu fra badeøya spilte jo whist og quickstep i min taxi."
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:45
 msgid "{0} pt"
 msgstr "{0} pt"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:64
 msgid "Decrease {0}"
 msgstr "Reduser {0}"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:75
 msgid "Increase {0}"
 msgstr "Øk {0}"
 
-#: ui/shared/views/settings/FontsEditor.cpp
+#: ui/shared/views/settings/FontsEditor.cpp:256
 msgid "Reset {0}"
 msgstr "Tilbakestill {0}"
 
-#: ui/shared/views/EncryptionSetupOverlay.cpp
+#: ui/shared/views/EncryptionSetupOverlay.cpp:564
 msgid "Another of your devices already took this request. You can close this."
 msgstr "En annen av enhetene dine har allerede tatt denne forespørselen. Du kan lukke dette."
 
-#: ui/shared/views/EncryptionSetupOverlay.cpp
-msgid "The other device cancelled the verification."
-msgstr "Den andre enheten avbrøt verifiseringen."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:566
+msgid "The other device cancelled the confirmation."
+msgstr "Den andre enheten avbrøt bekreftelsen."
 
-#: ui/shared/views/EncryptionSetupOverlay.cpp
+#: ui/shared/views/EncryptionSetupOverlay.cpp:568
 msgid "The request timed out. Please try again."
 msgstr "Forespørselen ble tidsavbrutt. Prøv igjen."
 
-#: ui/shared/views/EncryptionSetupOverlay.cpp
+#: ui/shared/views/EncryptionSetupOverlay.cpp:575
 msgid "Something went wrong while confirming. Please try again."
 msgstr "Noe gikk galt under bekreftelsen. Prøv igjen."
 
-#: ui/shared/views/settings/AppearanceSection.cpp
+#: ui/shared/views/settings/AppearanceSection.cpp:144
 msgid "Show my name and avatar"
 msgstr "Vis navnet og avataren min"
 
-#: ui/shared/app/ShellBase_navigation.cpp
+#: ui/shared/app/ShellBase_navigation.cpp:486
 msgid "You don't have permission to join calls in this room."
 msgstr "Du har ikke tillatelse til å bli med i samtaler i dette rommet."
 
-#: ui/shared/app/ShellBase_navigation.cpp
+#: ui/shared/app/ShellBase_navigation.cpp:487
 msgid "A moderator needs to start the call."
 msgstr "En moderator må starte samtalen."
 
-#: ui/shared/views/settings/MediaSection.cpp
+#: ui/shared/views/settings/MediaSection.cpp:68
 msgid "Recompress images before sending (animated images are never changed)"
 msgstr "Komprimer bilder på nytt før sending (animerte bilder endres aldri)"
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/macos/src/MainWindowController.mm:6349 ui/shared/app/RoomPane.cpp:1233
 msgid "This image can't be sent because its metadata can't be removed."
 msgstr "Dette bildet kan ikke sendes fordi metadataene ikke kan fjernes."
 
 
-#: ui/shared/views/LoginView.cpp
+#: ui/shared/views/LoginView.cpp:199
 msgid "Settings"
 msgstr "Innstillinger"
 
-#: ui/shared/views/settings/NetworkSection.cpp
+#: ui/shared/views/settings/NetworkSection.cpp:170
 msgid "Applied now. Calls use the new proxy after a restart."
 msgstr "Brukt med en gang. Samtaler bruker den nye proxyen etter en omstart."
 
-#: ui/shared/app
+#: ui/shared/app/ShellBase_accounts.cpp:1749
 msgid "Couldn't reconnect your session. Check your connection, or sign out and back in from Settings."
 msgstr "Kunne ikke koble til økten din på nytt. Sjekk tilkoblingen, eller logg ut og inn igjen fra Innstillinger."
 
-#: ui/shared/app
-msgid "Replace backup"
-msgstr "Erstatt sikkerhetskopi"
+#: ui/shared/views/EncryptionSetupOverlay.cpp:1238
+msgid "Replace key storage"
+msgstr "Erstatt nøkkellagring"
 
-#: ui/shared/app
-msgid "This account already has a key backup on the server. Replacing it can make older messages unreadable on your other devices. Only continue if you can't use your old recovery key."
-msgstr "Denne kontoen har allerede en nøkkelsikkerhetskopi på serveren. Hvis du erstatter den, kan eldre meldinger bli uleselige på de andre enhetene dine. Fortsett bare hvis du ikke kan bruke den gamle gjenopprettingsnøkkelen."
+#: ui/shared/views/EncryptionSetupOverlay.cpp:290
+msgid "This account already has key storage on the server. Replacing it can make older messages unreadable on your other devices. Only continue if you can't use your old recovery key."
+msgstr "Denne kontoen har allerede nøkkellagring på serveren. Hvis du erstatter den, kan eldre meldinger bli uleselige på de andre enhetene dine. Fortsett bare hvis du ikke kan bruke den gamle gjenopprettingsnøkkelen."
 
-#: ui/shared/app/RoomPane.cpp
+#: ui/macos/src/MainWindowController.mm:6525 ui/shared/app/RoomPane.cpp:1364
 msgid "{0} image can't be sent because its metadata can't be removed. Remove it to send the rest."
 msgid_plural "{0} images can't be sent because their metadata can't be removed. Remove them to send the rest."
 msgstr[0] "{0} bilde kan ikke sendes fordi metadataene ikke kan fjernes. Fjern det for å sende resten."

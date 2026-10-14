@@ -123,7 +123,7 @@ void QRGrantView::set_state_(State s)
         break;
 
     case State::ShowQR:
-        status_lbl_->set_text(tk::tr("Scan this QR code with your Matrix app"));
+        status_lbl_->set_text(tk::tr("Scan this QR code with the device you want to link"));
         qr_view_->set_visible(true);
         cancel_btn_->set_label(tk::tr("Cancel"));
         cancel_btn_->set_visible(true);
@@ -131,7 +131,7 @@ void QRGrantView::set_state_(State s)
 
     case State::CheckCode:
         status_lbl_->set_text(
-            tk::tr("Enter the numeric code shown on the new device:"));
+            tk::tr("Enter the numeric code shown on the device you are linking:"));
         if (check_input_field_)
             check_input_field_->set_visible(true);
         confirm_btn_->set_enabled(true);
@@ -148,7 +148,7 @@ void QRGrantView::set_state_(State s)
         break;
 
     case State::Done:
-        status_lbl_->set_text(tk::tr("Device added successfully."));
+        status_lbl_->set_text(tk::tr("Device linked successfully."));
         close_btn_->set_visible(true);
         break;
 

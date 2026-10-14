@@ -161,7 +161,7 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
         return raw;
     };
     skip_link_ = make_link(tk::tr("Skip for now"), [this] { skip_(); });
-    passphrase_link_ = make_link(tk::tr("Use a passphrase instead"),
+    passphrase_link_ = make_link(tk::tr("Use a recovery passphrase instead"),
                                  [this] { use_passphrase_(); });
     back_link_ = make_link(tk::tr("Back"), [this] { go_back_(); });
     lost_link_ = make_link(tk::tr("I've lost my recovery key and other devices"),
@@ -169,7 +169,7 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
     reject_link_ = make_link(tk::tr("Not me"), [this] { reject_(); });
     remove_key_link_ = make_link(tk::tr("Sign out and delete the key"),
                                  [this] { sign_out_removing_key_(); });
-    turn_off_link_ = make_link(tk::tr("Turn off backup"), [this] { turn_off_backup_(); });
+    turn_off_link_ = make_link(tk::tr("Turn off key storage"), [this] { turn_off_backup_(); });
 
     device_card_ = add_child(tk::create_widget<OptionCardButton>(this));
     device_card_->set_visible(false);
@@ -210,14 +210,14 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
 
         auto passphrase = tk::create_widget<tk::TextField>(this, 36.0f);
         passphrase->set_password(true);
-        passphrase->set_accessible_name(tk::tr("Passphrase"));
+        passphrase->set_accessible_name(tk::tr("Recovery passphrase"));
         passphrase->set_visible(false);
         passphrase->set_on_changed(repaint);
         passphrase_field_ = add_child(std::move(passphrase));
 
         auto confirm = tk::create_widget<tk::TextField>(this, 36.0f);
         confirm->set_password(true);
-        confirm->set_accessible_name(tk::tr("Confirm passphrase"));
+        confirm->set_accessible_name(tk::tr("Confirm recovery passphrase"));
         confirm->set_visible(false);
         confirm->set_on_changed(repaint);
         confirm->set_on_submit(submit);
@@ -225,7 +225,7 @@ EncryptionSetupOverlay::EncryptionSetupOverlay(Mode mode)
 
         auto key = tk::create_widget<tk::TextField>(this, 36.0f);
         key->set_password(false);
-        key->set_accessible_name(tk::tr("Recovery key or passphrase"));
+        key->set_accessible_name(tk::tr("Recovery key or recovery passphrase"));
         key->set_visible(false);
         key->set_on_changed(repaint);
         key->set_on_submit(submit);
@@ -287,7 +287,7 @@ void EncryptionSetupOverlay::advance_progress(uint8_t step,
     {
         replace_backup_pending_ = true;
         advance_step_(Step::Intro);
-        error_msg_ = tk::tr("This account already has a key backup on the server. "
+        error_msg_ = tk::tr("This account already has key storage on the server. "
                             "Replacing it can make older messages unreadable on your "
                             "other devices. Only continue if you can't use your old "
                             "recovery key.");
@@ -563,7 +563,7 @@ void EncryptionSetupOverlay::verification_cancelled(const std::string& cancel_co
     if (cancel_code == "m.accepted")
         msg = tk::tr("Another of your devices already took this request. You can close this.");
     else if (cancel_code == "m.user")
-        msg = tk::tr("The other device cancelled the verification.");
+        msg = tk::tr("The other device cancelled the confirmation.");
     else if (cancel_code == "m.timeout")
         msg = tk::tr("The request timed out. Please try again.");
     else if (cancel_code == "m.mismatched_sas" || cancel_code == "m.key_mismatch" ||
@@ -642,7 +642,7 @@ void EncryptionSetupOverlay::sign_out_removing_key_()
 void EncryptionSetupOverlay::turn_off_backup_()
 {
     if (mode_ != Mode::AutoSetupNotice) return;
-    progress_label_    = tk::tr("Turning off backup\xe2\x80\xa6");
+    progress_label_    = tk::tr("Turning off key storage\xe2\x80\xa6");
     progress_fraction_ = -1.0f;
     advance_step_(Step::Progress);
     if (on_turn_off_backup) on_turn_off_backup();
@@ -710,7 +710,7 @@ std::string EncryptionSetupOverlay::done_text_() const
             return tk::tr("Verified. You can trust you're talking to the "
                           "right person.");
         case DoneKind::BackupOff:
-            return tk::tr("Backup is off. Your encrypted messages are kept only "
+            return tk::tr("Key storage is off. Your encrypted messages are kept only "
                           "on your devices.");
     }
     return {};
@@ -1017,7 +1017,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                                   "already signed in"),
                            true);
             place_card(key_card_, tk::tr("Enter recovery key"),
-                       tk::tr("Or the passphrase you chose instead"), !has_other_device_);
+                       tk::tr("Or the recovery passphrase you chose instead"), !has_other_device_);
 
             left_link(lost_link_, row_y - 2.0f,
                       tk::tr("I've lost my recovery key and other devices"));
@@ -1029,16 +1029,16 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         // ── LostAccess (Recover) ─────────────────────────────────────────────
         case Step::LostAccess:
         {
-            draw_title(tk::tr("Reset encryption?"));
+            draw_title(tk::tr("Reset digital identity?"));
             access_body_ =
                 tk::tr("If you've lost both your recovery key and every other "
                        "signed-in device, you can start over with a new recovery "
                        "key. Messages you can't read now will stay unreadable, "
-                       "and people you chat with will see that your security "
-                       "details changed.");
+                       "and people you chat with will see that your digital "
+                       "identity changed.");
             paint_paragraph(ctx, {cx, content_y, cw, 0}, access_body_, tk::FontRole::Body,
                             pal.text_secondary);
-            place_right_primary(tk::tr("Reset encryption"), true);
+            place_right_primary(tk::tr("Reset digital identity"), true);
             left_link(back_link_, by, tk::tr("Back"));
             break;
         }
@@ -1181,14 +1181,14 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             const bool save_key = mode_ == Mode::SaveKey;
             const bool sign_out = save_key && before_sign_out_;
             const bool notice   = mode_ == Mode::AutoSetupNotice;
-            draw_title(notice     ? tk::tr("Your messages are now backed up")
+            draw_title(notice     ? tk::tr("Key storage is now on")
                        : fresh    ? tk::tr("Protect your messages")
                        : sign_out ? tk::tr("Save your recovery key before you sign out")
                        : save_key ? tk::tr("Keep your messages safe")
                                   : tk::tr("Confirm it's you"));
             const std::string body =
                 notice
-                    ? tk::tr("Tesseract turned on secure backup for your "
+                    ? tk::tr("Tesseract turned on key storage for your "
                              "encrypted messages and made a recovery key for your "
                              "account. You'll need that key to read your messages "
                              "if you sign in on a new device or lose this one, so "
@@ -1232,10 +1232,10 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             // generated key. Deliberately a quiet link, not an upfront choice.
             if (fresh)
                 left_link(passphrase_link_, by - kEncryptionSetupBtnH - 6.0f,
-                          tk::tr("Use a passphrase instead"));
+                          tk::tr("Use a recovery passphrase instead"));
 
             const std::string prim = notice     ? tk::tr("OK")
-                                     : fresh && replace_backup_pending_ ? tk::tr("Replace backup")
+                                     : fresh && replace_backup_pending_ ? tk::tr("Replace key storage")
                                      : fresh    ? tk::tr("Create recovery key")
                                      : save_key ? tk::tr("Show my recovery key")
                                                 : tk::tr("Continue");
@@ -1247,7 +1247,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                 left_link(remove_key_link_, by - kEncryptionSetupBtnH - 6.0f,
                           tk::tr("Sign out and delete the key"));
             if (notice)
-                left_link(turn_off_link_, by, tk::tr("Turn off backup"));
+                left_link(turn_off_link_, by, tk::tr("Turn off key storage"));
             if (!notice)
                 left_link(skip_link_, by,
                           sign_out   ? tk::tr("Sign out without saving")
@@ -1259,7 +1259,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         // ── PassphraseEntry (Fresh only) ─────────────────────────────────────
         case Step::PassphraseEntry:
         {
-            draw_title(tk::tr("Choose a passphrase"));
+            draw_title(tk::tr("Choose a recovery passphrase"));
             access_body_ = tk::tr("Pick something memorable that you don't use "
                                   "anywhere else.");
             paint_paragraph(ctx, {cx, content_y, cw, 0}, access_body_, tk::FontRole::Body,
@@ -1267,11 +1267,11 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
 
             tk::Rect f1 = passphrase_field_rect_value();
             tk::Rect f2 = passphrase_confirm_field_rect_value();
-            paint_paragraph(ctx, {cx, f1.y - 20.0f, cw, 0}, tk::tr("Passphrase"),
+            paint_paragraph(ctx, {cx, f1.y - 20.0f, cw, 0}, tk::tr("Recovery passphrase"),
                             tk::FontRole::Small, pal.text_muted);
             place_field(passphrase_field_, f1);
             paint_paragraph(ctx, {cx, f2.y - 20.0f, cw, 0},
-                            tk::tr("Confirm passphrase"),
+                            tk::tr("Confirm recovery passphrase"),
                             tk::FontRole::Small, pal.text_muted);
             place_field(passphrase_confirm_field_, f2);
 
@@ -1282,7 +1282,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
                                           : std::string();
             std::string hint = error_msg_;
             if (hint.empty() && !confirm.empty() && !passphrases_match_())
-                hint = tk::tr("The passphrases don't match.");
+                hint = tk::tr("The recovery passphrases don't match.");
             if (!hint.empty())
             {
                 const float hh = paint_paragraph(ctx, {cx, f2.y + f2.h + 10.0f, cw, 0}, hint,
@@ -1304,7 +1304,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         case Step::EnterKey:
         {
             draw_title(tk::tr("Enter your recovery key"));
-            access_body_ = tk::tr("If you set a passphrase instead, enter that.");
+            access_body_ = tk::tr("If you set a recovery passphrase instead, enter that.");
             paint_paragraph(ctx, {cx, card.y + 92.0f, cw, 0}, access_body_,
                             tk::FontRole::Small, pal.text_muted);
 
@@ -1529,7 +1529,7 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
         // ── ResetApproving (cross-signing reset awaiting browser approval) ───
         case Step::ResetApproving:
         {
-            draw_title(tk::tr("Resetting encryption"));
+            draw_title(tk::tr("Resetting digital identity"));
 
             // The approval page acts on whichever account the *browser* is
             // signed in as — nothing in the server-issued link pins it to
@@ -1540,10 +1540,10 @@ void EncryptionSetupOverlay::paint(tk::PaintCtx& ctx)
             if (failed)
                 body = error_msg_;
             else if (reset_account_.empty())
-                body = tk::tr("Approve the reset in the browser window that just "
-                              "opened. This will continue once you've confirmed.");
+                body = tk::tr("Approve the digital identity reset in the browser window "
+                              "that just opened. This will continue once you've confirmed.");
             else
-                body = tk::trf(tk::tr("Approve the reset as {0} in the browser window "
+                body = tk::trf(tk::tr("Approve the digital identity reset as {0} in the browser window "
                                       "that just opened. If the browser is signed in "
                                       "as a different account, sign out there first, "
                                       "or copy the link into a private window."),

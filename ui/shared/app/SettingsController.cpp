@@ -792,7 +792,7 @@ void SettingsController::export_room_keys()
         return;
 
     show_passphrase_prompt(
-        tk::tr("Export room keys"),
+        tk::tr("Export message keys"),
         [this](std::string passphrase)
         {
             if (passphrase.empty())
@@ -838,7 +838,7 @@ void SettingsController::import_room_keys()
                 return;
 
             show_passphrase_prompt(
-                tk::tr("Import room keys"),
+                tk::tr("Import message keys"),
                 [this, path = std::move(path)](std::string passphrase) mutable
                 {
                     if (passphrase.empty())

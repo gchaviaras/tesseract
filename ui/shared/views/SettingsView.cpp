@@ -146,7 +146,7 @@ SettingsView::SettingsView()
     // "Account" since both relate to the signed-in user's identity.
     auto tabs = tk::create_widget<tk::SideTabView>(this);
     tabs->add_tab(tk::tr("Account"), std::move(account));
-    tabs->add_tab(tk::tr("Sessions"), std::move(devices));
+    tabs->add_tab(tk::tr("Devices"), std::move(devices));
     tabs->add_tab(tk::tr("General"), std::move(general));
     tabs->add_tab(tk::tr("Appearance"), std::move(appearance));
     tabs->add_tab(tk::tr("Notifications"), std::move(notifications));
@@ -214,8 +214,8 @@ SettingsView::SettingsView()
              .body          = tk::tr("Deletes all downloaded media and cached message "
                               "history for this account, and closes open tabs and "
                               "pop-out windows. Your rooms and messages reload from the "
-                              "server afterwards. Your sign-in and encryption keys are "
-                              "kept, so you stay logged in and verified."),
+                              "server afterwards. Your sign-in and message keys are "
+                              "kept, so you stay logged in and confirmed."),
              .confirm_label = tk::tr("Clear"),
              .cancel_label  = tk::tr("Cancel"),
              .destructive   = true},
@@ -228,7 +228,7 @@ SettingsView::SettingsView()
     privacy_->on_reset_identity = [this]
     {
         confirm_dialog_->open(
-            {.title         = tk::tr("Reset encryption?"),
+            {.title         = tk::tr("Reset digital identity?"),
              .body          = tk::tr("Only do this if you've lost your recovery key and "
                               "have no other signed-in device. Messages you can't "
                               "read now will stay unreadable, and your other devices "

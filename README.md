@@ -168,13 +168,13 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 ### Security & privacy
 
 - End-to-end encryption with SAS verification of your own devices and of other users (numbers, plus emoji when the other side offers them)
-- Key backup recovery and room-key export / import
+- Key storage recovery and message-key export / import
 - Initial encryption setup for new accounts
 - OS-native secure credential storage on every platform
 - Privacy controls, including presence send/poll toggles
-- Device & session management
+- Device management
 - MSC4278 media preview controls
-- Cryptographic identity reset
+- Digital identity reset
 - Clear-cache action (leaves the crypto/session store intact)
 - Optional local crash handler (opt-in, off by default): writes a stack trace to disk only, nothing is transmitted anywhere
 
@@ -263,7 +263,7 @@ Change proposals where the homeserver advertises support for them:
 - [MSC4426](https://github.com/matrix-org/matrix-spec-proposals/pull/4426) — user status profile fields: a self-set emoji + text status, plus an automatic "in a call" indicator published while you're in a MatrixRTC call
 - [MSC4334](https://github.com/matrix-org/matrix-spec-proposals/pull/4334) — room language: shown in the room info panel, and announced to screen readers as the language of the room's messages (Qt6, Windows and macOS)
 - [MSC4108](https://github.com/matrix-org/matrix-spec-proposals/pull/4108) — QR-code login
-- [MSC4153](https://github.com/matrix-org/matrix-spec-proposals/pull/4153) — "exclude insecure devices" *(opt-in setting)*: room keys go only to cross-signed devices, messages from devices that aren't cross-signed are hidden, and encrypted rooms warn when a member's identity is reset
+- [MSC4153](https://github.com/matrix-org/matrix-spec-proposals/pull/4153) — "exclude insecure devices" *(opt-in setting)*: message keys go only to confirmed devices, messages from devices that aren't confirmed are hidden, and encrypted rooms warn when a member's digital identity is reset
 - [MSC4405](https://github.com/matrix-org/matrix-spec-proposals/pull/4405) — SAS verification compares the `decimal` numbers first; emoji are shown only as a secondary check, and a decimal-only peer works
 - [MSC4391](https://github.com/matrix-org/matrix-spec-proposals/pull/4391) — in-room bot commands
 - [MSC4278](https://github.com/matrix-org/matrix-spec-proposals/pull/4278) — media preview gating

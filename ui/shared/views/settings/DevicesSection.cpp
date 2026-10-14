@@ -116,15 +116,20 @@ public:
         std::string n = device_.display_name.empty() ? tk::tr("(no name)")
                                                      : device_.display_name;
         if (device_.is_current)
-            n += ", " + tk::tr("This device");
+        {
+            n = tk::trf(tk::tr("{0}, {1}"), {n, tk::tr("This device")});
+        }
         if (device_.verification ==
             tesseract::Client::DeviceVerification::Verified)
-            n += ", " + tk::tr("Verified");
+        {
+            n = tk::trf(tk::tr("{0}, {1}"), {n, tk::tr("Confirmed")});
+        }
         else if (device_.verification ==
                  tesseract::Client::DeviceVerification::Unverified)
-            n += ", " + tk::tr("Unverified");
-        n += ", " + compose_subline(device_);
-        return n;
+        {
+            n = tk::trf(tk::tr("{0}, {1}"), {n, tk::tr("Unconfirmed")});
+        }
+        return tk::trf(tk::tr("{0}, {1}"), {n, compose_subline(device_)});
     }
 
 private:
@@ -322,10 +327,10 @@ void DevicesSection::DeviceRow::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
         chip_st.role = tk::FontRole::UiSemibold;
         std::string verif_label = tk::tr("Unknown");
         if (device_.verification == tesseract::Client::DeviceVerification::Verified)
-            verif_label = tk::tr("Verified");
+            verif_label = tk::tr("Confirmed");
         else if (device_.verification ==
                  tesseract::Client::DeviceVerification::Unverified)
-            verif_label = tk::tr("Unverified");
+            verif_label = tk::tr("Unconfirmed");
         verif_layout_ = ctx.factory.build_text(verif_label, chip_st);
     }
     if (device_.is_current && !this_dev_layout_)
@@ -472,7 +477,7 @@ void DevicesSection::DeviceRow::paint_before_children(tk::PaintCtx& ctx)
 
 DevicesSection::DevicesSection()
 {
-    group_ = add_group(tk::tr("Sessions"));
+    group_ = add_group(tk::tr("Devices"));
 }
 
 DevicesSection::~DevicesSection() = default;
@@ -551,14 +556,14 @@ void DevicesSection::rebuild_()
 
     if (loading_)
     {
-        auto lbl = tk::create_widget<tk::Label>(this, tk::tr("Loading sessions…"));
+        auto lbl = tk::create_widget<tk::Label>(this, tk::tr("Loading devices…"));
         loading_label_ = group_->add_widget(std::move(lbl));
         return;
     }
 
     if (devices_.empty())
     {
-        auto lbl = tk::create_widget<tk::Label>(this, tk::tr("No sessions."));
+        auto lbl = tk::create_widget<tk::Label>(this, tk::tr("No devices."));
         empty_label_ = group_->add_widget(std::move(lbl));
         return;
     }

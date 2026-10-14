@@ -49,7 +49,7 @@ std::string EncryptionReminderBanner::label_text() const
 {
     switch (kind_)
     {
-        case Kind::SetupNeeded: return tk::tr("Your messages aren't backed up yet.");
+        case Kind::SetupNeeded: return tk::tr("Key storage isn't set up yet.");
         case Kind::Locked:
             return tk::tr("Your encrypted messages are locked on this device.");
         case Kind::SaveKey:
@@ -62,7 +62,7 @@ void EncryptionReminderBanner::apply_kind_()
 {
     if (label_) label_->set_text(label_text());
     if (action_)
-        action_->set_label(kind_ == Kind::SetupNeeded ? tk::tr("Set up recovery")
+        action_->set_label(kind_ == Kind::SetupNeeded ? tk::tr("Set up key storage")
                            : kind_ == Kind::SaveKey   ? tk::tr("Show me")
                                                       : tk::tr("Unlock"));
 }

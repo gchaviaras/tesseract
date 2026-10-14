@@ -1004,10 +1004,10 @@ std::vector<ShellBase::UserMenuItem> ShellBase::build_user_menu_items_(
         items.push_back({tk::tr("Keyboard Shortcuts\xe2\x80\xa6"),
                          [app = main_app_] { app->show_keyboard_shortcuts(); }});
     if (verify_session)
-        items.push_back({tk::tr("Verify this session\xe2\x80\xa6"), std::move(verify_session)});
+        items.push_back({tk::tr("Confirm this device\xe2\x80\xa6"), std::move(verify_session)});
     items.push_back({tk::tr("Add Account\xe2\x80\xa6"), std::move(add_account)});
     if (server_info_.supports_qr_grant && show_qr_grant)
-        items.push_back({tk::tr("Add device via QR\xe2\x80\xa6"), std::move(show_qr_grant)});
+        items.push_back({tk::tr("Link a device\xe2\x80\xa6"), std::move(show_qr_grant)});
     const std::string& name =
         my_display_name_.empty() ? my_user_id_ : my_display_name_;
     items.push_back({tk::trf(tk::tr("Log Out {0}"), {name}), std::move(logout)});

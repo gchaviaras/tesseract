@@ -394,7 +394,7 @@ void RoomPane::wire_room_view_()
                             if (!alive.lock()) return;
                             if (!ok)
                                 shell_show_status_message_(tk::trf(
-                                    tk::tr("Couldn't update the identity: {0}"), {msg}));
+                                    tk::tr("Couldn't update the digital identity: {0}"), {msg}));
                             refresh_profile_trust_(user_id);
                         });
                 });
@@ -2913,7 +2913,7 @@ void RoomPane::resolve_identity_warning_(const tesseract::IdentityWarning& w)
                 {
                     if (!alive.lock()) return;
                     shell_show_status_message_(tk::trf(
-                        tk::tr("Couldn't update the identity: {0}"), {msg}));
+                        tk::tr("Couldn't update the digital identity: {0}"), {msg}));
                 });
         });
 }

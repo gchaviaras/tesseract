@@ -5747,7 +5747,7 @@ void MainWindow::refresh_sync_status()
     {
         sync_progress_shown_ = true;
         SetWindowTextW(hStatus_,
-                       utf8_to_wstr(tk::trf(tk::tr("Downloading encryption keys ({0})…"),
+                       utf8_to_wstr(tk::trf(tk::tr("Downloading message keys ({0})…"),
                                             {std::to_string(last_imported_keys_)}))
                            .c_str());
         return;
@@ -6437,7 +6437,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         [this](bool ok, std::string error)
     {
         if (ok)
-            MessageBoxW(hwnd_, utf8_to_wstr(tk::tr("Room keys exported successfully.")).c_str(),
+            MessageBoxW(hwnd_, utf8_to_wstr(tk::tr("Message keys exported successfully.")).c_str(),
                         utf8_to_wstr(tk::tr("Export complete")).c_str(), MB_OK | MB_ICONINFORMATION);
         else
             MessageBoxW(hwnd_, utf8_to_wstr(error).c_str(),
@@ -6448,7 +6448,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         [this](bool ok, std::string error)
     {
         if (ok)
-            MessageBoxW(hwnd_, utf8_to_wstr(tk::tr("Room keys imported successfully.")).c_str(),
+            MessageBoxW(hwnd_, utf8_to_wstr(tk::tr("Message keys imported successfully.")).c_str(),
                         utf8_to_wstr(tk::tr("Import complete")).c_str(), MB_OK | MB_ICONINFORMATION);
         else
             MessageBoxW(hwnd_, utf8_to_wstr(error).c_str(),

@@ -163,8 +163,8 @@ TEST_CASE("passphrase fields are labelled and never expose the typed text",
     ov->passphrase_field()->set_text("hunter2");
     st.run(*ov);
 
-    CHECK(ov->passphrase_field()->access_name() == "Passphrase");
-    CHECK(ov->passphrase_confirm_field()->access_name() == "Confirm passphrase");
+    CHECK(ov->passphrase_field()->access_name() == "Recovery passphrase");
+    CHECK(ov->passphrase_confirm_field()->access_name() == "Confirm recovery passphrase");
     AccessNode tree = build_access_tree(ov.get());
     CHECK(find_named(tree, "hunter2") == nullptr);
 }

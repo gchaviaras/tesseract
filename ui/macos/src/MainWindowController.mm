@@ -6745,7 +6745,7 @@ private:
         NSAlert* alert = [[NSAlert alloc] init];
         alert.messageText = ok ? TkTr("Export complete") : TkTr("Export failed");
         alert.informativeText = ok
-            ? TkTr("Room keys exported successfully.")
+            ? TkTr("Message keys exported successfully.")
             : [NSString stringWithUTF8String:error.c_str()];
         alert.alertStyle = ok ? NSAlertStyleInformational : NSAlertStyleWarning;
         [alert beginSheetModalForWindow:s.window completionHandler:nil];
@@ -6759,7 +6759,7 @@ private:
         NSAlert* alert = [[NSAlert alloc] init];
         alert.messageText = ok ? TkTr("Import complete") : TkTr("Import failed");
         alert.informativeText = ok
-            ? TkTr("Room keys imported successfully.")
+            ? TkTr("Message keys imported successfully.")
             : [NSString stringWithUTF8String:error.c_str()];
         alert.alertStyle = ok ? NSAlertStyleInformational : NSAlertStyleWarning;
         [alert beginSheetModalForWindow:s.window completionHandler:nil];
@@ -8028,7 +8028,7 @@ private:
         text = TkTr("Reconnecting…");
     else if (keys_busy)
         text = [NSString
-            stringWithUTF8String:tk::trf(tk::tr("Downloading encryption keys ({0})…"),
+            stringWithUTF8String:tk::trf(tk::tr("Downloading message keys ({0})…"),
                                          {std::to_string(ss.imported_keys)})
                                      .c_str()];
     else if (ss.has_override)

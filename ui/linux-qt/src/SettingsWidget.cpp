@@ -158,14 +158,14 @@ void SettingsWidget::set_controller(tesseract::SettingsController* ctrl)
         [this](std::string suggested, std::function<void(std::string)> cb)
     {
         QString path = QFileDialog::getSaveFileName(
-            this, QString::fromStdString(tk::tr("Export room keys")), QString::fromStdString(suggested));
+            this, QString::fromStdString(tk::tr("Export message keys")), QString::fromStdString(suggested));
         if (!path.isEmpty())
             cb(path.toStdString());
     };
     ctrl->show_open_file_dialog =
         [this](std::function<void(std::string)> cb)
     {
-        QString path = QFileDialog::getOpenFileName(this, QString::fromStdString(tk::tr("Import room keys")));
+        QString path = QFileDialog::getOpenFileName(this, QString::fromStdString(tk::tr("Import message keys")));
         if (!path.isEmpty())
             cb(path.toStdString());
     };
@@ -173,7 +173,7 @@ void SettingsWidget::set_controller(tesseract::SettingsController* ctrl)
     {
         if (ok)
             QMessageBox::information(this, QString::fromStdString(tk::tr("Export complete")),
-                                     QString::fromStdString(tk::tr("Room keys exported successfully.")));
+                                     QString::fromStdString(tk::tr("Message keys exported successfully.")));
         else
             QMessageBox::warning(this, QString::fromStdString(tk::tr("Export failed")),
                                  QString::fromStdString(error));
@@ -182,7 +182,7 @@ void SettingsWidget::set_controller(tesseract::SettingsController* ctrl)
     {
         if (ok)
             QMessageBox::information(this, QString::fromStdString(tk::tr("Import complete")),
-                                     QString::fromStdString(tk::tr("Room keys imported successfully.")));
+                                     QString::fromStdString(tk::tr("Message keys imported successfully.")));
         else
             QMessageBox::warning(this, QString::fromStdString(tk::tr("Import failed")),
                                  QString::fromStdString(error));

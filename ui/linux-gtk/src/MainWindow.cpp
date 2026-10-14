@@ -3168,7 +3168,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         [this](std::string suggested_name, std::function<void(std::string)> cb)
     {
         GtkFileDialog* dlg = gtk_file_dialog_new();
-        gtk_file_dialog_set_title(dlg, tk::tr("Save room keys").c_str());
+        gtk_file_dialog_set_title(dlg, tk::tr("Save message keys").c_str());
         gtk_file_dialog_set_initial_name(dlg, suggested_name.c_str());
 
         struct SaveCtx { std::function<void(std::string)> cb; };
@@ -3197,7 +3197,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         [this](std::function<void(std::string)> cb)
     {
         GtkFileDialog* dlg = gtk_file_dialog_new();
-        gtk_file_dialog_set_title(dlg, tk::tr("Open room keys").c_str());
+        gtk_file_dialog_set_title(dlg, tk::tr("Open message keys").c_str());
 
         struct OpenCtx { std::function<void(std::string)> cb; };
         auto* ctx = new OpenCtx{std::move(cb)};
@@ -3228,7 +3228,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         GtkWidget* dlg = gtk_message_dialog_new(
             GTK_WINDOW(window_), GTK_DIALOG_MODAL,
             ok ? GTK_MESSAGE_INFO : GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-            "%s", ok ? tk::tr("Room keys exported successfully.").c_str() : error.c_str());
+            "%s", ok ? tk::tr("Message keys exported successfully.").c_str() : error.c_str());
         G_GNUC_END_IGNORE_DEPRECATIONS
         g_signal_connect(dlg, "response",
                          G_CALLBACK(+[](GtkDialog* d, int, gpointer)
@@ -3244,7 +3244,7 @@ void MainWindow::wire_key_dialog_callbacks_()
         GtkWidget* dlg = gtk_message_dialog_new(
             GTK_WINDOW(window_), GTK_DIALOG_MODAL,
             ok ? GTK_MESSAGE_INFO : GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-            "%s", ok ? tk::tr("Room keys imported successfully.").c_str() : error.c_str());
+            "%s", ok ? tk::tr("Message keys imported successfully.").c_str() : error.c_str());
         G_GNUC_END_IGNORE_DEPRECATIONS
         g_signal_connect(dlg, "response",
                          G_CALLBACK(+[](GtkDialog* d, int, gpointer)
@@ -5249,7 +5249,7 @@ void MainWindow::refresh_sync_status()
     if (keys_busy)
     {
         sync_progress_shown_ = true;
-        std::string msg = tk::trf(tk::tr("Downloading encryption keys ({0})\xe2\x80\xa6"),
+        std::string msg = tk::trf(tk::tr("Downloading message keys ({0})\xe2\x80\xa6"),
                                   {std::to_string(last_imported_keys_)});
         gtk_label_set_text(GTK_LABEL(status_bar_), msg.c_str());
         return;

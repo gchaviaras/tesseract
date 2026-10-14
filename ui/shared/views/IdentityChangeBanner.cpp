@@ -57,8 +57,8 @@ std::string IdentityChangeBanner::label_text() const
         return {};
     const auto& w = warnings_.front();
     if (w.kind == tesseract::IdentityWarning::Kind::VerificationBroken)
-        return tk::trf(tk::tr("{0}'s verified identity was reset."), {identity_who(w)});
-    return tk::trf(tk::tr("{0}'s identity was reset."), {identity_who(w)});
+        return tk::trf(tk::tr("{0}'s verified digital identity was reset."), {identity_who(w)});
+    return tk::trf(tk::tr("{0}'s digital identity was reset."), {identity_who(w)});
 }
 
 void IdentityChangeBanner::apply_()

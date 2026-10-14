@@ -47,7 +47,7 @@ struct TkSettingsViewStage
 constexpr int kAdvancedTabIdx = 12;
 
 // The "Emojis & Stickers" tab is index 9 in tab-registration order:
-// Account=0, Sessions=1, General=2, Appearance=3, Notifications=4, Media=5,
+// Account=0, Devices=1, General=2, Appearance=3, Notifications=4, Media=5,
 // Privacy=6, Network=7, Server=8, Emojis & Stickers=9.
 constexpr int kUserPackTabIdx = 9;
 

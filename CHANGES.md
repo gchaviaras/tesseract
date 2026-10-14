@@ -13,6 +13,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(packaging): the Windows uninstaller removes its Add/Remove Programs key again (a 64-bit registry view left set by the `DefaultHomeserver` cleanup hid it from the template's delete). Windows installer user-verified
 - fix(send): the metadata strip now runs on every real send path, single images (animated too), files and gallery items, not only the sync/gallery ones; a photo sent as a file loses its EXIF/GPS while TIFF/RAW, SVG, BMP and JPEG 2000 files go byte-identical, TIFF is never truncated, and PNG/WebP keep only rendering chunks (C2PA and private chunks are dropped). Qt6 build, ctest 3277/3277, cargo 1065
 - fix(send): the "can be stripped?" check no longer runs when a smaller recompression wins, and a crafted HEIC can't stall it. A gallery with any refused image sends nothing and keeps the composer. Qt6 build, ctest 3277/3277, cargo 1065
 - fix(login): a retired login client is freed only when no worker is running (a lookup in flight when the proxy changed could use it after free). Qt6 build, ctest 3277/3277

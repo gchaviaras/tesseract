@@ -78,6 +78,7 @@ if(WIN32)
     StrCmp $R0 '' hs_done
     SetRegView 64
     WriteRegStr HKLM 'Software\\Tesseract-Matrix' 'DefaultHomeserver' $R0
+    SetRegView 32
     hs_done:
     Pop $R3
     Pop $R2
@@ -93,7 +94,8 @@ if(WIN32)
     IfSilent hs_keep
     DeleteRegValue HKLM 'Software\\\\Tesseract-Matrix' 'DefaultHomeserver'
     DeleteRegKey /ifempty HKLM 'Software\\\\Tesseract-Matrix'
-    hs_keep:")
+    hs_keep:
+    SetRegView 32")
 endif()
 
 if(APPLE)

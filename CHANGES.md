@@ -7,8 +7,9 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
-- fix(macos): the minimum macOS is now 13 Ventura, and CI builds the bundled libopus for it instead of shipping Homebrew's, whose macOS 26 minimum most likely kept the DMGs from launching on anything older. A configure warning and a CI check catch a libopus built for a newer macOS. macOS arm64 build
-- feat(packaging): the macOS DMGs are Developer ID signed (hardened runtime, mic/camera/location entitlements) and notarized in CI when the signing secrets are set, ad-hoc otherwise. macOS arm64 ad-hoc build + signed configure check; untested in CI
+- chore(ci): failed workflow runs now save their Rust build cache too (`cache-on-failure` on every `rust-cache` step), so a retry after a C++ or packaging failure skips the Rust build. YAML parse only
+- fix(macos): the minimum macOS is now 13 Ventura, and CI builds the bundled libopus for it instead of shipping Homebrew's, whose macOS 26 minimum most likely kept the DMGs from launching on anything older. A configure warning and a CI check catch a libopus built for a newer macOS. macOS arm64 build, CI DMG voice playback user-verified; not run on macOS 13
+- feat(packaging): the macOS DMGs are Developer ID signed (hardened runtime, mic/camera/location entitlements) and notarized in CI when the signing secrets are set, ad-hoc otherwise. CI-signed DMG user-verified on macOS (Gatekeeper, session kept on upgrade, mic/camera/location, voice playback, notifications, Launch at Login)
 - fix(packaging): the Windows uninstaller removes its Add/Remove Programs key again (a 64-bit registry view left set by the `DefaultHomeserver` cleanup hid it from the template's delete). Windows installer user-verified
 - fix(send): the metadata strip now runs on every real send path, single images (animated too), files and gallery items, not only the sync/gallery ones; a photo sent as a file loses its EXIF/GPS while TIFF/RAW, SVG, BMP and JPEG 2000 files go byte-identical, TIFF is never truncated, and PNG/WebP keep only rendering chunks (C2PA and private chunks are dropped). Qt6 build, ctest 3277/3277, cargo 1065
 - fix(send): the "can be stripped?" check no longer runs when a smaller recompression wins, and a crafted HEIC can't stall it. A gallery with any refused image sends nothing and keeps the composer. Qt6 build, ctest 3277/3277, cargo 1065

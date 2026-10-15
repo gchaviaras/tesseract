@@ -219,6 +219,15 @@ link order.
   copies (~2 GB each in Debug). Delete all but the newest, or use
   `cargo sweep`.
 
+### CI Rust cache
+
+Every workflow job caches its Cargo output with `Swatinem/rust-cache` and
+`cache-on-failure: true`, so a run that fails after the Rust build (C++,
+packaging, signing) still saves it for the next attempt. A saved key is never
+overwritten: a cache from a run that failed mid-Rust stays partial until
+`Cargo.lock`, the toolchain or the job changes, and cargo rebuilds what's
+missing. Jobs cancelled by `package.yml`'s cancel-on-failure step may not save.
+
 ### Feature options
 
 `-DTESSERACT_ENABLE_SILENT_RECOVERY_SETUP=OFF` (default `ON`) brings back the

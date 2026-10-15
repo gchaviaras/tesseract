@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Moved into the sandbox container on the App Store build's first
+         launch (home-relative paths; the default profile only, since
+         Tesseract-<profile> directories cannot be wildcarded). -->
+    <key>Move</key>
+    <array>
+        <string>Library/Application Support/Tesseract</string>
+        <string>Library/Caches/Tesseract</string>
+    </array>
+</dict>
+</plist>

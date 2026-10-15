@@ -14,6 +14,8 @@
 #                        self-hosted OSTree repo, signs it, deploys to gh-pages
 #        - store:       submits package.yml's Store MSIX artifact to Partner
 #                        Center
+#        - appstore:    uploads package.yml's Mac App Store .pkg to App Store
+#                       Connect
 #        - winget:      opens the winget-pkgs update PR (disabled, see below)
 #
 # Everything published here is the exact build that was tested as the
@@ -36,15 +38,23 @@
 #            settings > Users > Microsoft Entra applications), and at least
 #            one submission already published manually through Partner
 #            Center — msstore's update flow does not create the first one.
+#   App Store: an app record in App Store Connect with a bundle id of
+#            im.gnomos.tesseract, an App Store Connect API key (Users and
+#            Access > Integrations), and the export-compliance answer matching
+#            ITSAppUsesNonExemptEncryption (see ui/macos/CMakeLists.txt).
 #   Winget:  the first manual submission in packaging/winget/README.md.
 #
 # Repo configuration (Settings > Secrets and variables > Actions):
 #   Variables:
 #     TESSERACT_MSIX_STORE_PRODUCT_ID   Partner Center's Store product ID
+#     TESSERACT_MAC_APPSTORE_APPLE_ID   the app's numeric Apple ID in App Store Connect
 #   Secrets:
 #     FLATPAK_GPG_PRIVATE_KEY, FLATPAK_GPG_PASSPHRASE, FLATPAK_GPG_KEY_ID
 #     AZURE_AD_TENANT_ID, AZURE_AD_APPLICATION_CLIENT_ID,
 #     AZURE_AD_APPLICATION_SECRET, SELLER_ID
+#     APPSTORE_API_KEY_ID, APPSTORE_API_ISSUER_ID, APPSTORE_API_KEY_P8
+#                    App Store Connect API key id, issuer id and .p8 contents
+#                    (the signing secrets/variables are package.yml's)
 #     WINGET_TOKEN   GitHub PAT (classic, public_repo scope) for an account
 #                    that can open PRs against microsoft/winget-pkgs
 # ---------------------------------------------------------------------------
@@ -69,6 +79,10 @@ on:
         default: true
       store:
         description: 'Submit to the Microsoft Store'
+        type: boolean
+        default: true
+      appstore:
+        description: 'Upload to the Mac App Store (App Store Connect)'
         type: boolean
         default: true
       winget:
@@ -255,6 +269,92 @@ jobs:
       # publisher only handles updates, not an app's first submission.
       - name: Publish to Store
         run: msstore publish "${{ github.workspace }}/msix/Tesseract-store-x64.msix" --appId ${{ vars.TESSERACT_MSIX_STORE_PRODUCT_ID }}
+
+  # ---------------------------------------------------------------------------
+  # Mac App Store — validate and upload the .pkg that package.yml's
+  # macos-appstore job built for this tag. Skipped when the API key secrets
+  # are missing.
+  # ---------------------------------------------------------------------------
+  appstore:
+    name: Mac App Store upload
+    if: github.event_name == 'release' || inputs.appstore
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Check for App Store Connect API key
+        id: key_check
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+        run: |
+          if [ -n "$KEY_ID" ] && [ -n "$ISSUER_ID" ] && [ -n "$KEY_P8" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::App Store Connect API key secrets missing; skipping the upload"
+          fi
+
+      - name: Download the pkg from package.yml's run for this tag
+        if: steps.key_check.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow package.yml \
+                     --branch "$TAG" --event push --status success --limit 1 \
+                     --json databaseId --jq '.[0].databaseId')
+          if [ -z "$run_id" ]; then
+            echo "::error::No successful package.yml run found for $TAG"
+            exit 1
+          fi
+          echo "Using package.yml run $run_id"
+          if ! gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+                 --name tesseract-macos-appstore --dir appstore; then
+            echo "::error::Couldn't download tesseract-macos-appstore from run $run_id; it may have expired (90-day retention) or the signing secrets were missing"
+            exit 1
+          fi
+          ls appstore/Tesseract-*-appstore.pkg
+
+      # altool looks the key up as AuthKey_<id>.p8 in ~/.appstoreconnect/private_keys.
+      - name: Install the API key
+        if: steps.key_check.outputs.present == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+
+      - name: Validate
+        if: steps.key_check.outputs.present == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          pkg=$(ls appstore/Tesseract-*-appstore.pkg)
+          xcrun altool --validate-app -f "$pkg" -t macos --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+
+      # --upload-package needs the bundle's versions and the app's Apple ID
+      # (the numeric App Store Connect id); the versions are read from the
+      # pkg so they cannot drift from what was built.
+      - name: Upload
+        if: steps.key_check.outputs.present == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          APPLE_ID: ${{ vars.TESSERACT_MAC_APPSTORE_APPLE_ID }}
+        run: |
+          pkg=$(ls appstore/Tesseract-*-appstore.pkg)
+          pkgutil --expand-full "$pkg" expanded
+          plist=$(ls expanded/*/Tesseract.app/Contents/Info.plist)
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
+          short=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
+          xcrun altool --upload-package "$pkg" -t macos --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" \
+            --apple-id "$APPLE_ID" --bundle-id im.gnomos.tesseract \
+            --bundle-version "$build" --bundle-short-version-string "$short"
 
   # ---------------------------------------------------------------------------
   # winget — open the winget-pkgs manifest update PR for the NSIS installer.

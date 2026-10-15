@@ -126,6 +126,9 @@ if(APPLE)
             \"\${CMAKE_INSTALL_PREFIX}/share\")
     ")
     
+    # Mac App Store .pkg (appstore-pkg target); no-op unless TESSERACT_MAC_APP_STORE.
+    include(${CMAKE_CURRENT_LIST_DIR}/AppStore.cmake)
+
     # Optional notarization wrapper. Runs `xcrun notarytool submit --wait`
     # followed by `xcrun stapler staple` against the .dmg CPack produces.
     # Invoke with:  cmake --build build/<preset> --target notarize

@@ -2,6 +2,7 @@
 #import "AppDelegate.h"
 
 #include "app/Launch.h"
+#include "app/UpdateChecker.h"
 #include "tk/single_instance.h"
 
 #include <string>
@@ -39,6 +40,12 @@ int main(int argc, const char* argv[])
         {
             return *plan.exit_code;
         }
+
+#ifdef TESSERACT_MAC_APP_STORE
+        // The App Store delivers updates; the GitHub release check would point
+        // at the DMG. Must precede any UI (Settings builds "Updates" lazily).
+        tesseract::disable_update_checks();
+#endif
 
         NSApplication* app = NSApplication.sharedApplication;
         AppDelegate* del = [[AppDelegate alloc] init];

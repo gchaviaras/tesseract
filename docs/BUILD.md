@@ -142,6 +142,7 @@ All presets live in `CMakePresets.json`:
 `windows-debug`, `windows-release`, `windows-xwin-debug`,
 `windows-xwin-release` (Linux host, see above), `linux-debug`, `linux-release`,
 `macos-appkit-arm64-debug`, `macos-appkit-arm64-release`,
+`macos-appkit-arm64-appstore` (Mac App Store, below),
 `macos-appkit-x86_64-debug`, `macos-appkit-x86_64-release`.
 
 The `linux-*` presets configure and build both the GTK4 and Qt6 UIs from a
@@ -156,6 +157,34 @@ override (below) to install or package.
 (`linux` builds both GTK4 and Qt6; otherwise auto-detected from platform).
 Pass this alongside a `linux-*` preset (e.g. `-DTESSERACT_UI=qt6`) to build
 and install/package a single Linux backend instead of both.
+
+## Mac App Store
+
+`-DTESSERACT_MAC_APP_STORE=ON` (or the `macos-appkit-arm64-appstore` preset,
+arm64 only) builds the sandboxed App Store edition: App Sandbox entitlements
+(`ui/macos/Tesseract-AppStore.entitlements.in`), App Store signing, no
+self-update checks, and a one-time move of an existing DMG install's data into
+the sandbox container (`ui/macos/container-migration.plist`; the data is moved,
+so a DMG install on the same Mac starts empty afterwards). It cannot be combined
+with `TESSERACT_ENABLE_CRASH_HANDLER`.
+
+Cache variables:
+
+- `TESSERACT_MAC_APPSTORE_APP_IDENTITY`: "Apple Distribution: Foo (TEAMID)".
+- `TESSERACT_MAC_APPSTORE_INSTALLER_IDENTITY`: "3rd Party Mac Developer Installer: Foo (TEAMID)".
+- `TESSERACT_MAC_PROVISIONING_PROFILE`: path to the `.provisionprofile`, embedded in the bundle.
+- `TESSERACT_MAC_TEAM_ID`: prefix of the `application-identifier` entitlement.
+- `TESSERACT_MAC_BUILD_NUMBER`: `CFBundleVersion`; App Store Connect rejects a repeated one (default: the project version).
+
+With none of the identities set, the build signs ad-hoc with the sandbox
+entitlements only, which is enough to test sandbox behaviour locally without
+certificates. With the app identity, profile and team id set, the bundle is
+signed for distribution; adding the installer identity defines the
+`appstore-pkg` target, which runs `productbuild` and `pkgutil --check-signature`
+to produce `Tesseract-<version>-appstore.pkg` in the build directory. CMake
+stops there: CI validates and uploads it (`package.yml` `macos-appstore`,
+`publish-release.yml` `appstore`). `ITSAppUsesNonExemptEncryption` in the
+Info.plist must match your export-compliance answer in App Store Connect.
 
 ## Build internals
 

@@ -15,6 +15,15 @@ and in-progress work, as a single backlog ordered by priority/urgency.
 
 ## Tier 2 — Next up
 
+- **Mac App Store edition — live verification.** `TESSERACT_MAC_APP_STORE`
+  builds, but nothing has run sandboxed yet: OAuth loopback login, camera /
+  mic / screen share, location, file save/open, the `NSWorkspace`
+  profile-switch relaunch (vs. `LSMultipleInstancesProhibited`), and the
+  DMG→container migration — including whether keychain sessions written by
+  the DMG build stay readable. Then a real signed `appstore-pkg` through
+  `altool --validate-app`; Homebrew libopus's `minos` may exceed
+  `LSMinimumSystemVersion` 11.0. Confirm `ITSAppUsesNonExemptEncryption`
+  against the export-compliance answer.
 - **DM-counterpart avatar picks the bridge bot itself** when the bridge
   doesn't publish `io.element.functional_members` (MSC4171) — heisenbridge
   currently lacks the state event, so 1:1 control rooms show the bot's own

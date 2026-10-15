@@ -128,6 +128,20 @@ option(TESSERACT_ENABLE_CRASH_HANDLER
     "Enable the optional local crash handler (writes a stack trace to disk if the app crashes; still opt-in per-user via Settings once built)"
     OFF)
 
+# Mac App Store edition: App Sandbox entitlements, App Store signing and a
+# signed .pkg (see cmake/AppStore.cmake and docs/BUILD.md). The crash handler
+# writes outside the sandbox container, so the two are mutually exclusive.
+option(TESSERACT_MAC_APP_STORE "Build a sandboxed Mac App Store edition (.pkg)" OFF)
+if(TESSERACT_MAC_APP_STORE)
+    if(NOT APPLE)
+        message(FATAL_ERROR "TESSERACT_MAC_APP_STORE is only valid on macOS")
+    endif()
+    if(TESSERACT_ENABLE_CRASH_HANDLER)
+        message(FATAL_ERROR
+            "TESSERACT_MAC_APP_STORE cannot be combined with TESSERACT_ENABLE_CRASH_HANDLER")
+    endif()
+endif()
+
 # Route the process allocator through jemalloc. Linux-only (see the usage site
 # below); ignored on macOS/Windows. On by default because stock glibc malloc
 # retains freed memory aggressively under this app's thread count, inflating

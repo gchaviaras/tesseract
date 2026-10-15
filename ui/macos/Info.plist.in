@@ -7,7 +7,7 @@
     <key>CFBundleName</key>             <string>Tesseract</string>
     <key>CFBundleDisplayName</key>      <string>Tesseract</string>
     <key>CFBundleIdentifier</key>       <string>im.gnomos.tesseract</string>
-    <key>CFBundleVersion</key>          <string>@PROJECT_VERSION@</string>
+    <key>CFBundleVersion</key>          <string>@TESSERACT_MAC_BUNDLE_VERSION@</string>
     <key>CFBundleShortVersionString</key><string>@PROJECT_VERSION@</string>
     <key>CFBundlePackageType</key>      <string>APPL</string>
     <key>CFBundleSignature</key>        <string>????</string>
@@ -19,6 +19,8 @@
     <key>NSPrincipalClass</key>         <string>NSApplication</string>
 
     <key>LSMinimumSystemVersion</key>   <string>11.0</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.social-networking</string>
+@TESSERACT_MAC_APPSTORE_PLIST_KEYS@
 
     <!-- Display niceties. -->
     <key>NSHighResolutionCapable</key>  <true/>

@@ -145,6 +145,24 @@ target_include_directories(tesseract_macos PRIVATE
     "${CMAKE_SOURCE_DIR}/ui/shared/tk"
 )
 
+# Info.plist substitutions. CFBundleVersion must be unique per App Store
+# Connect upload, so CI passes TESSERACT_MAC_BUILD_NUMBER (github.run_number).
+set(TESSERACT_MAC_BUILD_NUMBER "" CACHE STRING
+    "CFBundleVersion override (App Store Connect rejects a repeated build number); empty = project version")
+if(TESSERACT_MAC_BUILD_NUMBER)
+    set(TESSERACT_MAC_BUNDLE_VERSION "${TESSERACT_MAC_BUILD_NUMBER}")
+else()
+    set(TESSERACT_MAC_BUNDLE_VERSION "${PROJECT_VERSION}")
+endif()
+set(TESSERACT_MAC_APPSTORE_PLIST_KEYS "")
+if(TESSERACT_MAC_APP_STORE)
+    # MAINTAINER: this value must match the export-compliance answer given in
+    # App Store Connect. Matrix E2EE uses standard algorithms, which usually
+    # qualifies for the exemption (false), but confirm before uploading.
+    set(TESSERACT_MAC_APPSTORE_PLIST_KEYS
+        "    <key>ITSAppUsesNonExemptEncryption</key><false/>")
+endif()
+
 set_target_properties(tesseract_macos PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
     MACOSX_BUNDLE_ICON_FILE  "Tesseract"
@@ -250,6 +268,66 @@ add_custom_command(TARGET tesseract_macos POST_BUILD
     VERBATIM
 )
 
+if(TESSERACT_MAC_APP_STORE)
+    set(TESSERACT_MAC_APPSTORE_APP_IDENTITY "" CACHE STRING
+        "App Store signing identity (e.g. 'Apple Distribution: Foo (TEAMID)')")
+    set(TESSERACT_MAC_APPSTORE_INSTALLER_IDENTITY "" CACHE STRING
+        "Installer identity for the .pkg (e.g. '3rd Party Mac Developer Installer: Foo (TEAMID)')")
+    set(TESSERACT_MAC_PROVISIONING_PROFILE "" CACHE FILEPATH
+        "Path to the Mac App Store .provisionprofile embedded in the bundle")
+    set(TESSERACT_MAC_TEAM_ID "" CACHE STRING
+        "Apple developer team id (prefix of the application-identifier entitlement)")
+
+    target_compile_definitions(tesseract_macos PRIVATE TESSERACT_MAC_APP_STORE)
+
+    set(_bundle "$<TARGET_BUNDLE_DIR:tesseract_macos>")
+    set(_as_ids "")
+    if(TESSERACT_MAC_APPSTORE_APP_IDENTITY AND TESSERACT_MAC_PROVISIONING_PROFILE
+       AND TESSERACT_MAC_TEAM_ID)
+        set(_as_signed TRUE)
+        set(_as_sign_id "${TESSERACT_MAC_APPSTORE_APP_IDENTITY}")
+        set(_as_timestamp --timestamp)
+        set(_as_ids
+"    <key>com.apple.application-identifier</key><string>${TESSERACT_MAC_TEAM_ID}.im.gnomos.tesseract</string>
+    <key>com.apple.developer.team-identifier</key><string>${TESSERACT_MAC_TEAM_ID}</string>")
+    else()
+        # No certificates: ad-hoc sign with the sandbox entitlements only, so
+        # sandbox behaviour can be tested locally. No timestamp for ad-hoc.
+        set(_as_signed FALSE)
+        set(_as_sign_id "-")
+        set(_as_timestamp "")
+    endif()
+    set(TESSERACT_MAC_APPSTORE_ENTITLEMENT_IDS "${_as_ids}")
+    set(_as_entitlements "${CMAKE_CURRENT_BINARY_DIR}/Tesseract-AppStore.entitlements")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/Tesseract-AppStore.entitlements.in"
+                   "${_as_entitlements}" @ONLY)
+
+    # Declared after the libopus bundling POST_BUILD above (commands run in
+    # declaration order). libopus is signed on its own: --deep is discouraged
+    # for App Store submissions. The build-dir bundle is what appstore-pkg
+    # packages; `cmake --install` would rewrite rpaths and break this signature.
+    set(_as_cmds
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/container-migration.plist"
+            "${_bundle}/Contents/Resources/container-migration.plist")
+    if(_as_signed)
+        list(APPEND _as_cmds
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${TESSERACT_MAC_PROVISIONING_PROFILE}"
+                "${_bundle}/Contents/embedded.provisionprofile")
+    endif()
+    add_custom_command(TARGET tesseract_macos POST_BUILD
+        ${_as_cmds}
+        COMMAND codesign --force ${_as_timestamp} --options runtime
+                --sign "${_as_sign_id}"
+                "${_bundle}/Contents/Frameworks/${_opus_filename}"
+        COMMAND codesign --force ${_as_timestamp} --options runtime
+                --entitlements "${_as_entitlements}"
+                --sign "${_as_sign_id}" "${_bundle}"
+        COMMENT "Signing Tesseract.app for the Mac App Store (identity: ${_as_sign_id})"
+        VERBATIM
+    )
+else()
 # Sign the build-dir app after every build so macOS accepts UNUserNotificationCenter
 # permission requests. Uses the real identity when one is configured, ad-hoc otherwise.
 # --deep covers Contents/Frameworks/ so libopus.dylib is signed alongside the exe.
@@ -280,6 +358,7 @@ else()
         execute_process(COMMAND codesign --force --deep --sign \"-\"
             \"\${CMAKE_INSTALL_PREFIX}/Tesseract.app\")
     " COMPONENT Application)
+endif()
 endif()
 
 # Bundle .mo translation catalogs into Resources/i18n

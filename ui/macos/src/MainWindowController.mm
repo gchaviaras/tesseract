@@ -2033,6 +2033,33 @@ MacShell::create_secondary_room_window_(const std::string& room_id)
 
 bool MacShell::spawn_relaunch_(const std::vector<std::string>& args)
 {
+#ifdef TESSERACT_MAC_APP_STORE
+    // The sandbox likely kills a child process that is not an inherit helper,
+    // so go through LaunchServices instead. NEEDS LIVE VERIFICATION: this must
+    // actually start a second instance despite LSMultipleInstancesProhibited
+    // (createsNewApplicationInstance is meant to override it). If it does not,
+    // profile switching must be hidden in this edition.
+    NSURL* bundle_url = NSBundle.mainBundle.bundleURL;
+    if (!bundle_url)
+        return false;
+    NSMutableArray<NSString*>* ns_args = [NSMutableArray array];
+    for (const auto& a : args)
+        [ns_args addObject:[NSString stringWithUTF8String:a.c_str()]];
+    NSWorkspaceOpenConfiguration* cfg = [NSWorkspaceOpenConfiguration configuration];
+    cfg.createsNewApplicationInstance = YES;
+    cfg.arguments = ns_args;
+    [NSWorkspace.sharedWorkspace
+        openApplicationAtURL:bundle_url
+               configuration:cfg
+           completionHandler:^(NSRunningApplication* app, NSError* error)
+           {
+               if (error)
+               {
+                   NSLog(@"relaunch failed: %@", error);
+               }
+           }];
+    return true;
+#else
     // Exec the bundle's binary directly rather than via LaunchServices:
     // LSMultipleInstancesProhibited would make NSWorkspace/`open` just
     // re-activate this (still running) instance. A direct launch is what a
@@ -2063,6 +2090,7 @@ bool MacShell::spawn_relaunch_(const std::vector<std::string>& args)
     posix_spawn_file_actions_destroy(&actions);
     posix_spawnattr_destroy(&attr);
     return rc == 0;
+#endif
 }
 
 void MacShell::quit_app_()

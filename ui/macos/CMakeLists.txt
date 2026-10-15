@@ -207,6 +207,24 @@ execute_process(
 string(REGEX REPLACE "^[^\n]*\n" "" _opus_id "${_opus_otool}")
 string(STRIP "${_opus_id}" _opus_id)
 
+# dyld refuses a library whose minimum OS is newer than the running system, so
+# a libopus built for the build machine (Homebrew's is) makes the bundle
+# unlaunchable below that version whatever LSMinimumSystemVersion says. CI
+# builds opus with -DCMAKE_OSX_DEPLOYMENT_TARGET to match and fails on this.
+execute_process(
+    COMMAND vtool -show-build "${_opus_real}"
+    OUTPUT_VARIABLE _opus_build
+    ERROR_QUIET)
+string(REGEX MATCH "minos ([0-9.]+)" _ "${_opus_build}")
+set(TESSERACT_OPUS_MINOS "${CMAKE_MATCH_1}")
+if(TESSERACT_OPUS_MINOS AND TESSERACT_OPUS_MINOS VERSION_GREATER CMAKE_OSX_DEPLOYMENT_TARGET)
+    message(WARNING
+        "${_opus_real} requires macOS ${TESSERACT_OPUS_MINOS}, newer than the "
+        "deployment target ${CMAKE_OSX_DEPLOYMENT_TARGET}: the app will not launch "
+        "below ${TESSERACT_OPUS_MINOS}. Build opus with "
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET} for a shippable bundle.")
+endif()
+
 # All three archives have circular dependencies through the FFI; link them
 # with WHOLE_ARCHIVE so every symbol is present regardless of order.
 target_link_libraries(tesseract_macos PRIVATE
@@ -248,6 +266,9 @@ set(TESSERACT_MAC_CODESIGN_IDENTITY "" CACHE STRING
     "codesign identity (e.g. 'Developer ID Application: Foo (TEAMID)') — empty = ad-hoc signing")
 set(TESSERACT_MAC_NOTARIZE_PROFILE "" CACHE STRING
     "notarytool keychain profile name — empty = no notarization")
+set(TESSERACT_MAC_NOTARIZE_KEYCHAIN "" CACHE STRING
+    "keychain file holding the notarytool profile (passed as --keychain) — empty = default keychain")
+set(_tesseract_entitlements "${CMAKE_CURRENT_SOURCE_DIR}/Tesseract.entitlements")
 
 # Copy libopus into Contents/Frameworks and rewrite all install-name references so
 # the bundle is self-contained and works on machines without Homebrew.
@@ -331,13 +352,19 @@ else()
 # Sign the build-dir app after every build so macOS accepts UNUserNotificationCenter
 # permission requests. Uses the real identity when one is configured, ad-hoc otherwise.
 # --deep covers Contents/Frameworks/ so libopus.dylib is signed alongside the exe.
+# With a real identity the app is signed with the hardened runtime (required for
+# notarization) and the entitlements in Tesseract.entitlements: the hardened
+# runtime blocks microphone, camera and location unless they are granted there.
+# The build-dir and installed signatures use the same options so they match.
 if(TESSERACT_MAC_CODESIGN_IDENTITY)
     set(_tesseract_sign_id "${TESSERACT_MAC_CODESIGN_IDENTITY}")
+    set(_tesseract_sign_opts --options runtime --entitlements "${_tesseract_entitlements}")
 else()
     set(_tesseract_sign_id "-")
+    set(_tesseract_sign_opts)
 endif()
 add_custom_command(TARGET tesseract_macos POST_BUILD
-    COMMAND codesign --force --deep --sign "${_tesseract_sign_id}"
+    COMMAND codesign --force --deep ${_tesseract_sign_opts} --sign "${_tesseract_sign_id}"
             "$<TARGET_BUNDLE_DIR:tesseract_macos>"
     COMMENT "Signing Tesseract.app (identity: ${_tesseract_sign_id})"
     VERBATIM
@@ -346,17 +373,20 @@ add_custom_command(TARGET tesseract_macos POST_BUILD
 # Re-sign after install. CMake's bundle install rewrites build-dir rpaths via
 # install_name_tool, which invalidates the POST_BUILD ad-hoc signature. Without
 # a re-sign here the DMG ships a broken signature that the Apple Silicon kernel
-# rejects at launch.
+# rejects at launch. COMMAND_ERROR_IS_FATAL makes a failed sign fail the install.
 if(TESSERACT_MAC_CODESIGN_IDENTITY)
     install(CODE "
         execute_process(COMMAND codesign --force --deep --options runtime --timestamp
+            --entitlements \"${_tesseract_entitlements}\"
             --sign \"${TESSERACT_MAC_CODESIGN_IDENTITY}\"
-            \"\${CMAKE_INSTALL_PREFIX}/Tesseract.app\")
+            \"\${CMAKE_INSTALL_PREFIX}/Tesseract.app\"
+            COMMAND_ERROR_IS_FATAL ANY)
     " COMPONENT Application)
 else()
     install(CODE "
         execute_process(COMMAND codesign --force --deep --sign \"-\"
-            \"\${CMAKE_INSTALL_PREFIX}/Tesseract.app\")
+            \"\${CMAKE_INSTALL_PREFIX}/Tesseract.app\"
+            COMMAND_ERROR_IS_FATAL ANY)
     " COMPONENT Application)
 endif()
 endif()

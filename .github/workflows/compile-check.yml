@@ -58,6 +58,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/windows-release/cargo/build
+          cache-on-failure: true
 
       # resvg-py 0.3.2 only ships wheels up to cp312, so pin Python 3.12.
       # The id lets us hand the exact interpreter to CMake below — otherwise
@@ -139,6 +140,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/macos-appkit-arm64-release/cargo/build
+          cache-on-failure: true
 
       - name: Configure (Release, arm64)
         run: cmake --preset macos-appkit-arm64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
@@ -198,6 +200,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/linux-release/cargo/build
+          cache-on-failure: true
 
       # Tests stay on. Under TESSERACT_UI=linux the test target picks the Qt6
       # TestSurface (tests/CMakeLists.txt maps "linux" to "qt6"), so the GTK
@@ -249,6 +252,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/windows-xwin-release/cargo/build
+          cache-on-failure: true
 
       # Keyed on the setup script so a change to it refreshes the sysroot.
       # Running the script accepts Microsoft's CRT/SDK license terms.

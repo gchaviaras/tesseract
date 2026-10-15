@@ -7,6 +7,9 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- chore(ci): failed workflow runs now save their Rust build cache too (`cache-on-failure` on every `rust-cache` step), so a retry after a C++ or packaging failure skips the Rust build. YAML parse only
+- fix(macos): the minimum macOS is now 13 Ventura, and CI builds the bundled libopus for it instead of shipping Homebrew's, whose macOS 26 minimum most likely kept the DMGs from launching on anything older. A configure warning and a CI check catch a libopus built for a newer macOS. macOS arm64 build, CI DMG voice playback user-verified; not run on macOS 13
+- feat(packaging): the macOS DMGs are Developer ID signed (hardened runtime, mic/camera/location entitlements) and notarized in CI when the signing secrets are set, ad-hoc otherwise. CI-signed DMG user-verified on macOS (Gatekeeper, session kept on upgrade, mic/camera/location, voice playback, notifications, Launch at Login)
 - feat(macos): `TESSERACT_MAC_APP_STORE` (preset `macos-appkit-arm64-appstore`) builds a sandboxed Mac App Store edition with App Store signing, a signed `.pkg` (`appstore-pkg`) and a CI upload job; it moves a DMG install's data into the container on first launch. macOS arm64 release + App Store builds; ctest not run (Intel host), signed `.pkg` untested
 - feat(ui): clickable regions now show hover feedback and a pointing-hand cursor. `tk::Widget` gains opt-in hover/click (`set_hoverable`, `set_on_click`, `cursor()`) and `tk::Button` is built on it; the room header title, profile/room-info avatars, room-list +/×, composer chip × and the switcher chips use it. Qt6 + GTK4 build, ctest 3321/3321
 - refactor(ui): crypto wording follows MSC4161 (message keys, key storage, confirmed devices, digital identity, recovery passphrase, Devices tab, linking a device); English strings only, catalogs follow. Windows build

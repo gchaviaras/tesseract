@@ -68,6 +68,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/windows-release/cargo/build
+          cache-on-failure: true
 
       # resvg-py 0.3.2 only ships wheels up to cp312, so pin Python 3.12.
       # The id lets us hand the exact interpreter to CMake below — otherwise
@@ -157,23 +158,43 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # macOS arm64 (Apple Silicon) — DragNDrop DMG
+  # macOS arm64 (Apple Silicon) — DragNDrop DMG. Developer ID signing +
+  # notarization runs when package.yml's macOS signing secrets are all set
+  # (see the comment above its macos-arm64 job), ad-hoc otherwise.
   # ---------------------------------------------------------------------------
   macos-arm64:
     if: ${{ inputs.macos_arm64 }}
     name: macOS arm64 (DMG)
     runs-on: macos-latest
+    # Matches CMAKE_OSX_DEPLOYMENT_TARGET (root CMakeLists.txt); also read by
+    # CMake, rustc and cc-built C dependencies.
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install build dependencies
-        run: brew install go resvg autoconf automake libtool opus
+        run: brew install go resvg autoconf automake libtool
 
-      - name: Expose opus to audiopus_sys
+      # Homebrew's opus bottle targets the runner's own macOS, which dyld
+      # refuses to load on anything older; build it for the deployment target.
+      - name: Build opus from source (arm64)
         run: |
-          echo "OPUS_LIB_DIR=$(brew --prefix opus)/lib" >> $GITHUB_ENV
-          echo "OPUS_INCLUDE_DIR=$(brew --prefix opus)/include" >> $GITHUB_ENV
+          git clone --depth 1 --branch v1.5.2 https://github.com/xiph/opus.git opus-src
+          cmake -S opus-src -B opus-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
+            -DOPUS_BUILD_SHARED_LIBRARY=ON \
+            -DOPUS_BUILD_PROGRAMS=OFF \
+            -DOPUS_BUILD_TESTING=OFF
+          cmake --build opus-build
+          # Lay opus.pc where Corrosion's PKG_CONFIG_PATH (…/pkgconfig) will find it.
+          mkdir -p opus-build/pkgconfig
+          cp opus-build/opus.pc opus-build/pkgconfig/
+          echo "OPUS_LIB_DIR=$PWD/opus-build" >> $GITHUB_ENV
+          echo "OPUS_INCLUDE_DIR=$PWD/opus-src/include" >> $GITHUB_ENV
 
       - name: Install Rust (stable, aarch64 target)
         uses: dtolnay/rust-toolchain@stable
@@ -189,15 +210,101 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/macos-appkit-arm64-release/cargo/build
+          cache-on-failure: true
+
+      - name: Check for signing secrets
+        id: sign_check
+        env:
+          P12: ${{ secrets.TESSERACT_MAC_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.TESSERACT_MAC_DEVELOPER_ID_P12_PASSWORD }}
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          API_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          CODESIGN_IDENTITY: ${{ vars.TESSERACT_MAC_CODESIGN_IDENTITY }}
+        run: |
+          if [ -n "$P12" ] && [ -n "$P12_PASSWORD" ] && [ -n "$API_KEY_ID" ] \
+             && [ -n "$API_ISSUER_ID" ] && [ -n "$API_KEY_P8" ] && [ -n "$CODESIGN_IDENTITY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::macOS signing secrets not (all) set; building an ad-hoc signed, un-notarized DMG"
+          fi
+
+      - name: Import signing certificate and notary credentials
+        if: steps.sign_check.outputs.present == 'true'
+        env:
+          P12: ${{ secrets.TESSERACT_MAC_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.TESSERACT_MAC_DEVELOPER_ID_P12_PASSWORD }}
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          API_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          CODESIGN_IDENTITY: ${{ vars.TESSERACT_MAC_CODESIGN_IDENTITY }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/tesseract-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # The .p12 carries the leaf and Apple's Developer ID intermediate;
+          # one import brings in both.
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" \
+            -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/developer-id.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # Add to the user search list (keeping existing entries) so codesign finds it.
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | tr -d '"')
+          echo "KEYCHAIN_PATH=$KEYCHAIN" >> "$GITHUB_ENV"
+
+          echo "$API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          xcrun notarytool store-credentials tesseract-notary \
+            --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$API_KEY_ID" \
+            --issuer "$API_ISSUER_ID" --keychain "$KEYCHAIN"
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
 
       - name: Configure (Release, arm64)
-        run: cmake --preset macos-appkit-arm64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
+        env:
+          SIGNING: ${{ steps.sign_check.outputs.present }}
+          CODESIGN_IDENTITY: ${{ vars.TESSERACT_MAC_CODESIGN_IDENTITY }}
+        run: |
+          SIGN_ARGS=()
+          if [ "$SIGNING" = "true" ]; then
+            SIGN_ARGS=("-DTESSERACT_MAC_CODESIGN_IDENTITY=$CODESIGN_IDENTITY"
+                       "-DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary"
+                       "-DTESSERACT_MAC_NOTARIZE_KEYCHAIN=$KEYCHAIN_PATH")
+          fi
+          cmake --preset macos-appkit-arm64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" "${SIGN_ARGS[@]}"
 
       - name: Build
         run: cmake --build build/macos-appkit-arm64-release
 
+      - name: Check bundled libopus minimum macOS
+        run: |
+          for f in build/macos-appkit-arm64-release/ui/macos/Tesseract.app/Contents/Frameworks/libopus*.dylib; do
+            minos=$(vtool -show-build "$f" | awk '/minos/ {print $2; exit}')
+            echo "$f: minos $minos"
+            if [ "$(printf '%s\n%s\n' "$minos" "$MACOSX_DEPLOYMENT_TARGET" | sort -V | tail -n 1)" != "$MACOSX_DEPLOYMENT_TARGET" ]; then
+              echo "::error::$f needs macOS $minos, newer than the $MACOSX_DEPLOYMENT_TARGET deployment target"
+              exit 1
+            fi
+          done
+
       - name: Package (CPack → DMG)
         run: cmake --build build/macos-appkit-arm64-release --target package
+
+      - name: Notarize and verify DMG
+        if: steps.sign_check.outputs.present == 'true'
+        run: |
+          cmake --build build/macos-appkit-arm64-release --target notarize
+          DMG="$(ls build/macos-appkit-arm64-release/Tesseract-*.dmg | head -n 1)"
+          MOUNT="$RUNNER_TEMP/dmg-verify"
+          mkdir -p "$MOUNT"
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT" "$DMG"
+          codesign --verify --deep --strict --verbose=2 "$MOUNT/Tesseract.app" || { hdiutil detach "$MOUNT"; exit 1; }
+          hdiutil detach "$MOUNT"
+          spctl -a -t open --context context:primary-signature -v "$DMG"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -206,13 +313,23 @@ jobs:
           path: build/macos-appkit-arm64-release/Tesseract-*.dmg
           if-no-files-found: error
 
+      - name: Delete temporary keychain
+        if: always() && steps.sign_check.outputs.present == 'true'
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" || true
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/AuthKey.p8"
+
   # ---------------------------------------------------------------------------
-  # macOS x86_64 (Intel) — DragNDrop DMG
+  # macOS x86_64 (Intel) — DragNDrop DMG (signing: see macos-arm64 above)
   # ---------------------------------------------------------------------------
   macos-x86_64:
     if: ${{ inputs.macos_x86_64 }}
     name: macOS x86_64 (DMG)
     runs-on: macos-latest
+    # Matches CMAKE_OSX_DEPLOYMENT_TARGET (root CMakeLists.txt); also read by
+    # CMake, rustc and cc-built C dependencies.
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
 
     steps:
       - uses: actions/checkout@v4
@@ -229,6 +346,7 @@ jobs:
           cmake -S opus-src -B opus-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
             -DOPUS_BUILD_SHARED_LIBRARY=ON \
             -DOPUS_BUILD_PROGRAMS=OFF \
             -DOPUS_BUILD_TESTING=OFF
@@ -251,15 +369,101 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/macos-appkit-x86_64-release/cargo/build
+          cache-on-failure: true
+
+      - name: Check for signing secrets
+        id: sign_check
+        env:
+          P12: ${{ secrets.TESSERACT_MAC_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.TESSERACT_MAC_DEVELOPER_ID_P12_PASSWORD }}
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          API_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          CODESIGN_IDENTITY: ${{ vars.TESSERACT_MAC_CODESIGN_IDENTITY }}
+        run: |
+          if [ -n "$P12" ] && [ -n "$P12_PASSWORD" ] && [ -n "$API_KEY_ID" ] \
+             && [ -n "$API_ISSUER_ID" ] && [ -n "$API_KEY_P8" ] && [ -n "$CODESIGN_IDENTITY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::macOS signing secrets not (all) set; building an ad-hoc signed, un-notarized DMG"
+          fi
+
+      - name: Import signing certificate and notary credentials
+        if: steps.sign_check.outputs.present == 'true'
+        env:
+          P12: ${{ secrets.TESSERACT_MAC_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.TESSERACT_MAC_DEVELOPER_ID_P12_PASSWORD }}
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          API_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          CODESIGN_IDENTITY: ${{ vars.TESSERACT_MAC_CODESIGN_IDENTITY }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/tesseract-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # The .p12 carries the leaf and Apple's Developer ID intermediate;
+          # one import brings in both.
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" \
+            -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/developer-id.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # Add to the user search list (keeping existing entries) so codesign finds it.
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | tr -d '"')
+          echo "KEYCHAIN_PATH=$KEYCHAIN" >> "$GITHUB_ENV"
+
+          echo "$API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          xcrun notarytool store-credentials tesseract-notary \
+            --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$API_KEY_ID" \
+            --issuer "$API_ISSUER_ID" --keychain "$KEYCHAIN"
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
 
       - name: Configure (Release, x86_64)
-        run: cmake --preset macos-appkit-x86_64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
+        env:
+          SIGNING: ${{ steps.sign_check.outputs.present }}
+          CODESIGN_IDENTITY: ${{ vars.TESSERACT_MAC_CODESIGN_IDENTITY }}
+        run: |
+          SIGN_ARGS=()
+          if [ "$SIGNING" = "true" ]; then
+            SIGN_ARGS=("-DTESSERACT_MAC_CODESIGN_IDENTITY=$CODESIGN_IDENTITY"
+                       "-DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary"
+                       "-DTESSERACT_MAC_NOTARIZE_KEYCHAIN=$KEYCHAIN_PATH")
+          fi
+          cmake --preset macos-appkit-x86_64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" "${SIGN_ARGS[@]}"
 
       - name: Build
         run: cmake --build build/macos-appkit-x86_64-release
 
+      - name: Check bundled libopus minimum macOS
+        run: |
+          for f in build/macos-appkit-x86_64-release/ui/macos/Tesseract.app/Contents/Frameworks/libopus*.dylib; do
+            minos=$(vtool -show-build "$f" | awk '/minos/ {print $2; exit}')
+            echo "$f: minos $minos"
+            if [ "$(printf '%s\n%s\n' "$minos" "$MACOSX_DEPLOYMENT_TARGET" | sort -V | tail -n 1)" != "$MACOSX_DEPLOYMENT_TARGET" ]; then
+              echo "::error::$f needs macOS $minos, newer than the $MACOSX_DEPLOYMENT_TARGET deployment target"
+              exit 1
+            fi
+          done
+
       - name: Package (CPack → DMG)
         run: cmake --build build/macos-appkit-x86_64-release --target package
+
+      - name: Notarize and verify DMG
+        if: steps.sign_check.outputs.present == 'true'
+        run: |
+          cmake --build build/macos-appkit-x86_64-release --target notarize
+          DMG="$(ls build/macos-appkit-x86_64-release/Tesseract-*.dmg | head -n 1)"
+          MOUNT="$RUNNER_TEMP/dmg-verify"
+          mkdir -p "$MOUNT"
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT" "$DMG"
+          codesign --verify --deep --strict --verbose=2 "$MOUNT/Tesseract.app" || { hdiutil detach "$MOUNT"; exit 1; }
+          hdiutil detach "$MOUNT"
+          spctl -a -t open --context context:primary-signature -v "$DMG"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -267,6 +471,12 @@ jobs:
           name: tesseract-macos-x86_64
           path: build/macos-appkit-x86_64-release/Tesseract-*.dmg
           if-no-files-found: error
+
+      - name: Delete temporary keychain
+        if: always() && steps.sign_check.outputs.present == 'true'
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" || true
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/AuthKey.p8"
 
   # ---------------------------------------------------------------------------
   # Linux x86_64 — DEB + RPM + AppImage (Qt6 backend, one build shared by all
@@ -317,6 +527,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/linux-release/cargo/build
+          cache-on-failure: true
 
       - name: Configure (Release)
         run: cmake --preset linux-release -DTESSERACT_UI=qt6 "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"

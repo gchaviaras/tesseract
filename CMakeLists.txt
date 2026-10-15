@@ -216,11 +216,12 @@ if(TESSERACT_UI STREQUAL "macos")
     if(NOT APPLE)
         message(FATAL_ERROR "macos UI only available on macOS")
     endif()
-    # 11.0 = Big Sur. Earliest macOS that ships every Apple Silicon
-    # frameworks we use (NSTrackingArea modes, NSTextField improvements,
-    # CGImageSource APIs as we call them). Override at preset level.
-    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
-        set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "" FORCE)
+    # 13.0 = Ventura: SMAppService (Launch at Login) and every Apple Silicon
+    # Mac. Raised from 11.0, so a build dir still caching an older value is
+    # bumped too. Info.plist's LSMinimumSystemVersion follows this value, and
+    # the bundled libopus must be built for it (see ui/macos/CMakeLists.txt).
+    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 13.0)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "" FORCE)
     endif()
     # The CommandLineTools install ships a stale libc++ (version 8000, pre-C++20)
     # that lacks <ranges> and other C++20 standard library headers. The macOS SDK

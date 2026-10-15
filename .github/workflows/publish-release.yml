@@ -349,7 +349,7 @@ jobs:
         run: |
           pkg=$(ls appstore/Tesseract-*-appstore.pkg)
           pkgutil --expand-full "$pkg" expanded
-          plist=$(ls expanded/*/Tesseract.app/Contents/Info.plist)
+          plist=$(find expanded -path '*/Tesseract.app/Contents/Info.plist' | head -n 1)
           build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
           short=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
           xcrun altool --upload-package "$pkg" -t macos --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" \

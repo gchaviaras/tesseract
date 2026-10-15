@@ -28,6 +28,14 @@ on:
         description: 'macOS x86_64 (DMG)'
         type: boolean
         default: true
+      macos_appstore:
+        description: 'macOS arm64 Mac App Store .pkg (needs the App Store signing secrets)'
+        type: boolean
+        default: false
+      macos_appstore_upload:
+        description: 'Mac App Store: also validate and upload the .pkg to App Store Connect (TestFlight)'
+        type: boolean
+        default: false
       linux_packages:
         description: 'Linux DEB + RPM'
         type: boolean
@@ -477,6 +485,190 @@ jobs:
         run: |
           security delete-keychain "$KEYCHAIN_PATH" || true
           rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/AuthKey.p8"
+
+  # ---------------------------------------------------------------------------
+  # macOS arm64 — Mac App Store .pkg (sandboxed). Same as package.yml's
+  # macos-appstore job (secrets/variables: see there), plus an optional
+  # validate + upload (macos_appstore_upload) for TestFlight testing without
+  # tagging a release.
+  # ---------------------------------------------------------------------------
+  macos-appstore:
+    if: ${{ inputs.macos_appstore || inputs.macos_appstore_upload }}
+    name: macOS arm64 (Mac App Store pkg)
+    runs-on: macos-latest
+    # Matches CMAKE_OSX_DEPLOYMENT_TARGET (root CMakeLists.txt); also read by
+    # CMake, rustc and cc-built C dependencies.
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The `secrets` context can't be read in an `if:`; check presence here
+      # and gate the remaining steps on this step's output (see the Windows
+      # signing check above).
+      - name: Check for App Store signing secrets
+        id: as_check
+        env:
+          APP_CERT: ${{ secrets.TESSERACT_MAC_APPSTORE_APP_CERT_P12 }}
+          INSTALLER_CERT: ${{ secrets.TESSERACT_MAC_APPSTORE_INSTALLER_CERT_P12 }}
+          PROFILE: ${{ secrets.TESSERACT_MAC_PROVISIONING_PROFILE_B64 }}
+        run: |
+          if [ -n "$APP_CERT" ] && [ -n "$INSTALLER_CERT" ] && [ -n "$PROFILE" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Mac App Store signing secrets missing; skipping the App Store package"
+          fi
+
+      - name: Install build dependencies
+        if: steps.as_check.outputs.present == 'true'
+        run: brew install go resvg autoconf automake libtool
+
+      # Homebrew's opus bottle targets the runner's own macOS; App Store
+      # validation rejects a dylib newer than LSMinimumSystemVersion.
+      - name: Build opus from source (arm64)
+        if: steps.as_check.outputs.present == 'true'
+        run: |
+          git clone --depth 1 --branch v1.5.2 https://github.com/xiph/opus.git opus-src
+          cmake -S opus-src -B opus-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
+            -DOPUS_BUILD_SHARED_LIBRARY=ON \
+            -DOPUS_BUILD_PROGRAMS=OFF \
+            -DOPUS_BUILD_TESTING=OFF
+          cmake --build opus-build
+          # Lay opus.pc where Corrosion's PKG_CONFIG_PATH (…/pkgconfig) will find it.
+          mkdir -p opus-build/pkgconfig
+          cp opus-build/opus.pc opus-build/pkgconfig/
+          echo "OPUS_LIB_DIR=$PWD/opus-build" >> $GITHUB_ENV
+          echo "OPUS_INCLUDE_DIR=$PWD/opus-src/include" >> $GITHUB_ENV
+
+      - name: Install Rust (stable, aarch64 target)
+        if: steps.as_check.outputs.present == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+          components: llvm-tools-preview
+
+      - name: Cache Rust build artifacts
+        if: steps.as_check.outputs.present == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> build/macos-appkit-arm64-appstore/cargo/build
+          cache-on-failure: true
+
+      # Certificates go into a throwaway keychain; the profile is written
+      # under RUNNER_TEMP so neither lands in the checkout.
+      - name: Import certificates and provisioning profile
+        if: steps.as_check.outputs.present == 'true'
+        id: as_import
+        env:
+          APP_CERT: ${{ secrets.TESSERACT_MAC_APPSTORE_APP_CERT_P12 }}
+          INSTALLER_CERT: ${{ secrets.TESSERACT_MAC_APPSTORE_INSTALLER_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.TESSERACT_MAC_APPSTORE_CERT_PASSWORD }}
+          PROFILE: ${{ secrets.TESSERACT_MAC_PROVISIONING_PROFILE_B64 }}
+        run: |
+          keychain="$RUNNER_TEMP/appstore.keychain-db"
+          kc_pass="$(uuidgen)"
+          security create-keychain -p "$kc_pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$kc_pass" "$keychain"
+          echo "$APP_CERT" | base64 --decode > "$RUNNER_TEMP/app.p12"
+          echo "$INSTALLER_CERT" | base64 --decode > "$RUNNER_TEMP/installer.p12"
+          for f in app installer; do
+            security import "$RUNNER_TEMP/$f.p12" -k "$keychain" -P "$CERT_PASSWORD" \
+              -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
+          done
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kc_pass" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          echo "$PROFILE" | base64 --decode > "$RUNNER_TEMP/tesseract.provisionprofile"
+          rm -f "$RUNNER_TEMP/app.p12" "$RUNNER_TEMP/installer.p12"
+          echo "profile_path=$RUNNER_TEMP/tesseract.provisionprofile" >> "$GITHUB_OUTPUT"
+
+      # CFBundleVersion = run number: App Store Connect rejects a repeated one.
+      - name: Configure (Mac App Store, arm64)
+        if: steps.as_check.outputs.present == 'true'
+        run: |
+          cmake --preset macos-appkit-arm64-appstore \
+            "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" \
+            "-DTESSERACT_MAC_APPSTORE_APP_IDENTITY=${{ vars.TESSERACT_MAC_APPSTORE_APP_IDENTITY }}" \
+            "-DTESSERACT_MAC_APPSTORE_INSTALLER_IDENTITY=${{ vars.TESSERACT_MAC_APPSTORE_INSTALLER_IDENTITY }}" \
+            "-DTESSERACT_MAC_TEAM_ID=${{ vars.TESSERACT_MAC_TEAM_ID }}" \
+            "-DTESSERACT_MAC_PROVISIONING_PROFILE=${{ steps.as_import.outputs.profile_path }}" \
+            "-DTESSERACT_MAC_BUILD_NUMBER=${{ github.run_number }}"
+
+      - name: Build signed .pkg
+        if: steps.as_check.outputs.present == 'true'
+        run: cmake --build build/macos-appkit-arm64-appstore --target appstore-pkg
+
+      - name: Check bundled libopus minimum macOS
+        if: steps.as_check.outputs.present == 'true'
+        run: |
+          for f in build/macos-appkit-arm64-appstore/ui/macos/Tesseract.app/Contents/Frameworks/libopus*.dylib; do
+            minos=$(vtool -show-build "$f" | awk '/minos/ {print $2; exit}')
+            echo "$f: minos $minos"
+            if [ "$(printf '%s\n%s\n' "$minos" "$MACOSX_DEPLOYMENT_TARGET" | sort -V | tail -n 1)" != "$MACOSX_DEPLOYMENT_TARGET" ]; then
+              echo "::error::$f needs macOS $minos, newer than the $MACOSX_DEPLOYMENT_TARGET deployment target"
+              exit 1
+            fi
+          done
+
+      - name: Upload App Store pkg artifact
+        if: steps.as_check.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tesseract-macos-appstore
+          path: build/macos-appkit-arm64-appstore/Tesseract-*-appstore.pkg
+          if-no-files-found: error
+
+      # Optional upload, the manual equivalent of publish-release.yml's
+      # appstore job: validates and uploads this run's pkg to App Store
+      # Connect (it then shows up in TestFlight once processed).
+      - name: Check for App Store Connect API key
+        id: key_check
+        if: inputs.macos_appstore_upload && steps.as_check.outputs.present == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          APPLE_ID: ${{ vars.TESSERACT_MAC_APPSTORE_APPLE_ID }}
+        run: |
+          if [ -n "$KEY_ID" ] && [ -n "$ISSUER_ID" ] && [ -n "$KEY_P8" ] && [ -n "$APPLE_ID" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Upload requested but the App Store Connect API key secrets or TESSERACT_MAC_APPSTORE_APPLE_ID are missing"
+            exit 1
+          fi
+
+      - name: Validate and upload to App Store Connect
+        if: steps.key_check.outputs.present == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          APPLE_ID: ${{ vars.TESSERACT_MAC_APPSTORE_APPLE_ID }}
+        run: |
+          # altool looks the key up as AuthKey_<id>.p8 in ~/.appstoreconnect/private_keys.
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+          pkg=$(ls build/macos-appkit-arm64-appstore/Tesseract-*-appstore.pkg)
+          plist=build/macos-appkit-arm64-appstore/ui/macos/Tesseract.app/Contents/Info.plist
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
+          short=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
+          xcrun altool --validate-app -f "$pkg" -t macos --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+          xcrun altool --upload-package "$pkg" -t macos --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" \
+            --apple-id "$APPLE_ID" --bundle-id im.gnomos.tesseract \
+            --bundle-version "$build" --bundle-short-version-string "$short"
+          rm -f ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+
+      - name: Remove signing keychain
+        if: always() && steps.as_check.outputs.present == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/appstore.keychain-db" || true
 
   # ---------------------------------------------------------------------------
   # Linux x86_64 — DEB + RPM + AppImage (Qt6 backend, one build shared by all

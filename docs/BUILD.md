@@ -202,7 +202,9 @@ signed for distribution; adding the installer identity defines the
 `appstore-pkg` target, which runs `productbuild` and `pkgutil --check-signature`
 to produce `Tesseract-<version>-appstore.pkg` in the build directory. CMake
 stops there: CI validates and uploads it (`package.yml` `macos-appstore`,
-`publish-release.yml` `appstore`). `ITSAppUsesNonExemptEncryption` in the
+`publish-release.yml` `appstore`, which needs a tag-push `package.yml` run).
+For a TestFlight build without tagging, run Build Platform with
+`macos_appstore_upload`. `ITSAppUsesNonExemptEncryption` in the
 Info.plist must match your export-compliance answer in App Store Connect.
 
 ## Build internals

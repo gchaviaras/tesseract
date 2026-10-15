@@ -2704,6 +2704,30 @@ bool RoomView::copy_active_selection()
     return true;
 }
 
+bool RoomView::has_context_link() const
+{
+    MessageListView* thread_ml =
+        thread_view_ ? thread_view_->message_list() : nullptr;
+    return (message_list_ && message_list_->has_context_link()) ||
+           (thread_ml && thread_ml->has_context_link());
+}
+
+std::string RoomView::copy_menu_label() const
+{
+    return has_context_link() && !has_active_selection() ? tk::tr("Copy link")
+                                                         : tk::tr("Copy");
+}
+
+bool RoomView::copy_context_menu_target()
+{
+    if (copy_active_selection())
+        return true;
+    MessageListView* thread_ml =
+        thread_view_ ? thread_view_->message_list() : nullptr;
+    return (message_list_ && message_list_->copy_context_link()) ||
+           (thread_ml && thread_ml->copy_context_link());
+}
+
 bool RoomView::on_key_down(const tk::KeyEvent& event)
 {
     if (matches(ShortcutId::CopyMessage, event))

@@ -585,10 +585,21 @@ public:
     // still-focused composer.
     std::function<void()> on_selection_started;
 
-    // Right-click on an active selection in either timeline. The shell
-    // should show a native context menu with a "Copy" item that calls
-    // copy_active_selection(). Falls back to copying directly if unset.
+    // Right-click on an active selection, or on a link with no selection, in
+    // either timeline. The shell should show a native context menu with one
+    // item labelled copy_menu_label() that calls copy_context_menu_target().
+    // Falls back to copying directly if unset.
     std::function<void()> on_show_copy_menu;
+
+    // True when the last right-click landed on a link (no selection).
+    bool has_context_link() const;
+
+    // "Copy link" for a right-clicked link, otherwise "Copy" (translated).
+    std::string copy_menu_label() const;
+
+    // Context-menu Copy action: the selection if any, else the right-clicked
+    // link. Returns false when there is nothing to copy.
+    bool copy_context_menu_target();
 
     // True when either timeline (main or thread panel) has a non-empty,
     // visible, uncovered text selection.

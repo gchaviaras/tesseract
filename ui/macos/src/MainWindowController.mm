@@ -3610,7 +3610,8 @@ private:
                 return;
             NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
             NSMenuItem* item = [[NSMenuItem alloc]
-                initWithTitle:TkTr("Copy")
+                initWithTitle:[NSString stringWithUTF8String:
+                                  s->_mainApp->room_view()->copy_menu_label().c_str()]
                        action:@selector(copy:)
                 keyEquivalent:@""];
             // Explicit target: with nil, copy: walks the responder chain and a
@@ -8425,7 +8426,8 @@ private:
 {
     if (item.action == @selector(copy:))
     {
-        return _mainApp && _mainApp->room_view()->has_active_selection();
+        return _mainApp && (_mainApp->room_view()->has_active_selection() ||
+                            _mainApp->room_view()->has_context_link());
     }
     if ([self respondsToSelector:item.action] &&
         [NSStringFromSelector(item.action) hasSuffix:@"MenuAction:"])
@@ -8438,7 +8440,7 @@ private:
 - (void)copy:(id)sender
 {
     if (_mainApp)
-        _mainApp->room_view()->copy_active_selection();
+        _mainApp->room_view()->copy_context_menu_target();
 }
 
 - (void)_showQRGrant

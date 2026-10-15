@@ -570,10 +570,10 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             auto* menu = new QMenu(mainAppSurface_);
             menu->setAttribute(Qt::WA_DeleteOnClose);
             menu->setStyleSheet(tk::qt6::build_menu_qss(current_theme_));
-            QAction* copyAct = menu->addAction(QString::fromStdString(tk::tr("Copy")));
+            QAction* copyAct = menu->addAction(QString::fromStdString(rv->copy_menu_label()));
             QObject::connect(copyAct, &QAction::triggered, [rv]()
             {
-                rv->copy_active_selection();
+                rv->copy_context_menu_target();
             });
             menu->popup(QCursor::pos());
         };

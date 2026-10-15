@@ -10478,12 +10478,37 @@ void MessageListView::clear_selection()
         request_repaint_();
 }
 
-bool MessageListView::on_right_click(tk::Point /*local*/)
+bool MessageListView::on_right_click(tk::Point local)
 {
+    context_link_url_.clear();
     if (!has_selection())
-        return false;
+    {
+        // No selection: a link under the pointer can be copied directly.
+        const std::size_t row = hovered_row_geom_.row_index;
+        if (gate_blocks_input_() || nav_loading_ || row >= messages_.size())
+            return false;
+        const LinkLayout* le = link_cache_.peek(messages_[row].event_id);
+        if (!le)
+            return false;
+        const tk::Point world{local.x + bounds().x, local.y + bounds().y};
+        context_link_url_ = link_at_world(*le, world);
+        if (context_link_url_.empty())
+            return false;
+        if (!on_show_copy_menu || !on_show_copy_menu())
+            copy_context_link();
+        return true;
+    }
     if (!on_show_copy_menu || !on_show_copy_menu())
         copy_selection();
+    return true;
+}
+
+bool MessageListView::copy_context_link()
+{
+    if (context_link_url_.empty() || !on_set_clipboard)
+        return false;
+    on_set_clipboard(context_link_url_);
+    context_link_url_.clear();
     return true;
 }
 
@@ -10494,6 +10519,7 @@ bool MessageListView::on_pointer_down(tk::Point local)
     // never saw announced on the clicked row.
     kbd_event_id_.clear();
     kbd_part_key_.clear();
+    context_link_url_.clear();
     if (gate_blocks_input_())
     {
         return false; // list not painted yet

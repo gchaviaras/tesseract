@@ -60,6 +60,25 @@ xcode-select --install   # Xcode Command Line Tools
 
 No Go or Perl toolchain is needed (see the note under the Linux prerequisites above).
 
+#### Developer ID signing (DMG)
+
+By default the app and DMG are ad-hoc signed. Cache variables (ui/macos/CMakeLists.txt):
+
+- `TESSERACT_MAC_CODESIGN_IDENTITY`: e.g. `Developer ID Application: Name (TEAMID)`. Signs the app with the hardened runtime and `ui/macos/Tesseract.entitlements`, and the DMG. The entitlements grant microphone, camera and location, which the hardened runtime otherwise blocks.
+- `TESSERACT_MAC_NOTARIZE_PROFILE`: `notarytool` keychain profile; enables the `notarize` target and requires the identity above.
+- `TESSERACT_MAC_NOTARIZE_KEYCHAIN`: optional keychain file holding that profile (`--keychain`); empty = default keychain.
+
+Locally: run `xcrun notarytool store-credentials tesseract-notary` once, then
+
+```bash
+cmake --preset macos-appkit-arm64-release \
+  -DTESSERACT_MAC_CODESIGN_IDENTITY="Developer ID Application: Name (TEAMID)" \
+  -DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary
+cmake --build build/macos-appkit-arm64-release --target package notarize
+```
+
+CI (`.github/workflows/package.yml`, both macOS jobs) signs and notarizes when all of these are set, and builds the ad-hoc DMG otherwise: secrets `TESSERACT_MAC_DEVELOPER_ID_P12` (base64 .p12 with the certificate, key and intermediate), `TESSERACT_MAC_DEVELOPER_ID_P12_PASSWORD`, `APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID`, `APPSTORE_API_KEY_P8`, and repository variable `TESSERACT_MAC_CODESIGN_IDENTITY`.
+
 ### Windows / Win32
 
 Requires Visual Studio (or the standalone Build Tools) with the "Desktop

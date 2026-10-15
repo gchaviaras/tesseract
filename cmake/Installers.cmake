@@ -126,17 +126,32 @@ if(APPLE)
             \"\${CMAKE_INSTALL_PREFIX}/share\")
     ")
     
-    # Optional notarization wrapper. Runs `xcrun notarytool submit --wait`
-    # followed by `xcrun stapler staple` against the .dmg CPack produces.
+    # Optional notarization wrapper. Signs the .dmg CPack produces with the
+    # Developer ID identity (the app inside is already signed by the install
+    # step), runs `xcrun notarytool submit --wait`, then `xcrun stapler staple`.
+    # Needs TESSERACT_MAC_CODESIGN_IDENTITY; TESSERACT_MAC_NOTARIZE_KEYCHAIN is
+    # passed as --keychain when the profile lives outside the default keychain.
     # Invoke with:  cmake --build build/<preset> --target notarize
     if(TESSERACT_MAC_NOTARIZE_PROFILE)
+        if(NOT TESSERACT_MAC_CODESIGN_IDENTITY)
+            message(FATAL_ERROR
+                "TESSERACT_MAC_NOTARIZE_PROFILE requires TESSERACT_MAC_CODESIGN_IDENTITY "
+                "(notarization needs a Developer ID signed app and DMG)")
+        endif()
         set(_dmg_path "${CMAKE_BINARY_DIR}/${CPACK_PACKAGE_FILE_NAME}.dmg")
+        set(_notary_keychain_args)
+        if(TESSERACT_MAC_NOTARIZE_KEYCHAIN)
+            set(_notary_keychain_args --keychain "${TESSERACT_MAC_NOTARIZE_KEYCHAIN}")
+        endif()
         add_custom_target(notarize
+            COMMAND codesign --force --timestamp
+                    --sign "${TESSERACT_MAC_CODESIGN_IDENTITY}" "${_dmg_path}"
             COMMAND xcrun notarytool submit "${_dmg_path}"
                     --keychain-profile "${TESSERACT_MAC_NOTARIZE_PROFILE}"
+                    ${_notary_keychain_args}
                     --wait
             COMMAND xcrun stapler staple "${_dmg_path}"
-            COMMENT "Notarizing and stapling ${_dmg_path}"
+            COMMENT "Signing, notarizing and stapling ${_dmg_path}"
             VERBATIM
         )
     endif()

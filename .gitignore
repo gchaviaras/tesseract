@@ -8,6 +8,7 @@ target/
 _deps/
 CMakeFiles/
 CMakeCache.txt
+CmakeUserPresets.json
 compile_commands.json
 *.user
 *.suo

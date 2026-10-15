@@ -189,6 +189,24 @@ execute_process(
 string(REGEX REPLACE "^[^\n]*\n" "" _opus_id "${_opus_otool}")
 string(STRIP "${_opus_id}" _opus_id)
 
+# dyld refuses a library whose minimum OS is newer than the running system, so
+# a libopus built for the build machine (Homebrew's is) makes the bundle
+# unlaunchable below that version whatever LSMinimumSystemVersion says. CI
+# builds opus with -DCMAKE_OSX_DEPLOYMENT_TARGET to match and fails on this.
+execute_process(
+    COMMAND vtool -show-build "${_opus_real}"
+    OUTPUT_VARIABLE _opus_build
+    ERROR_QUIET)
+string(REGEX MATCH "minos ([0-9.]+)" _ "${_opus_build}")
+set(TESSERACT_OPUS_MINOS "${CMAKE_MATCH_1}")
+if(TESSERACT_OPUS_MINOS AND TESSERACT_OPUS_MINOS VERSION_GREATER CMAKE_OSX_DEPLOYMENT_TARGET)
+    message(WARNING
+        "${_opus_real} requires macOS ${TESSERACT_OPUS_MINOS}, newer than the "
+        "deployment target ${CMAKE_OSX_DEPLOYMENT_TARGET}: the app will not launch "
+        "below ${TESSERACT_OPUS_MINOS}. Build opus with "
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET} for a shippable bundle.")
+endif()
+
 # All three archives have circular dependencies through the FFI; link them
 # with WHOLE_ARCHIVE so every symbol is present regardless of order.
 target_link_libraries(tesseract_macos PRIVATE

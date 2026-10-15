@@ -274,7 +274,7 @@ Change proposals where the homeserver advertises support for them:
 | Platform | Minimum OS | Architecture |
 | -------- | ---------- | ------------ |
 | Windows (Win32) | Windows 10 version 1607 (Anniversary Update) | x86-64 |
-| macOS (AppKit) | macOS 11 Big Sur | Apple Silicon (arm64) or Intel (x86-64) |
+| macOS (AppKit) | macOS 13 Ventura | Apple Silicon (arm64) or Intel (x86-64) |
 | Linux — Qt6 | Debian 12 (Bookworm) / Ubuntu 24.04 LTS or newer | x86-64 |
 | Linux — GTK4 | Debian 13 (Trixie) / Ubuntu 24.04 LTS or newer (GTK ≥ 4.12) | x86-64 |
 
@@ -373,10 +373,10 @@ Tesseract is licensed under the [GNU General Public License v3](./LICENSE)
   and per-monitor-v2 DPI awareness require Windows 10 1607; Windows 11 is
   also supported. The rendering stack is Direct2D + DirectWrite + WIC and
   audio uses Media Foundation, all present from Windows 10.
-- **macOS** — deployment target and `LSMinimumSystemVersion` are both 11.0.
+- **macOS** — deployment target and `LSMinimumSystemVersion` are both 13.0.
   Builds are per-architecture (arm64 or x86-64). Voice-message (MSC3245
   opus) playback additionally requires **macOS 14+**; the rest of the app
-  runs on macOS 11+.
+  runs on macOS 13+.
 - **Linux (Qt6)** — runtime depends on Qt ≥ 6.4, which is the version
   shipped by Debian 12 and Ubuntu 24.04 LTS. Older distros work if a
   Qt ≥ 6.4 is provided.

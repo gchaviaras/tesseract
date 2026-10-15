@@ -22,9 +22,6 @@ static constexpr auto kChromeHideAfter = std::chrono::milliseconds(2500);
 // Fixed, backdrop-tuned fill states for the chrome buttons — the scrim is
 // always near-black regardless of the app's light/dark theme, so these
 // bypass tk::Button's default theme-driven fill (see Button::FillOverride).
-static constexpr tk::Color kCloseFillRest      = tk::Color::rgba(255, 255, 255, 30);
-static constexpr tk::Color kCloseFillHover     = tk::Color::rgba(255, 255, 255, 80);
-static constexpr tk::Color kCloseFillPressed   = tk::Color::rgba(255, 255, 255, 115);
 static constexpr tk::Color kDarkPillFillRest    = tk::Color::rgba(0, 0, 0, 160);
 static constexpr tk::Color kDarkPillFillHover   = tk::Color::rgba(60, 60, 60, 185);
 static constexpr tk::Color kDarkPillFillPressed = tk::Color::rgba(95, 95, 95, 200);
@@ -57,7 +54,7 @@ MediaOverlayBase::MediaOverlayBase()
     add_tooltip_(close_btn_);
     close_btn_->set_on_click([this] { dismiss_(); });
     close_btn_->set_fill_override(tk::Button::FillOverride{
-        kCloseFillRest, kCloseFillHover, kCloseFillPressed});
+        kDarkPillFillRest, kDarkPillFillHover, kDarkPillFillPressed});
 
     auto save = tk::create_widget<tk::Button>(this, "", std::function<void()>{},
                                               tk::Button::Variant::Icon);

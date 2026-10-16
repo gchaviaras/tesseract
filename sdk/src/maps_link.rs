@@ -12,7 +12,6 @@ use std::pin::Pin;
 use std::time::Duration;
 use url::Url;
 
-use crate::net_guard::host_is_safe;
 
 /// Outcome of classifying a piece of text as a maps link.
 #[derive(Debug, Clone, PartialEq)]
@@ -78,13 +77,21 @@ pub fn classify_maps_link(text: &str) -> MapsLinkKind {
     MapsLinkKind::NotAMapsLink
 }
 
+/// Coordinates a maps link or a `geo:` location may carry: finite and on the
+/// globe. `f64::parse` accepts `NaN`, `inf` and `1e308`, so every parsed pair
+/// goes through here, and `send_location` uses it before writing a `geo:` URI.
+pub fn checked_coords(lat: f64, lon: f64) -> Option<(f64, f64)> {
+    let in_range = lat.is_finite() && lon.is_finite() && lat.abs() <= 90.0 && lon.abs() <= 180.0;
+    in_range.then_some((lat, lon))
+}
+
 /// Parse `lat,lon[,...]` from a comma-separated prefix, ignoring any further
 /// comma-separated fields (e.g. a trailing Google Maps zoom level `15z`).
 fn parse_lat_lon_prefix(s: &str) -> Option<(f64, f64)> {
     let mut parts = s.split(',');
     let lat: f64 = parts.next()?.trim().parse().ok()?;
     let lon: f64 = parts.next()?.trim().parse().ok()?;
-    Some((lat, lon))
+    checked_coords(lat, lon)
 }
 
 /// Google Maps direct-coordinate forms: `?q=lat,lon`, a path segment
@@ -129,7 +136,7 @@ fn parse_osm(url: &Url) -> Option<(f64, f64)> {
         }
     }
     if let (Some(lat), Some(lon)) = (mlat, mlon) {
-        return Some((lat, lon));
+        return checked_coords(lat, lon);
     }
     let frag = url.fragment()?;
     let rest = frag.strip_prefix("map=")?;
@@ -137,7 +144,7 @@ fn parse_osm(url: &Url) -> Option<(f64, f64)> {
     let _zoom = parts.next()?;
     let lat: f64 = parts.next()?.parse().ok()?;
     let lon: f64 = parts.next()?.parse().ok()?;
-    Some((lat, lon))
+    checked_coords(lat, lon)
 }
 
 // ---------------------------------------------------------------------------
@@ -155,25 +162,20 @@ pub trait ShortlinkFetcher: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'a>>;
 }
 
-/// Maximum redirect hops to follow manually before giving up.
-const MAX_REDIRECTS: u8 = 10;
-
-/// Production fetcher: manually walks the HTTP redirect chain (GET with
-/// redirects disabled, reading the raw `Location` header at each hop)
-/// instead of relying on reqwest's automatic redirect-following.
+/// Production fetcher: walks the redirect chain through the guarded client
+/// (`net_guard::guarded_get`), which vets every hop's scheme and host and
+/// checks the peer address, and never lets reqwest follow redirects itself.
 ///
-/// This matters because OpenStreetMap's `osm.org/go/...` shortlinks
-/// terminate in a `Location` header carrying a URL *fragment*
-/// (`https://www.openstreetmap.org/#map=18/lat/lon` — OSM's frontend routes
-/// off the fragment client-side, there's no server-side page for it).
-/// Fragments are never transmitted over HTTP, and reqwest's own redirect
-/// follower reports the terminal response's `response.url()` with the
-/// fragment already dropped (verified empirically). Reading the `Location`
-/// header text ourselves — and never re-deriving the "current" URL from a
-/// response's own `url()` — is the only way to keep it. A GET (rather than
-/// HEAD) is used because some short-link redirectors don't reliably support
-/// HEAD.
+/// The final URL is the last hop's target as joined from its `Location`
+/// header, so the fragment survives. That matters because OpenStreetMap's
+/// `osm.org/go/...` shortlinks end in a `Location` whose fragment carries the
+/// coordinates (`https://www.openstreetmap.org/#map=18/lat/lon`); fragments
+/// are never sent over HTTP, so the response URL alone would lose them. A GET
+/// is used rather than HEAD because some redirectors don't support HEAD.
 pub struct ReqwestShortlinkFetcher;
+
+/// Hops followed for one shortlink; the target page's status is not checked.
+const SHORTLINK_MAX_REDIRECTS: u8 = 10;
 
 impl ShortlinkFetcher for ReqwestShortlinkFetcher {
     fn fetch_final_url<'a>(
@@ -182,30 +184,16 @@ impl ShortlinkFetcher for ReqwestShortlinkFetcher {
         timeout: Duration,
     ) -> Pin<Box<dyn Future<Output = Option<String>> + Send + 'a>> {
         Box::pin(async move {
-            let client = crate::net_proxy::apply(reqwest::Client::builder())
-                .timeout(timeout)
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .ok()?;
-            let mut current = Url::parse(url).ok()?;
-            for _ in 0..MAX_REDIRECTS {
-                if !host_is_safe(&current).await {
-                    return None;
-                }
-                let resp = client.get(current.clone()).send().await.ok()?;
-                let Some(location) = resp.headers().get(reqwest::header::LOCATION) else {
-                    // Terminal (non-redirect) response — `current` already
-                    // holds the last-known target, fragment intact.
-                    return Some(current.to_string());
-                };
-                let location_str = location.to_str().ok()?;
-                let next = current.join(location_str).ok()?;
-                if next.scheme() != "http" && next.scheme() != "https" {
-                    return None;
-                }
-                current = next;
-            }
-            None
+            let client = crate::net_guard::guarded_client(timeout)?;
+            let start = Url::parse(url).ok()?;
+            // One deadline for the whole chain; the client's timeout is per request.
+            let final_url = tokio::time::timeout(
+                timeout,
+                crate::net_guard::guarded_final_url(&client, start, SHORTLINK_MAX_REDIRECTS),
+            )
+            .await
+            .ok()??;
+            Some(final_url.to_string())
         })
     }
 }
@@ -314,6 +302,35 @@ mod tests {
             ),
             direct(41.40338, -2.17404)
         );
+    }
+
+    #[test]
+    fn non_finite_or_out_of_range_coords_are_rejected() {
+        for url in [
+            "https://maps.google.com/?q=91,0",
+            "https://maps.google.com/?q=0,181",
+            "https://maps.google.com/?q=NaN,1",
+            "https://maps.google.com/?q=1,inf",
+            "https://maps.google.com/?q=1e308,1",
+            "https://www.google.com/maps/@-90.5,10,15z",
+            "https://www.openstreetmap.org/?mlat=inf&mlon=1",
+            "https://www.openstreetmap.org/#map=3/nan/1",
+            "https://www.openstreetmap.org/#map=3/1/-180.5",
+        ] {
+            assert_eq!(
+                classify_maps_link(url),
+                MapsLinkKind::NotAMapsLink,
+                "{url} should not classify"
+            );
+        }
+    }
+
+    #[test]
+    fn coords_at_the_limits_are_accepted() {
+        assert_eq!(checked_coords(90.0, 180.0), Some((90.0, 180.0)));
+        assert_eq!(checked_coords(-90.0, -180.0), Some((-90.0, -180.0)));
+        assert_eq!(checked_coords(f64::NAN, 0.0), None);
+        assert_eq!(checked_coords(0.0, f64::INFINITY), None);
     }
 
     #[test]

@@ -121,3 +121,40 @@ TEST_CASE("location_click_url repairs comma-decimal OSM bodies only",
     CHECK(location_click_url("Alice shared her location", 51.5008, -0.1247,
                              15) == fixed);
 }
+
+TEST_CASE("location_click_url opens only a known map host from the body",
+          "[map_tiles]")
+{
+    // The body is sender-supplied: any other host is replaced by the link built
+    // from the coordinates.
+    const std::string local = tesseract::views::osm_view_url(51.5, -0.1, 15);
+    CHECK(tesseract::views::location_click_url("https://evil.example/login",
+                                               51.5, -0.1, 15) == local);
+    CHECK(tesseract::views::location_click_url("https://maps.google.evil.example/maps",
+                                               51.5, -0.1, 15) == local);
+    CHECK(tesseract::views::location_click_url("https://google.com.evil.example/maps/x",
+                                               51.5, -0.1, 15) == local);
+    CHECK(tesseract::views::location_click_url("https://google.com/search?q=x",
+                                               51.5, -0.1, 15) == local);
+    CHECK(tesseract::views::location_click_url("https://openstreetmap.org@evil.example/",
+                                               51.5, -0.1, 15) == local);
+    // Known map services: opened as sent.
+    const std::string apple = "https://maps.apple.com/?ll=51.5,-0.1";
+    CHECK(tesseract::views::location_click_url(apple, 51.5, -0.1, 15) == apple);
+}
+
+TEST_CASE("lat_lon_to_tile stays in range for out-of-range coordinates",
+          "[map_tiles]")
+{
+    // Remote coordinates reach these functions; a pole or a bad zoom must not
+    // produce a non-finite or out-of-range tile.
+    for (double lat : {90.0, -90.0, 1000.0, -1000.0}) {
+        const auto t = tesseract::views::lat_lon_to_tile(lat, 0.0, 10);
+        CHECK(t.x >= 0);
+        CHECK(t.x < (1 << 10));
+        CHECK(t.y >= 0);
+        CHECK(t.y < (1 << 10));
+    }
+    const auto huge = tesseract::views::lat_lon_to_tile(0.0, 0.0, 500);
+    CHECK(huge.z <= 19);
+}

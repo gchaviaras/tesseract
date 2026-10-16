@@ -27,10 +27,30 @@ struct MapViewport
 };
 
 /// Convert geographic coordinates to the slippy-map tile index at `zoom`.
+// Web Mercator is undefined at the poles, and a latitude out of range makes
+// log/tan/cos non-finite. Clamp to the square-map limit, the longitude to
+// [-180, 180], and the zoom to the tile servers' range, so the conversions below
+// always stay finite and in range. The coordinates come from remote events.
+inline constexpr double kMaxMercatorLat = 85.0511287798;
+inline constexpr int kMaxZoom = 19;
+
+inline double clamp_mercator_lat(double lat)
+{
+    return std::max(-kMaxMercatorLat, std::min(lat, kMaxMercatorLat));
+}
+
+inline double clamp_lon(double lon)
+{
+    return std::max(-180.0, std::min(lon, 180.0));
+}
+
 inline TileCoord lat_lon_to_tile(double lat, double lon, int zoom)
 {
+    zoom = std::max(0, std::min(zoom, kMaxZoom));
     const int n = 1 << zoom;
     const double fn = static_cast<double>(n);
+    lat = clamp_mercator_lat(lat);
+    lon = clamp_lon(lon);
     const double lat_r = lat * M_PI / 180.0;
     int x = static_cast<int>(std::floor((lon + 180.0) / 360.0 * fn));
     int y = static_cast<int>(std::floor(
@@ -44,7 +64,10 @@ inline TileCoord lat_lon_to_tile(double lat, double lon, int zoom)
 /// World-pixel position of a lat/lon at `zoom` (tile size = 256 px).
 inline tk::Point lat_lon_to_world_px(double lat, double lon, int zoom)
 {
+    zoom = std::max(0, std::min(zoom, kMaxZoom));
     const double n = static_cast<double>(1 << zoom) * 256.0;
+    lat = clamp_mercator_lat(lat);
+    lon = clamp_lon(lon);
     const double lat_r = lat * M_PI / 180.0;
     double fx = (lon + 180.0) / 360.0 * n;
     double fy =
@@ -145,12 +168,34 @@ inline std::string osm_view_url(double lat, double lon, int zoom)
 /// openstreetmap.org link containing ',': messages sent from a comma-decimal
 /// locale carry "mlat=51,5008" links that don't resolve, so those are rebuilt
 /// from the card's coordinates.
+// Map services a location card may open. The body is sender-supplied, so a
+// link to any other host is replaced by the coordinates URL built here.
+inline bool is_known_map_url(std::string_view url)
+{
+    const auto scheme_end = url.find("://");
+    if (scheme_end == std::string_view::npos)
+        return false;
+    const auto after = url.substr(scheme_end + 3);
+    const auto host_end = after.find_first_of("/?#");
+    const auto host = after.substr(0, host_end);
+    const auto path = host_end == std::string_view::npos
+                          ? std::string_view{}
+                          : after.substr(host_end);
+    if (host == "openstreetmap.org" || host == "www.openstreetmap.org" ||
+        host == "osm.org" || host == "maps.apple.com")
+        return true;
+    if (host == "maps.google.com" || host == "www.google.com" ||
+        host == "google.com")
+        return path.starts_with("/maps");
+    return false;
+}
+
 inline std::string location_click_url(std::string_view body, double lat,
                                       double lon, int zoom)
 {
     const bool body_is_url =
         body.starts_with("http://") || body.starts_with("https://");
-    if (!body_is_url)
+    if (!body_is_url || !is_known_map_url(body))
         return osm_view_url(lat, lon, zoom);
     const bool broken_osm =
         (body.starts_with("https://www.openstreetmap.org/") ||

@@ -130,6 +130,7 @@ struct RlShell : tesseract::test::TestShellBase
     using ShellBase::own_extended_profile_;
     using ShellBase::pending_invite_resolves_;
     using ShellBase::pending_join_via_;
+    using ShellBase::kMaxPendingJoinVia;
     using ShellBase::pending_launch_action_;
     using ShellBase::pending_launch_room_id_;
     using ShellBase::pending_matrix_link_;
@@ -143,6 +144,7 @@ struct RlShell : tesseract::test::TestShellBase
     using ShellBase::retry_pending_launch_room_;
     using ShellBase::room_view_;
     using ShellBase::rooms_;
+    using ShellBase::room_list_received_;
     using ShellBase::server_info_;
     using ShellBase::start_presence_tracking_;
     using ShellBase::tab_select_room;
@@ -495,7 +497,7 @@ TEST_CASE("a launch room on another account switches to it first",
 
 // ── matrix links ────────────────────────────────────────────────────────────
 
-TEST_CASE("a matrix link is held until logged in with rooms", "[shell][links]")
+TEST_CASE("a matrix link is held until the room list has arrived", "[shell][links]")
 {
     RlFx f;
     f.s.open_matrix_link("https://matrix.to/#/!r:x");
@@ -503,9 +505,21 @@ TEST_CASE("a matrix link is held until logged in with rooms", "[shell][links]")
     CHECK(f.s.tabs_.empty());
 }
 
+TEST_CASE("a matrix link opens once an account's empty room list has arrived",
+          "[shell][links]")
+{
+    // A brand-new account: the list arrives with no rooms. The link must not be
+    // held again, or the replay on that update would requeue it forever.
+    RlFx f;
+    f.s.room_list_received_ = true;
+    f.s.open_matrix_link("https://matrix.to/#/!new:x");
+    CHECK(f.s.pending_matrix_link_.empty());
+}
+
 TEST_CASE("matrix links navigate to rooms, aliases and events", "[shell][links]")
 {
     RlFx f;
+    f.s.room_list_received_ = true;
     auto room = rl_room("!r:x");
     room.canonical_alias = "#alias:x";
     f.s.rooms_ = {room};
@@ -523,6 +537,12 @@ TEST_CASE("matrix links navigate to rooms, aliases and events", "[shell][links]"
     f.s.current_room_id_.clear();
     f.s.tabs_.clear();
     f.s.open_matrix_link("https://matrix.to/#/!r:x/$event:x");
+    CHECK(f.s.current_room_id_ == "!r:x");
+
+    // An alias link that names an event opens the room too.
+    f.s.current_room_id_.clear();
+    f.s.tabs_.clear();
+    f.s.open_matrix_link("https://matrix.to/#/%23alias:x/$event:x");
     CHECK(f.s.current_room_id_ == "!r:x");
 
     f.s.open_matrix_link("https://example.com/not-matrix"); // ignored
@@ -643,4 +663,23 @@ TEST_CASE("window activity without a tracker only updates polling state",
     f.s.notify_window_active_(false);
     CHECK_FALSE(f.s.last_window_active_);
     f.s.notify_presence_tick_();
+}
+
+TEST_CASE("pending ?via= hints stay within their cap across many permalinks",
+          "[shell][roster_links]")
+{
+    RlFx f;
+    // Links are only handled once the room list has arrived.
+    f.s.room_list_received_ = true;
+    f.s.rooms_ = {rl_room("!known:x")};
+    f.s.mark_room_index_dirty_();
+    for (int i = 0; i < 300; ++i)
+        f.s.open_matrix_link("https://matrix.to/#/!r" + std::to_string(i) +
+                             ":x?via=hs.example");
+    CHECK(f.s.pending_join_via_.size() == f.s.kMaxPendingJoinVia);
+    // The oldest hints go first: the table keeps routing hints for the links
+    // the user is following now.
+    CHECK(f.s.pending_join_via_.count("!r299:x") == 1);
+    CHECK(f.s.pending_join_via_.count("!r" + std::to_string(300 - f.s.kMaxPendingJoinVia) + ":x") == 1);
+    CHECK(f.s.pending_join_via_.count("!r0:x") == 0);
 }

@@ -1221,7 +1221,13 @@ std::vector<BodyBlock> html_to_blocks(std::string_view html, bool dark)
         Kind kind;
         int  level;    // 1-based nesting depth
         int  counter;  // next item number for OL; unused for BQ/UL
+        // Opened past kMaxBlockNesting: kept so its closing tag still matches,
+        // but it adds no indent and no list of its own.
+        bool flattened = false;
     };
+    // Nesting past this is flattened, so a message of nested <blockquote>s or
+    // lists cannot make the indents and counters grow without bound.
+    constexpr std::size_t kMaxBlockNesting = 16;
     std::vector<BlockCtx> bctx;
 
     // ── Table accumulation ───────────────────────────────────────────────────
@@ -1483,7 +1489,8 @@ std::vector<BodyBlock> html_to_blocks(std::string_view html, bool dark)
     auto inner_list = [&]() -> BlockCtx*
     {
         for (int i = static_cast<int>(bctx.size()) - 1; i >= 0; --i)
-            if (bctx[i].kind == BlockCtx::UL || bctx[i].kind == BlockCtx::OL)
+            if (!bctx[i].flattened &&
+                (bctx[i].kind == BlockCtx::UL || bctx[i].kind == BlockCtx::OL))
                 return &bctx[i];
         return nullptr;
     };
@@ -1493,7 +1500,7 @@ std::vector<BodyBlock> html_to_blocks(std::string_view html, bool dark)
     {
         int d = 0;
         for (const auto& c : bctx)
-            if (c.kind == BlockCtx::BQ) ++d;
+            if (c.kind == BlockCtx::BQ && !c.flattened) ++d;
         return d;
     };
 
@@ -1502,7 +1509,8 @@ std::vector<BodyBlock> html_to_blocks(std::string_view html, bool dark)
     {
         int d = 0;
         for (const auto& c : bctx)
-            if (c.kind == BlockCtx::UL || c.kind == BlockCtx::OL) ++d;
+            if ((c.kind == BlockCtx::UL || c.kind == BlockCtx::OL) && !c.flattened)
+                ++d;
         return d;
     };
 
@@ -1643,6 +1651,11 @@ std::vector<BodyBlock> html_to_blocks(std::string_view html, bool dark)
         {
             if (!tag.closing)
             {
+                if (bctx.size() >= kMaxBlockNesting)
+                {
+                    bctx.push_back({BlockCtx::BQ, 0, 0, true});
+                    continue;
+                }
                 commit_block();
                 int depth = bq_depth() + 1;
                 bctx.push_back({BlockCtx::BQ, depth, 0});
@@ -1682,6 +1695,11 @@ std::vector<BodyBlock> html_to_blocks(std::string_view html, bool dark)
         {
             if (!tag.closing)
             {
+                if (bctx.size() >= kMaxBlockNesting)
+                {
+                    bctx.push_back({BlockCtx::UL, 0, 0, true});
+                    continue;
+                }
                 int depth = list_depth() + 1;
                 bctx.push_back({BlockCtx::UL, depth, 0});
             }
@@ -1704,6 +1722,11 @@ std::vector<BodyBlock> html_to_blocks(std::string_view html, bool dark)
         {
             if (!tag.closing)
             {
+                if (bctx.size() >= kMaxBlockNesting)
+                {
+                    bctx.push_back({BlockCtx::OL, 0, 0, true});
+                    continue;
+                }
                 int depth = list_depth() + 1;
                 bctx.push_back({BlockCtx::OL, depth, 0});
             }

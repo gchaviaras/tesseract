@@ -17,13 +17,17 @@ pub const KIND_EVENT: u8 = 4;
 ///   `https://matrix.to/#/#alias:server`           → RoomAlias
 ///   `https://matrix.to/#/@user:server`            → User
 ///   `https://matrix.to/#/!room:server/$evt:server`→ Event
+///   `https://matrix.to/#/#alias:server/$evt:server` → RoomAlias with `event_id`
+///     set; the shell does not navigate to the event yet (Event needs a room id)
 ///
 /// matrix: URI (MSC2312):
-///   `matrix:roomid/<id>`           → Room       (primary = `!<id>`)
-///   `matrix:r/<alias>`             → RoomAlias  (primary = `#<alias>`)
-///   `matrix:u/<user>`              → User       (primary = `@<user>`)
-///   `matrix:e/<roomid>/<eventid>`  → Event
+///   `matrix:roomid/<id>`               → Room       (primary = `!<id>`)
+///   `matrix:roomid/<id>/e/<eventid>`   → Event
+///   `matrix:r/<alias>`                 → RoomAlias  (primary = `#<alias>`)
+///   `matrix:r/<alias>/e/<eventid>`     → RoomAlias with `event_id` (as above)
+///   `matrix:u/<user>`                  → User       (primary = `@<user>`)
 ///
+/// Every identifier is validated with ruma; anything else is `kind == 0`.
 /// `?action=…` is ignored; `?via=…` params are retained in `via` (in order).
 pub fn parse_matrix_link(uri: &str) -> MatrixLinkResult {
     try_matrix_to(uri)
@@ -63,7 +67,8 @@ fn parse_via(query: Option<&str>) -> Vec<String> {
 // Strip the `https://matrix.to/#/` prefix. Returns the raw sigil-prefixed
 // target, query string included (the caller splits it off).
 fn matrix_to_target(href: &str) -> Option<&str> {
-    for prefix in ["https://matrix.to/#/", "http://matrix.to/#/"] {
+    // https only: an http permalink would invite a downgrade when pills are shown.
+    for prefix in ["https://matrix.to/#/"] {
         if let Some(rest) = href.strip_prefix(prefix) {
             return Some(rest);
         }
@@ -103,40 +108,24 @@ fn try_matrix_uri(uri: &str) -> Option<MatrixLinkResult> {
     let (rest, query) = split_query(uri.strip_prefix("matrix:")?);
     let via = parse_via(query);
 
-    // Split into path segments; MSC2312 uses `/` within the path.
-    let mut parts = rest.splitn(3, '/');
+    // `<kind>/<value>[/e/<event_id>]`. A bare `/<event_id>` tail, written by
+    // clients before the `e/` marker was specified, is still accepted.
+    let mut parts = rest.splitn(4, '/');
     let segment = parts.next()?;
-    let value = percent_decode(parts.next().unwrap_or(""));
-    let extra = parts.next().map(percent_decode);
+    let value = percent_decode(parts.next()?);
+    let event = match parts.next() {
+        None => None,
+        Some("e") => Some(percent_decode(parts.next()?)),
+        Some(legacy) => Some(percent_decode(legacy)),
+    };
 
-    match segment {
-        "u" => {
-            let user = format!("@{}", value);
-            result(KIND_USER, &user, "", via)
-        }
-        "r" => {
-            let alias = format!("#{}", value);
-            result(KIND_ROOM_ALIAS, &alias, "", via)
-        }
-        "roomid" => {
-            let room_id = format!("!{}", value);
-            match extra {
-                Some(ev) if !ev.is_empty() => result(KIND_EVENT, &room_id, &ev, via),
-                _ => result(KIND_ROOM, &room_id, "", via),
-            }
-        }
-        "e" => {
-            // `matrix:e/<room_id>/<event_id>`
-            let room_id = format!("!{}", value);
-            let event_id = extra.unwrap_or_default();
-            if event_id.is_empty() {
-                None
-            } else {
-                result(KIND_EVENT, &room_id, &event_id, via)
-            }
-        }
-        _ => None,
-    }
+    let (primary, event) = match (segment, event) {
+        ("roomid", event) => (format!("!{}", value), event),
+        ("r", event) => (format!("#{}", value), event),
+        ("u", None) => (format!("@{}", value), None),
+        _ => return None,
+    };
+    classify_sigil(&primary, event.as_deref(), via)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -150,6 +139,10 @@ fn classify_sigil(
 ) -> Option<MatrixLinkResult> {
     use matrix_sdk::ruma::{EventId, RoomAliasId, RoomId, UserId};
 
+    // ruma accepts a bare `!` as an opaque room id, so reject empty ids here.
+    if primary.len() < 2 {
+        return None;
+    }
     match primary.chars().next()? {
         '!' => {
             // Validate room ID
@@ -164,11 +157,21 @@ fn classify_sigil(
         }
         '#' => {
             RoomAliasId::parse(primary).ok()?;
-            result(KIND_ROOM_ALIAS, primary, "", via)
+            // The event is carried, not dropped; the shell only navigates by room id.
+            match second {
+                Some(ev) if !ev.is_empty() => {
+                    EventId::parse(ev).ok()?;
+                    result(KIND_ROOM_ALIAS, primary, ev, via)
+                }
+                _ => result(KIND_ROOM_ALIAS, primary, "", via),
+            }
         }
         '@' => {
             UserId::parse(primary).ok()?;
-            result(KIND_USER, primary, "", via)
+            match second {
+                Some(ev) if !ev.is_empty() => None,
+                _ => result(KIND_USER, primary, "", via),
+            }
         }
         '$' => {
             // Bare event ID (rare in matrix.to but valid): treat as unknown
@@ -179,23 +182,24 @@ fn classify_sigil(
     }
 }
 
-/// Decode `%XX` percent-encoding. Invalid sequences are left as-is.
+/// Decode `%XX` percent-encoding. Invalid sequences are left as-is. Decoding
+/// happens on bytes, so multi-byte UTF-8 (`%C3%A9` → `é`) survives intact.
 fn percent_decode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
     let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
             if let (Some(hi), Some(lo)) = (hex_nibble(bytes[i + 1]), hex_nibble(bytes[i + 2])) {
-                out.push(char::from(hi << 4 | lo));
+                out.push(hi << 4 | lo);
                 i += 3;
                 continue;
             }
         }
-        out.push(char::from(bytes[i]));
+        out.push(bytes[i]);
         i += 1;
     }
-    out
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn hex_nibble(b: u8) -> Option<u8> {
@@ -262,6 +266,11 @@ mod tests {
     fn matrix_to_room_alias() {
         let r = parse_matrix_link("https://matrix.to/#/#general:example.com");
         assert_eq!(r, alias("#general:example.com"));
+    }
+
+    #[test]
+    fn matrix_to_over_plain_http_is_not_a_permalink() {
+        assert_eq!(parse_matrix_link("http://matrix.to/#/@alice:example.com").kind, KIND_UNKNOWN);
     }
 
     #[test]
@@ -339,15 +348,56 @@ mod tests {
     }
 
     #[test]
-    fn matrix_uri_event() {
-        let r = parse_matrix_link("matrix:e/abc123:example.com/$xyz789:example.com");
+    fn matrix_uri_roomid_with_event_spec_form() {
+        let r = parse_matrix_link("matrix:roomid/abc123:example.com/e/$xyz789:example.com");
         assert_eq!(r, event("!abc123:example.com", "$xyz789:example.com"));
     }
 
     #[test]
-    fn matrix_uri_roomid_with_event() {
+    fn matrix_uri_roomid_with_legacy_event_tail() {
         let r = parse_matrix_link("matrix:roomid/abc123:example.com/$xyz789:example.com");
         assert_eq!(r, event("!abc123:example.com", "$xyz789:example.com"));
+    }
+
+    #[test]
+    fn matrix_uri_alias_with_event_keeps_event() {
+        let r = parse_matrix_link("matrix:r/general:example.com/e/$xyz789:example.com");
+        assert_eq!(r.kind, KIND_ROOM_ALIAS);
+        assert_eq!(r.primary, "#general:example.com");
+        assert_eq!(r.event_id, "$xyz789:example.com");
+    }
+
+    #[test]
+    fn matrix_uri_made_up_e_form_is_unknown() {
+        // `matrix:e/<room>/<event>` is not in any spec.
+        let r = parse_matrix_link("matrix:e/abc123:example.com/$xyz789:example.com");
+        assert_eq!(r.kind, KIND_UNKNOWN);
+    }
+
+    #[test]
+    fn matrix_uri_rejects_invalid_identifiers() {
+        assert_eq!(parse_matrix_link("matrix:u/bogus").kind, KIND_UNKNOWN);
+        assert_eq!(parse_matrix_link("matrix:roomid/").kind, KIND_UNKNOWN);
+        assert_eq!(parse_matrix_link("matrix:r/").kind, KIND_UNKNOWN);
+        assert_eq!(
+            parse_matrix_link("matrix:roomid/abc123:example.com/e/notanevent").kind,
+            KIND_UNKNOWN
+        );
+        assert_eq!(parse_matrix_link("matrix:roomid").kind, KIND_UNKNOWN);
+    }
+
+    #[test]
+    fn matrix_to_alias_with_event_keeps_event() {
+        let r = parse_matrix_link("https://matrix.to/#/#general:example.com/$xyz789:example.com");
+        assert_eq!(r.kind, KIND_ROOM_ALIAS);
+        assert_eq!(r.primary, "#general:example.com");
+        assert_eq!(r.event_id, "$xyz789:example.com");
+    }
+
+    #[test]
+    fn matrix_to_user_with_event_is_unknown() {
+        let r = parse_matrix_link("https://matrix.to/#/@alice:example.com/$xyz789:example.com");
+        assert_eq!(r.kind, KIND_UNKNOWN);
     }
 
     #[test]
@@ -368,11 +418,22 @@ mod tests {
     }
 
     #[test]
-    fn matrix_uri_percent_decode() {
-        // space in localpart (unusual but spec allows encoded chars)
-        let r = parse_matrix_link("matrix:u/alice%40example:example.com");
-        // This won't pass ruma validation — just check it doesn't panic
-        let _ = r;
+    fn percent_decode_keeps_utf8_sequences() {
+        // Encoded and literal UTF-8 must decode to the same character.
+        assert_eq!(percent_decode("%C3%A9"), "é");
+        assert_eq!(percent_decode("é"), "é");
+        assert_eq!(percent_decode("a%2Eb"), "a.b");
+        // Malformed escapes are left as they are.
+        assert_eq!(percent_decode("%zz%4"), "%zz%4");
+    }
+
+    #[test]
+    fn matrix_uri_via_decodes_non_ascii() {
+        let r = parse_matrix_link("matrix:roomid/abc123:example.com?via=b%C3%BCcher.example");
+        assert_eq!(
+            r,
+            with_via(room("!abc123:example.com"), &["bücher.example"])
+        );
     }
 
     #[test]

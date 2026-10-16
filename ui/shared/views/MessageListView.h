@@ -1912,6 +1912,11 @@ private:
     // "ended" with no timeline event to trigger it. No-op for non-live rows.
     void arm_live_location_expiry_(const MessageRowData& m);
     std::unordered_set<std::string> live_expiry_armed_; // "eid:expires_ms"
+    // Bounds on live-location expiry timers. A remote sender chooses the
+    // expiry, so the timers per view are capped and each waits at most an hour
+    // (the expiry callback re-arms for the rest).
+    static constexpr std::size_t kMaxArmedLiveExpiryTimers = 32;
+    static constexpr std::uint64_t kMaxLiveExpiryTimerMs = 60ull * 60 * 1000;
 
     enum class VoicePressKind
     {

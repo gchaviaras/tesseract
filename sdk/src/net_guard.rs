@@ -95,18 +95,51 @@ fn embedded_v4(v6: Ipv6Addr) -> Option<Ipv4Addr> {
     None
 }
 
+/// `localhost` and the names under it always mean this machine (RFC 6761).
+fn is_loopback_name(name: &str) -> bool {
+    let name = name.trim_end_matches('.').to_ascii_lowercase();
+    name == "localhost" || name.ends_with(".localhost")
+}
+
+/// Names that point at a machine on the local network rather than the public
+/// internet: a single label (`router`, `intranet`), or a name under a
+/// reserved internal suffix. A name that resolves to a private address is
+/// refused by the resolver check, so this only matters behind the user's
+/// Manual proxy, where the proxy resolves the name and the resolver-side check
+/// never sees it. It is not applied otherwise, so a service on a public
+/// address that happens to be called `box.lan` stays reachable.
+fn is_internal_name(name: &str) -> bool {
+    let name = name.trim_end_matches('.').to_ascii_lowercase();
+    if !name.contains('.') {
+        return true;
+    }
+    [".local", ".internal", ".lan", ".localdomain", ".home.arpa"]
+        .iter()
+        .any(|suffix| name.ends_with(suffix))
+}
+
 /// Pre-flight check for one hop of a guarded fetch: http/https only, and an
-/// IP-literal host must not be disallowed. Hostnames pass here — they're
-/// vetted at connect time by [`SafeResolver`] (or by [`host_is_safe`] for
-/// callers not using [`guarded_client`]).
+/// IP-literal host must not be disallowed. A hostname that is really an IP in
+/// another spelling (e.g. `127.0.0.1.`) is checked as an IP; `localhost` is
+/// always refused, and behind a Manual proxy so is any other internal name
+/// ([`is_internal_name`]). Other names are vetted again at connect time by
+/// [`SafeResolver`] (or by [`host_is_safe`] for callers not using
+/// [`guarded_client`]).
 pub(crate) fn url_is_fetchable(url: &Url) -> bool {
+    url_is_fetchable_with(url, crate::net_proxy::is_manual())
+}
+
+fn url_is_fetchable_with(url: &Url, manual_proxy: bool) -> bool {
     if url.scheme() != "http" && url.scheme() != "https" {
         return false;
     }
     match url.host() {
         Some(url::Host::Ipv4(v4)) => !is_disallowed_v4(v4),
         Some(url::Host::Ipv6(v6)) => !is_disallowed_ip(IpAddr::V6(v6)),
-        Some(url::Host::Domain(_)) => true,
+        Some(url::Host::Domain(name)) => match name.trim_end_matches('.').parse::<IpAddr>() {
+            Ok(ip) => !is_disallowed_ip(ip),
+            Err(_) => !is_loopback_name(name) && !(manual_proxy && is_internal_name(name)),
+        },
         None => false,
     }
 }
@@ -204,8 +237,25 @@ pub(crate) fn guarded_client(total_timeout: Duration) -> Option<reqwest::Client>
 /// vets hostnames) and the peer address is re-checked. Returns the
 /// final successful response and its URL.
 pub(crate) async fn guarded_get(http: &reqwest::Client, url: Url) -> Option<(reqwest::Response, Url)> {
+    guarded_walk(http, url, GUARDED_MAX_REDIRECTS, true).await
+}
+
+/// Like [`guarded_get`], but where the chain ends is enough: the final
+/// response may be any status, and `max_redirects` hops are followed. For
+/// callers that read the destination URL (a maps shortlink whose target page
+/// answers 403 still names the coordinates) rather than its body.
+pub(crate) async fn guarded_final_url(http: &reqwest::Client, url: Url, max_redirects: u8) -> Option<Url> {
+    guarded_walk(http, url, max_redirects, false).await.map(|(_, u)| u)
+}
+
+async fn guarded_walk(
+    http: &reqwest::Client,
+    url: Url,
+    max_redirects: u8,
+    require_success: bool,
+) -> Option<(reqwest::Response, Url)> {
     let mut current = url;
-    for _ in 0..=GUARDED_MAX_REDIRECTS {
+    for _ in 0..=max_redirects {
         if !url_is_fetchable(&current) {
             return None;
         }
@@ -224,7 +274,7 @@ pub(crate) async fn guarded_get(http: &reqwest::Client, url: Url) -> Option<(req
             current = current.join(location).ok()?;
             continue;
         }
-        if !resp.status().is_success() {
+        if require_success && !resp.status().is_success() {
             return None;
         }
         return Some((resp, current));
@@ -344,6 +394,40 @@ mod tests {
         // url normalises decimal/hex IPv4 forms to Host::Ipv4.
         assert!(!ok("http://2130706433/"));
         assert!(!ok("http://0x7f.1/"));
+    }
+
+    #[test]
+    fn url_is_fetchable_always_refuses_loopback_names_and_ip_spellings() {
+        for manual in [false, true] {
+            let ok = |s: &str| url_is_fetchable_with(&Url::parse(s).unwrap(), manual);
+            for host in [
+                "localhost",
+                "localhost.",
+                "LOCALHOST.",
+                "a.localhost",
+                "127.0.0.1.",
+                "169.254.169.254.",
+            ] {
+                assert!(!ok(&format!("https://{host}/x")), "{host} must be refused (manual={manual})");
+            }
+            assert!(ok("https://example.com/"));
+            assert!(ok("https://localhost.example.com/"));
+            assert!(ok("https://notlocal.example/"));
+        }
+    }
+
+    #[test]
+    fn url_is_fetchable_refuses_internal_names_only_behind_a_manual_proxy() {
+        let behind_proxy = |s: &str| url_is_fetchable_with(&Url::parse(s).unwrap(), true);
+        let direct = |s: &str| url_is_fetchable_with(&Url::parse(s).unwrap(), false);
+        for host in ["printer.local", "nas.internal", "router.lan", "intranet", "box.localdomain", "gw.home.arpa"] {
+            let url = format!("https://{host}/x");
+            assert!(!behind_proxy(&url), "{host} must be refused behind a proxy");
+            // Direct: the resolver check vets where the name points, so a
+            // name on a public address stays reachable.
+            assert!(direct(&url), "{host} is left to the resolver check when direct");
+        }
+        assert!(behind_proxy("https://example.local.org/"));
     }
 
     #[test]

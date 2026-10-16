@@ -846,9 +846,11 @@ const RoomInfo* ShellBase::best_unread_room_() const
 
 void ShellBase::open_matrix_link(const std::string& uri)
 {
-    if (!client_ || rooms_.empty())
+    if (!client_ || !room_list_received_)
     {
-        // Not yet logged in or rooms haven't arrived yet — replay on first update.
+        // Not yet logged in or the room list has not arrived — replay on first update.
+        // Gated on the list arriving, not on rooms_ being non-empty: a brand-new
+        // account has no rooms, and the replay would then requeue the link forever.
         pending_matrix_link_ = uri;
         return;
     }
@@ -862,7 +864,7 @@ void ShellBase::open_matrix_link(const std::string& uri)
     if (!link.via.empty() &&
         (link.kind == Kind::Room || link.kind == Kind::RoomAlias ||
          link.kind == Kind::Event))
-        pending_join_via_[link.primary] = link.via;
+        remember_join_via_(link.primary, link.via);
 
     switch (link.kind)
     {
@@ -889,7 +891,17 @@ void ShellBase::open_matrix_link(const std::string& uri)
                                [&](const RoomInfo& r)
                                { return r.canonical_alias == link.primary; });
         if (it != rooms_.end())
+        {
             tab_navigate_room(it->id);
+            // A link to an event in a room named by alias: the room is known
+            // here, so jump to the event as an Event link does.
+            if (!link.event_id.empty())
+            {
+                if (room_view_ && room_view_->message_list())
+                    room_view_->message_list()->set_highlighted_event(link.event_id);
+                try_scroll_to_room_event_(link.event_id);
+            }
+        }
         else if (main_app_)
         {
             main_app_->add_room_view()->open_join_with_prefill(link.primary);

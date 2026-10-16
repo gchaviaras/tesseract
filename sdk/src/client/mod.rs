@@ -2187,48 +2187,133 @@ pub(super) fn first_line(s: &str) -> String {
         .to_owned()
 }
 
+/// True when the start-tag text `tag` (what lies between `<` and `>`) carries
+/// the attribute `name`, whether bare or with a value. Names are matched
+/// case-insensitively, and text inside a quoted value is never taken for one.
+fn has_attribute(tag: &str, name: &str) -> bool {
+    let mut chars = tag.chars().peekable();
+    // The element name comes first.
+    while chars.next_if(|c| !c.is_whitespace()).is_some() {}
+    loop {
+        while chars.next_if(|c| c.is_whitespace() || *c == '/').is_some() {}
+        let mut attr = String::new();
+        while let Some(c) = chars.next_if(|c| !c.is_whitespace() && *c != '=' && *c != '/') {
+            attr.push(c);
+        }
+        if attr.is_empty() {
+            return false;
+        }
+        if attr.eq_ignore_ascii_case(name) {
+            return true;
+        }
+        while chars.next_if(|c| c.is_whitespace()).is_some() {}
+        if chars.next_if(|c| *c == '=').is_some() {
+            while chars.next_if(|c| c.is_whitespace()).is_some() {}
+            match chars.next() {
+                Some(q @ ('"' | '\'')) => {
+                    for c in chars.by_ref() {
+                        if c == q {
+                            break;
+                        }
+                    }
+                }
+                Some(_) => while chars.next_if(|c| !c.is_whitespace()).is_some() {},
+                None => return false,
+            }
+        }
+    }
+}
+
 /// Strip a Matrix `formatted_body` (HTML subset) to its first plain-text
 /// line. Block/break tags become newlines; all other tags are dropped;
 /// the handful of entities Matrix uses are decoded. Char-safe (UTF-8).
 /// No external deps.
+///
+/// Text that is not preview content is skipped: the `<mx-reply>` fallback a
+/// client quotes above a reply, `<script>` and `<style>` bodies, and the text
+/// of a `data-mx-spoiler` span. A `>` inside a quoted attribute value does
+/// not end the tag.
 pub(super) fn html_first_line(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;
+    let mut quote: Option<char> = None;
     let mut tag = String::new();
+    // The element whose content is being skipped, and how many of it are open.
+    let mut hidden: Option<String> = None;
+    let mut hidden_depth = 0usize;
     for c in html.chars() {
         if in_tag {
-            if c == '>' {
-                in_tag = false;
-                let lower = tag.to_ascii_lowercase();
-                let name: String = lower
-                    .trim_start_matches('/')
-                    .chars()
-                    .take_while(|c| c.is_ascii_alphanumeric())
-                    .collect();
-                let breaks = matches!(
-                    name.as_str(),
-                    "br" | "p"
-                        | "div"
-                        | "li"
-                        | "tr"
-                        | "blockquote"
-                        | "h1"
-                        | "h2"
-                        | "h3"
-                        | "h4"
-                        | "h5"
-                        | "h6"
-                );
-                if breaks {
-                    out.push('\n');
-                }
-                tag.clear();
-            } else {
+            if let Some(q) = quote {
                 tag.push(c);
+                if c == q {
+                    quote = None;
+                }
+                continue;
+            }
+            match c {
+                '"' | '\'' => {
+                    // A quote opens a value only straight after `=`; an
+                    // apostrophe elsewhere in a tag (`title=it's`) is text.
+                    if tag.trim_end().ends_with('=') {
+                        quote = Some(c);
+                    }
+                    tag.push(c);
+                }
+                '>' => {
+                    in_tag = false;
+                    let closing = tag.trim_start().starts_with('/');
+                    let self_closing = tag.trim_end().ends_with('/');
+                    let lower = tag.to_ascii_lowercase();
+                    let name: String = lower
+                        .trim_start()
+                        .trim_start_matches('/')
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                        .collect();
+                    if let Some(h) = hidden.as_deref() {
+                        if name == h {
+                            if closing {
+                                hidden_depth -= 1;
+                                if hidden_depth == 0 {
+                                    hidden = None;
+                                }
+                            } else if !self_closing {
+                                hidden_depth += 1;
+                            }
+                        }
+                    } else if !closing && !self_closing {
+                        let spoiler = name == "span" && has_attribute(&tag, "data-mx-spoiler");
+                        if matches!(name.as_str(), "mx-reply" | "script" | "style") || spoiler {
+                            hidden = Some(name.clone());
+                            hidden_depth = 1;
+                        }
+                    }
+                    if hidden.is_none() {
+                        let breaks = matches!(
+                            name.as_str(),
+                            "br" | "p"
+                                | "div"
+                                | "li"
+                                | "tr"
+                                | "blockquote"
+                                | "h1"
+                                | "h2"
+                                | "h3"
+                                | "h4"
+                                | "h5"
+                                | "h6"
+                        );
+                        if breaks {
+                            out.push('\n');
+                        }
+                    }
+                    tag.clear();
+                }
+                _ => tag.push(c),
             }
         } else if c == '<' {
             in_tag = true;
-        } else {
+        } else if hidden.is_none() {
             out.push(c);
         }
     }
@@ -2240,6 +2325,35 @@ pub(super) fn html_first_line(html: &str) -> String {
         .replace("&nbsp;", " ")
         .replace("&amp;", "&");
     first_line(&decoded)
+}
+
+/// Drop the `> <@user> …` reply fallback that a plain `body` can start with:
+/// the quoted lines, then the blank line that ends them. A body without the
+/// fallback is returned unchanged.
+pub(super) fn strip_plain_reply_fallback(body: &str) -> &str {
+    // The fallback's first line is `> <@user:server> …`; a user's own
+    // blockquote is not one.
+    if !body.starts_with("> <@") {
+        return body;
+    }
+    let mut rest = body;
+    let mut past_quote = false;
+    while let Some(i) = rest.find('\n') {
+        let line = &rest[..i];
+        rest = &rest[i + 1..];
+        if line.trim().is_empty() {
+            past_quote = true;
+            break;
+        }
+        if !line.starts_with('>') {
+            return body;
+        }
+    }
+    if past_quote {
+        rest
+    } else {
+        body
+    }
 }
 
 fn latest_event_preview(value: &matrix_sdk::latest_events::LatestEventValue) -> LatestPreview {
@@ -2255,7 +2369,7 @@ fn latest_event_preview(value: &matrix_sdk::latest_events::LatestEventValue) -> 
             _ => String::new(),
         };
         let line = if line.is_empty() {
-            first_line(body)
+            first_line(strip_plain_reply_fallback(body))
         } else {
             line
         };
@@ -2467,7 +2581,7 @@ fn extract_local_preview(content: &matrix_sdk::store::SerializableEventContent) 
             _ => String::new(),
         };
         let line = if line.is_empty() {
-            first_line(body)
+            first_line(strip_plain_reply_fallback(body))
         } else {
             line
         };
@@ -2880,7 +2994,7 @@ pub(super) async fn build_room_info_unfiltered(
     let name = room
         .display_name()
         .await
-        .map(|n| n.to_string())
+        .map(|n| crate::text_utils::strip_bidi_overrides(&n.to_string()))
         .unwrap_or_else(|_| room.room_id().to_string());
     let is_space = room.is_space();
     // Prefer the client-side computed counts over the server-reported
@@ -5545,5 +5659,79 @@ mod thread_list_tests {
         assert_eq!(ti.root_event_id, "$root:server");
         assert_eq!(ti.num_replies, 4);
         assert!(ti.latest_event_id.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod html_preview_tests {
+    use super::{html_first_line, strip_plain_reply_fallback};
+
+    #[test]
+    fn reply_fallback_in_html_is_not_the_preview() {
+        let html = "<mx-reply><blockquote>quoted text</blockquote></mx-reply>The answer";
+        assert_eq!(html_first_line(html), "The answer");
+    }
+
+    #[test]
+    fn script_and_style_bodies_are_dropped() {
+        assert_eq!(html_first_line("<script>alert(1)</script>Hi"), "Hi");
+        assert_eq!(html_first_line("<style>p{color:red}</style>Hi"), "Hi");
+    }
+
+    #[test]
+    fn spoiler_text_is_hidden_including_nested_spans() {
+        let html = r#"a <span data-mx-spoiler="">secret <span>deeper</span> more</span> b"#;
+        assert_eq!(html_first_line(html), "a  b");
+    }
+
+    #[test]
+    fn a_greater_than_inside_a_quoted_attribute_does_not_end_the_tag() {
+        let html = r#"<a title="x>y" href="https://example.org">link</a>"#;
+        assert_eq!(html_first_line(html), "link");
+    }
+
+    #[test]
+    fn an_apostrophe_outside_a_value_does_not_swallow_the_message() {
+        let html = "<a title=it's>link</a> and the rest";
+        assert_eq!(html_first_line(html), "link and the rest");
+    }
+
+    #[test]
+    fn only_a_real_spoiler_attribute_hides_text() {
+        // The words inside another attribute's value are not the attribute.
+        assert_eq!(
+            html_first_line(r#"<span title="data-mx-spoiler">shown</span>"#),
+            "shown"
+        );
+        // A bare attribute, with or without a value, hides the span.
+        assert_eq!(html_first_line("a <span data-mx-spoiler>x</span> b"), "a  b");
+        assert_eq!(html_first_line(r#"a <SPAN DATA-MX-SPOILER="why">x</SPAN> b"#), "a  b");
+    }
+
+    #[test]
+    fn has_attribute_reads_attribute_names_only() {
+        use super::has_attribute;
+        assert!(has_attribute("span data-mx-spoiler", "data-mx-spoiler"));
+        assert!(has_attribute("span class=\"a b\" data-mx-spoiler=\"r\"", "data-mx-spoiler"));
+        assert!(has_attribute("span class=a  data-mx-spoiler", "data-mx-spoiler"));
+        assert!(!has_attribute("span title=\"x data-mx-spoiler y\"", "data-mx-spoiler"));
+        assert!(!has_attribute("span title=data-mx-spoiler", "data-mx-spoiler"));
+        assert!(!has_attribute("span", "data-mx-spoiler"));
+    }
+
+    #[test]
+    fn breaks_still_separate_lines() {
+        assert_eq!(html_first_line("<p>one</p><p>two</p>"), "one");
+    }
+
+    #[test]
+    fn plain_reply_fallback_is_removed_from_the_body() {
+        let body = "> <@alice:x> quoted\n\nThe reply";
+        assert_eq!(strip_plain_reply_fallback(body), "The reply");
+        assert_eq!(strip_plain_reply_fallback("plain text"), "plain text");
+        // A quote that is not a reply fallback (no blank line after it) stays.
+        assert_eq!(strip_plain_reply_fallback("> quoted\nnext"), "> quoted\nnext");
+        // A user's own blockquote followed by a blank line is not a fallback.
+        assert_eq!(strip_plain_reply_fallback("> some quote\n\nmy comment"), "> some quote\n\nmy comment");
     }
 }

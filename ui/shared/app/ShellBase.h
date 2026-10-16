@@ -529,8 +529,14 @@ protected:
     // keyed by the permalink's room id or alias. Stashed by open_matrix_link()
     // and consumed by join_room_command_ / knock_room_command_ /
     // lookup_room_command_ so a federated room the homeserver doesn't already
-    // know stays reachable. A stale entry is harmless and tiny.
+    // know stays reachable. Every followed link adds one, so the table is capped;
+    // see remember_join_via_().
     std::unordered_map<std::string, std::vector<std::string>> pending_join_via_;
+    static constexpr std::size_t kMaxPendingJoinVia = 128;
+    // Keys of pending_join_via_, oldest first, so the cap drops the stalest hint.
+    std::deque<std::string> pending_join_via_order_;
+    // Records `via` for `key`. At the cap, the oldest entry is dropped first.
+    void remember_join_via_(std::string key, std::vector<std::string> via);
 
     // ── Active-account identity ───────────────────────────────────────────────
     std::string my_user_id_;
@@ -573,6 +579,9 @@ protected:
 
     // ── Rooms ─────────────────────────────────────────────────────────────────
     std::vector<RoomInfo> rooms_;
+    // True once the active account's room list has arrived at least once. An
+    // empty rooms_ is a valid answer (a new account), so it cannot mean "not yet".
+    bool room_list_received_ = false;
     // room_id → index into rooms_, for O(1) lookup instead of a linear scan on
     // the room-switch path (space-detection, set_room, tab-bar metadata). rooms_
     // is only ever wholesale-replaced or cleared (never mutated in place), and

@@ -221,18 +221,29 @@ mod net {
             else {
                 return String::new();
             };
-            let direct_http = if self.bundled_url_previews_direct.load(Ordering::Relaxed) {
+            // A proxy the user configured resolves and connects for us, so the
+            // address checks in the direct path cannot see the real target. No
+            // direct previews are attempted then; the homeserver's still are.
+            // (The OS/env proxy of the default mode is not treated this way.)
+            let explicit_proxy = !matches!(
+                crate::net_proxy::current(),
+                crate::net_proxy::ProxyMode::System | crate::net_proxy::ProxyMode::None
+            );
+            let direct_http = if self.bundled_url_previews_direct.load(Ordering::Relaxed) && !explicit_proxy {
                 guarded_client(DIRECT_ATTEMPT_BUDGET)
             } else {
                 None
             };
             // MSC4452: a homeserver that turned `/preview_url` off would only
             // answer 403, so don't ask it; direct fetches still run.
-            let homeserver_ok = self.homeserver_preview_url_enabled.load(Ordering::Relaxed);
+            // In an encrypted room the homeserver must not learn the links, so
+            // the homeserver fallback is off there; only the direct fetch runs.
+            let encrypted = room.encryption_state().is_encrypted();
+            let homeserver_ok =
+                self.homeserver_preview_url_enabled.load(Ordering::Relaxed) && !encrypted;
             if direct_http.is_none() && !homeserver_ok {
                 return String::new();
             }
-            let encrypted = room.encryption_state().is_encrypted();
             let previews: Vec<UrlPreview> = self
                 .block_on_cancellable(async move {
                     let tasks = urls.into_iter().map(|url| {
@@ -338,8 +349,30 @@ mod net {
             return None;
         }
         let bytes = super::super::media::read_body_capped(resp, &label, MAX_PREVIEW_IMAGE_BYTES).await;
-        (!bytes.is_empty()).then_some((bytes, mime))
+        // The header is the server's claim. Use the type the bytes sniff as, and
+        // only when that is a raster image; a document labelled as an image is dropped.
+        let sniffed = infer::get(&bytes)?.mime_type().to_owned();
+        if !PREVIEW_IMAGE_TYPES.contains(&sniffed.as_str()) {
+            return None;
+        }
+        (!bytes.is_empty()).then_some((bytes, sniffed))
     }
+
+    /// Image types a preview may carry: what the UI can decode and show. Not
+    /// every `image/*` the sniffer knows (it also names drawings, Photoshop and
+    /// camera-raw files) and never SVG.
+    const PREVIEW_IMAGE_TYPES: [&str; 10] = [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/avif",
+        "image/heif",
+        "image/jxl",
+        "image/bmp",
+        "image/tiff",
+        "image/vnd.microsoft.icon",
+    ];
 
     async fn homeserver_preview(client: &Client, encrypted: bool, url: &str) -> Option<UrlPreview> {
         use matrix_sdk::media::{MediaFormat, MediaRequestParameters};

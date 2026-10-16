@@ -121,6 +121,7 @@ struct AsShell : tesseract::test::TestShellBase
     using ShellBase::pool_;
     using ShellBase::retired_login_clients_;
     using ShellBase::run_async_;
+    using ShellBase::room_list_received_;
     using ShellBase::unread_prefetch_fingerprint_;
     using ShellBase::bridge_check_fingerprint_;
     using ShellBase::current_room_knock_requests_;
@@ -192,6 +193,26 @@ TEST_CASE("switching adopts the incoming account's identity and snapshots",
           std::vector<std::string>{"!z", "!x", "!y"});
     CHECK(s.account_manager_.dedicated_window("@a:x") == &s);
     CHECK(tesseract::SessionStore::load_index().active_user_id == "@a:x");
+}
+
+TEST_CASE("switching counts a cached room list as received, and no list as not yet",
+          "[shell][account_switch]")
+{
+    tesseract::test::SettingsGuard guard;
+    AsShell s;
+    auto a = as_acct("@a:x");
+    auto b = as_acct("@b:x");
+    s.account_manager_.add_account(a);
+    s.account_manager_.add_account(b);
+    tesseract::RoomInfo room;
+    room.id = "!a-room";
+    s.per_account_rooms_["@a:x"] = {room};
+
+    REQUIRE(s.switch_active_account_impl_("@a:x"));
+    CHECK(s.room_list_received_);
+    // @b has no snapshot yet: its links must wait for its list, not use @a's state.
+    REQUIRE(s.switch_active_account_impl_("@b:x"));
+    CHECK_FALSE(s.room_list_received_);
 }
 
 TEST_CASE("switching clears per-account, room-keyed state", "[shell][account_switch]")

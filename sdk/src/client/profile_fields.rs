@@ -16,6 +16,27 @@ use super::{err, ok};
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Bounds on remote profile values, applied as they are parsed. A profile can
+// carry tens of kilobytes of extended fields, and the profile card and the
+// timeline status line only ever show a short prefix of each. The status
+// limits are the ones ruma documents for MSC4426.
+const MAX_PRONOUN_ENTRIES: usize = 16;
+const MAX_PRONOUN_BYTES: usize = 128;
+const MAX_TAG_BYTES: usize = 32;
+const MAX_TZ_BYTES: usize = 64;
+const MAX_BIOGRAPHY_BYTES: usize = 2048;
+const MAX_STATUS_TEXT_BYTES: usize = 256;
+const MAX_STATUS_EMOJI_BYTES: usize = 32;
+
+/// The longest prefix of `s` that is at most `max` bytes, cut on a char boundary.
+fn clamp_bytes(s: &str, max: usize) -> String {
+    let mut end = s.len().min(max);
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    s[..end].to_owned()
+}
+
 /// One `m.pronouns` array entry: a language-tagged pronoun summary plus an
 /// optional grammatical gender (MSC4247). `grammatical_gender` is an empty
 /// string when the entry doesn't specify one.
@@ -47,7 +68,7 @@ fn parse_pronouns(j: &serde_json::Value) -> Vec<PronounEntry> {
             }
             return vec![PronounEntry {
                 language: String::new(),
-                summary: s.to_owned(),
+                summary: clamp_bytes(s, MAX_PRONOUN_BYTES),
                 grammatical_gender: String::new(),
             }];
         }
@@ -57,14 +78,15 @@ fn parse_pronouns(j: &serde_json::Value) -> Vec<PronounEntry> {
                 .filter_map(|o| {
                     let summary = o["summary"].as_str()?;
                     Some(PronounEntry {
-                        language: o["language"].as_str().unwrap_or("").to_owned(),
-                        summary: summary.to_owned(),
-                        grammatical_gender: o["grammatical_gender"]
-                            .as_str()
-                            .unwrap_or("")
-                            .to_owned(),
+                        language: clamp_bytes(o["language"].as_str().unwrap_or(""), MAX_TAG_BYTES),
+                        summary: clamp_bytes(summary, MAX_PRONOUN_BYTES),
+                        grammatical_gender: clamp_bytes(
+                            o["grammatical_gender"].as_str().unwrap_or(""),
+                            MAX_TAG_BYTES,
+                        ),
                     })
                 })
+                .take(MAX_PRONOUN_ENTRIES)
                 .collect();
         }
     }
@@ -75,7 +97,7 @@ fn parse_pronouns(j: &serde_json::Value) -> Vec<PronounEntry> {
 fn parse_tz(j: &serde_json::Value) -> String {
     for key in &["m.tz", "us.cloke.msc4175.tz"] {
         if let Some(s) = j[*key].as_str() {
-            return s.to_owned();
+            return clamp_bytes(s, MAX_TZ_BYTES);
         }
     }
     String::new()
@@ -96,14 +118,14 @@ fn parse_biography(j: &serde_json::Value) -> String {
                 let mime = entry.get("mimetype").and_then(|m| m.as_str());
                 if mime.is_none() || mime == Some("text/plain") {
                     if let Some(body) = entry["body"].as_str() {
-                        return body.to_owned();
+                        return clamp_bytes(body, MAX_BIOGRAPHY_BYTES);
                     }
                 }
             }
         }
         // Plain-string fallback for servers that omit the m.text wrapper.
         if let Some(s) = v.as_str() {
-            return s.to_owned();
+            return clamp_bytes(s, MAX_BIOGRAPHY_BYTES);
         }
     }
     String::new()
@@ -131,6 +153,12 @@ fn extract_status(
         .ok()
         .flatten()
         .filter(|s| !(s.text.is_empty() && s.emoji.is_empty()))
+        .map(|s| {
+            matrix_sdk::ruma::profile::StatusProfileField::new(
+                clamp_bytes(&s.text, MAX_STATUS_TEXT_BYTES),
+                clamp_bytes(&s.emoji, MAX_STATUS_EMOJI_BYTES),
+            )
+        })
 }
 
 /// `call_joined_ts` (unix seconds) from the typed MSC4426 `call` field.
@@ -388,8 +416,9 @@ impl ClientFfi {
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_call_joined_ts, extract_status, parse_biography, parse_pronouns, parse_tz,
-        PronounEntry,
+        clamp_bytes, extract_call_joined_ts, extract_status, parse_biography, parse_pronouns,
+        parse_tz, PronounEntry, MAX_BIOGRAPHY_BYTES, MAX_PRONOUN_BYTES, MAX_PRONOUN_ENTRIES,
+        MAX_STATUS_EMOJI_BYTES, MAX_STATUS_TEXT_BYTES, MAX_TAG_BYTES, MAX_TZ_BYTES,
     };
 
     fn entry(language: &str, summary: &str, grammatical_gender: &str) -> PronounEntry {
@@ -696,5 +725,69 @@ mod tests {
     fn extract_call_joined_ts_empty_object_is_none() {
         let p = profile_with("org.matrix.msc4426.call", serde_json::json!({}));
         assert_eq!(extract_call_joined_ts(&p), None);
+    }
+
+    #[test]
+    fn clamp_bytes_keeps_a_short_value_and_cuts_on_a_char_boundary() {
+        assert_eq!(clamp_bytes("abc", 8), "abc");
+        assert_eq!(clamp_bytes("aaaa", 2), "aa");
+        // "é" is two bytes, so a cut at byte 2 would split it: back off to 1.
+        assert_eq!(clamp_bytes("aé", 2), "a");
+        assert_eq!(clamp_bytes("", 0), "");
+    }
+
+    #[test]
+    fn parse_pronouns_clamps_each_value_and_caps_the_entry_count() {
+        let entries: Vec<serde_json::Value> = (0..40)
+            .map(|_| {
+                serde_json::json!({
+                    "summary": "s".repeat(1000),
+                    "language": "l".repeat(1000),
+                    "grammatical_gender": "g".repeat(1000),
+                })
+            })
+            .collect();
+        let profile = serde_json::json!({ "m.pronouns": entries });
+        let parsed = parse_pronouns(&profile);
+        assert_eq!(parsed.len(), MAX_PRONOUN_ENTRIES);
+        let first = &parsed[0];
+        assert_eq!(first.summary.len(), MAX_PRONOUN_BYTES);
+        assert_eq!(first.language.len(), MAX_TAG_BYTES);
+        assert_eq!(first.grammatical_gender.len(), MAX_TAG_BYTES);
+    }
+
+    #[test]
+    fn parse_pronouns_string_fallback_is_clamped() {
+        let profile = serde_json::json!({ "m.pronouns": "x".repeat(5000) });
+        let parsed = parse_pronouns(&profile);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].summary.len(), MAX_PRONOUN_BYTES);
+    }
+
+    #[test]
+    fn parse_tz_is_clamped() {
+        let profile = serde_json::json!({ "m.tz": "Z".repeat(500) });
+        assert_eq!(parse_tz(&profile).len(), MAX_TZ_BYTES);
+    }
+
+    #[test]
+    fn parse_biography_is_clamped_on_a_char_boundary() {
+        let body = "é".repeat(5000);
+        let profile = serde_json::json!({ "m.biography": { "m.text": [{ "body": body }] } });
+        let bio = parse_biography(&profile);
+        assert!(bio.len() <= MAX_BIOGRAPHY_BYTES);
+        assert!(bio.len() > MAX_BIOGRAPHY_BYTES - 2);
+        assert!(bio.chars().all(|c| c == 'é'));
+    }
+
+    #[test]
+    fn extract_status_is_clamped_to_the_msc4426_limits() {
+        let p = profile_with(
+            "org.matrix.msc4426.status",
+            serde_json::json!({"text": "t".repeat(1000), "emoji": "e".repeat(1000)}),
+        );
+        let s = extract_status(&p).unwrap();
+        assert_eq!(s.text.len(), MAX_STATUS_TEXT_BYTES);
+        assert_eq!(s.emoji.len(), MAX_STATUS_EMOJI_BYTES);
     }
 }

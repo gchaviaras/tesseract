@@ -12,6 +12,32 @@
 namespace tesseract
 {
 
+void ShellBase::remember_join_via_(std::string key, std::vector<std::string> via)
+{
+    if (!pending_join_via_.contains(key))
+    {
+        // Entries consumed elsewhere leave stale keys in the order list; skip them.
+        while (pending_join_via_.size() >= kMaxPendingJoinVia && !pending_join_via_order_.empty())
+        {
+            pending_join_via_.erase(pending_join_via_order_.front());
+            pending_join_via_order_.pop_front();
+        }
+        pending_join_via_order_.push_back(key);
+    }
+    // Keys consumed elsewhere stay in the order list; compact it now and then.
+    if (pending_join_via_order_.size() > 4 * kMaxPendingJoinVia)
+    {
+        std::deque<std::string> live;
+        for (auto& k : pending_join_via_order_)
+            if (pending_join_via_.contains(k) &&
+                std::find(live.begin(), live.end(), k) == live.end())
+                live.push_back(std::move(k));
+        pending_join_via_order_ = std::move(live);
+    }
+    pending_join_via_[std::move(key)] = std::move(via);
+}
+
+
 void ShellBase::set_room_notification_mode_(const std::string& room_id,
                                              const std::string& mode,
     const std::shared_ptr<AccountSession>& on_behalf_of)
@@ -87,6 +113,7 @@ void ShellBase::push_rooms_(std::string user_id, std::vector<RoomInfo> rooms)
         return;
     }
     rooms_ = std::move(rooms);
+    room_list_received_ = true;
     mark_room_index_dirty_();
     // A hidden upgraded room that is listed again (its successor was left) is
     // now served by rooms_ itself.
@@ -689,7 +716,7 @@ void ShellBase::lookup_room_command_(const std::string& room_id_or_alias)
                     if (summary.ok() && !via.empty() &&
                         !summary.room_id.empty() &&
                         summary.room_id != room_id_or_alias)
-                        pending_join_via_[summary.room_id] = via;
+                        remember_join_via_(summary.room_id, via);
                     auto* ar2 = main_app_ ? main_app_->add_room_view() : nullptr;
                     auto* jr2 = ar2 ? ar2->join_view() : nullptr;
                     if (!jr2 || !ar2->is_open() ||

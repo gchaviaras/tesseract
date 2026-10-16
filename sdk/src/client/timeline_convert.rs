@@ -53,7 +53,9 @@ fn sender_profile_ffi(
     };
     let (sender_status_emoji, sender_status_text) = status_ffi(p.status.as_ref());
     SenderProfileFfi {
-        sender_name: p.display_name.clone().unwrap_or_default(),
+        sender_name: crate::text_utils::strip_bidi_overrides(
+            p.display_name.as_deref().unwrap_or_default(),
+        ),
         sender_avatar_url: p
             .avatar_url
             .as_ref()
@@ -473,7 +475,8 @@ pub(crate) fn parse_geo_uri(uri: &str) -> Option<(f64, f64)> {
     let mut parts = coords.split(',');
     let lat: f64 = parts.next()?.parse().ok()?;
     let lon: f64 = parts.next()?.parse().ok()?;
-    Some((lat, lon))
+    // f64::parse accepts NaN, inf and 1e999; the map code cannot place those.
+    crate::maps_link::checked_coords(lat, lon)
 }
 
 /// Plain-data view of a live-location share for the FFI event. Primitive
@@ -2699,5 +2702,18 @@ mod gallery_item_ffi_tests {
 
         assert_eq!(ffi.itemtype, "org.example.custom");
         assert_eq!(ffi.body, "custom body");
+    }
+}
+
+#[cfg(test)]
+mod geo_uri_tests {
+    use super::parse_geo_uri;
+
+    #[test]
+    fn non_finite_and_out_of_range_geo_uris_are_refused() {
+        for uri in ["geo:NaN,0", "geo:0,inf", "geo:1e999,0", "geo:91,0", "geo:0,181", "geo:-90.5,0"] {
+            assert_eq!(parse_geo_uri(uri), None, "{uri}");
+        }
+        assert_eq!(parse_geo_uri("geo:85,180;u=35"), Some((85.0, 180.0)));
     }
 }

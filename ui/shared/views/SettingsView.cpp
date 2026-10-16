@@ -21,19 +21,39 @@ namespace tesseract::views
 
 namespace
 {
-// Minimal JSON string escaper: produces a JSON-quoted string literal.
-// Only escapes backslash and double-quote, which is sufficient for all
-// profile field values (IANA tz IDs, pronoun summaries, bio plain text).
+// JSON string escaper: produces a JSON-quoted string literal. Escapes every
+// character RFC 8259 requires: quote, backslash, and the control characters
+// U+0000-U+001F. A bio or status with a pasted tab or newline must stay valid
+// JSON, or the profile PUT fails with no explanation.
 std::string json_quote(const std::string& s)
 {
+    static constexpr char kHex[] = "0123456789abcdef";
     std::string out;
     out.reserve(s.size() + 2);
     out += '"';
-    for (char c : s)
+    for (unsigned char c : s)
     {
-        if (c == '\\') out += "\\\\";
-        else if (c == '"') out += "\\\"";
-        else out += c;
+        switch (c)
+        {
+        case '\\': out += "\\\\"; break;
+        case '"': out += "\\\""; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        case '\b': out += "\\b"; break;
+        case '\f': out += "\\f"; break;
+        default:
+            if (c < 0x20)
+            {
+                out += "\\u00";
+                out += kHex[c >> 4];
+                out += kHex[c & 0xF];
+            }
+            else
+            {
+                out += static_cast<char>(c);
+            }
+        }
     }
     out += '"';
     return out;

@@ -8493,12 +8493,16 @@ void MessageListView::arm_live_location_expiry_(const MessageRowData& m)
     if (phase != LiveLocationPhase::Live && phase != LiveLocationPhase::Waiting)
         return;
     const std::string key = m.event_id + ":" + std::to_string(m.location_live_expires_ms);
-    if (!live_expiry_armed_.insert(key).second)
-        return;
-    // phase is Live/Waiting so now < expires; clamp for the int delay.
+    if (live_expiry_armed_.count(key) != 0 ||
+        live_expiry_armed_.size() >= kMaxArmedLiveExpiryTimers)
+        return; // already armed, or the view's timers are full
+    live_expiry_armed_.insert(key);
+    // phase is Live/Waiting so now < expires. Each timer waits at most an hour:
+    // the expiry callback re-arms for the rest, so a long share never parks one
+    // timer for days (a Windows post_delayed is a thread that sleeps the whole time).
     const std::uint64_t remaining = m.location_live_expires_ms - now;
-    const int delay = static_cast<int>(
-        std::clamp<std::uint64_t>(remaining, 1, std::numeric_limits<int>::max()));
+    const int delay = static_cast<int>(std::clamp<std::uint64_t>(
+        remaining, 1, kMaxLiveExpiryTimerMs));
     const std::string eid = m.event_id;
     post_delayed_(delay,
                   guarded(
@@ -8516,6 +8520,15 @@ void MessageListView::arm_live_location_expiry_(const MessageRowData& m)
                                   arm_live_location_expiry_(row);
                                   break;
                               }
+                          }
+                          // A slot is free again: arm the live shares the cap left out.
+                          for (const auto& other : messages_)
+                          {
+                              if (live_expiry_armed_.size() >= kMaxArmedLiveExpiryTimers)
+                                  break;
+                              if (other.kind == MessageRowData::Kind::Location &&
+                                  other.event_id != eid)
+                                  arm_live_location_expiry_(other);
                           }
                       }));
 }

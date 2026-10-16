@@ -6,7 +6,7 @@
 use crate::ffi::{MapsLinkResult, OpResult};
 
 #[cfg(not(test))]
-use super::ClientFfi;
+use super::{err, ClientFfi};
 #[cfg(test)]
 use super::{err, ClientFfi};
 
@@ -61,6 +61,9 @@ impl ClientFfi {
     /// don't render locations.
     #[cfg(not(test))]
     pub fn send_location(&self, room_id: &str, lat: f64, lon: f64, body: &str) -> OpResult {
+        if crate::maps_link::checked_coords(lat, lon).is_none() {
+            return err("invalid coordinates");
+        }
         let geo_uri = format!("geo:{lat:.6},{lon:.6}");
         let content = RoomMessageEventContent::new(MessageType::Location(
             LocationMessageEventContent::new(body.to_owned(), geo_uri),

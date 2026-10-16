@@ -2,6 +2,15 @@ use linkify::{LinkFinder, LinkKind};
 
 pub use crate::ffi::UrlSpan;
 
+/// Remove the bidirectional override and isolate controls (U+202A–U+202E,
+/// U+2066–U+2069) from text shown as a name, so a sender cannot reorder the
+/// text around it. Right-to-left marks and ordinary bidi text are kept.
+pub fn strip_bidi_overrides(s: &str) -> String {
+    s.chars()
+        .filter(|c| !matches!(*c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'))
+        .collect()
+}
+
 /// Find all linkable URIs in `text` and return their byte-offset spans.
 ///
 /// Covers two classes:
@@ -196,5 +205,19 @@ mod tests {
         assert_eq!(s[0].url, "https://example.org");
         assert_eq!(s[1].url, "matrix:u/alice:example.org");
         assert!(s[0].start < s[1].start);
+    }
+}
+
+#[cfg(test)]
+mod bidi_tests {
+    use super::strip_bidi_overrides;
+
+    #[test]
+    fn removes_overrides_and_isolates_but_keeps_text() {
+        // "invoice" followed by an RLO that would draw "fdp.exe" reversed.
+        assert_eq!(strip_bidi_overrides("invoice\u{202E}fdp.exe"), "invoicefdp.exe");
+        assert_eq!(strip_bidi_overrides("a\u{2066}b\u{2069}c"), "abc");
+        // Right-to-left marks and plain Arabic/Hebrew text are unchanged.
+        assert_eq!(strip_bidi_overrides("\u{200F}שלום مرحبا"), "\u{200F}שלום مرحبا");
     }
 }

@@ -856,6 +856,8 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
     auto it = per_account_rooms_.find(my_user_id_);
     rooms_ = (it != per_account_rooms_.end()) ? it->second
                                               : std::vector<tesseract::RoomInfo>{};
+    // A cached snapshot counts as a received list; otherwise wait for the push.
+    room_list_received_ = it != per_account_rooms_.end();
     mark_room_index_dirty_();
     // The known-user roster belongs to the previous account — drop it.
     invalidate_known_users_();
@@ -1212,6 +1214,7 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     own_room_avatar_dirty_.clear();
     strip_avatar_room_.clear();
     rooms_.clear();
+    room_list_received_ = false;
     mark_room_index_dirty_();
     invites_.clear();
     current_invite_.reset();
@@ -1533,6 +1536,7 @@ void ShellBase::restart_sdk_begin_(
 
     // Empty the visible room list; sliding sync repopulates it from scratch.
     rooms_.clear();
+    room_list_received_ = false;
     per_account_rooms_.erase(my_user_id_);
     mark_room_index_dirty_();
 

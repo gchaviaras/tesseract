@@ -943,6 +943,31 @@ TEST_CASE("blocks: nested blockquote produces level-2 block",
     CHECK(joined_block_text(*inner).find("inner") != std::string::npos);
 }
 
+TEST_CASE("blocks: deep blockquote nesting is capped, and its closes balance",
+          "[html_spans][blocks]")
+{
+    std::string html;
+    for (int i = 0; i < 40; ++i)
+        html += "<blockquote>";
+    html += "deep";
+    for (int i = 0; i < 40; ++i)
+        html += "</blockquote>";
+    html += "tail";
+    auto blocks = html_to_blocks(html, false);
+
+    for (const auto& b : blocks)
+        if (b.kind == BodyBlock::Kind::Blockquote)
+            CHECK(b.level <= 16);
+    // Text past the nest is back at top level: the flattened opens were closed.
+    const BodyBlock* tail = nullptr;
+    for (const auto& b : blocks)
+        if (joined_block_text(b).find("tail") != std::string::npos)
+            tail = &b;
+    REQUIRE(tail != nullptr);
+    CHECK(tail->kind == BodyBlock::Kind::Paragraph);
+    CHECK(tail->level == 0);
+}
+
 TEST_CASE("blocks: blockquote with inner <p> (pulldown-cmark output) works",
           "[html_spans][blocks]")
 {

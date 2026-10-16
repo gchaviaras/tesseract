@@ -76,6 +76,18 @@ fn find_syntax<'a>(ss: &'a SyntaxSet, lang: &str) -> Option<&'a SyntaxReference>
 /// Highlight `code` as language `lang`. Empty result means "no highlighting"
 /// (unknown language or error) — the caller should fall back to plain text.
 pub fn highlight_code(code: &str, lang: &str, dark: bool) -> Vec<HighlightSpan> {
+    // Highlighting runs on the UI thread while the row is built. Sender-supplied
+    // code can be large or made to backtrack the grammar's regexes, so past these
+    // limits it stays plain monospace.
+    const MAX_BYTES: usize = 8 * 1024;
+    const MAX_LINES: usize = 200;
+    const MAX_LINE_BYTES: usize = 2 * 1024;
+    if code.len() > MAX_BYTES
+        || code.lines().count() > MAX_LINES
+        || code.lines().any(|l| l.len() > MAX_LINE_BYTES)
+    {
+        return Vec::new();
+    }
     let ss = syntax_set();
     let Some(syntax) = find_syntax(ss, lang) else {
         return Vec::new();
@@ -105,6 +117,15 @@ pub fn highlight_code(code: &str, lang: &str, dark: bool) -> Vec<HighlightSpan> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_code_is_left_plain() {
+        // Too many bytes, too many lines, or one very long line: no highlighting.
+        assert!(highlight_code(&"let x = 1;\n".repeat(1000), "rust", false).is_empty());
+        assert!(highlight_code(&"a\n".repeat(300), "rust", false).is_empty());
+        assert!(highlight_code(&format!("{}\n", "x".repeat(3000)), "rust", false).is_empty());
+        assert!(!highlight_code("let x = 1;\n", "rust", false).is_empty());
+    }
 
     fn joined(spans: &[HighlightSpan]) -> String {
         spans.iter().map(|s| s.text.as_str()).collect()

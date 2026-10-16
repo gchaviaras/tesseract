@@ -3,6 +3,7 @@
 #include "tesseract/client.h"
 #include "tesseract/paths.h"
 
+#include <cerrno>
 #include <cstdio>
 #include <exception>
 #include <cstring>
@@ -66,6 +67,36 @@ bool make_private_dir(const fs::path& p)
     return true;
 }
 
+// Longest file name written. Common file systems cap a name at 255 bytes, and a
+// longer one would fail the whole write.
+constexpr std::size_t kMaxNameBytes = 200;
+
+// The name, cut to kMaxNameBytes. A short extension is kept, and the cut never
+// splits a UTF-8 sequence.
+std::string fit_name(const std::string& name)
+{
+    if (name.size() <= kMaxNameBytes)
+        return name;
+    std::string ext;
+    const auto dot = name.find_last_of('.');
+    if (dot != std::string::npos && name.size() - dot <= 16)
+        ext = name.substr(dot);
+    std::string stem = name.substr(0, kMaxNameBytes - ext.size());
+    // Drop a sequence the cut split: find the last lead byte and keep it only if
+    // all of its continuation bytes made it in.
+    std::size_t lead = stem.size();
+    while (lead > 0 && (static_cast<unsigned char>(stem[lead - 1]) & 0xC0) == 0x80)
+        --lead;
+    if (lead > 0)
+    {
+        const auto b = static_cast<unsigned char>(stem[lead - 1]);
+        const std::size_t need = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 1;
+        if (stem.size() - (lead - 1) < need)
+            stem.resize(lead - 1);
+    }
+    return stem + ext;
+}
+
 bool is_inside(const fs::path& root, const fs::path& candidate)
 {
     std::error_code ec;
@@ -105,10 +136,11 @@ std::optional<fs::path> write_open_media_file(const std::string& filename,
     const fs::path dir = root / random_hex(8);
     if (!make_private_dir(dir))
         return std::nullopt;
+    const std::string name = fit_name(filename);
     fs::path file;
     try
     {
-        file = dir / fs::path(std::u8string(filename.begin(), filename.end()));
+        file = dir / fs::path(std::u8string(name.begin(), name.end()));
     }
     catch (const std::exception&) // not convertible to a native path (bad UTF-8)
     {
@@ -141,6 +173,8 @@ std::optional<fs::path> write_open_media_file(const std::string& filename,
         const ssize_t n = ::write(fd, p, left);
         if (n < 0)
         {
+            if (errno == EINTR)
+                continue; // interrupted before any byte moved: try again
             ::close(fd);
             return std::nullopt;
         }
@@ -229,8 +263,12 @@ bool open_local_file(const fs::path& path)
         _exit(inner < 0 ? 1 : 0);
     }
     int status = 0;
-    return waitpid(pid, &status, 0) == pid && WIFEXITED(status) &&
-           WEXITSTATUS(status) == 0;
+    pid_t reaped = -1;
+    do
+    {
+        reaped = waitpid(pid, &status, 0); // EINTR is not a failed launch
+    } while (reaped < 0 && errno == EINTR);
+    return reaped == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 #endif
 }
 

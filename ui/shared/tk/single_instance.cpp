@@ -3,6 +3,7 @@
 #include <tesseract/paths.h>
 
 #include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <climits>
 #include <cstring>
@@ -398,9 +399,20 @@ void ActivationListener::on_readable()
     std::string buf;
     char chunk[512];
     pollfd pfd{conn, POLLIN, 0};
+    // One deadline for the whole message, not per read: a peer that trickles
+    // a byte every few milliseconds would otherwise hold the UI thread for as
+    // long as it kept writing.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
     for (;;)
     {
-        int pr = poll(&pfd, 1, 200);
+        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              deadline - std::chrono::steady_clock::now())
+                              .count();
+        if (left <= 0)
+        {
+            break;
+        }
+        int pr = poll(&pfd, 1, static_cast<int>(left));
         if (pr <= 0)
         {
             break;

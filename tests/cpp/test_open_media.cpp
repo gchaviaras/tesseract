@@ -81,3 +81,18 @@ TEST_CASE("open_media handles non-ASCII names without throwing", "[open_media]")
     CHECK_NOTHROW(tesseract::open_local_file(*p));
     tesseract::purge_open_media_dir();
 }
+
+TEST_CASE("open_media shortens an over-long name and keeps its extension",
+          "[open_media]")
+{
+    const std::vector<std::uint8_t> data{1, 2, 3};
+    const std::string long_name = std::string(300, 'x') + ".png";
+    auto written = tesseract::write_open_media_file(long_name, data);
+    REQUIRE(written);
+    const std::string got = written->filename().string();
+    CHECK(got.size() <= 255);
+    CHECK(got.size() > 200 - 1); // cut to the cap, not dropped
+    CHECK(got.ends_with(".png"));
+    CHECK(fs::file_size(*written) == 3);
+    tesseract::purge_open_media_dir();
+}

@@ -9,10 +9,12 @@
 #include <nlohmann/json.hpp>
 
 #include <cctype>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <shared_mutex>
+#include <string>
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -326,7 +328,18 @@ bool Client::open_in_browser(const std::string& url)
         return false;
     }
 #if defined(_WIN32)
-    HINSTANCE hi = ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr,
+    // ShellExecuteA reads the URL in the ANSI code page, which mangles IDN and
+    // other non-ASCII bytes. Convert the UTF-8 to UTF-16 for the wide API.
+    const int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, url.c_str(),
+                                         static_cast<int>(url.size()), nullptr, 0);
+    if (wlen <= 0)
+    {
+        return false;
+    }
+    std::wstring wurl(static_cast<std::size_t>(wlen), L'\0');
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, url.c_str(),
+                        static_cast<int>(url.size()), wurl.data(), wlen);
+    HINSTANCE hi = ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr,
                                  SW_SHOWNORMAL);
     return reinterpret_cast<INT_PTR>(hi) > 32;
 #else
@@ -358,9 +371,14 @@ bool Client::open_in_browser(const std::string& url)
         _exit(inner < 0 ? 1 : 0);
     }
     int status = 0;
-    // Reaps only the fast middle process, not the opener.
-    return waitpid(pid, &status, 0) == pid && WIFEXITED(status) &&
-           WEXITSTATUS(status) == 0;
+    // Reaps only the fast middle process, not the opener. A signal during the
+    // wait (EINTR) must not read as a failed launch, so retry the wait.
+    pid_t reaped = -1;
+    do
+    {
+        reaped = waitpid(pid, &status, 0);
+    } while (reaped < 0 && errno == EINTR);
+    return reaped == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 #endif
 }
 

@@ -311,10 +311,19 @@ TEST_CASE("decode_size_allowed: budgets")
     CHECK(tk::decode_size_allowed(bytes_of("not an image"), false));
 }
 
-TEST_CASE("decode_size_allowed: JPEG stills get the larger budget")
+TEST_CASE("decode_size_allowed: JPEG stills get the larger budget where it is DCT-scaled")
 {
-    CHECK(tk::decode_size_allowed(jpeg(0xC0, 16320, 12240), false));
-    CHECK(tk::decode_size_allowed(jpeg(0xC0, 11648, 8736), false));
+    // Linux only (see image_sniff.h): elsewhere a JPEG has the still budget.
+    if (tk::kMaxJpegStillDecodePixels > tk::kMaxStillDecodePixels)
+    {
+        CHECK(tk::decode_size_allowed(jpeg(0xC0, 16320, 12240), false));
+        CHECK(tk::decode_size_allowed(jpeg(0xC0, 11648, 8736), false));
+    }
+    else
+    {
+        CHECK_FALSE(tk::decode_size_allowed(jpeg(0xC0, 16320, 12240), false));
+        CHECK(tk::decode_size_allowed(jpeg(0xC0, 8064, 6048), false));
+    }
     CHECK_FALSE(tk::decode_size_allowed(jpeg(0xC0, 20000, 20000), false));
     CHECK_FALSE(tk::decode_size_allowed(png_ihdr(16320, 12240), false));
     CHECK_FALSE(tk::decode_size_allowed(jpeg(0xC0, 16320, 12240), true));

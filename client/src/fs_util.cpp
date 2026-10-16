@@ -136,6 +136,21 @@ bool atomic_write_file(const fs::path& p, std::string_view content)
         std::error_code re;
         fs::remove(bak, re);
     }
+#if !defined(_WIN32)
+    // The rename is durable only once the directory entry itself is on disk;
+    // without this a power loss can roll the directory back to the old file.
+    // Best effort: the new file is already in place, so a failure here is not
+    // reported as a failed write.
+    if (const auto dir = p.parent_path(); !dir.empty())
+    {
+        const int dfd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (dfd >= 0)
+        {
+            (void)::fsync(dfd);
+            ::close(dfd);
+        }
+    }
+#endif
     return true;
 }
 

@@ -22,6 +22,8 @@ pub struct WebpAnimDecoder {
     frame: *const u8,
     frame_len: usize,
     timestamp_ms: i32,
+    /// Frames handed out since construction or the last `reset`.
+    frames_taken: u32,
 }
 
 // Used by one C++ thread at a time; libwebp has no thread affinity.
@@ -47,6 +49,10 @@ pub fn webp_is_data(bytes: &[u8]) -> bool {
 /// checked from the header before calling it.
 const MAX_ANIM_CANVAS_PIXELS: u64 = 4096 * 4096;
 
+/// Frame cap for one animation; matches tk::kAnimDecodeMaxFrames. The header
+/// can declare far more frames, and each `next_frame` composites a full canvas.
+const MAX_ANIM_FRAMES: u32 = 200;
+
 fn canvas_within_limit(w: i32, h: i32) -> bool {
     w > 0 && h > 0 && (w as u64) * (h as u64) <= MAX_ANIM_CANVAS_PIXELS
 }
@@ -60,6 +66,7 @@ pub fn webp_anim_decoder_new(bytes: &[u8]) -> Box<WebpAnimDecoder> {
         frame: std::ptr::null(),
         frame_len: 0,
         timestamp_ms: 0,
+        frames_taken: 0,
     });
     unsafe {
         let (mut cw, mut ch) = (0i32, 0i32);
@@ -104,11 +111,13 @@ impl WebpAnimDecoder {
     }
 
     pub fn frame_count(&self) -> u32 {
-        self.info.frame_count
+        self.info.frame_count.min(MAX_ANIM_FRAMES)
     }
 
     pub fn has_more_frames(&self) -> bool {
-        !self.dec.is_null() && unsafe { w::WebPAnimDecoderHasMoreFrames(self.dec) != 0 }
+        !self.dec.is_null()
+            && self.frames_taken < MAX_ANIM_FRAMES
+            && unsafe { w::WebPAnimDecoderHasMoreFrames(self.dec) != 0 }
     }
 
     /// Decode the next frame into the decoder's canvas. On false the previous
@@ -127,6 +136,7 @@ impl WebpAnimDecoder {
         self.frame = buf;
         self.frame_len = self.info.canvas_width as usize * self.info.canvas_height as usize * 4;
         self.timestamp_ms = ts;
+        self.frames_taken += 1;
         true
     }
 
@@ -150,6 +160,7 @@ impl WebpAnimDecoder {
         self.frame = std::ptr::null();
         self.frame_len = 0;
         self.timestamp_ms = 0;
+        self.frames_taken = 0;
         if !self.dec.is_null() {
             unsafe { w::WebPAnimDecoderReset(self.dec) };
         }
@@ -212,5 +223,32 @@ mod tests {
         let d = webp_anim_decoder_new(b"garbage");
         assert!(!d.valid());
         assert!(!d.has_more_frames());
+    }
+
+    #[test]
+    fn decoding_stops_at_the_frame_cap() {
+        // One more frame than the cap, so the header declares more than is decoded.
+        let mut cfg = webp::WebPConfig::new().unwrap();
+        cfg.lossless = 1;
+        // Each frame differs from the last; the encoder would merge repeats.
+        let frames: Vec<Vec<u8>> = (0..=MAX_ANIM_FRAMES as i32)
+            .map(|i| [i as u8, (i >> 8) as u8, 0, 255].repeat(4 * 4))
+            .collect();
+        let mut enc = webp::AnimEncoder::new(4, 4, &cfg);
+        for (i, f) in frames.iter().enumerate() {
+            enc.add_frame(webp::AnimFrame::from_rgba(f, 4, 4, i as i32 * 10));
+        }
+        let bytes = enc.encode().to_vec();
+        let mut d = webp_anim_decoder_new(&bytes);
+        assert!(d.valid());
+        assert_eq!(d.frame_count(), MAX_ANIM_FRAMES);
+        let mut taken = 0;
+        while d.next_frame() {
+            taken += 1;
+        }
+        assert_eq!(taken, MAX_ANIM_FRAMES);
+        assert!(!d.has_more_frames());
+        d.reset();
+        assert!(d.next_frame());
     }
 }

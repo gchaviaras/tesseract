@@ -31,15 +31,21 @@ struct ImageDims
 std::optional<ImageDims> probe_image_dimensions(std::span<const std::uint8_t> bytes);
 
 // Pixel budget for decoding untrusted bytes. Stills: 100 MP and 32768 px per
-// side (~400 MB RGBA). JPEG stills get 268 MP and 65535 px per side because
-// every shell path decodes JPEG with DCT-domain scaling, so memory is bounded
-// by the output size, and real 102-200 MP camera files must still open.
-// Animations keep every frame plus compositing buffers, so they get 16 MP
-// (4096x4096).
+// side (~400 MB RGBA). Animations keep every frame plus compositing buffers,
+// so they get 16 MP (4096x4096).
 inline constexpr std::uint64_t kMaxStillDecodePixels = 100'000'000;
 inline constexpr std::uint32_t kMaxDecodeSide = 32768;
-inline constexpr std::uint64_t kMaxJpegStillDecodePixels = 1ull << 28; // 268 MP: JPEG decodes scaled in every shell path
+// JPEG stills may be larger only where the decoder scales in the DCT domain,
+// so memory is bounded by the output size: the Qt and GTK shells on Linux.
+// Windows (WIC) and macOS (ImageIO) decode a JPEG at full size, so there a
+// 268 MP file would cost 1-3 GB per decode and gets the still budget instead.
+#if defined(_WIN32) || defined(__APPLE__)
+inline constexpr std::uint64_t kMaxJpegStillDecodePixels = kMaxStillDecodePixels;
+inline constexpr std::uint32_t kMaxJpegDecodeSide = kMaxDecodeSide;
+#else
+inline constexpr std::uint64_t kMaxJpegStillDecodePixels = 1ull << 28; // 268 MP: scaled in the DCT domain
 inline constexpr std::uint32_t kMaxJpegDecodeSide = 65535;
+#endif
 inline constexpr std::uint64_t kMaxAnimatedDecodePixels = 4096ull * 4096ull;
 
 // False only when the header is recognised and over budget. Unrecognised

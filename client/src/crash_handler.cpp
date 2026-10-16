@@ -28,6 +28,8 @@
 #include <io.h>
 #else
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #endif
 
 namespace tesseract
@@ -162,6 +164,14 @@ void redirect_stderr_to(const fs::path& path)
     FILE* reopened = nullptr;
     (void)_wfreopen_s(&reopened, path.wstring().c_str(), L"a", stderr);
 #else
+    // Stderr from here on holds room ids, URLs and errors. Create the file
+    // owner-only, rather than with the process umask, before redirecting.
+    if (int cfd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+        cfd >= 0)
+    {
+        (void)::fchmod(cfd, 0600);
+        ::close(cfd);
+    }
     int fd = fileno(stderr);
     g_saved_stderr_fd = dup(fd);
     FILE* reopened = freopen(path.string().c_str(), "a", stderr);

@@ -438,6 +438,9 @@ pub async fn begin(
     })
 }
 
+/// How long the loopback redirect is awaited before the sign-in gives up.
+const OAUTH_CALLBACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
 /// Phase 2 — await the browser's loopback redirect, then ask the SDK to
 /// finalise the login. Takes `&PendingFlow` (not by value) so `cancel()` can
 /// keep reaching the same flow's shutdown handle while this is blocked. The
@@ -454,9 +457,18 @@ pub async fn await_callback(flow: &PendingFlow) -> anyhow::Result<()> {
         .take()
         .ok_or_else(|| anyhow!("oauth flow already awaited"))?;
 
-    let query = redirect_handle
-        .await
-        .ok_or_else(|| anyhow!("oauth flow cancelled or redirect server error"))?;
+    // Bounded: a login the user walked away from must not hold the flow forever.
+    let query = match tokio::time::timeout(OAUTH_CALLBACK_TIMEOUT, redirect_handle).await {
+        Ok(q) => q,
+        Err(_) => {
+            // Free the loopback port now rather than when the flow is dropped.
+            flow.shutdown_handle.clone().shutdown();
+            return Err(anyhow!(
+                "the sign-in in the browser was not completed in time; start again"
+            ));
+        }
+    }
+    .ok_or_else(|| anyhow!("oauth flow cancelled or redirect server error"))?;
 
     client
         .oauth()

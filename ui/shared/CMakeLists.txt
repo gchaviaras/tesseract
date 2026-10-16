@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.30)
 
 # tesseract_tk — the shared UI toolkit core. Cross-platform widget classes,
 # layout, theme, and the abstract Canvas interface (see tk/canvas.h).

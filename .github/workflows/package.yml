@@ -147,6 +147,7 @@ jobs:
           }
           cmake --preset windows-release `
             "-DPython3_EXECUTABLE=${{ steps.python.outputs.python-path }}" `
+            -DTESSERACT_BUILD_TESTS=OFF `
             "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" `
             "-DTESSERACT_MSIX_STORE_IDENTITY_NAME=${{ vars.TESSERACT_MSIX_STORE_IDENTITY_NAME }}" `
             "-DTESSERACT_MSIX_STORE_PUBLISHER=${{ vars.TESSERACT_MSIX_STORE_PUBLISHER }}" `
@@ -321,7 +322,7 @@ jobs:
                        "-DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary"
                        "-DTESSERACT_MAC_NOTARIZE_KEYCHAIN=$KEYCHAIN_PATH")
           fi
-          cmake --preset macos-appkit-arm64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" "${SIGN_ARGS[@]}"
+          cmake --preset macos-appkit-arm64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
 
       - name: Build
         run: cmake --build build/macos-appkit-arm64-release
@@ -644,7 +645,7 @@ jobs:
                        "-DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary"
                        "-DTESSERACT_MAC_NOTARIZE_KEYCHAIN=$KEYCHAIN_PATH")
           fi
-          cmake --preset macos-appkit-x86_64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" "${SIGN_ARGS[@]}"
+          cmake --preset macos-appkit-x86_64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
 
       - name: Build
         run: cmake --build build/macos-appkit-x86_64-release
@@ -746,7 +747,7 @@ jobs:
           cache-on-failure: true
 
       - name: Configure (Release)
-        run: cmake --preset linux-release -DTESSERACT_UI=qt6 "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
+        run: cmake --preset linux-release -DTESSERACT_UI=qt6 "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF
 
       - name: Build
         run: cmake --build build/linux-release

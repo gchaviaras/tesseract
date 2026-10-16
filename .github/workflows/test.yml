@@ -1,0 +1,97 @@
+# Runs the test suites that were previously only run on a maintainer's machine:
+#   - Rust unit tests of the SDK (`cargo test -p tesseract-sdk-ffi`);
+#   - the translation-completeness gate (`i18n/check_i18n.py`);
+#   - the C++ Catch2 suite under ctest, on Linux with the Qt6 shell (the only
+#     UI whose test surface compiles in CI today).
+#
+# Pull requests and pushes to the review branches run it. Packaging jobs in
+# package.yml and build-platform.yml build with TESSERACT_BUILD_TESTS=OFF.
+
+name: Tests
+
+on:
+  push:
+    branches: [main, 'review-*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-and-i18n:
+    name: Rust tests and translation check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: SDK unit tests
+        run: cargo test -p tesseract-sdk-ffi --lib
+
+      - name: Translation catalogs complete
+        run: python3 i18n/check_i18n.py .
+
+  cpp-tests:
+    name: C++ tests (Catch2 via ctest, Linux Qt6)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same build dependencies as the Linux job in compile-check.yml,
+      # which is the reference for this list.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            qt6-base-dev qt6-base-private-dev qt6-multimedia-dev \
+            qt6-wayland \
+            qt6-image-formats-plugins \
+            libgtk-4-dev \
+            ninja-build \
+            libgl-dev \
+            libopus-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libsecret-1-dev \
+            libwayland-dev \
+            libxtst-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-libav \
+            fonts-noto-color-emoji
+
+      - name: Expose opus to audiopus_sys
+        run: |
+          echo "OPUS_LIB_DIR=$(pkg-config --variable=libdir opus)" >> $GITHUB_ENV
+          echo "OPUS_INCLUDE_DIR=$(pkg-config --variable=includedir opus)" >> $GITHUB_ENV
+          echo "OPUS_STATIC=1" >> $GITHUB_ENV
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> build/linux-debug/cargo/build
+
+      - name: Configure (Debug, tests on)
+        run: cmake --preset linux-debug -DTESSERACT_UI=qt6 "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
+
+      - name: Build test target
+        run: cmake --build build/linux-debug --target tesseract_tests -j4
+
+      - name: Run tests
+        run: ctest --test-dir build/linux-debug --output-on-failure

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.30)
 
 # Noto Color Emoji (CBDT/CBLC color emoji font), vendored under fonts/ rather
 # than downloaded at configure time — a prior fetch from

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.30)
 
 # ---------------------------------------------------------------------------
 # tesseract_client – common C++20 static library

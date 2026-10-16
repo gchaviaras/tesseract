@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.30)
 
 set(QT_NO_PRIVATE_MODULE_WARNING ON)
 # 6.4 is the project's actual floor: Ubuntu 24.04's apt qt6-base-dev package

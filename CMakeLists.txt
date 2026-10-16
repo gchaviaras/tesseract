@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.30)
 
 # Must run before project()/enable_language(): locates and applies the MSVC
 # dev environment (vcvarsall) on Windows so the Ninja generator can find

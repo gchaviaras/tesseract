@@ -175,6 +175,12 @@ if(TESSERACT_UNITY_BUILD)
     set(CMAKE_UNITY_BUILD ON)
 endif()
 
+# No C++ modules here. cmake_minimum_required >= 3.28 turns CMP0155 on, which
+# scans every C++20 source for `import`s, and CMake never batches a scanned
+# source into a unity TU — so it silently disables TESSERACT_UNITY_BUILD (every
+# file compiled alone) and adds a scan step per file.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+
 # Apply a precompiled-header set to `target`, honoring TESSERACT_ENABLE_PCH.
 # Defined at root scope so every subdirectory's CMakeLists can call it. No
 # language guards are needed: no target mixes C with C++/ObjC++ (the Wayland

@@ -21,27 +21,54 @@ their full text ships with the respective libraries.
 
 Component            SPDX License                       Author / Maintainer
 --------             ------------                       -------------------
-matrix-sdk           Apache-2.0                          The Matrix.org Foundation / Element
-matrix-sdk-base      Apache-2.0                          The Matrix.org Foundation / Element
-matrix-sdk-ui        Apache-2.0                          The Matrix.org Foundation / Element
-ruma                 MIT                                 The Ruma project
-cxx                  MIT OR Apache-2.0                   David Tolnay
-tokio                MIT                                 Tokio project
-reqwest              MIT OR Apache-2.0                   Sean McArthur
-tiny_http            MIT OR Apache-2.0                   Pierre Krieger
-serde                MIT OR Apache-2.0                   David Tolnay & Erick Tryzelaar
-serde_json           MIT OR Apache-2.0                   David Tolnay & Erick Tryzelaar
-futures-util         MIT OR Apache-2.0                   The Rust futures-rs team
-anyhow               MIT OR Apache-2.0                   David Tolnay
-tracing              MIT                                 Tokio project
-tracing-subscriber   MIT                                 Tokio project
-url                  MIT OR Apache-2.0                   The Servo project
-rusqlite             MIT                                 The rusqlite project
-syntect              MIT                                 Tristan Hume
-audiopus             ISC                                 Lars Wirth
-ogg                  BSD-3-Clause                        RustAudio
-mime                 MIT OR Apache-2.0                   Sean McArthur
-hostname             MIT                                 Steven Allen
+matrix-sdk           Apache-2.0                         The Matrix.org Foundation / Element
+matrix-sdk-base      Apache-2.0                         The Matrix.org Foundation / Element
+matrix-sdk-ui        Apache-2.0                         The Matrix.org Foundation / Element
+ruma                 MIT                                The Ruma project
+livekit              Apache-2.0                         LiveKit
+webrtc-sys / libwebrtc
+                     Apache-2.0 (bundles WebRTC: BSD-3)
+                     LiveKit / The WebRTC project
+cxx                  MIT OR Apache-2.0                  David Tolnay
+tokio                MIT                                Tokio project
+reqwest              MIT OR Apache-2.0                  Sean McArthur
+serde                MIT OR Apache-2.0                  David Tolnay & Erick Tryzelaar
+serde_json           MIT OR Apache-2.0                  David Tolnay & Erick Tryzelaar
+futures-util         MIT OR Apache-2.0                  The Rust futures-rs team
+async-trait          MIT OR Apache-2.0                  David Tolnay
+anyhow               MIT OR Apache-2.0                  David Tolnay
+zeroize              Apache-2.0 OR MIT                  The RustCrypto Project
+sha2, hkdf, base64ct MIT OR Apache-2.0                  RustCrypto Developers
+rand                 MIT OR Apache-2.0                  The Rand Project Developers
+parking_lot          MIT OR Apache-2.0                  Amanieu d'Antras
+tracing              MIT                                Tokio project
+tracing-subscriber   MIT                                Tokio project
+url                  MIT OR Apache-2.0                  The Servo project
+mime                 MIT OR Apache-2.0                  Sean McArthur
+mime_guess           MIT                                Austin Bonander
+infer                MIT                                Bojan
+os_info              MIT                                Jan Schulte
+rusqlite             MIT                                The rusqlite project
+qrcode               MIT OR Apache-2.0                  kennytm
+syntect              MIT                                Tristan Hume
+pulldown-cmark       MIT                                Raph Levien
+linkify              MIT OR Apache-2.0                  Robin Stocker
+scraper              ISC                                June McEnroe
+encoding_rs
+                     (Apache-2.0 OR MIT) AND BSD-3-Clause
+                     Henri Sivonen
+zip                  MIT                                Mathijs van de Nes
+image                MIT OR Apache-2.0                  The image-rs Developers
+webp                 MIT OR Apache-2.0                  Jared Forth
+libwebp-sys          MIT                                XianYou
+jxl-oxide            MIT OR Apache-2.0                  Wonwoo Choi
+img-parts            MIT OR Apache-2.0                  Paolo Barbolini
+little_exif          MIT OR Apache-2.0                  Tobias Prisching
+audiopus / audiopus_sys
+                     ISC
+                     Lars Wirth (Lakelezz)
+ogg                  BSD-3-Clause                       RustAudio
+eyeball              MPL-2.0                            Jonas Platte
 
 ================================================================================
             2. RUST CRATES (notable transitive dependencies)
@@ -50,6 +77,10 @@ hostname             MIT                                 Steven Allen
 Component            SPDX License                       Author / Maintainer
 --------             ------------                       -------------------
 rustls               Apache-2.0 OR ISC OR MIT            The Rustls project
+ring                 Apache-2.0 AND ISC                  Brian Smith & contributors
+brotli               BSD-3-Clause AND MIT                Daniel Reiter Horn
+zune-jpeg            MIT OR Apache-2.0 OR Zlib           Caleb Etemesi
+moxcms               BSD-3-Clause OR Apache-2.0          Radzivon Bartoshyk
 libsqlite3-sys       MIT                                 The rusqlite project
 SQLite (bundled)     Public Domain                       D. Richard Hipp
 aws-lc-sys           ISC AND (Apache-2.0 OR ISC) AND     Amazon Web Services
@@ -62,9 +93,525 @@ SQLite is dedicated to the public domain by its author; see
 https://www.sqlite.org/copyright.html. It is compiled in-tree via matrix-sdk's
 "bundled-sqlite" feature.
 
+
+MPL-2.0 (file-level copyleft) crates, used unmodified from crates.io:
+as_variant, async-rx, cssparser, cssparser-macros, dtoa-short, eyeball,
+eyeball-im, eyeball-im-util, imbl, imbl-sized-chunks (MPL-2.0+), readlock,
+readlock-tokio and selectors. Their source code is available from
+https://crates.io/crates/<name> and the repositories linked there; the license
+text is at https://www.mozilla.org/MPL/2.0/ (see "LICENSE TEXTS").
+
 aws-lc / aws-lc-sys aggregates code under several licenses (including portions
 derived from BoringSSL and OpenSSL). See the aws-lc distribution for the
 complete per-file license breakdown: https://github.com/aws/aws-lc.
+
+================================================================================
+          2a. RUST CRATES (complete list, all transitive dependencies)
+================================================================================
+
+Generated from Cargo.lock (cargo metadata) for the macOS, Windows and Linux
+targets; crates that are only build-time or only used on some targets are
+included. License texts for each SPDX identifier appear under "LICENSE TEXTS"
+or in the crate's own distribution. Regenerate when Cargo.lock changes.
+
+Crate                                    Version(s)            SPDX License
+-----                                    ---------             ------------
+accessory                                2.1.1                 MIT OR Apache-2.0
+adler2                                   2.0.1                 0BSD OR MIT OR Apache-2.0
+aead                                     0.6.1                 MIT OR Apache-2.0
+aes                                      0.9.3                 MIT OR Apache-2.0
+aho-corasick                             1.1.5                 Unlicense OR MIT
+alloc-no-stdlib                          2.0.4                 BSD-3-Clause
+alloc-stdlib                             0.2.4                 BSD-3-Clause
+anyhow                                   1.0.104               MIT OR Apache-2.0
+anymap2                                  0.13.0                MIT/Apache-2.0
+archery                                  1.2.3                 MIT
+arrayvec                                 0.7.8                 MIT OR Apache-2.0
+as_variant                               1.3.0                 MPL-2.0
+assign                                   1.1.1                 MIT
+async-compression                        0.4.44                MIT OR Apache-2.0
+async-rx                                 0.2.1                 MPL-2.0
+async-stream                             0.3.6                 MIT
+async-stream-impl                        0.3.6                 MIT
+async-trait                              0.1.92                MIT OR Apache-2.0
+async_cell                               0.2.3                 MIT
+atomic-waker                             1.1.2                 Apache-2.0 OR MIT
+audiopus                                 0.2.0                 ISC
+audiopus_sys                             0.1.8                 ISC
+autocfg                                  1.5.1                 Apache-2.0 OR MIT
+aws-lc-rs                                1.18.1                ISC AND (Apache-2.0 OR ISC)
+aws-lc-sys                               0.45.0                ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)
+axum                                     0.8.9                 MIT
+axum-core                                0.5.6                 MIT
+backon                                   1.6.0                 Apache-2.0
+base16ct                                 1.0.0                 Apache-2.0 OR MIT
+base64                                   0.21.7, 0.22.1, 0.23.1 MIT OR Apache-2.0
+base64ct                                 1.8.3                 Apache-2.0 OR MIT
+bincode                                  1.3.3                 MIT
+bit-set                                  0.8.0                 Apache-2.0 OR MIT
+bit-vec                                  0.8.0                 Apache-2.0 OR MIT
+bitflags                                 2.13.2                MIT OR Apache-2.0
+blake3                                   1.8.7                 CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception
+block-buffer                             0.10.4, 0.12.1        MIT OR Apache-2.0
+block-padding                            0.4.2                 MIT OR Apache-2.0
+block2                                   0.6.2                 MIT
+bmrng                                    0.5.2                 MIT OR Apache-2.0
+brotli                                   8.0.4                 BSD-3-Clause AND MIT
+brotli-decompressor                      5.0.3                 BSD-3-Clause/MIT
+bs58                                     0.5.1                 MIT/Apache-2.0
+bumpalo                                  3.20.3                MIT OR Apache-2.0
+bytemuck                                 1.25.2                Zlib OR Apache-2.0 OR MIT
+byteorder                                1.5.0                 Unlicense OR MIT
+byteorder-lite                           0.1.0                 Unlicense OR MIT
+bytes                                    1.12.1                MIT
+bytesize                                 2.7.0                 Apache-2.0
+cbc                                      0.2.1                 MIT OR Apache-2.0
+cc                                       1.4.5                 MIT OR Apache-2.0
+cfb                                      0.14.0                MIT
+cfg-if                                   1.0.4                 MIT OR Apache-2.0
+cfg_aliases                              0.2.2                 MIT
+chacha20                                 0.10.2                MIT OR Apache-2.0
+chacha20poly1305                         0.11.0                Apache-2.0 OR MIT
+chrono                                   0.4.45                MIT OR Apache-2.0
+cipher                                   0.5.2                 MIT OR Apache-2.0
+cmake                                    0.1.58                MIT OR Apache-2.0
+cmov                                     0.5.4                 Apache-2.0 OR MIT
+codespan-reporting                       0.13.1                Apache-2.0
+color_quant                              1.1.0                 MIT
+compression-codecs                       0.4.39                MIT OR Apache-2.0
+compression-core                         0.4.33                MIT OR Apache-2.0
+const-oid                                0.10.2                Apache-2.0 OR MIT
+const_panic                              0.2.17                Zlib
+constant_time_eq                         0.4.2                 CC0-1.0 OR MIT-0 OR Apache-2.0
+core-foundation                          0.10.1, 0.9.4         MIT OR Apache-2.0
+core-foundation-sys                      0.8.7                 MIT OR Apache-2.0
+core_detect                              1.0.0                 MIT/Apache-2.0
+cpubits                                  0.1.1                 MIT OR Apache-2.0
+cpufeatures                              0.2.17, 0.3.1         MIT OR Apache-2.0
+crc                                      3.4.0                 MIT OR Apache-2.0
+crc-catalog                              2.5.0                 MIT OR Apache-2.0
+crc32fast                                1.5.1                 MIT OR Apache-2.0
+crypto-common                            0.1.7, 0.2.2          MIT OR Apache-2.0
+cssparser                                0.37.0                MPL-2.0
+cssparser-macros                         0.7.1                 MPL-2.0
+ctr                                      0.10.1                MIT OR Apache-2.0
+ctutils                                  0.4.2                 Apache-2.0 OR MIT
+curve25519-dalek                         5.0.0                 BSD-3-Clause
+curve25519-dalek-derive                  0.1.1                 MIT/Apache-2.0
+cxx                                      1.0.199               MIT OR Apache-2.0
+cxx-build                                1.0.199               MIT OR Apache-2.0
+cxxbridge-flags                          1.0.199               MIT OR Apache-2.0
+cxxbridge-macro                          1.0.199               MIT OR Apache-2.0
+darling                                  0.14.4                MIT
+darling_core                             0.14.4                MIT
+darling_macro                            0.14.4                MIT
+data-encoding                            2.11.1                MIT
+date_header                              1.0.5                 MIT/Apache-2.0
+deadpool                                 0.13.1                MIT OR Apache-2.0
+deadpool-runtime                         0.3.1                 MIT OR Apache-2.0
+deadpool-sync                            0.2.0                 MIT OR Apache-2.0
+decancer                                 3.3.3                 MIT
+delegate-display                         3.0.1                 MIT
+deranged                                 0.5.8                 MIT OR Apache-2.0
+derivative                               2.2.0                 MIT/Apache-2.0
+derive_more                              1.0.0, 2.1.1          MIT
+derive_more-impl                         1.0.0, 2.1.1          MIT
+device-info                              0.1.1                 Apache-2.0
+digest                                   0.10.7, 0.11.3        MIT OR Apache-2.0
+dispatch2                                0.3.1                 Zlib OR Apache-2.0 OR MIT
+displaydoc                               0.2.7                 MIT OR Apache-2.0
+dtoa                                     1.0.11                MIT OR Apache-2.0
+dtoa-short                               0.3.5                 MPL-2.0
+dunce                                    1.0.5                 CC0-1.0 OR MIT-0 OR Apache-2.0
+ed25519                                  3.0.0                 Apache-2.0 OR MIT
+ed25519-dalek                            3.0.0                 BSD-3-Clause
+ego-tree                                 0.11.0                ISC
+either                                   1.18.0                MIT OR Apache-2.0
+emojis                                   0.9.0                 (MIT OR Apache-2.0) AND Unicode-3.0
+encoding_rs                              0.8.42                (Apache-2.0 OR MIT) AND BSD-3-Clause
+equivalent                               1.0.2                 Apache-2.0 OR MIT
+errno                                    0.3.14                MIT OR Apache-2.0
+event-listener                           5.4.2                 Apache-2.0 OR MIT
+eyeball                                  0.8.8                 MPL-2.0
+eyeball-im                               0.9.1                 MPL-2.0
+eyeball-im-util                          0.11.0                MPL-2.0
+fallible-iterator                        0.3.0                 MIT/Apache-2.0
+fallible-streaming-iterator              0.1.9                 MIT/Apache-2.0
+fancy-regex                              0.16.2                MIT
+fancy_constructor                        2.1.1                 MIT OR Apache-2.0
+fastrand                                 2.5.0                 Apache-2.0 OR MIT
+fdeflate                                 0.3.7                 MIT OR Apache-2.0
+find-msvc-tools                          0.1.12                MIT OR Apache-2.0
+fixedbitset                              0.4.2                 MIT/Apache-2.0
+flate2                                   1.1.10                MIT OR Apache-2.0
+fnv                                      1.0.7                 Apache-2.0 / MIT
+foldhash                                 0.2.0                 Zlib
+form_urlencoded                          1.2.2                 MIT OR Apache-2.0
+from_variants                            1.0.2                 MIT/Apache-2.0
+from_variants_impl                       1.0.2                 MIT/Apache-2.0
+fs2                                      0.4.3                 MIT/Apache-2.0
+fs_extra                                 1.3.0                 MIT
+futures-channel                          0.3.34                MIT OR Apache-2.0
+futures-core                             0.3.34                MIT OR Apache-2.0
+futures-io                               0.3.34                MIT OR Apache-2.0
+futures-macro                            0.3.34                MIT OR Apache-2.0
+futures-sink                             0.3.34                MIT OR Apache-2.0
+futures-task                             0.3.34                MIT OR Apache-2.0
+futures-util                             0.3.34                MIT OR Apache-2.0
+fuzzy-matcher                            0.3.7                 MIT
+generic-array                            0.14.7                MIT
+getopts                                  0.2.24                MIT OR Apache-2.0
+getrandom                                0.2.17, 0.3.4, 0.4.3  MIT OR Apache-2.0
+gif                                      0.14.2                MIT OR Apache-2.0
+glob                                     0.3.4                 MIT OR Apache-2.0
+gloo-utils                               0.3.0                 MIT OR Apache-2.0
+growable-bloom-filter                    2.1.1                 MIT
+h2                                       0.4.19                MIT
+hashbrown                                0.17.1                MIT OR Apache-2.0
+hashlink                                 0.12.1                MIT OR Apache-2.0
+heck                                     0.4.1, 0.5.0          MIT OR Apache-2.0
+hex                                      0.4.3                 MIT OR Apache-2.0
+hkdf                                     0.12.4, 0.13.0        MIT OR Apache-2.0
+hmac                                     0.12.1, 0.13.0        MIT OR Apache-2.0
+hpke                                     0.14.1                MIT/Apache-2.0
+html5ever                                0.39.0                MIT OR Apache-2.0
+http                                     1.5.0                 MIT OR Apache-2.0
+http-body                                1.1.0                 MIT
+http-body-util                           0.1.5                 MIT
+httparse                                 1.10.1                MIT OR Apache-2.0
+httpdate                                 1.0.3                 MIT OR Apache-2.0
+hybrid-array                             0.4.14                MIT OR Apache-2.0
+hyper                                    1.11.1                MIT
+hyper-rustls                             0.27.9                Apache-2.0 OR ISC OR MIT
+hyper-util                               0.1.20                MIT
+iana-time-zone                           0.1.65                MIT OR Apache-2.0
+icu_collections                          2.3.0                 Unicode-3.0
+icu_locale_core                          2.3.0                 Unicode-3.0
+icu_normalizer                           2.3.0                 Unicode-3.0
+icu_normalizer_data                      2.3.0                 Unicode-3.0
+icu_properties                           2.3.0                 Unicode-3.0
+icu_properties_data                      2.3.0                 Unicode-3.0
+icu_provider                             2.3.1                 Unicode-3.0
+ident_case                               1.0.1                 MIT/Apache-2.0
+idna                                     1.1.0                 MIT OR Apache-2.0
+idna_adapter                             1.2.2                 Apache-2.0 OR MIT
+image                                    0.25.10               MIT OR Apache-2.0
+image-webp                               0.2.4                 MIT OR Apache-2.0
+imbl                                     7.0.2                 MPL-2.0+
+imbl-sized-chunks                        0.2.0                 MPL-2.0+
+img-parts                                0.4.0                 MIT OR Apache-2.0
+impartial-ord                            2.0.0                 MIT
+indexmap                                 2.14.2                Apache-2.0 OR MIT
+infer                                    0.22.0                MIT
+inout                                    0.2.2                 MIT OR Apache-2.0
+ipnet                                    2.12.1                MIT OR Apache-2.0
+itertools                                0.11.0, 0.14.0, 0.15.0 MIT OR Apache-2.0
+itoa                                     1.0.18                MIT OR Apache-2.0
+jobserver                                0.1.35                MIT OR Apache-2.0
+js-sys                                   0.3.106               MIT OR Apache-2.0
+js_int                                   0.2.2                 MIT
+js_option                                0.2.0                 MIT
+jsonwebtoken                             10.4.0                MIT
+jxl-bitstream                            1.1.0                 MIT OR Apache-2.0
+jxl-coding                               1.0.1                 MIT OR Apache-2.0
+jxl-color                                0.11.0                MIT OR Apache-2.0
+jxl-frame                                0.13.3                MIT OR Apache-2.0
+jxl-grid                                 0.6.2                 MIT OR Apache-2.0
+jxl-image                                0.13.0                MIT OR Apache-2.0
+jxl-jbr                                  0.2.1                 MIT OR Apache-2.0
+jxl-modular                              0.11.3                MIT OR Apache-2.0
+jxl-oxide                                0.12.6                MIT OR Apache-2.0
+jxl-oxide-common                         1.0.0                 MIT OR Apache-2.0
+jxl-render                               0.12.4                MIT OR Apache-2.0
+jxl-threadpool                           1.0.0                 MIT OR Apache-2.0
+jxl-vardct                               0.11.1                MIT OR Apache-2.0
+konst                                    0.4.3                 Zlib
+language-tags                            0.3.2                 MIT/Apache-2.0
+lazy_static                              1.5.0                 MIT OR Apache-2.0
+libc                                     0.2.189               MIT OR Apache-2.0
+libloading                               0.8.9                 ISC
+libsqlite3-sys                           0.38.2                MIT
+libwebp-sys                              0.9.6                 MIT
+libwebrtc                                0.3.42                Apache-2.0
+link-cplusplus                           1.0.12                MIT OR Apache-2.0
+linked-hash-map                          0.5.6                 MIT/Apache-2.0
+linkify                                  0.11.0                MIT OR Apache-2.0
+linux-raw-sys                            0.12.1                Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
+litemap                                  0.8.3                 Unicode-3.0
+little_exif                              0.6.23                MIT OR Apache-2.0
+livekit                                  0.7.53                Apache-2.0
+livekit-api                              0.5.6                 Apache-2.0
+livekit-common                           0.1.0                 Apache-2.0
+livekit-data-stream                      0.1.0                 Apache-2.0
+livekit-datatrack                        0.1.11                Apache-2.0
+livekit-protocol                         0.7.10                Apache-2.0
+livekit-runtime                          0.4.0                 Apache-2.0
+lock_api                                 0.4.14                MIT OR Apache-2.0
+log                                      0.4.34                MIT OR Apache-2.0
+lru-slab                                 0.1.2                 MIT OR Apache-2.0 OR Zlib
+macroific                                2.0.0, 3.0.1          Apache-2.0
+macroific_attr_parse                     2.0.0, 3.0.1          Apache-2.0
+macroific_core                           2.0.0, 3.0.1          Apache-2.0
+macroific_macro                          2.0.0, 3.0.1          Apache-2.0
+maplit                                   1.0.2                 MIT/Apache-2.0
+markup5ever                              0.39.0                MIT OR Apache-2.0
+matchers                                 0.2.0                 MIT
+matchit                                  0.8.4                 MIT AND BSD-3-Clause
+matrix-pickle                            0.2.3                 Apache-2.0
+matrix-pickle-derive                     0.2.3                 Apache-2.0
+matrix-sdk                               0.19.1                Apache-2.0
+matrix-sdk-base                          0.19.1                Apache-2.0
+matrix-sdk-common                        0.19.1                Apache-2.0
+matrix-sdk-crypto                        0.19.1                Apache-2.0
+matrix-sdk-indexeddb                     0.19.1                Apache-2.0
+matrix-sdk-qrcode                        0.19.1                Apache-2.0
+matrix-sdk-sqlite                        0.19.1                Apache-2.0
+matrix-sdk-store-encryption              0.19.1                Apache-2.0
+matrix-sdk-ui                            0.19.1                Apache-2.0
+matrix_indexed_db_futures                0.7.0                 MIT
+matrix_indexed_db_futures_macros_internal 1.0.0                 MIT
+memchr                                   2.8.3                 Unlicense OR MIT
+mime                                     0.3.17                MIT OR Apache-2.0
+mime2ext                                 0.1.54                MIT
+mime_guess                               2.0.5                 MIT
+miniz_oxide                              0.8.9, 0.9.1          MIT OR Zlib OR Apache-2.0
+mio                                      1.2.3                 MIT
+moxcms                                   0.8.1                 BSD-3-Clause OR Apache-2.0
+multimap                                 0.10.1                MIT OR Apache-2.0
+multiversion_no_op                       1.0.0                 Apache-2.0 OR MIT
+new_debug_unreachable                    1.0.6                 MIT
+nix                                      0.31.3                MIT
+nu-ansi-term                             0.50.3                MIT
+num-conv                                 0.2.2                 MIT OR Apache-2.0
+num-traits                               0.2.19                MIT OR Apache-2.0
+num_cpus                                 1.17.0                MIT OR Apache-2.0
+oauth2                                   5.0.0                 MIT OR Apache-2.0
+oauth2-reqwest                           0.1.0-alpha.3         MIT
+objc2                                    0.6.4                 MIT
+objc2-core-foundation                    0.3.2                 Zlib OR Apache-2.0 OR MIT
+objc2-encode                             4.1.0                 MIT
+objc2-foundation                         0.3.2                 MIT
+ogg                                      0.9.2                 BSD-3-Clause
+once_cell                                1.21.4                MIT OR Apache-2.0
+openssl-probe                            0.2.1                 MIT OR Apache-2.0
+os_info                                  3.15.0                MIT
+parking                                  2.2.1                 Apache-2.0 OR MIT
+parking_lot                              0.12.5                MIT OR Apache-2.0
+parking_lot_core                         0.9.12                MIT OR Apache-2.0
+paste                                    1.0.15                MIT OR Apache-2.0
+pbjson                                   0.6.0                 MIT
+pbjson-build                             0.6.2                 MIT
+pbjson-types                             0.6.0                 MIT
+pbkdf2                                   0.13.0                MIT OR Apache-2.0
+percent-encoding                         2.3.2                 MIT OR Apache-2.0
+petgraph                                 0.6.5                 MIT OR Apache-2.0
+phf                                      0.13.1                MIT
+phf_codegen                              0.13.1                MIT
+phf_generator                            0.13.1                MIT
+phf_macros                               0.13.1                MIT
+phf_shared                               0.13.1                MIT
+pin-project-lite                         0.2.17                Apache-2.0 OR MIT
+pkg-config                               0.3.34                MIT OR Apache-2.0
+plist                                    1.10.0                MIT
+png                                      0.18.1                MIT OR Apache-2.0
+poly1305                                 0.9.1                 Apache-2.0 OR MIT
+potential_utf                            0.1.6                 Unicode-3.0
+powerfmt                                 0.2.0                 MIT OR Apache-2.0
+ppv-lite86                               0.2.21                MIT OR Apache-2.0
+precomputed-hash                         0.1.1                 MIT
+prettyplease                             0.2.37                MIT OR Apache-2.0
+proc-macro-crate                         3.5.0                 MIT OR Apache-2.0
+proc-macro2                              1.0.107               MIT OR Apache-2.0
+prost                                    0.12.6, 0.14.4        Apache-2.0
+prost-build                              0.12.6                Apache-2.0
+prost-derive                             0.12.6, 0.14.4        Apache-2.0
+prost-types                              0.12.6                Apache-2.0
+pulldown-cmark                           0.13.4                MIT
+pulldown-cmark-escape                    0.11.0                MIT
+pxfm                                     0.1.30                BSD-3-Clause OR Apache-2.0
+qrcode                                   0.14.1                MIT OR Apache-2.0
+quick-error                              2.0.1                 MIT/Apache-2.0
+quick-xml                                0.37.5, 0.41.0        MIT
+quinn                                    0.11.11               MIT OR Apache-2.0
+quinn-proto                              0.11.17               MIT OR Apache-2.0
+quinn-udp                                0.5.15                MIT OR Apache-2.0
+quote                                    1.0.47                MIT OR Apache-2.0
+rand                                     0.10.2, 0.8.8, 0.9.5  MIT OR Apache-2.0
+rand_chacha                              0.3.1, 0.9.0          MIT OR Apache-2.0
+rand_core                                0.10.1, 0.6.4, 0.9.5  MIT OR Apache-2.0
+rand_pcg                                 0.10.2                MIT OR Apache-2.0
+rand_xoshiro                             0.7.0                 MIT OR Apache-2.0
+readlock                                 0.1.11                MPL-2.0
+readlock-tokio                           0.1.6                 MPL-2.0
+regex                                    1.13.1                MIT OR Apache-2.0
+regex-automata                           0.4.18                MIT OR Apache-2.0
+regex-syntax                             0.8.11                MIT OR Apache-2.0
+reqwest                                  0.12.28, 0.13.5       MIT OR Apache-2.0
+ring                                     0.17.14               Apache-2.0 AND ISC
+rmp                                      0.8.15                MIT
+rmp-serde                                1.3.1                 MIT
+rtrb                                     0.3.5                 MIT OR Apache-2.0
+ruma                                     0.17.0                MIT
+ruma-client-api                          0.25.0                MIT
+ruma-common                              0.20.0                MIT
+ruma-events                              0.35.0                MIT
+ruma-html                                0.9.0                 MIT
+ruma-identifiers-validation              0.12.1                MIT
+ruma-macros                              0.20.0                MIT
+rusqlite                                 0.40.2                MIT
+rustc-hash                               2.1.3                 Apache-2.0 OR MIT
+rustc_version                            0.4.1                 MIT OR Apache-2.0
+rustix                                   1.1.4                 Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
+rustls                                   0.23.43               Apache-2.0 OR ISC OR MIT
+rustls-native-certs                      0.8.4                 Apache-2.0 OR ISC OR MIT
+rustls-pki-types                         1.15.1                MIT OR Apache-2.0
+rustls-platform-verifier                 0.7.0                 MIT OR Apache-2.0
+rustls-webpki                            0.103.15              ISC
+rustversion                              1.0.23                MIT OR Apache-2.0
+ryu                                      1.0.23                Apache-2.0 OR BSL-1.0
+safe_arch                                0.7.4                 Zlib OR Apache-2.0 OR MIT
+same-file                                1.0.6                 Unlicense/MIT
+schannel                                 0.1.29                MIT
+scopeguard                               1.2.0                 MIT OR Apache-2.0
+scraper                                  0.27.0                ISC
+scratch                                  1.0.9                 MIT OR Apache-2.0
+sealed                                   0.6.0, 0.7.0          MIT OR Apache-2.0
+security-framework                       3.7.0                 MIT OR Apache-2.0
+security-framework-sys                   2.17.0                MIT OR Apache-2.0
+selectors                                0.38.0                MPL-2.0
+semver                                   1.0.28                MIT OR Apache-2.0
+serde                                    1.0.229               MIT OR Apache-2.0
+serde-wasm-bindgen                       0.6.5                 MIT
+serde_bytes                              0.11.19               MIT OR Apache-2.0
+serde_core                               1.0.229               MIT OR Apache-2.0
+serde_derive                             1.0.229               MIT OR Apache-2.0
+serde_html_form                          0.4.1                 MIT
+serde_json                               1.0.151               MIT OR Apache-2.0
+serde_path_to_error                      0.1.20                MIT OR Apache-2.0
+serde_spanned                            1.1.1                 MIT OR Apache-2.0
+serde_urlencoded                         0.7.1                 MIT/Apache-2.0
+serdect                                  0.4.3                 Apache-2.0 OR MIT
+servo_arc                                0.4.3                 MIT OR Apache-2.0
+sha1                                     0.10.7                MIT OR Apache-2.0
+sha2                                     0.10.9, 0.11.0        MIT OR Apache-2.0
+sharded-slab                             0.1.7                 MIT
+shlex                                    2.0.1                 MIT OR Apache-2.0
+signal-hook-registry                     1.4.8                 MIT OR Apache-2.0
+signature                                2.2.0, 3.0.0          Apache-2.0 OR MIT
+simd-adler32                             0.3.10                MIT
+simdutf8                                 0.1.5                 MIT OR Apache-2.0
+siphasher                                1.0.3                 MIT/Apache-2.0
+slab                                     0.4.12                MIT
+smallvec                                 1.16.0                MIT OR Apache-2.0
+socket2                                  0.6.5                 MIT OR Apache-2.0
+stable_deref_trait                       1.2.1                 MIT OR Apache-2.0
+string_cache                             0.9.0                 MIT OR Apache-2.0
+string_cache_codegen                     0.6.1                 MIT OR Apache-2.0
+strsim                                   0.10.0                MIT
+subtle                                   2.6.1                 BSD-3-Clause
+syn                                      1.0.109, 2.0.119, 3.0.5 MIT OR Apache-2.0
+sync_wrapper                             1.0.2                 Apache-2.0
+synstructure                             0.13.2                MIT
+syntect                                  5.3.0                 MIT
+system-configuration                     0.7.0                 MIT OR Apache-2.0
+system-configuration-sys                 0.6.0                 MIT OR Apache-2.0
+tempfile                                 3.27.0                MIT OR Apache-2.0
+tendril                                  0.5.1                 MIT OR Apache-2.0
+termcolor                                1.4.1                 Unlicense OR MIT
+thiserror                                1.0.69, 2.0.20        MIT OR Apache-2.0
+thiserror-impl                           1.0.69, 2.0.20        MIT OR Apache-2.0
+thread_local                             1.1.10                MIT OR Apache-2.0
+time                                     0.3.55                MIT OR Apache-2.0
+time-core                                0.1.9                 MIT OR Apache-2.0
+time-macros                              0.2.32                MIT OR Apache-2.0
+tinystr                                  0.8.4                 Unicode-3.0
+tinyvec                                  1.13.2                Zlib OR Apache-2.0 OR MIT
+tinyvec_macros                           0.1.1                 MIT OR Apache-2.0 OR Zlib
+tokio                                    1.53.1                MIT
+tokio-macros                             2.7.2                 MIT
+tokio-rustls                             0.26.5                MIT OR Apache-2.0
+tokio-stream                             0.1.19                MIT
+tokio-tungstenite                        0.29.0                MIT
+tokio-util                               0.7.19                MIT
+toml                                     1.1.5+spec-1.1.0      MIT OR Apache-2.0
+toml_datetime                            1.1.1+spec-1.1.0      MIT OR Apache-2.0
+toml_edit                                0.25.13+spec-1.1.0    MIT OR Apache-2.0
+toml_parser                              1.1.3+spec-1.1.0      MIT OR Apache-2.0
+tower                                    0.5.3                 MIT
+tower-http                               0.6.11                MIT
+tower-layer                              0.3.3                 MIT
+tower-service                            0.3.3                 MIT
+tracing                                  0.1.44                MIT
+tracing-attributes                       0.1.31                MIT
+tracing-core                             0.1.36                MIT
+tracing-log                              0.2.0                 MIT
+tracing-subscriber                       0.3.23                MIT
+try-lock                                 0.2.5                 MIT
+tungstenite                              0.29.0                MIT OR Apache-2.0
+typenum                                  1.20.1                MIT OR Apache-2.0
+typewit                                  1.15.2                Zlib
+ulid                                     3.0.0                 MIT
+unicase                                  2.9.0                 MIT OR Apache-2.0
+unicode-ident                            1.0.24                (MIT OR Apache-2.0) AND Unicode-3.0
+unicode-normalization                    0.1.25                MIT OR Apache-2.0
+unicode-segmentation                     1.13.3                MIT OR Apache-2.0
+unicode-width                            0.2.2                 MIT OR Apache-2.0
+unicode-xid                              0.2.6                 MIT OR Apache-2.0
+universal-hash                           0.6.1                 MIT OR Apache-2.0
+untrusted                                0.9.0                 ISC
+url                                      2.5.8                 MIT OR Apache-2.0
+utf8_iter                                1.0.4                 Apache-2.0 OR MIT
+uuid                                     1.27.0                Apache-2.0 OR MIT
+vcpkg                                    0.2.15                MIT/Apache-2.0
+version_check                            0.9.5                 MIT/Apache-2.0
+vodozemac                                0.11.1                Apache-2.0
+walkdir                                  2.5.0                 Unlicense/MIT
+want                                     0.3.1                 MIT
+wasm-bindgen                             0.2.129               MIT OR Apache-2.0
+wasm-bindgen-futures                     0.4.79                MIT OR Apache-2.0
+wasm-bindgen-macro                       0.2.129               MIT OR Apache-2.0
+wasm-bindgen-macro-support               0.2.129               MIT OR Apache-2.0
+wasm-bindgen-shared                      0.2.129               MIT OR Apache-2.0
+wasm_evt_listener                        0.1.0                 MIT
+web-sys                                  0.3.106               MIT OR Apache-2.0
+web-time                                 1.1.0                 MIT OR Apache-2.0
+web_atoms                                0.2.6                 MIT OR Apache-2.0
+webp                                     0.3.1                 MIT OR Apache-2.0
+webrtc-sys                               0.3.39                Apache-2.0
+webrtc-sys-build                         0.3.18                Apache-2.0
+weezl                                    0.1.12                MIT OR Apache-2.0
+wide                                     0.7.33                Zlib OR Apache-2.0 OR MIT
+wildmatch                                2.6.1                 MIT
+winapi                                   0.3.9                 MIT/Apache-2.0
+winapi-util                              0.1.11                Unlicense OR MIT
+windows-link                             0.2.1                 MIT OR Apache-2.0
+windows-registry                         0.6.1                 MIT OR Apache-2.0
+windows-result                           0.4.1                 MIT OR Apache-2.0
+windows-strings                          0.5.1                 MIT OR Apache-2.0
+windows-sys                              0.59.0, 0.61.2        MIT OR Apache-2.0
+windows-targets                          0.52.6                MIT OR Apache-2.0
+windows_x86_64_msvc                      0.52.6                MIT OR Apache-2.0
+winnow                                   1.0.4                 MIT
+writeable                                0.6.4                 Unicode-3.0
+x25519-dalek                             3.0.0                 BSD-3-Clause
+xxhash-rust                              0.8.18                BSL-1.0
+yaml-rust                                0.4.5                 MIT/Apache-2.0
+yoke                                     0.8.3                 Unicode-3.0
+yoke-derive                              0.8.2                 Unicode-3.0
+zerocopy                                 0.8.56                BSD-2-Clause OR Apache-2.0 OR MIT
+zerofrom                                 0.1.8                 Unicode-3.0
+zerofrom-derive                          0.1.7                 Unicode-3.0
+zeroize                                  1.9.0                 Apache-2.0 OR MIT
+zeroize_derive                           1.5.0                 Apache-2.0 OR MIT
+zerotrie                                 0.2.5                 Unicode-3.0
+zerovec                                  0.11.8                Unicode-3.0
+zerovec-derive                           0.11.6                Unicode-3.0
+zip                                      0.6.6, 2.4.2          MIT
+zlib-rs                                  0.6.7                 Zlib
+zmij                                     1.0.23                MIT
+zopfli                                   0.8.3                 Apache-2.0
+zune-core                                0.5.3                 MIT OR Apache-2.0 OR Zlib
+zune-jpeg                                0.5.15                MIT OR Apache-2.0 OR Zlib
 
 ================================================================================
                  3. UI TOOLKITS (C++ — per platform)
@@ -129,9 +676,11 @@ MIT License
 --------------------------------------------------------------------------------
 
 Applies to: ruma, tokio, tracing, tracing-subscriber, rusqlite, syntect,
-hostname, libsqlite3-sys, nlohmann/json, Corrosion, backward-cpp, and (at your
-option) cxx, reqwest, tiny_http, serde, serde_json, futures-util, anyhow, url,
-mime, rustls.
+libsqlite3-sys, mime_guess, infer, os_info, pulldown-cmark, zip, libwebp-sys,
+nlohmann/json, Corrosion, backward-cpp, and (at your option) cxx, reqwest,
+serde, serde_json, futures-util, async-trait, anyhow, zeroize, sha2, hkdf,
+base64ct, rand, parking_lot, url, mime, qrcode, linkify, image, webp,
+jxl-oxide, img-parts, little_exif, zune-jpeg, rustls.
 
 Copyright (c) the respective authors listed above.
 
@@ -157,9 +706,9 @@ SOFTWARE.
 Apache License 2.0
 --------------------------------------------------------------------------------
 
-Applies to: matrix-sdk, matrix-sdk-base, matrix-sdk-ui, Ninja, and (at your
-option) cxx, reqwest, tiny_http, serde, serde_json, futures-util, anyhow, url,
-mime, rustls, aws-lc-sys.
+Applies to: matrix-sdk, matrix-sdk-base, matrix-sdk-ui, livekit, webrtc-sys,
+libwebrtc, ring, Ninja, and (at your option) the crates above listed as
+"OR Apache-2.0", rustls and aws-lc-sys.
 
                                  Apache License
                            Version 2.0, January 2004
@@ -184,7 +733,8 @@ https://www.apache.org/licenses/LICENSE-2.0.txt
 BSD 3-Clause License
 --------------------------------------------------------------------------------
 
-Applies to: ogg, CMake, and (as one option) portions of aws-lc-sys.
+Applies to: ogg, brotli, encoding_rs (portions), WebRTC (bundled in libwebrtc),
+CMake, and (as one option) moxcms and portions of aws-lc-sys.
 
 Copyright (c) the respective authors listed above.
 All rights reserved.
@@ -218,7 +768,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ISC License
 --------------------------------------------------------------------------------
 
-Applies to: audiopus, and (as one option) rustls and portions of aws-lc-sys.
+Applies to: audiopus, audiopus_sys, scraper, ring, and (as one option) rustls
+and portions of aws-lc-sys.
 
 Copyright (c) the respective authors listed above.
 
@@ -290,6 +841,83 @@ THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY
 DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+Mozilla Public License 2.0
+--------------------------------------------------------------------------------
+
+Applies to: as_variant, async-rx, cssparser, cssparser-macros, dtoa-short,
+eyeball, eyeball-im, eyeball-im-util, imbl, imbl-sized-chunks, readlock,
+readlock-tokio, selectors.
+
+These crates are distributed in unmodified form. Their Source Code Form is
+available from the crate pages on https://crates.io. The full license text is
+available at https://www.mozilla.org/MPL/2.0/ and is distributed with each crate.
+
+--------------------------------------------------------------------------------
+Unicode License v3 (Unicode-3.0)
+--------------------------------------------------------------------------------
+
+Applies to: every crate marked Unicode-3.0 in section 2a (icu_*, zerovec, tinystr,
+litemap, writeable, yoke, zerofrom, zerotrie, potential_utf, and, alongside
+MIT/Apache-2.0, unicode-ident and emojis).
+
+UNICODE LICENSE V3
+
+COPYRIGHT AND PERMISSION NOTICE
+
+Copyright © 2020-2024 Unicode, Inc.
+
+NOTICE TO USER: Carefully read the following legal agreement. BY
+DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING DATA FILES, AND/OR
+SOFTWARE, YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE
+TERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT
+DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE THE DATA FILES OR SOFTWARE.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of data files and any associated documentation (the "Data Files") or
+software and any associated documentation (the "Software") to deal in the
+Data Files or Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, and/or sell
+copies of the Data Files or Software, and to permit persons to whom the
+Data Files or Software are furnished to do so, provided that either (a)
+this copyright and permission notice appear with all copies of the Data
+Files or Software, or (b) this copyright and permission notice appear in
+associated Documentation.
+
+THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+THIRD PARTY RIGHTS.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE
+BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES,
+OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA
+FILES OR SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall
+not be used in advertising or otherwise to promote the sale, use or other
+dealings in these Data Files or Software without prior written
+authorization of the copyright holder.
+
+SPDX-License-Identifier: Unicode-3.0
+
+—
+
+Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
+ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
+
+--------------------------------------------------------------------------------
+Other permissive licenses (no attribution text beyond the crate's own notice)
+--------------------------------------------------------------------------------
+
+Where a crate in section 2a is licensed 0BSD, BSD-2-Clause, CC0-1.0, MIT-0,
+Unlicense or Apache-2.0 WITH LLVM-exception (almost always as one option of an
+"OR" choice, with MIT or Apache-2.0 also offered), the license text is
+available from https://spdx.org/licenses/<identifier>.html and is distributed
+with the respective crate.
 
 --------------------------------------------------------------------------------
 GNU Lesser General Public License

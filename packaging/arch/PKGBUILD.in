@@ -47,11 +47,16 @@ sha256sums=()
 _repodir="$(realpath "${startdir}/../..")"
 
 build() {
+    # makepkg sets RUN_CHECK=n for --nocheck; skip compiling the test suite then.
+    local build_tests=ON
+    [[ ${RUN_CHECK-} == n ]] && build_tests=OFF
+
     cmake -S "$_repodir" -B "$srcdir/build" -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DTESSERACT_UI=qt6 \
-          -DTESSERACT_ENABLE_HARDENING=OFF
+          -DTESSERACT_ENABLE_HARDENING=OFF \
+          -DTESSERACT_BUILD_TESTS=$build_tests
     cmake --build "$srcdir/build"
 }
 

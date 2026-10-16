@@ -192,6 +192,16 @@ public:
 private:
     void capture_loop_()
     {
+        capture_frames_();
+        // stop() clears running_ before it joins, so a loop that ends while
+        // still marked running ended on its own: a failed duplication, a
+        // closed window, or a setup step that did not succeed.
+        if (running_.load())
+            report_failure_();
+    }
+
+    void capture_frames_()
+    {
         std::string sid;
         {
             std::lock_guard<std::mutex> lk(mu_);
@@ -219,14 +229,31 @@ private:
             }
         }
 
-        // Create D3D11 device.
+        // Resolve the adapter and output first: the device has to be created on
+        // the adapter that owns the output, or DuplicateOutput fails (or the
+        // wrong GPU's output is duplicated on a multi-GPU machine).
+        IDXGIFactory1* factory = nullptr;
+        CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+        IDXGIAdapter1* target_adapter = nullptr;
+        if (factory)
+            factory->EnumAdapters1(adapter_idx, &target_adapter);
+        if (factory)
+            factory->Release();
+
+        // Create D3D11 device on that adapter (an explicit adapter needs the
+        // UNKNOWN driver type).
         ID3D11Device*        d3d_dev  = nullptr;
         ID3D11DeviceContext* d3d_ctx  = nullptr;
         D3D_FEATURE_LEVEL    feature_level;
-        if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE,
+        if (FAILED(D3D11CreateDevice(target_adapter,
+                                     target_adapter ? D3D_DRIVER_TYPE_UNKNOWN
+                                                    : D3D_DRIVER_TYPE_HARDWARE,
                                      nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
                                      &d3d_dev, &feature_level, &d3d_ctx)))
+        {
+            if (target_adapter) target_adapter->Release();
             return;
+        }
 
         IDXGIDevice*  dxgi_dev     = nullptr;
         IDXGIAdapter* dxgi_adapter = nullptr;
@@ -237,12 +264,6 @@ private:
         d3d_dev->QueryInterface(IID_PPV_ARGS(&dxgi_dev));
         dxgi_dev->GetAdapter(&dxgi_adapter);
 
-        // Advance to the requested adapter/output.
-        IDXGIFactory1* factory = nullptr;
-        CreateDXGIFactory1(IID_PPV_ARGS(&factory));
-        IDXGIAdapter1* target_adapter = nullptr;
-        factory->EnumAdapters1(adapter_idx, &target_adapter);
-        factory->Release();
         if (target_adapter)
         {
             target_adapter->EnumOutputs(output_idx, &dxgi_output);
@@ -545,13 +566,27 @@ private:
             }
         }
 
+        // Same ordering as the capture path: the device lives on the output's adapter.
+        IDXGIFactory1* factory = nullptr;
+        CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+        IDXGIAdapter1* target_adapter = nullptr;
+        if (factory)
+            factory->EnumAdapters1(adapter_idx, &target_adapter);
+        if (factory)
+            factory->Release();
+
         ID3D11Device*        d3d_dev = nullptr;
         ID3D11DeviceContext* d3d_ctx = nullptr;
         D3D_FEATURE_LEVEL    feature_level;
-        if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE,
+        if (FAILED(D3D11CreateDevice(target_adapter,
+                                     target_adapter ? D3D_DRIVER_TYPE_UNKNOWN
+                                                    : D3D_DRIVER_TYPE_HARDWARE,
                                      nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
                                      &d3d_dev, &feature_level, &d3d_ctx)))
+        {
+            if (target_adapter) target_adapter->Release();
             return false;
+        }
 
         IDXGIDevice*  dxgi_dev     = nullptr;
         IDXGIAdapter* dxgi_adapter = nullptr;
@@ -562,11 +597,6 @@ private:
         d3d_dev->QueryInterface(IID_PPV_ARGS(&dxgi_dev));
         dxgi_dev->GetAdapter(&dxgi_adapter);
 
-        IDXGIFactory1* factory = nullptr;
-        CreateDXGIFactory1(IID_PPV_ARGS(&factory));
-        IDXGIAdapter1* target_adapter = nullptr;
-        factory->EnumAdapters1(adapter_idx, &target_adapter);
-        factory->Release();
         if (target_adapter)
         {
             target_adapter->EnumOutputs(output_idx, &dxgi_output);

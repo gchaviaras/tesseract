@@ -489,3 +489,11 @@ TEST_CASE("ComboButton dropdown rows are exposed and activatable",
     list->on_pointer_up({10, 40}, true);
     CHECK(changed == "space");
 }
+
+TEST_CASE("ComboBox without a host does not stay expanded when asked to open",
+          "[tk][combobox]")
+{
+    auto cb = create_root_widget<ComboBox>(nullptr);
+    CHECK(cb->access_default_action());
+    CHECK_FALSE(cb->is_expanded());
+}

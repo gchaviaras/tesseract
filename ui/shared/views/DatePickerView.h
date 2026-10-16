@@ -251,4 +251,10 @@ private:
     void ensure_layouts_(tk::CanvasFactory& factory);
 };
 
+// Milliseconds since the Unix epoch at local midnight of a calendar date: the
+// start of that day for the user. The picker works in the user's calendar, so
+// a jump to a picked date must not start at UTC midnight. 0 when the date
+// cannot be represented.
+std::uint64_t local_midnight_ms(int year, int month, int day);
+
 } // namespace tesseract::views

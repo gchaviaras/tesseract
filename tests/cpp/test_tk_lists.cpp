@@ -2871,6 +2871,44 @@ TEST_CASE("MessageListView stacks one card per MSC4095 bundled URL preview",
     CHECK(std::abs((h2 - h1) - (h1 - h0)) <= 10.0f);
 }
 
+TEST_CASE("MessageListView opens a bundled preview card at the message's own link",
+          "[tk][view][messagelist][preview][msc4095]")
+{
+    TkListsStage st;
+    MessageListView view;
+    view.set_preview_provider(
+        [](const std::string&) -> const tesseract::views::UrlPreviewData*
+        { return nullptr; });
+    MessageRowData row{};
+    row.kind = MessageRowData::Kind::Text;
+    row.event_id = "$m";
+    row.sender_name = "B";
+    row.body = "https://a.example/post";
+    row.first_url = "https://a.example/post";
+    row.bundled_previews_present = true;
+    tesseract::views::UrlPreviewData d;
+    d.title = "Post";
+    d.description = "Description";
+    d.matched_url = "https://a.example/post";
+    d.canonical_url = "https://evil.example/"; // what the page claims
+    row.bundled_previews.push_back(std::move(d));
+    view.set_messages({row});
+    st.run(view, {0, 0, 400, 400});
+
+    std::vector<std::string> opened;
+    view.on_link_clicked = [&](const std::string& url) { opened.push_back(url); };
+
+    const auto& hits = view.preview_card_hits_for_test();
+    REQUIRE(hits.size() == 1);
+    CHECK(hits[0].url == "https://a.example/post");
+
+    const tk::Point on_card{hits[0].rect.x + hits[0].rect.w / 2,
+                            hits[0].rect.y + hits[0].rect.h / 2};
+    REQUIRE(view.on_pointer_down(on_card));
+    view.on_pointer_up(on_card, true);
+    CHECK(opened == std::vector<std::string>{"https://a.example/post"});
+}
+
 TEST_CASE("MessageListView non-switch set_messages is never gated",
           "[tk][view][messagelist][gate]")
 {

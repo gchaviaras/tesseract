@@ -53,10 +53,12 @@ TEST_CASE("find_prefix rejects mid-message slash", "[slash][engine]")
     REQUIRE(!m.has_value());
 }
 
-TEST_CASE("find_prefix rejects non-letter chars after slash", "[slash][engine]")
+TEST_CASE("find_prefix rejects characters a command name cannot contain",
+          "[slash][engine]")
 {
     SlashCommandEngine e;
-    REQUIRE(!e.find_prefix("/9", 2).has_value());
+    // Digits are part of a bot command name; punctuation is not.
+    REQUIRE(e.find_prefix("/9", 2).has_value());
     REQUIRE(!e.find_prefix("/!", 2).has_value());
 }
 
@@ -141,4 +143,15 @@ TEST_CASE("lookup prefix-matches bot commands after built-ins", "[slash][engine]
     REQUIRE(results[0].is_builtin);
     REQUIRE(results[1].name == "meow");
     REQUIRE_FALSE(results[1].is_builtin);
+}
+
+TEST_CASE("find_prefix accepts digits and dashes in a bot command name",
+          "[slash][engine]")
+{
+    // Bot command names are [a-z0-9_-]; the popup must keep open for them.
+    SlashCommandEngine e;
+    auto m = e.find_prefix("/set-x2", 7);
+    REQUIRE(m.has_value());
+    CHECK(m->prefix == "set-x2");
+    CHECK_FALSE(e.find_prefix("/set x", 6).has_value());
 }

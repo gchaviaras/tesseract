@@ -370,6 +370,24 @@ TEST_CASE("MainAppWidget Escape closes and hides media lightboxes",
     CHECK(app.media_viewer()->visible() == false);
 }
 
+TEST_CASE("MainAppWidget hides the compose text area while the export dialog is open",
+          "[tk][widget][export_dialog]")
+{
+    // The surface outlives the widget tree, as in the shortcut-overlay tests.
+    auto surface = TestSurface::create(1100, 700);
+    StubHost host;
+    auto app = tk::create_root_widget<MainAppWidget>(&host);
+    host.set_root(app.get());
+    app->room_view()->set_room({.id = "!room:example.org", .name = "Room"});
+    auto lc = LayoutCtx{surface->factory(), Theme::light()};
+    app->measure(lc, {1100.0f, 700.0f});
+    app->arrange(lc, {0, 0, 1100, 700});
+    REQUIRE_FALSE(app->compose_text_area_rect().empty());
+
+    app->export_history_dialog()->open("!room:example.org", "Room");
+    CHECK(app->compose_text_area_rect().empty());
+}
+
 TEST_CASE("MainAppWidget show_room closes and hides an open video lightbox",
           "[tk][widget]")
 {

@@ -11,6 +11,11 @@
 
 use super::*;
 
+/// Verification flows awaiting an answer at once, in all and from one user;
+/// further incoming requests are ignored.
+const MAX_PENDING_VERIFICATION_FLOWS: usize = 128;
+const MAX_PENDING_FLOWS_PER_USER: usize = 3;
+
 use matrix_sdk::SessionChange;
 use matrix_sdk_ui::sync_service::SyncService;
 
@@ -317,10 +322,13 @@ impl ClientFfi {
             let h = Arc::clone(&handler);
             let client_clone = client.clone();
             self.event_handler_handles.push(client.add_event_handler(
-                move |ev: OriginalSyncMessageLikeEvent<RoomMessageEventContent>, room: Room| {
+                move |ev: OriginalSyncMessageLikeEvent<RoomMessageEventContent>,
+                      raw: matrix_sdk::event_handler::RawEvent,
+                      room: Room| {
                     let h = Arc::clone(&h);
                     let client_clone = client_clone.clone();
-                    handle_message_notification(ev, room, client_clone, h, session_start_ms)
+                    let raw = raw.get().to_owned();
+                    handle_message_notification(ev, raw, room, client_clone, h, session_start_ms)
                 },
             ));
         }
@@ -335,10 +343,13 @@ impl ClientFfi {
             let h = Arc::clone(&handler);
             let client_clone = client.clone();
             self.event_handler_handles.push(client.add_event_handler(
-                move |ev: OriginalSyncMessageLikeEvent<StickerEventContent>, room: Room| {
+                move |ev: OriginalSyncMessageLikeEvent<StickerEventContent>,
+                      raw: matrix_sdk::event_handler::RawEvent,
+                      room: Room| {
                     let h = Arc::clone(&h);
                     let client_clone = client_clone.clone();
-                    handle_sticker_notification(ev, room, client_clone, h, session_start_ms)
+                    let raw = raw.get().to_owned();
+                    handle_sticker_notification(ev, raw, room, client_clone, h, session_start_ms)
                 },
             ));
         }
@@ -1121,10 +1132,13 @@ impl ClientFfi {
             let sink = std::sync::Arc::new(RtcCxxBridgeSink {
                 handler: std::sync::Arc::clone(&handler),
             });
-            rtc::register_sink(sink);
-            rtc::session::register_invitation_handler(&client);
-            rtc::session::register_msc3401_invitation_handler(&client);
-            rtc::session::register_rtc_notification_handler(&client);
+            rtc::register_sink(&client.user_id().map(|u| u.to_string()).unwrap_or_default(), sink);
+            self.rtc_sink_registered.store(true, std::sync::atomic::Ordering::Relaxed);
+            // Tracked so stop_sync removes them: a sync restart on the same
+            // client would otherwise stack a second set and ring twice.
+            self.event_handler_handles.push(rtc::session::register_invitation_handler(&client));
+            self.event_handler_handles.push(rtc::session::register_msc3401_invitation_handler(&client));
+            self.event_handler_handles.extend(rtc::session::register_rtc_notification_handler(&client));
         }
 
         self.spawn_tracked("sync-supervisor", async move {
@@ -1673,7 +1687,12 @@ async fn watch_session_changes(
     let mut changes = client.subscribe_to_session_changes();
     loop {
         match changes.recv().await {
-            Ok(SessionChange::TokensRefreshed) => {
+            // Lagged means some changes were dropped, not that the stream is
+            // over. Persist the current session as for a refresh: the newest
+            // tokens are what must survive. Ending the watcher here would stop
+            // all later token persistence and the unknown-token check.
+            Ok(SessionChange::TokensRefreshed)
+            | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                 let Some(envelope) = SessionEnvelope::snapshot(&client) else {
                     continue;
                 };
@@ -1700,7 +1719,7 @@ async fn watch_session_changes(
                 }
                 break;
             }
-            Err(_) => break,
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
         }
     }
 }
@@ -1710,19 +1729,27 @@ async fn watch_session_changes(
 /// invocation and forwards it here along with the event/room.
 async fn handle_message_notification(
     ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent<RoomMessageEventContent>,
+    raw_event_json: String,
     room: Room,
     client: Client,
     h: Arc<Mutex<SendHandler>>,
     session_start_ms: u64,
 ) {
-    use matrix_sdk::ruma::events::room::message::MessageType;
-    let (body, msg_type_str) = match &ev.content.msgtype {
-        MessageType::Text(t) => (t.body.trim().to_owned(), "m.text"),
-        MessageType::Image(i) => (i.body.trim().to_owned(), "m.image"),
-        MessageType::File(f) => (f.body.trim().to_owned(), "m.file"),
-        MessageType::Audio(a) => (a.body.trim().to_owned(), "m.audio"),
-        MessageType::Video(v) => (v.body.trim().to_owned(), "m.video"),
-        MessageType::Gallery(g) => (g.body.trim().to_owned(), "m.gallery"),
+    use matrix_sdk::ruma::events::room::message::{MessageType, Relation};
+    // An edit replaces a message that already notified. Its "* new text"
+    // fallback body must not notify a second time.
+    if matches!(ev.content.relates_to, Some(Relation::Replacement(_))) {
+        return;
+    }
+    let body = match &ev.content.msgtype {
+        MessageType::Text(t) => t.body.trim().to_owned(),
+        MessageType::Notice(n) => n.body.trim().to_owned(),
+        MessageType::Emote(e) => e.body.trim().to_owned(),
+        MessageType::Image(i) => i.body.trim().to_owned(),
+        MessageType::File(f) => f.body.trim().to_owned(),
+        MessageType::Audio(a) => a.body.trim().to_owned(),
+        MessageType::Video(v) => v.body.trim().to_owned(),
+        MessageType::Gallery(g) => g.body.trim().to_owned(),
         _ => return,
     };
     if body.is_empty() {
@@ -1738,11 +1765,11 @@ async fn handle_message_notification(
         room,
         &ev.sender,
         &body,
-        msg_type_str,
         ev.event_id.as_str(),
         ev.origin_server_ts.get().into(),
         session_start_ms,
         preview_source,
+        &raw_event_json,
         &h,
     )
     .await;
@@ -1753,6 +1780,7 @@ async fn handle_sticker_notification(
     ev: matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent<
         matrix_sdk::ruma::events::sticker::StickerEventContent,
     >,
+    raw_event_json: String,
     room: Room,
     client: Client,
     h: Arc<Mutex<SendHandler>>,
@@ -1774,11 +1802,11 @@ async fn handle_sticker_notification(
         room,
         &ev.sender,
         &body,
-        "m.sticker",
         ev.event_id.as_str(),
         ev.origin_server_ts.get().into(),
         session_start_ms,
         preview_source,
+        &raw_event_json,
         &h,
     )
     .await;
@@ -2202,7 +2230,19 @@ async fn adopt_incoming_verification_request(
         );
         return;
     };
-    lock_or_recover(&flow_users).insert(flow_id.clone(), user_id.clone());
+    {
+        let mut users = lock_or_recover(&flow_users);
+        // Flows are removed when they end. A peer spamming requests must not
+        // grow the table (and the banners) without bound, but must not be able
+        // to lock others out either, so the limit is per sender (the sender of
+        // a to-device event is authenticated) with a generous overall one.
+        let from_sender = users.values().filter(|u| **u == user_id).count();
+        if from_sender >= MAX_PENDING_FLOWS_PER_USER || users.len() >= MAX_PENDING_VERIFICATION_FLOWS {
+            tracing::warn!("too many pending verification flows; ignoring {flow_id} from {user_id}");
+            return;
+        }
+        users.insert(flow_id.clone(), user_id.clone());
+    }
     {
         let guard = h.lock();
         guard.on_verification_request(&flow_id, &user_id, &device_id, true);

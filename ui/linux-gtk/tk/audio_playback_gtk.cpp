@@ -104,6 +104,10 @@ public:
             std::swap(src_, replacement.src_);
             replacement.pipeline_ = nullptr;
             replacement.src_      = nullptr;
+            // The replacement did not start. Drop this frame; pushing to the
+            // null source would crash and leak the buffer.
+            if (!src_)
+                return;
         }
 
         const std::size_t byte_size =

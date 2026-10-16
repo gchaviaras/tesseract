@@ -37,8 +37,22 @@ public:
     std::uintmax_t size_bytes() const;
 
     // Delete all cached files and recreate the (empty) cache directory.
-    // Resets hit/miss counters.
+    // Resets hit/miss counters. Blocks on the filesystem and races concurrent
+    // load/store calls; prefer retire_for_clear() + finish_clear() when the
+    // caller is on the UI thread.
     void clear() const;
+
+    // First half of a clear, cheap enough for the UI thread: renames the cache
+    // directory aside and creates an empty one in its place, and resets the
+    // hit/miss counters. Returns the aside path, or an empty path if the rename
+    // failed (for example a file held open on Windows); the cache is then left as
+    // it was.
+    std::filesystem::path retire_for_clear() const;
+
+    // Second half, safe on any thread: deletes the directory retire_for_clear()
+    // moved aside. With an empty path (the rename failed), removes the live
+    // entries one at a time, as evict() does.
+    void finish_clear(const std::filesystem::path& retired) const;
 
     uint64_t hits() const
     {

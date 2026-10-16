@@ -34,15 +34,14 @@ constexpr float kBundledImageMaxW =
 constexpr float kBundledImageMaxH =
     static_cast<float>(tesseract::visual::kMaxInlineImageHeight);
 
-// Third line shown under a card's title/description: the canonical og:url,
-// else the matched URL, else (legacy path) the row's first URL. Shared by
+// The link a card opens, and the line shown under its title: the URL the
+// message itself carries (the matched URL, else the row's first URL). The
+// page's og:url is not used, since a page can name any site. Shared by
 // stack_height() (measure) and paint_cards() (paint) so both agree on
-// exactly which lines will be drawn/measured.
-std::string third_line_for(const UrlPreviewData& p, const std::string& first_url)
+// exactly which line is drawn and measured.
+std::string card_link_for(const UrlPreviewData& p, const std::string& first_url)
 {
-    return !p.canonical_url.empty() ? p.canonical_url
-          : !p.matched_url.empty()  ? p.matched_url
-                                    : first_url;
+    return !p.matched_url.empty() ? p.matched_url : first_url;
 }
 } // namespace
 
@@ -101,8 +100,8 @@ float UrlPreviewCardDisplay::stack_height(const MessageRowData& row,
         const float max_w = std::min(col_w, kBundledImageMaxW);
         for (const auto* p : cards)
         {
-            const std::string third_line = third_line_for(*p, row.first_url);
-            total += bundled_card_size_(*p, third_line, factory, max_w).h;
+            const std::string link = card_link_for(*p, row.first_url);
+            total += bundled_card_size_(*p, link, factory, max_w).h;
         }
     }
     else
@@ -134,12 +133,12 @@ void UrlPreviewCardDisplay::paint_cards(const MessageRowData& row,
     float cy = y;
     for (const auto* p : cards_for(row))
     {
-        const std::string third_line = third_line_for(*p, row.first_url);
+        const std::string link = card_link_for(*p, row.first_url);
         const float h = row.bundled_previews_present
-                            ? paint_one_bundled_(third_line, third_line, *p,
-                                                 ctx, x, cy, col_w)
-                            : paint_one_legacy_(third_line, third_line, *p,
-                                               ctx, x, cy, col_w);
+                            ? paint_one_bundled_(link, link, *p, ctx, x, cy,
+                                                 col_w)
+                            : paint_one_legacy_(link, link, *p, ctx, x, cy,
+                                               col_w);
         cy += h + kPreviewCardGap;
     }
 }

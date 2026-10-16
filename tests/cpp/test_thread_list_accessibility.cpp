@@ -114,3 +114,36 @@ TEST_CASE("invoking a thread row's default action fires on_thread_clicked "
     CHECK(invoke_default_action(*row));
     CHECK(clicked == "$root1");
 }
+
+TEST_CASE("with a search filter, a thread row names and activates the thread "
+         "it shows, not the thread at the unfiltered index",
+         "[thread_list][accessibility][action]")
+{
+    ThreadListView view;
+    std::vector<ThreadInfo> threads;
+    ThreadInfo alice = make_thread("Alice", "Hello world", 1);
+    alice.root_event_id = "$alice";
+    ThreadInfo bob = make_thread("Bob", "Second thread", 5);
+    bob.root_event_id = "$bob";
+    threads.push_back(alice);
+    threads.push_back(bob);
+    view.set_threads(std::move(threads));
+    view.set_search_text("second");
+
+    std::string clicked;
+    view.on_thread_clicked = [&](const std::string& id) { clicked = id; };
+
+    AccessNode tree = build_access_tree(&view);
+    const AccessNode* list = find_role_thread(tree, Role::List);
+    REQUIRE(list != nullptr);
+
+    const AccessNode* row = nullptr;
+    for (const auto& ch : list->children)
+        if (ch.role == Role::ListItem)
+            row = &ch;
+    REQUIRE(row != nullptr);
+
+    CHECK(row->name == "Bob: Second thread (5 replies)");
+    CHECK(invoke_default_action(*row));
+    CHECK(clicked == "$bob");
+}

@@ -181,7 +181,11 @@ public:
         {
             CGRequestScreenCaptureAccess();
             if (!CGPreflightScreenCaptureAccess())
+            {
+                // Granted only after a restart the first time, so nothing is captured.
+                report_failure_();
                 return;
+            }
         }
 
         std::string sid;

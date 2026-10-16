@@ -187,6 +187,43 @@ TEST_CASE("RoomMediaView activating cells routes images and videos to the "
         tk::invoke_default_action(c);
 }
 
+TEST_CASE("RoomMediaView ignores clicks on a strip's blank space",
+          "[tk][view][room_media_grid]")
+{
+    RmvStage s;
+    s.view->open("!r:x", "Room");
+    s.view->set_media({rmv_row("$i", MessageRowData::Kind::Image, 3),
+                       rmv_row("$j", MessageRowData::Kind::Image, 3)});
+    s.run();
+
+    std::vector<std::string> images;
+    s.view->on_image_clicked = [&](const MessageListView::ImageHit& h)
+    {
+        images.push_back(h.event_id);
+    };
+
+    // A strip of two cells leaves blank space after the second one.
+    const auto cells = s.cells();
+    REQUIRE(cells.size() == 2);
+    const auto& first = cells[0];
+    const auto& last = cells[1];
+    const float mid_y = last.rect.y + last.rect.h / 2;
+
+    const tk::Point gap{first.rect.x + first.rect.w + 1, mid_y};
+    s.host.dispatch_pointer_down(gap);
+    s.host.dispatch_pointer_up(gap);
+
+    const tk::Point after_last{last.rect.x + last.rect.w + 40, mid_y};
+    s.host.dispatch_pointer_down(after_last);
+    s.host.dispatch_pointer_up(after_last);
+    CHECK(images.empty());
+
+    const tk::Point on_last{last.rect.x + last.rect.w / 2, mid_y};
+    s.host.dispatch_pointer_down(on_last);
+    s.host.dispatch_pointer_up(on_last);
+    CHECK(images == std::vector<std::string>{"$j"});
+}
+
 TEST_CASE("RoomMediaView paints thumbnails via the image provider and shows "
           "placeholders",
           "[tk][view][room_media_grid]")

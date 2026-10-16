@@ -14,7 +14,8 @@ TextField::TextField(float min_height)
 
 void TextField::ensure_native_()
 {
-    if (field_ || creating_native_) return;
+    // Not attached to a host yet: the native field is made on a later call.
+    if (field_ || creating_native_ || !host()) return;
     creating_native_ = true;
     auto f = host()->make_text_field();
     creating_native_ = false;
@@ -197,10 +198,13 @@ void TextField::on_effective_visibility_changed_(bool now_visible)
 
 void TextField::set_focused(bool focused)
 {
+    auto* h = host();
+    if (!h)
+        return; // not attached: there is nothing to focus yet
     if (focused)
-        host()->request_focus(this);
-    else if (host()->focused_widget() == this)
-        host()->clear_focus();
+        h->request_focus(this);
+    else if (h->focused_widget() == this)
+        h->clear_focus();
 }
 
 void TextField::arrange(LayoutCtx& ctx, Rect bounds)

@@ -25,16 +25,23 @@ impl ClientFfi {
         // has no Send bound, so the non-Send MutexGuard in session.rs is
         // fine.  The handle keeps the same runtime for I/O and spawns.
         let handle = self.rt.handle().clone();
-        let result = std::thread::Builder::new()
+        // A failed spawn or a panic in the setup is a failed call, not a crash of
+        // the whole client.
+        let spawned = std::thread::Builder::new()
             .stack_size(16 * 1024 * 1024)
             .spawn(move || {
                 handle.block_on(crate::client::rtc::session::start_call(
                     &client, &http, &room_id, &slot_id, audio_only,
                 ))
-            })
-            .expect("failed to spawn call thread")
-            .join()
-            .expect("call thread panicked");
+            });
+        let worker = match spawned {
+            Ok(worker) => worker,
+            Err(e) => return err(format!("could not start the call thread: {e}")),
+        };
+        let result = match worker.join() {
+            Ok(result) => result,
+            Err(_) => return err("starting the call failed unexpectedly"),
+        };
         match result {
             Ok(session) => {
                 self.active_rtc_call = Some(Box::new(session));
@@ -98,7 +105,7 @@ impl ClientFfi {
     }
 
     /// Mute or unmute the local audio track.
-    pub fn rtc_set_audio_muted(&mut self, muted: bool) {
+    pub fn rtc_set_audio_muted(&self, muted: bool) {
         // mute() calls livekit_runtime::spawn → tokio::task::spawn, which
         // panics if there is no tokio runtime on the current thread. Enter
         // the runtime context so the spawn lands on our executor.
@@ -109,7 +116,7 @@ impl ClientFfi {
     }
 
     /// Mute or unmute the local video track.
-    pub fn rtc_set_video_muted(&mut self, muted: bool) {
+    pub fn rtc_set_video_muted(&self, muted: bool) {
         let _guard = self.rt.enter();
         if let Some(session) = &self.active_rtc_call {
             session.mute_video(muted);
@@ -119,7 +126,7 @@ impl ClientFfi {
     /// Inject a raw I420 video frame into the live session.
     #[allow(clippy::too_many_arguments)]
     pub fn rtc_push_video_frame_i420(
-        &mut self,
+        &self,
         y: &[u8],
         u: &[u8],
         v: &[u8],
@@ -164,7 +171,7 @@ impl ClientFfi {
     /// Inject a raw I420 screen frame into the live session. No-op when no call active.
     #[allow(clippy::too_many_arguments)]
     pub fn rtc_push_screen_frame_i420(
-        &mut self,
+        &self,
         y: &[u8],
         u: &[u8],
         v: &[u8],

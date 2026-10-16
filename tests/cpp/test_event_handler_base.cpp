@@ -430,12 +430,50 @@ TEST_CASE("translucent RGBA frames are premultiplied", "[event_handler_base]")
     CHECK(o[7] == 0);
 }
 
-TEST_CASE("an empty video frame is forwarded as empty", "[event_handler_base]")
+TEST_CASE("an empty video frame is dropped", "[event_handler_base]")
 {
     EhbFx f;
     f.h.on_call_video_frame(1, "p", 0, 0, nullptr, 0);
-    REQUIRE(f.shell.frames.size() == 1);
-    CHECK(f.shell.frames[0].empty());
+    CHECK(f.shell.frames.empty());
+    CHECK(f.shell.log.empty());
+}
+
+TEST_CASE("a frame whose size does not fit its bytes is dropped",
+          "[event_handler_base]")
+{
+    EhbFx f;
+    // 2x2 needs 16 bytes; only 8 are given, so the conversion must not run.
+    const std::uint8_t rgba[8] = {10, 20, 30, 255, 40, 50, 60, 255};
+    f.h.on_call_video_frame(1, "p", 2, 2, rgba, 8);
+    f.h.on_call_screen_frame(1, "p", 2, 2, rgba, 8);
+    CHECK(f.shell.frames.empty());
+    CHECK(f.shell.log.empty());
+}
+
+TEST_CASE("the frame mailbox queues one UI task per key and delivers the newest",
+          "[event_handler_base]")
+{
+    tesseract::FrameMailbox box;
+    std::vector<int> seen;
+    // The first put starts a UI task; later puts for the same key replace the
+    // pending frame and start none.
+    CHECK(box.put("k", [&] { seen.push_back(1); }));
+    CHECK_FALSE(box.put("k", [&] { seen.push_back(2); }));
+    CHECK_FALSE(box.put("k", [&] { seen.push_back(3); }));
+    // Other keys are independent.
+    CHECK(box.put("other", [&] { seen.push_back(9); }));
+
+    auto first = box.take("k");
+    REQUIRE(first);
+    first();
+    CHECK(seen == std::vector<int>{3});
+    // Nothing left to take for that key until another put.
+    CHECK_FALSE(box.take("k"));
+    CHECK(box.put("k", [&] { seen.push_back(4); }));
+    box.take("k")();
+    CHECK(seen == std::vector<int>{3, 4});
+    box.take("other")();
+    CHECK(seen == std::vector<int>{3, 4, 9});
 }
 
 TEST_CASE("call audio frames bypass the UI queue and tolerate no output",

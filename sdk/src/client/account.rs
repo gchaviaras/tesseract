@@ -64,6 +64,46 @@ pub(super) async fn read_recent_emoji_entries(client: &Client) -> Vec<crate::rec
     Vec::new()
 }
 
+/// The recent-emoji list as the server holds it, for a write that replaces the
+/// list. The local cache can be empty before the first sync, so reading it
+/// there would replace the server's entries with one. A failed request, or a
+/// blob that does not parse, is an error here rather than an empty list.
+#[cfg(not(test))]
+async fn fetch_recent_emoji_entries(
+    client: &Client,
+) -> Result<Vec<crate::recent_emoji::Entry>, ()> {
+    use matrix_sdk::ruma::events::GlobalAccountDataEventType;
+    use serde_json::Value;
+
+    async fn fetch(client: &Client, ty: &str) -> Result<Option<Value>, ()> {
+        let et = GlobalAccountDataEventType::from(ty);
+        match client.account().fetch_account_data(et).await {
+            Ok(None) => Ok(None),
+            Ok(Some(raw)) => serde_json::from_str::<Value>(raw.json().get())
+                .map(Some)
+                .map_err(|_| ()),
+            Err(_) => Err(()),
+        }
+    }
+
+    if let Some(v) = fetch(client, crate::recent_emoji::TYPE_STABLE).await? {
+        let entries = crate::recent_emoji::parse_msc4356(&v);
+        if !entries.is_empty() {
+            return Ok(entries);
+        }
+    }
+    if let Some(v) = fetch(client, crate::recent_emoji::TYPE_UNSTABLE).await? {
+        let entries = crate::recent_emoji::parse_msc4356(&v);
+        if !entries.is_empty() {
+            return Ok(entries);
+        }
+    }
+    if let Some(v) = fetch(client, crate::recent_emoji::TYPE_LEGACY).await? {
+        return Ok(crate::recent_emoji::parse_legacy_element(&v));
+    }
+    Ok(Vec::new())
+}
+
 /// Raw media upload — bytes → mxc:// URI. Does not mutate any user profile.
 /// Called by `upload_avatar` (upload + set global avatar) and by the
 /// `upload_media` FFI (bare upload for room-member avatar, etc.).
@@ -182,13 +222,12 @@ pub(super) async fn read_room_media_preview_override_json(
     let mp = v
         .as_ref()
         .and_then(crate::media_preview::parse_media_previews_field);
-    format!(
-        r#"{{"has_media_previews":{},"media_previews":{},"join_rule":"{}"}}"#,
-        mp.is_some(),
-        mp.unwrap_or(crate::media_preview::MediaPreviews::On)
-            .to_u8(),
-        join_rule.replace('"', "\\\""),
-    )
+    serde_json::json!({
+        "has_media_previews": mp.is_some(),
+        "media_previews": mp.unwrap_or(crate::media_preview::MediaPreviews::On).to_u8(),
+        "join_rule": join_rule,
+    })
+    .to_string()
 }
 
 /// Live, network-only counterpart of `read_room_media_preview_override_json`
@@ -249,13 +288,14 @@ async fn fetch_room_media_preview_override_live(client: &Client, room_id: &str) 
     let mp = v
         .as_ref()
         .and_then(crate::media_preview::parse_media_previews_field);
-    Some(format!(
-        r#"{{"has_media_previews":{},"media_previews":{},"join_rule":"{}"}}"#,
-        mp.is_some(),
-        mp.unwrap_or(crate::media_preview::MediaPreviews::On)
-            .to_u8(),
-        join_rule.replace('"', "\\\""),
-    ))
+    Some(
+        serde_json::json!({
+            "has_media_previews": mp.is_some(),
+            "media_previews": mp.unwrap_or(crate::media_preview::MediaPreviews::On).to_u8(),
+            "join_rule": join_rule,
+        })
+        .to_string(),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -336,7 +376,11 @@ impl ClientFfi {
             // Serialize the whole GET→modify→PUT against other account-data
             // writers so rapid bumps build on each other instead of racing.
             let _ad_guard = ad_lock.lock().await;
-            let entries = read_recent_emoji_entries(&client).await;
+            let Ok(entries) = fetch_recent_emoji_entries(&client).await else {
+                // Unreadable now: a write would replace the list with the bumped
+                // glyph alone. The next pick tries again.
+                return;
+            };
             let bumped = crate::recent_emoji::bump(entries, &glyph);
             let content = crate::recent_emoji::serialize_msc4356(&bumped);
             let raw = match Raw::new(&content) {
@@ -405,6 +449,10 @@ impl ClientFfi {
         #[cfg(debug_assertions)]
         let in_flight_urls = Arc::clone(&self.in_flight_urls);
         let handler_for_guard = self.handler.clone();
+        let ad_lock = Arc::clone(&self.account_data_lock);
+        let order = Arc::clone(&self.prefs_saves);
+        // Numbered now, in call order, so the spawned writes can be sorted.
+        let seq = order.next();
         self.rt.spawn(async move {
             use matrix_sdk::ruma::events::GlobalAccountDataEventType;
             use matrix_sdk::ruma::serde::Raw;
@@ -423,6 +471,12 @@ impl ClientFfi {
             let Ok(raw) = Raw::new(&raw_value) else {
                 return;
             };
+            // Writes do not interleave, and an older save that a newer one has
+            // overtaken is not sent: the server would keep the older document.
+            let _ad_guard = ad_lock.lock().await;
+            if !order.is_newest(seq) {
+                return;
+            }
             let et = GlobalAccountDataEventType::from("im.gnomos.tesseract");
             let _ = client
                 .account()
@@ -459,15 +513,27 @@ impl ClientFfi {
         let Ok(raw) = Raw::new(&raw_value) else {
             return err("invalid json");
         };
+        let ad_lock = Arc::clone(&self.account_data_lock);
+        let order = Arc::clone(&self.prefs_saves);
+        let seq = order.next();
         self.rt.block_on(async move {
             let et = GlobalAccountDataEventType::from("im.gnomos.tesseract");
-            match tokio::time::timeout(
-                SAVE_PREFS_SHUTDOWN_TIMEOUT,
-                client.account().set_account_data_raw(et, raw.cast_unchecked()),
-            )
-            .await
-            {
-                Ok(Ok(_)) => ok(""),
+            // The lock and the newest check are inside the timeout, so waiting
+            // behind a write in flight is bounded too.
+            let write = async move {
+                let _ad_guard = ad_lock.lock().await;
+                if !order.is_newest(seq) {
+                    // A later save has been queued and carries this state.
+                    return Ok(());
+                }
+                client
+                    .account()
+                    .set_account_data_raw(et, raw.cast_unchecked())
+                    .await
+                    .map(|_| ())
+            };
+            match tokio::time::timeout(SAVE_PREFS_SHUTDOWN_TIMEOUT, write).await {
+                Ok(Ok(())) => ok(""),
                 Ok(Err(e)) => err(format!("save prefs failed: {e}")),
                 Err(_) => err("save prefs timed out"),
             }
@@ -1432,7 +1498,9 @@ impl ClientFfi {
             .as_str()?
             .trim_end_matches('/')
             .to_owned();
-        Some(base)
+        // A published http:// base would carry credentials in cleartext; ignore it
+        // and let the caller fall back to https://{server}.
+        base.starts_with("https://").then_some(base)
     }
 
     // Confirm the candidate base URL actually speaks Matrix by hitting
@@ -1521,7 +1589,17 @@ impl ClientFfi {
                 Err(e) => return Self::discovery_json_str("", &e.to_string(), false),
             };
 
-            let (candidate, outcome) = if server.starts_with("https://") || server.starts_with("http://") {
+            // Plain http would send the password and tokens in cleartext, so only
+            // https homeservers are accepted, whether typed in or published in
+            // .well-known. The user gets a clear reason, not a silent fallback.
+            if server.starts_with("http://") {
+                return Self::discovery_json_str(
+                    "",
+                    "Use an https:// address; plain http is not accepted for a homeserver",
+                    false,
+                );
+            }
+            let (candidate, outcome) = if server.starts_with("https://") {
                 // Caller passed a full URL — validate it directly.
                 let candidate = server.trim_end_matches('/').to_owned();
                 let outcome = Self::validate_homeserver(&http, &candidate).await;

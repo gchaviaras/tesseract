@@ -260,6 +260,8 @@ public:
 
         // Image / Video: decoded preview thumbnail (lazy, from arrange()).
         std::unique_ptr<tk::Image> preview;
+        // Set once a decode has failed, so arrange() does not retry it on every pass.
+        bool decode_failed = false;
         std::uint32_t width = 0, height = 0;
 
         // Image kind: true for animated GIF/WebP.

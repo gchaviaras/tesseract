@@ -1,6 +1,7 @@
 #include "PinnedBanner.h"
 
 #include "icons.h"
+#include "sdk_text.h"
 #include "tk/host.h"
 #include "tk/i18n.h"
 #include "tk/theme.h"
@@ -86,11 +87,12 @@ std::string PinnedBanner::current_preview() const
     if (current_index_ >= pins_.size())
         return {};
     const auto& p = pins_[current_index_];
+    const std::string preview = sdk_text::localize(p.body_preview);
     if (p.sender_name.empty())
-        return p.body_preview;
-    if (p.body_preview.empty())
+        return preview;
+    if (preview.empty())
         return p.sender_name;
-    return tk::trf(tk::tr("{0}: {1}"), {p.sender_name, p.body_preview});
+    return tk::trf(tk::tr("{0}: {1}"), {p.sender_name, preview});
 }
 
 std::string PinnedBanner::access_name() const

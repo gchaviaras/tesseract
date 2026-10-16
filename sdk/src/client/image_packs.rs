@@ -226,11 +226,6 @@ impl ClientFfi {
                             .collect(),
                     );
 
-                    let mime: mime::Mime = serde_json::from_str::<serde_json::Value>(info_json)
-                        .ok()
-                        .and_then(|v| v.get("mimetype")?.as_str()?.parse().ok())
-                        .unwrap_or(mime::APPLICATION_OCTET_STREAM);
-
                     let client_dl = client.clone();
                     let bytes = self.rt.block_on(async move {
                         client_dl
@@ -247,6 +242,21 @@ impl ClientFfi {
                     let bytes = match bytes {
                         Ok(b) => b,
                         Err(e) => return err(format!("download encrypted sticker: {e}")),
+                    };
+                    // The bytes are re-uploaded in plaintext, so cap them and check
+                    // what they are, rather than trusting the sender's mimetype.
+                    if bytes.len() > super::media::MAX_MEDIA_BYTES {
+                        return err("encrypted sticker is too large to save");
+                    }
+                    let sniffed = match infer::get(&bytes) {
+                        Some(kind) if kind.mime_type().starts_with("image/") => {
+                            kind.mime_type().to_owned()
+                        }
+                        _ => return err("encrypted sticker is not an image"),
+                    };
+                    let mime: mime::Mime = match sniffed.parse() {
+                        Ok(m) => m,
+                        Err(_) => return err("encrypted sticker is not an image"),
                     };
 
                     let client_ul = client.clone();
@@ -899,25 +909,29 @@ impl ClientFfi {
             .msc2545_legacy_compat
             .load(std::sync::atomic::Ordering::Relaxed);
         let (final_state_key, types_to_write): (String, Vec<&'static str>) = if is_new {
-            let existing_keys = self.rt.block_on(super::room_pack_state_keys(
+            let Some(existing_keys) = self.rt.block_on(super::room_pack_state_keys(
                 &client,
                 &self.room_state_cache,
                 &rid,
                 legacy_compat,
-            ));
+            )) else {
+                return err("couldn't read the room's packs; nothing was changed");
+            };
             let key = crate::image_packs::loop_suffixed_state_key(&existing_keys, display_name);
             // legacy_compat ON (default) dual-writes both event types for a
             // brand-new pack, matching pre-flag read behavior; OFF writes
             // only the stable type.
             (key, crate::image_packs::room_pack_types(legacy_compat).to_vec())
         } else if legacy_compat {
-            let types = self.rt.block_on(super::room_pack_event_types_for_key(
+            let Some(types) = self.rt.block_on(super::room_pack_event_types_for_key(
                 &client,
                 &self.room_state_cache,
                 &rid,
                 state_key,
                 legacy_compat,
-            ));
+            )) else {
+                return err("couldn't read the room's packs; nothing was changed");
+            };
             let types = if types.is_empty() {
                 vec![crate::image_packs::TYPE_ROOM_PACK_STABLE]
             } else {
@@ -995,13 +1009,15 @@ impl ClientFfi {
         let legacy_compat = self
             .msc2545_legacy_compat
             .load(std::sync::atomic::Ordering::Relaxed);
-        let types = self.rt.block_on(super::room_pack_event_types_for_key(
+        let Some(types) = self.rt.block_on(super::room_pack_event_types_for_key(
             &client,
             &self.room_state_cache,
             &rid,
             state_key,
             legacy_compat,
-        ));
+        )) else {
+            return err("couldn't read the room's packs; nothing was changed");
+        };
         if types.is_empty() {
             // Nothing to remove — no-op success, mirrors remove_user_pack_image's
             // "shortcode doesn't exist" no-op-ok behavior.

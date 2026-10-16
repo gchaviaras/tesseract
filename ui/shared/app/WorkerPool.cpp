@@ -1,5 +1,9 @@
 #include "app/WorkerPool.h"
 
+#include <cassert>
+#include <cstdio>
+#include <exception>
+
 namespace tesseract
 {
 
@@ -26,7 +30,20 @@ WorkerPool::WorkerPool(int threads)
                     }
                     if (notify)
                         notify();
-                    task();
+                    // A throwing task must not take the process down, and must
+                    // not skip the in_flight_ decrement below.
+                    try
+                    {
+                        task();
+                    }
+                    catch (const std::exception& e)
+                    {
+                        std::fprintf(stderr, "[worker] task threw: %s\n", e.what());
+                    }
+                    catch (...)
+                    {
+                        std::fprintf(stderr, "[worker] task threw a non-standard exception\n");
+                    }
                     // task() may have captured a shared_ptr<AccountSession>
                     // (or similar) that only releases when it returns here —
                     // wait_idle() waits on in_flight_, not pending_, exactly
@@ -35,7 +52,7 @@ WorkerPool::WorkerPool(int threads)
                     if (in_flight_.fetch_sub(1, std::memory_order_relaxed) == 1)
                     {
                         std::lock_guard<std::mutex> lk(mu_);
-                        cv_.notify_all();
+                        idle_cv_.notify_all();
                     }
                 }
             });
@@ -62,8 +79,11 @@ void WorkerPool::drain()
         pending_.store(0, std::memory_order_relaxed);
     }
     cv_.notify_all();
+    idle_cv_.notify_all();
     for (auto& t : threads_)
     {
+        // Joining a pool thread from one of its own tasks would deadlock.
+        assert(!t.joinable() || t.get_id() != std::this_thread::get_id());
         if (t.joinable())
             t.join();
     }

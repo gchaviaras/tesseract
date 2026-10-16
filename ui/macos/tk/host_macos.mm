@@ -27,6 +27,9 @@
 #include <utility>
 #include <vector>
 
+#include <netinet/in.h>
+#include <sys/socket.h>
+
 namespace tk::macos
 {
 class NSTextFieldNative;
@@ -3177,19 +3180,21 @@ void Host::post_delayed(int ms, std::function<void()> fn)
 
 bool Host::is_network_available() const
 {
-    // A well-known, stable hostname (not a local address) so this reports
-    // real internet reachability, not just local-link status — same choice
-    // Apple's own Reachability sample makes.
-    SCNetworkReachabilityRef ref =
-        SCNetworkReachabilityCreateWithName(nullptr, "www.matrix.org");
+    // The all-zeros address asks whether any default route exists, i.e. some
+    // network is up (Apple's documented "is there a network" check). A probe of
+    // one public hostname instead reports offline for a homeserver on a LAN or
+    // VPN that has no internet access.
+    struct sockaddr_in zero{};
+    zero.sin_len = sizeof(zero);
+    zero.sin_family = AF_INET;
+    SCNetworkReachabilityRef ref = SCNetworkReachabilityCreateWithAddress(
+        nullptr, reinterpret_cast<const struct sockaddr*>(&zero));
     if (!ref) return true;
     SCNetworkReachabilityFlags flags = 0;
     bool ok = SCNetworkReachabilityGetFlags(ref, &flags);
     CFRelease(ref);
     if (!ok) return true;
-    const bool reachable = (flags & kSCNetworkReachabilityFlagsReachable) != 0;
-    const bool needs_conn = (flags & kSCNetworkReachabilityFlagsConnectionRequired) != 0;
-    return reachable && !needs_conn;
+    return (flags & kSCNetworkReachabilityFlagsReachable) != 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────

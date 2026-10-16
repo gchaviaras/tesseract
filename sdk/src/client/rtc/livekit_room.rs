@@ -81,7 +81,7 @@ impl SharedKeys {
 
     /// Apply every stored key to the participants currently in `room`.
     fn apply_all_to(&self, room: &Room) {
-        let pending = self.pending.lock().unwrap();
+        let pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
         for (identity, _) in room.remote_participants() {
             apply_pending_for(&self.key_provider, &pending, &identity);
         }
@@ -483,17 +483,11 @@ impl LiveKitRoom {
         stride_u: u32,
         stride_v: u32,
     ) {
-        let mut buf = I420Buffer::new(width, height);
-        {
-            let (dy, du, dv) = buf.data_mut();
-            // I420Buffer is tightly packed; copy row-by-row to handle source
-            // padding (stride > packed width), which macOS/Win32 cameras produce.
-            copy_plane(y, dy, width as usize, height as usize, stride_y as usize);
-            let h_uv = ((height as usize) + 1) / 2;
-            let w_uv = ((width as usize) + 1) / 2;
-            copy_plane(u, du, w_uv, h_uv, stride_u as usize);
-            copy_plane(v, dv, w_uv, h_uv, stride_v as usize);
-        }
+        // A frame whose planes do not fit their strides is dropped.
+        let Some(buf) = i420_from_planes(y, u, v, width, height, stride_y, stride_u, stride_v)
+        else {
+            return;
+        };
         let timestamp_us = self.call_start.elapsed().as_micros() as i64;
         let frame = VideoFrame {
             rotation: VideoRotation::VideoRotation0,
@@ -550,8 +544,8 @@ impl LiveKitRoom {
             .local_participant()
             .publish_track(LocalTrack::Video(screen_track), opts)
             .await?;
-        *self.screen_source.lock().unwrap() = Some(screen_source);
-        *self.screen_publication.lock().unwrap() = Some(pub_);
+        *self.screen_source.lock().unwrap_or_else(|e| e.into_inner()) = Some(screen_source);
+        *self.screen_publication.lock().unwrap_or_else(|e| e.into_inner()) = Some(pub_);
         // LocalTrackPublished only logs (see spawn_event_task below) — emit the
         // participant update ourselves so the UI creates the local ":screen"
         // tile. Without this, is_screen_sharing never flips true for the local
@@ -573,8 +567,8 @@ impl LiveKitRoom {
     /// unambiguous signal (RoomEvent::TrackUnpublished on their side) that the
     /// track is gone.
     pub fn stop_screen_share(&self) {
-        let pub_ = self.screen_publication.lock().unwrap().take();
-        *self.screen_source.lock().unwrap() = None;
+        let pub_ = self.screen_publication.lock().unwrap_or_else(|e| e.into_inner()).take();
+        *self.screen_source.lock().unwrap_or_else(|e| e.into_inner()) = None;
         if let Some(pub_) = pub_ {
             pub_.mute();
             let room = Arc::clone(&self.room);
@@ -608,7 +602,7 @@ impl LiveKitRoom {
         stride_u: u32,
         stride_v: u32,
     ) {
-        let src_guard = self.screen_source.lock().unwrap();
+        let src_guard = self.screen_source.lock().unwrap_or_else(|e| e.into_inner());
         let Some(ref src) = *src_guard else { return };
         if self
             .screen_frame_in_flight
@@ -617,15 +611,11 @@ impl LiveKitRoom {
         {
             return;
         }
-        let mut buf = I420Buffer::new(width, height);
-        {
-            let (dy, du, dv) = buf.data_mut();
-            copy_plane(y, dy, width as usize, height as usize, stride_y as usize);
-            let h_uv = ((height as usize) + 1) / 2;
-            let w_uv = ((width as usize) + 1) / 2;
-            copy_plane(u, du, w_uv, h_uv, stride_u as usize);
-            copy_plane(v, dv, w_uv, h_uv, stride_v as usize);
-        }
+        let Some(buf) = i420_from_planes(y, u, v, width, height, stride_y, stride_u, stride_v)
+        else {
+            self.screen_frame_in_flight.store(false, Ordering::Release);
+            return;
+        };
         let timestamp_us = self.call_start.elapsed().as_micros() as i64;
         let frame = VideoFrame {
             rotation: VideoRotation::VideoRotation0,
@@ -773,6 +763,69 @@ impl RemoteSfuRoom {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// True when a plane of `rows` rows of `width` bytes, `stride` bytes apart, fits in
+/// `src`. A stride narrower than the row would overlap rows, so it is refused too.
+fn plane_fits(src: &[u8], width: usize, rows: usize, stride: usize) -> bool {
+    if stride < width {
+        return false;
+    }
+    if rows == 0 {
+        return true;
+    }
+    (rows - 1)
+        .checked_mul(stride)
+        .and_then(|n| n.checked_add(width))
+        .is_some_and(|needed| src.len() >= needed)
+}
+
+/// The three planes of a frame, when every plane fits its stride; `None` otherwise.
+/// Nothing is allocated or copied for a frame that does not fit.
+fn planes_fit(
+    y: &[u8],
+    u: &[u8],
+    v: &[u8],
+    width: usize,
+    height: usize,
+    stride_y: usize,
+    stride_u: usize,
+    stride_v: usize,
+) -> bool {
+    let h_uv = (height + 1) / 2;
+    let w_uv = (width + 1) / 2;
+    plane_fits(y, width, height, stride_y)
+        && plane_fits(u, w_uv, h_uv, stride_u)
+        && plane_fits(v, w_uv, h_uv, stride_v)
+}
+
+/// Packs the three planes of a camera or screen frame into an I420 buffer, copying
+/// each row so that source padding is dropped. `None` if a plane does not fit.
+fn i420_from_planes(
+    y: &[u8],
+    u: &[u8],
+    v: &[u8],
+    width: u32,
+    height: u32,
+    stride_y: u32,
+    stride_u: u32,
+    stride_v: u32,
+) -> Option<I420Buffer> {
+    let (w, h) = (width as usize, height as usize);
+    let (sy, su, sv) = (stride_y as usize, stride_u as usize, stride_v as usize);
+    if !planes_fit(y, u, v, w, h, sy, su, sv) {
+        return None;
+    }
+    let h_uv = (h + 1) / 2;
+    let w_uv = (w + 1) / 2;
+    let mut buf = I420Buffer::new(width, height);
+    {
+        let (dy, du, dv) = buf.data_mut();
+        copy_plane(y, dy, w, h, sy);
+        copy_plane(u, du, w_uv, h_uv, su);
+        copy_plane(v, dv, w_uv, h_uv, sv);
+    }
+    Some(buf)
+}
+
 /// Copy one I420 plane from a (possibly padded) source into a tightly-packed
 /// destination. `src` has `stride` bytes per row; `dst` has exactly
 /// `width * rows` bytes (no padding). Panics only if `dst` is smaller than
@@ -917,10 +970,17 @@ fn spawn_event_task(
                                         continue;
                                     }
                                     if let Some(ref s) = sink2 {
-                                        if let Some(rgba) = i420_to_rgba(&frame) {
+                                        // The per-pixel conversion is CPU work, so it runs
+                                        // on the blocking pool; the two runtime workers stay
+                                        // free for sync and sends. The in-flight flag above
+                                        // still allows one conversion per track at a time.
+                                        let converted = tokio::task::spawn_blocking(move || {
+                                            let rgba = i420_to_rgba(&frame)?;
                                             let buf = frame.buffer.as_ref();
-                                            let w = buf.width();
-                                            let h = buf.height();
+                                            Some((buf.width(), buf.height(), rgba))
+                                        })
+                                        .await;
+                                        if let Ok(Some((w, h, rgba))) = converted {
                                             if is_scr {
                                                 s.on_screen_frame(sid, &pid2, w, h, rgba);
                                             } else {
@@ -1349,6 +1409,28 @@ mod helper_tests {
         let mut dst = [0u8; 4];
         copy_plane(&src, &mut dst, 2, 2, 4);
         assert_eq!(dst, [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn plane_fits_refuses_short_or_overlapping_planes() {
+        // 2 rows of 3 bytes, stride 4: needs 4 + 3 = 7 bytes.
+        assert!(plane_fits(&[0; 7], 3, 2, 4));
+        assert!(!plane_fits(&[0; 6], 3, 2, 4));
+        // A stride narrower than the row would overlap rows.
+        assert!(!plane_fits(&[0; 64], 3, 2, 2));
+        // No rows need no bytes at all.
+        assert!(plane_fits(&[], 3, 0, 4));
+    }
+
+    #[test]
+    fn planes_fit_checks_every_plane_at_its_own_size() {
+        // 4x2 frame: Y is 4x2 (stride 4), chroma planes are 2x1 (stride 2).
+        let y = [0u8; 8];
+        let uv = [0u8; 2];
+        assert!(planes_fit(&y, &uv, &uv, 4, 2, 4, 2, 2));
+        // A short chroma plane is refused even when Y is fine.
+        assert!(!planes_fit(&y, &[0u8; 1], &uv, 4, 2, 4, 2, 2));
+        assert!(!planes_fit(&[0u8; 7], &uv, &uv, 4, 2, 4, 2, 2));
     }
 
     #[test]

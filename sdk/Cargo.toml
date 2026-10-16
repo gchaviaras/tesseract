@@ -28,6 +28,7 @@ jemalloc = ["dep:tikv-jemallocator"]
 
 [dependencies]
 cxx        = "1.0"
+zeroize    = "1.9"
 tokio      = { version = "1", features = ["full"] }
 matrix-sdk    = { version = "0.19", features = ["unstable-msc4426", "unstable-msc4274", "e2e-encryption", "bundled-sqlite", "local-server", "markdown", "qrcode", "experimental-send-custom-to-device"] }
 qrcode        = "0.14"

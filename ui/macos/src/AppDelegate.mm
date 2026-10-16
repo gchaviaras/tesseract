@@ -6,6 +6,7 @@
 #import "tk_locale.h"
 #include "tesseract/launch_args.h"
 #include "tesseract/paths.h"
+#include "tesseract/session_store.h"
 #include "tk/single_instance.h"
 #include "views/shortcut_registry.h"
 #include <string>
@@ -409,6 +410,9 @@ static void TkApplyShortcut(NSMenuItem* item, tesseract::views::ShortcutId id)
 - (void)applicationWillTerminate:(NSNotification*)note
 {
     [_windowController stopSync];
+    // Terminate exits the process without running the shell's destructor, which
+    // is where the last token refreshes are otherwise flushed.
+    tesseract::SessionStore::flush_session_updates();
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender

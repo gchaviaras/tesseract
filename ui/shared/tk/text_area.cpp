@@ -14,7 +14,8 @@ TextArea::TextArea(float min_height)
 
 void TextArea::ensure_native_()
 {
-    if (area_ || creating_native_) return;
+    // Not attached to a host yet: the native area is made on a later call.
+    if (area_ || creating_native_ || !host()) return;
     creating_native_ = true;
     auto a = host()->make_text_area();
     creating_native_ = false;
@@ -306,10 +307,13 @@ void TextArea::on_effective_visibility_changed_(bool now_visible)
 
 void TextArea::set_focused(bool focused)
 {
+    auto* h = host();
+    if (!h)
+        return; // not attached: there is nothing to focus yet
     if (focused)
-        host()->request_focus(this);
-    else if (host()->focused_widget() == this)
-        host()->clear_focus();
+        h->request_focus(this);
+    else if (h->focused_widget() == this)
+        h->clear_focus();
 }
 
 void TextArea::arrange(LayoutCtx& ctx, Rect bounds)

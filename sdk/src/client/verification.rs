@@ -140,7 +140,7 @@ pub(super) async fn watch_verification_request(
                     let flow_id2 = flow_id.clone();
                     let sas_cache2 = Arc::clone(&sas_cache);
                     let handle = tokio::spawn(watch_sas(sas, flow_id2, h2, sas_cache2));
-                    lock_or_recover(&tasks).push(handle.abort_handle());
+                    track_task(&tasks, handle.abort_handle());
                 }
                 break;
             }
@@ -222,6 +222,15 @@ pub(super) async fn watch_sas(
 // ---------------------------------------------------------------------------
 // FFI impls
 // ---------------------------------------------------------------------------
+
+/// Remember a watcher so sign-out can abort it, forgetting the finished ones
+/// first: a peer that spams requests must not grow the list without bound.
+#[cfg(not(test))]
+fn track_task(tasks: &Mutex<Vec<tokio::task::AbortHandle>>, handle: tokio::task::AbortHandle) {
+    let mut tasks = lock_or_recover(tasks);
+    tasks.retain(|t| !t.is_finished());
+    tasks.push(handle);
+}
 
 impl ClientFfi {
     /// Initiate an `m.key.verification.request` to every other device of the
@@ -413,7 +422,7 @@ impl ClientFfi {
                 }
             };
             let handle = tokio::spawn(watch_sas(sas, flow_id_str, handler, sas_cache));
-            lock_or_recover(&tasks).push(handle.abort_handle());
+            track_task(&tasks, handle.abort_handle());
             Ok::<(), anyhow::Error>(())
         }) {
             Ok(()) => ok(""),

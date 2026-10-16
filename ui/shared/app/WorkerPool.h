@@ -37,8 +37,10 @@ struct WorkerPool
     // AccountManager::wait_until_drained).
     bool wait_idle(std::chrono::milliseconds timeout)
     {
+        // Waits on idle_cv_, not cv_: a notify_one on cv_ meant for a worker
+        // must never be spent on a waiter here, or the queued task stalls.
         std::unique_lock<std::mutex> lk(mu_);
-        return cv_.wait_for(lk, timeout, [this]
+        return idle_cv_.wait_for(lk, timeout, [this]
         {
             return in_flight_.load(std::memory_order_relaxed) == 0;
         });
@@ -61,7 +63,8 @@ struct WorkerPool
 
     std::deque<std::function<void()>> queue_;
     std::mutex                        mu_;
-    std::condition_variable           cv_;
+    std::condition_variable           cv_;      // workers wait for queued tasks
+    std::condition_variable           idle_cv_; // wait_idle() waits for in_flight_ == 0
     bool                              stop_ = false;
     std::vector<std::thread>          threads_;
     // Tracks tasks waiting in queue_. Mutated under mu_; readable lock-free.

@@ -311,6 +311,14 @@ msgstr "Vedlegg: {0}"
 msgid "Attachment too large: {0}"
 msgstr "Vedlegget er for stort: {0}"
 
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That file isn't a PNG, JPEG, GIF or WebP image."
+msgstr "Filen er ikke et PNG-, JPEG-, GIF- eller WebP-bilde."
+
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That image is too large to send."
+msgstr "Bildet er for stort til å sendes."
+
 msgid "Image unavailable: {0}"
 msgstr "Bildet er utilgjengelig: {0}"
 
@@ -604,6 +612,10 @@ msgstr "Logg ut {0}"
 
 msgid "empty session"
 msgstr "tom økt"
+
+#: ui/shared/app/ShellBase_accounts.cpp
+msgid "Could not restore the session: {0}"
+msgstr "Kunne ikke gjenopprette økten: {0}"
 
 msgid "couldn't persist matrix store: {0}"
 msgstr "kunne ikke lagre Matrix-lageret: {0}"
@@ -3143,6 +3155,10 @@ msgstr "Ubekreftet"
 msgid "Open in browser"
 msgstr "Åpne i nettleser"
 
+#: ui/shared/views/settings/DevicesSection.cpp
+msgid "Open in browser ({0})"
+msgstr "Åpne i nettleseren ({0})"
+
 msgid "I've confirmed"
 msgstr "Jeg har bekreftet"
 
@@ -3435,6 +3451,10 @@ msgstr "Opphev bannlysing (du har ikke tillatelse til å oppheve denne bannlysin
 msgid "Banned users"
 msgstr "Bannlyste brukere"
 
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "Some bans may be missing: the room's member list did not fully load. Reopen settings to try again."
+msgstr "Noen utestengelser kan mangle: medlemslisten for rommet ble ikke fullstendig lastet. Åpne innstillingene på nytt for å prøve igjen."
+
 msgid "No banned users"
 msgstr "Ingen bannlyste brukere"
 
@@ -3513,6 +3533,10 @@ msgstr "La gjester bli med"
 
 msgid "History Visibility"
 msgstr "Synlighet for historikk"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "History: {0}"
+msgstr "Historikk: {0}"
 
 msgid "Anyone"
 msgstr "Alle"
@@ -4861,3 +4885,168 @@ msgid "{0} image can't be sent because its metadata can't be removed. Remove it 
 msgid_plural "{0} images can't be sent because their metadata can't be removed. Remove them to send the rest."
 msgstr[0] "{0} bilde kan ikke sendes fordi metadataene ikke kan fjernes. Fjern det for å sende resten."
 msgstr[1] "{0} bilder kan ikke sendes fordi metadataene ikke kan fjernes. Fjern dem for å sende resten."
+
+#: ui/shared/app/SlashCommands.cpp
+msgid "no display name given; use /myroomnick <name>"
+msgstr "ingen visningsnavn oppgitt. Bruk /myroomnick <navn>"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "A recovery passphrase must be at least {0} characters."
+msgstr "En gjenopprettingsfrase må være minst {0} tegn."
+
+#: ui/shared/app/ShellBase_calls.cpp
+msgid "Screen sharing stopped: the screen could not be captured."
+msgstr "Skjermdeling stanset: skjermen kunne ikke fanges opp."
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not pin the message: {0}"
+msgstr "Kunne ikke feste meldingen: {0}"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not unpin the message: {0}"
+msgstr "Kunne ikke løsne meldingen: {0}"
+
+#: ui/shared/views/MessageSearchView.cpp:29
+#: ui/shared/views/MessageSearchView.cpp:32
+msgid "now"
+msgstr "nå"
+
+#: ui/shared/views/MessageSearchView.cpp:45
+msgid "{0}w"
+msgstr "{0} u"
+
+#: ui/shared/views/MessageSearchView.cpp:46
+msgid "{0}y"
+msgstr "{0} år"
+
+#: ui/shared/app/ShellBase.cpp:240
+#, c++-format
+msgid "Couldn't save the sign-in for {0}. You may have to sign in again next time."
+msgstr "Kunne ikke lagre påloggingen for {0}. Du må kanskje logge på igjen neste gang."
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(image)"
+msgstr "(bilde)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(file)"
+msgstr "(fil)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(voice)"
+msgstr "(talemelding)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(audio)"
+msgstr "(lyd)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(video)"
+msgstr "(video)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(gallery)"
+msgstr "(galleri)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(message)"
+msgstr "(melding)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(sticker)"
+msgstr "(klistremerke)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(deleted)"
+msgstr "(slettet)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(unavailable)"
+msgstr "(utilgjengelig)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(poll)"
+msgstr "(avstemning)"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "(poll) {0}"
+msgstr "(avstemning) {0}"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sent before you joined this room"
+msgstr "🔒 Sendt før du ble med i dette rommet"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's identity changed since you verified them"
+msgstr "🔒 Avsenderens identitet har endret seg siden du verifiserte vedkommende"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is not signed"
+msgstr "🔒 Avsenderens enhet er ikke signert"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is unknown"
+msgstr "🔒 Avsenderens enhet er ukjent"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 History unavailable (key backup is off)"
+msgstr "🔒 Historikk utilgjengelig (nøkkelsikkerhetskopi er av)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender blocked this device"
+msgstr "🔒 Avsenderen blokkerte denne enheten"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Key was not shared with this device"
+msgstr "🔒 Nøkkelen ble ikke delt med denne enheten"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Verify this device to access history"
+msgstr "🔒 Verifiser denne enheten for å få tilgang til historikken"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Unable to decrypt"
+msgstr "🔒 Kan ikke dekryptere"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "cleared all pinned messages"
+msgstr "fjernet alle festede meldinger"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "pinned a message"
+msgstr "festet en melding"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "unpinned a message"
+msgstr "løsnet en melding"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "pinned {0} message"
+msgid_plural "pinned {0} messages"
+msgstr[0] "festet {0} melding"
+msgstr[1] "festet {0} meldinger"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "unpinned {0} message"
+msgid_plural "unpinned {0} messages"
+msgstr[0] "løsnet {0} melding"
+msgstr[1] "løsnet {0} meldinger"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "changed the pinned messages"
+msgstr "endret de festede meldingene"
+
+#: ui/shared/app/shell_helpers.cpp
+#, c++-format
+msgid "Sent {0} item"
+msgid_plural "Sent {0} items"
+msgstr[0] "Sendte {0} element"
+msgstr[1] "Sendte {0} elementer"
+
+#: ui/shared/app/ShellBase_accounts.cpp
+#, c++-format
+msgid "Couldn't start syncing: {0}. Retrying…"
+msgstr "Kunne ikke starte synkronisering: {0}. Prøver igjen …"

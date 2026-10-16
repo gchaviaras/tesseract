@@ -1,6 +1,7 @@
 #include "app/ShellBase.h"
 #include "views/MainAppWidget.h"
 #include <algorithm>
+#include <unordered_map>
 
 namespace tesseract
 {
@@ -60,10 +61,15 @@ void ShellBase::update_space_children_cache_()
             }
 
             post_to_ui_alive_(
-                [this,
+                [this, sess,
                  fresh_joined   = std::move(fresh_joined),
                  fresh_unjoined = std::move(fresh_unjoined)]() mutable
                 {
+                    // Results from an account that is no longer active would
+                    // overwrite the active account's caches. Drop them; the next
+                    // refresh for the active account rebuilds these.
+                    if (sess != active_account_)
+                        return;
                     if (fresh_joined   != space_children_cache_ ||
                         fresh_unjoined != unjoined_space_children_cache_)
                     {
@@ -116,28 +122,37 @@ ShellBase::parent_spaces_for_room_(const std::string& room_id) const
         return out;
     }
 
+    // Invert the cache once (child -> the spaces that list it), so each step is
+    // a hash probe rather than a scan of every space's children.
+    std::unordered_map<std::string, std::vector<std::string>> parents;
+    for (const auto& [space_id, children] : space_children_cache_)
+    {
+        for (const auto& child : children)
+        {
+            parents[child].push_back(space_id);
+        }
+    }
+
     std::unordered_set<std::string> visited;
     std::vector<std::string> frontier{room_id};
     while (!frontier.empty())
     {
         std::vector<std::string> next;
-        for (const auto& [space_id, children] : space_children_cache_)
+        for (const auto& id : frontier)
         {
-            if (visited.count(space_id))
+            const auto it = parents.find(id);
+            if (it == parents.end())
             {
                 continue;
             }
-            const bool contains_frontier_member =
-                std::any_of(frontier.begin(), frontier.end(), [&](const std::string& id) {
-                    return std::find(children.begin(), children.end(), id) != children.end();
-                });
-            if (!contains_frontier_member)
+            for (const auto& space_id : it->second)
             {
-                continue;
+                if (visited.insert(space_id).second)
+                {
+                    out.push_back(space_id);
+                    next.push_back(space_id);
+                }
             }
-            visited.insert(space_id);
-            out.push_back(space_id);
-            next.push_back(space_id);
         }
         frontier = std::move(next);
     }

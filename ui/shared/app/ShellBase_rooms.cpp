@@ -1,5 +1,6 @@
 #include "app/ShellBase.h"
 #include "app/SlashCommands.h"
+#include "app/UploadDraft.h"
 #include "app/UnreadPrefetch.h"
 #include "views/MainAppWidget.h"
 #include "views/text_util.h"
@@ -88,6 +89,9 @@ void ShellBase::push_rooms_(std::string user_id, std::vector<RoomInfo> rooms)
         apply_bridge_overrides_(rooms, sess->bridge_not_bridged_overrides);
     }
     per_account_rooms_[user_id] = rooms;
+    // A room list means sync is delivering again: the next sync error starts
+    // the restart backoff over.
+    sync_error_restarts_.erase(user_id);
     // The tray aggregate covers every signed-in account, not just the active
     // one — recompute on every account's update, even if it isn't the one
     // whose rooms_ cache is currently live.
@@ -619,11 +623,15 @@ void ShellBase::space_back_command_()
     }
 }
 
-void ShellBase::confirm_leave_room_(const std::string& room_id)
+void ShellBase::confirm_leave_room_(const std::string& room_id,
+                                    const std::shared_ptr<AccountSession>& on_behalf_of)
 {
     if (room_id.empty() || !main_app_ || !main_app_->confirm_dialog())
         return;
-    const RoomInfo* ri = room_by_id_(room_id);
+    // room_by_id_ only knows the active account's rooms; another account's
+    // room falls back to the generic wording.
+    const bool other_account = on_behalf_of && on_behalf_of != active_account_;
+    const RoomInfo* ri = other_account ? nullptr : room_by_id_(room_id);
     const std::string display =
         (ri && !ri->name.empty()) ? ri->name : tk::tr("this room");
 
@@ -637,7 +645,7 @@ void ShellBase::confirm_leave_room_(const std::string& room_id)
 
     main_app_->confirm_dialog()->open(
         std::move(opts),
-        [this, room_id] { leave_room_command_(room_id); });
+        [this, room_id, on_behalf_of] { leave_room_command_(room_id, on_behalf_of); });
 }
 
 void ShellBase::join_room_command_(const std::string& room_id_or_alias,
@@ -884,7 +892,12 @@ ShellBase::RoomSendOutcome ShellBase::dispatch_room_send_(
     }
     if (tesseract::is_slash_command_no_arg(body, "leave"))
     {
-        leave_room_command_(room_id, acting);
+        // Leaving is one keystroke here, so ask first, as the room header's
+        // Leave does. Without a dialog host the leave runs directly.
+        if (main_app_ && main_app_->confirm_dialog())
+            confirm_leave_room_(room_id, acting);
+        else
+            leave_room_command_(room_id, acting);
         out.handled_as_command = true;
         return out;
     }
@@ -1289,23 +1302,22 @@ void ShellBase::handle_room_action_complete_ui_(std::uint64_t request_id,
         else if (kind == RoomActionKind::AddSpaceChild ||
                  kind == RoomActionKind::RemoveSpaceChild)
         {
-            // Revert the optimistic cache mutation request_add/remove_
-            // room_to/from_space_ already applied, then re-push the
-            // (now-reverted) child set to the UI.
+            // Undo the optimistic cache mutation request_add/remove_room_to/from_space_
+            // applied. The request does not record which child list the room was in,
+            // so neither list is guessed back: both are re-derived from the server's
+            // view (a fresh update_space_children_cache_() pass). An add also drops
+            // the room from the joined list at once, so the revert shows immediately.
             const bool was_add = (kind == RoomActionKind::AddSpaceChild);
             if (was_add)
             {
                 auto& joined = space_children_cache_[action_space_id];
                 joined.erase(std::remove(joined.begin(), joined.end(), room_id),
                             joined.end());
+                if (client_)
+                    update_space_children_cache_();
             }
             else
             {
-                // We don't know whether the removed child was joined or
-                // unjoined at the time of the request — re-derive both from
-                // the still-authoritative last-known-good source (a fresh
-                // update_space_children_cache_() pass) rather than guessing
-                // which vector to restore it to.
                 update_space_children_cache_();
             }
             // refresh_space_root_children_ itself checks whether
@@ -1471,11 +1483,45 @@ void ShellBase::on_create_room_outcome_ui_(bool ok, const std::string& room_id,
     request_relayout_();
 }
 
+void ShellBase::remember_upload_draft_(std::uint64_t request_id,
+                                       std::shared_ptr<UploadDraft> draft)
+{
+    upload_drafts_[request_id] = std::move(draft);
+}
+
+void ShellBase::restore_failed_upload_(const std::shared_ptr<UploadDraft>& draft)
+{
+    if (!draft)
+        return;
+    const auto& uid = draft->user_id;
+    const auto& rid = draft->room_id;
+    // Only the account that sent it gets its content back: its own pop-out of
+    // the room first (active or not), then the main window if that account is
+    // the active one.
+    if (auto* w = find_secondary_(rid, uid); w && w->pane()->restore_upload_draft_(*draft))
+        return;
+    if (!active_account_ || active_account_->user_id != uid || !main_room_pane_)
+        return;
+    if (current_room_id_ == rid && main_room_pane_->restore_upload_draft_(*draft))
+        return;
+    // Room not on screen (or its composer is in use): keep it as that room's
+    // draft, restored when the user returns.
+    main_room_pane_->stash_upload_draft_(*draft);
+}
+
 void ShellBase::handle_upload_complete_ui_(std::uint64_t request_id,
                                             bool ok,
                                             std::string message)
 {
     on_upload_finished_ui_(request_id, ok);
+    if (auto it = upload_drafts_.find(request_id); it != upload_drafts_.end())
+    {
+        auto draft = std::move(it->second);
+        upload_drafts_.erase(it);
+        // "cancelled": the account is being torn down, nothing to restore into.
+        if (!ok && message != "cancelled")
+            restore_failed_upload_(draft);
+    }
     if (!ok)
     {
         std::fprintf(stderr, "[upload] failed: %s\n", message.c_str());

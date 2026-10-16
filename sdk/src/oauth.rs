@@ -7,7 +7,8 @@
 //!     matrix-sdk's `LocalServerBuilder` and asks the SDK for an authorisation
 //!     URL with that redirect URI.
 //!  2. The C++ side opens the URL in the user's default browser.
-//!  3. `await_callback()` awaits the browser's GET to the loopback listener.
+//!  3. `await_slice()` awaits the browser's GET to the loopback listener, in
+//!     short slices (see `ClientFfi::oauth_await_slice`).
 //!     The SDK's `LocalServerRedirectHandle` captures the query string and we
 //!     hand it to `OAuth::finish_login`, which performs the token exchange and
 //!     persists the session inside the SDK's sqlite store.
@@ -192,26 +193,29 @@ pub(crate) fn build_sdk_http_client() -> matrix_sdk::reqwest::Client {
 }
 
 /// The half-built client and the redirect-await handle, consumed once by
-/// `await_callback`.
+/// the first `await_slice`.
 struct PendingFlowState {
     client: Client,
     redirect_handle: matrix_sdk::utils::local_server::LocalServerRedirectHandle,
 }
 
-/// State carried between `begin` and `await_callback`.
+/// State carried between `begin` and the end of the browser wait.
 ///
-/// `pending`/`finished` are wrapped in `std::sync::Mutex<Option<…>>` (mirroring
-/// `qr_grant::QrGrantHandle`) so `await_callback`/`cancel` only ever need
-/// `&PendingFlow` — never `&mut` — which lets the C++ side call them under a
-/// shared (SH_FFI) lock instead of the exclusive (MUT_FFI) one. Without this,
-/// a Cancel click can never acquire the exclusive lock that a blocked
-/// `await_callback` holds for its whole (possibly minutes-long) wait,
-/// deadlocking the UI thread — see `ClientFfi::oauth_await_callback`.
+/// The wait runs as a background task on the flow's runtime, started by the
+/// first `await_slice` call. Each later slice only polls its result, so
+/// `await_slice` and `cancel` only ever need `&PendingFlow`, never `&mut`. The
+/// C++ side calls them under a shared (SH_FFI) lock, one slice at a time, and
+/// releases the lock in between. Without that, a Cancel click or a writer
+/// queued behind the sign-in would wait for the whole (possibly minutes-long)
+/// browser step. See `ClientFfi::oauth_await_slice`.
 pub struct PendingFlow {
     pending: std::sync::Mutex<Option<PendingFlowState>>,
-    /// The fully-authenticated client once `await_callback` finishes
-    /// successfully; taken by the separate, non-blocking `oauth_commit` step
-    /// (see `ClientFfi::oauth_commit`) that stores it on `ClientFfi`.
+    /// Receives the background wait's outcome. Set by the first slice and taken
+    /// once a slice reports the outcome.
+    waiter: std::sync::Mutex<Option<tokio::sync::oneshot::Receiver<anyhow::Result<Client>>>>,
+    /// The fully-authenticated client once the wait finishes successfully; taken
+    /// by the separate, non-blocking `oauth_commit` step (see
+    /// `ClientFfi::oauth_commit`) that stores it on `ClientFfi`.
     finished: std::sync::Mutex<Option<Client>>,
     /// Shutdown handle cloned from `redirect_handle`; used by `cancel()`.
     /// Cheaply `Clone` and never mutated after construction, so it needs no
@@ -432,6 +436,7 @@ pub async fn begin(
                 client,
                 redirect_handle,
             })),
+            waiter: std::sync::Mutex::new(None),
             finished: std::sync::Mutex::new(None),
             shutdown_handle,
         },
@@ -441,28 +446,26 @@ pub async fn begin(
 /// How long the loopback redirect is awaited before the sign-in gives up.
 const OAUTH_CALLBACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
+/// How long one slice of the browser wait may take before control returns to the
+/// caller. Kept short so a writer queued on the FFI lock is never held for long.
+pub const OAUTH_WAIT_SLICE: std::time::Duration = std::time::Duration::from_millis(50);
+
 /// Phase 2 — await the browser's loopback redirect, then ask the SDK to
-/// finalise the login. Takes `&PendingFlow` (not by value) so `cancel()` can
-/// keep reaching the same flow's shutdown handle while this is blocked. The
-/// resulting authenticated client is stashed on `flow` for `take_finished`
-/// to retrieve — see the comment on `PendingFlow`.
-pub async fn await_callback(flow: &PendingFlow) -> anyhow::Result<()> {
+/// finalise the login, and return the authenticated client. This is the
+/// background task that `await_slice` polls.
+async fn finish_redirect(state: PendingFlowState) -> anyhow::Result<Client> {
     let PendingFlowState {
         client,
         redirect_handle,
-    } = flow
-        .pending
-        .lock()
-        .unwrap()
-        .take()
-        .ok_or_else(|| anyhow!("oauth flow already awaited"))?;
+    } = state;
+    let shutdown_handle = redirect_handle.shutdown_handle();
 
     // Bounded: a login the user walked away from must not hold the flow forever.
     let query = match tokio::time::timeout(OAUTH_CALLBACK_TIMEOUT, redirect_handle).await {
         Ok(q) => q,
         Err(_) => {
             // Free the loopback port now rather than when the flow is dropped.
-            flow.shutdown_handle.clone().shutdown();
+            shutdown_handle.shutdown();
             return Err(anyhow!(
                 "the sign-in in the browser was not completed in time; start again"
             ));
@@ -486,14 +489,56 @@ pub async fn await_callback(flow: &PendingFlow) -> anyhow::Result<()> {
         }
     }
 
-    *flow.finished.lock().unwrap() = Some(client);
-    Ok(())
+    Ok(client)
 }
 
-/// Retrieve the client `await_callback` produced, if it has completed
+/// One slice of the browser wait. The first call starts the wait as a background
+/// task on the current runtime. `None` means the browser has not answered within
+/// the slice, so the caller should call again. `Some` carries the outcome. On
+/// success the client is parked for `take_finished`.
+///
+/// No lock is held across the await: the receiver is taken out of its slot for
+/// the slice and put back if the slice times out.
+pub async fn await_slice(flow: &PendingFlow) -> Option<anyhow::Result<()>> {
+    let slot = flow.waiter.lock().unwrap().take();
+    let mut rx = match slot {
+        Some(rx) => rx,
+        None => {
+            let state = match flow.pending.lock().unwrap().take() {
+                Some(state) => state,
+                None => return Some(Err(anyhow!("oauth flow already awaited"))),
+            };
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            tokio::spawn(async move {
+                // Nobody is left to hear the outcome once the flow is dropped.
+                let _ = tx.send(finish_redirect(state).await);
+            });
+            rx
+        }
+    };
+
+    let outcome = match tokio::time::timeout(OAUTH_WAIT_SLICE, &mut rx).await {
+        Err(_elapsed) => {
+            *flow.waiter.lock().unwrap() = Some(rx);
+            return None;
+        }
+        // The task ended without sending: it panicked, or the runtime went away.
+        Ok(Err(_closed)) => Err(anyhow!("oauth flow cancelled or redirect server error")),
+        Ok(Ok(result)) => result,
+    };
+    Some(match outcome {
+        Ok(client) => {
+            *flow.finished.lock().unwrap() = Some(client);
+            Ok(())
+        }
+        Err(e) => Err(e),
+    })
+}
+
+/// Retrieve the client the browser wait produced, if it has completed
 /// successfully. `&mut self`-adjacent callers (see `ClientFfi::oauth_commit`)
 /// use this to move it onto `ClientFfi` without needing `&mut` for the
-/// (potentially long) await itself.
+/// (potentially long) wait itself.
 pub fn take_finished(flow: &PendingFlow) -> Option<Client> {
     flow.finished.lock().unwrap().take()
 }
@@ -828,6 +873,7 @@ mod pending_flow_tests {
                 client,
                 redirect_handle,
             })),
+            waiter: std::sync::Mutex::new(None),
             finished: std::sync::Mutex::new(None),
             shutdown_handle,
         };
@@ -840,14 +886,34 @@ mod pending_flow_tests {
         assert!(take_finished(&flow).is_none());
     }
 
+    /// Drives slices until the wait reports an outcome, as the C++ side does.
+    async fn await_to_end(flow: &PendingFlow) -> anyhow::Result<()> {
+        loop {
+            if let Some(outcome) = await_slice(flow).await {
+                return outcome;
+            }
+        }
+    }
+
     #[tokio::test]
-    async fn cancel_makes_await_callback_fail_and_consumes_the_flow() {
+    async fn slices_report_pending_until_the_wait_ends() {
+        let (flow, _) = offline_flow().await;
+        // Nothing has answered, so each slice times out and reports pending.
+        assert!(await_slice(&flow).await.is_none());
+        assert!(await_slice(&flow).await.is_none());
+        cancel(&flow);
+        let e = await_to_end(&flow).await.unwrap_err().to_string();
+        assert!(e.contains("cancelled"), "{e}");
+    }
+
+    #[tokio::test]
+    async fn cancel_makes_the_wait_fail_and_consumes_the_flow() {
         let (flow, _) = offline_flow().await;
         cancel(&flow);
-        let e = await_callback(&flow).await.unwrap_err().to_string();
+        let e = await_to_end(&flow).await.unwrap_err().to_string();
         assert!(e.contains("cancelled"), "{e}");
-        // The pending state was consumed by the first await.
-        let again = await_callback(&flow).await.unwrap_err().to_string();
+        // The pending state was consumed by the first slice.
+        let again = await_slice(&flow).await.unwrap().unwrap_err().to_string();
         assert!(again.contains("already awaited"), "{again}");
         assert!(take_finished(&flow).is_none());
     }
@@ -878,7 +944,7 @@ mod pending_flow_tests {
             body
         });
 
-        let e = format!("{:#}", await_callback(&flow).await.unwrap_err());
+        let e = format!("{:#}", await_to_end(&flow).await.unwrap_err());
         assert!(e.contains("oauth finish_login"), "{e}");
         // The browser still gets the "you're signed in" page.
         let page = hit.await.unwrap();

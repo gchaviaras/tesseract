@@ -65,6 +65,7 @@ public:
         {
             if (err) g_error_free(err);
             if (pipeline_) { gst_object_unref(pipeline_); pipeline_ = nullptr; }
+            report_failure_();
             return;
         }
 
@@ -73,6 +74,7 @@ public:
         {
             gst_object_unref(pipeline_);
             pipeline_ = nullptr;
+            report_failure_();
             return;
         }
 
@@ -85,6 +87,7 @@ public:
             sink_ = nullptr;
             gst_object_unref(pipeline_);
             pipeline_ = nullptr;
+            report_failure_();
             return;
         }
 

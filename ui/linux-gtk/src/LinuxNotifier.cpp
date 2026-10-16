@@ -1,8 +1,17 @@
 #include "LinuxNotifier.h"
+
+#include <memory>
 #include <string>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include "../../shared/linux_portal.h"
 #include "tk/i18n.h"
+
+namespace
+{
+// Bound on each synchronous notification-daemon call. The D-Bus default is about
+// 25 s, which froze the UI for that long when a daemon hung.
+constexpr int kNotifyBusTimeoutMs = 3000;
+} // namespace
 
 LinuxNotifierGtk::LinuxNotifierGtk(
     std::function<void(std::string, std::string)> on_activate,
@@ -59,7 +68,7 @@ LinuxNotifierGtk::LinuxNotifierGtk(
             bus_, "org.freedesktop.Notifications",
             "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
             "GetCapabilities", nullptr, G_VARIANT_TYPE("(as)"),
-            G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr))
+            G_DBUS_CALL_FLAGS_NONE, kNotifyBusTimeoutMs, nullptr, nullptr))
     {
         GVariant* caps_v = nullptr;
         g_variant_get(caps_result, "(@as)", &caps_v);
@@ -86,7 +95,7 @@ LinuxNotifierGtk::LinuxNotifierGtk(
             "Get",
             g_variant_new("(ss)", "org.freedesktop.portal.Notification",
                          "version"),
-            G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE, -1, nullptr,
+            G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE, kNotifyBusTimeoutMs, nullptr,
             nullptr))
     {
         GVariant* version_v = nullptr;
@@ -107,6 +116,8 @@ LinuxNotifierGtk::LinuxNotifierGtk(
 
 LinuxNotifierGtk::~LinuxNotifierGtk()
 {
+    // Pending Notify replies see the notifier as gone from here on.
+    alive_.reset();
     if (!bus_)
     {
         return;
@@ -336,28 +347,57 @@ void LinuxNotifierGtk::notify(const tesseract::Notification& n)
     g_free(esc_sender);
     g_free(esc_body);
 
-    GVariant* result = g_dbus_connection_call_sync(
+    // Asynchronous: the daemon's reply carries the id this notification needs for
+    // its later ActionInvoked, so it is recorded when the reply arrives. A slow or
+    // starting daemon must not hold the UI thread for the call. The image-data hint
+    // points into rgba, so rgba and loader are released by the reply handler, not
+    // here.
+    struct PendingNotify
+    {
+        std::weak_ptr<bool> alive;
+        LinuxNotifierGtk* self;
+        std::string room_id;
+        std::string event_id;
+        GdkPixbuf* rgba;
+        GdkPixbufLoader* loader;
+    };
+    auto* pending = new PendingNotify{alive_, this, n.room_id, n.event_id, rgba, loader};
+    g_dbus_connection_call(
         bus_, "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
         "org.freedesktop.Notifications", "Notify", params,
-        G_VARIANT_TYPE("(u)"), G_DBUS_CALL_FLAGS_NONE, -1, nullptr, nullptr);
-
-    // Safe to release avatar resources now that the sync call has serialised params.
-    if (rgba)
-    {
-        g_object_unref(rgba);
-    }
-    if (loader)
-    {
-        g_object_unref(loader);
-    }
-
-    if (result)
-    {
-        uint32_t id = 0;
-        g_variant_get(result, "(u)", &id);
-        g_variant_unref(result);
-        correlation_.record(id, n.room_id, n.event_id);
-    }
+        G_VARIANT_TYPE("(u)"), G_DBUS_CALL_FLAGS_NONE, kNotifyBusTimeoutMs, nullptr,
+        [](GObject* source, GAsyncResult* res, gpointer data)
+        {
+            std::unique_ptr<PendingNotify> p(static_cast<PendingNotify*>(data));
+            GError* error = nullptr;
+            GVariant* result =
+                g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), res, &error);
+            if (error)
+            {
+                g_error_free(error);
+            }
+            // Only touch the notifier while it exists. The reply runs on the UI
+            // thread, as does its destructor.
+            if (result && !p->alive.expired())
+            {
+                uint32_t id = 0;
+                g_variant_get(result, "(u)", &id);
+                p->self->correlation_.record(id, p->room_id, p->event_id);
+            }
+            if (result)
+            {
+                g_variant_unref(result);
+            }
+            if (p->rgba)
+            {
+                g_object_unref(p->rgba);
+            }
+            if (p->loader)
+            {
+                g_object_unref(p->loader);
+            }
+        },
+        pending);
 }
 
 void LinuxNotifierGtk::on_action_invoked_cb(GDBusConnection*, const char*,

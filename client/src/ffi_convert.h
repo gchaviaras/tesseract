@@ -3,6 +3,7 @@
 #include "tesseract/image_pack.h"
 #include "tesseract_sdk_bridge_cxx/bridge.h"
 #include "tesseract/types.h"
+#include "tesseract/utf8.h"
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <string>
@@ -354,7 +355,7 @@ inline tesseract_ffi::RoomExportOptionsFfi to_ffi(const RoomExportOptions& o)
         labels.push_back(l);
 
     return tesseract_ffi::RoomExportOptionsFfi{
-        .out_path             = o.out_path,
+        .out_path             = utf8_lossy(o.out_path), // a folder name can be arbitrary bytes
         .format                = o.format,
         .include_images        = o.include_images,
         .zip_output            = o.zip_output,

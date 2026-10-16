@@ -7,6 +7,14 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(review): whole-app code review fixes. Security: frame keys accepted only from a known sending device and wiped on rotation, fetches and GIF URLs go through the guarded client, no sender/body leaked to MPRIS, proxy credential kept in the OS keyring, notification images and caches owner-only, HTML export links `noopener noreferrer`, SDK text can't spoof a UI image carrier, search index purged on clear
+- fix(calls): call lifecycle (hang up before sign-out, account switch and quit; screen share stops when the call or capture ends), per-participant frame bounds and stride checks, per-account call sinks, only DMs ring, encryption-unknown rooms refused
+- fix(send): blank replies/edits, Send held until dropped AV metadata is stripped, attachments and caption restored on upload failure, `/me` and `/shrug` keep formatting, non-ASCII mentions match
+- fix(sync): failed backfill/seed/space/pack fetches retry instead of caching as done, sync-start failures retry with the reason shown, per-room state and decrypt hand-off bounded, prefs saves ordered, failed session saves warn
+- fix(media): attachment/sticker/map-tile/cache writes atomic, capped and sniffed, off the UI thread; avatar and outgoing-image decode budgets; download queue indexed
+- fix(rooms): list fingerprint covers badge/mute/DM/preview, `/leave` asks first, power-level and topic edits start from or restore server state, thread subscriptions and accessible rows follow the filter
+- fix(i18n): SDK-generated previews, decrypt reasons, pin actions and search time units translated; duplicate `pseudo.po` entries removed; invalid `\x01`/non-UTF-8 strings no longer abort the FFI
+- fix(platform): lifetime, accessibility and timer/handler cleanup on GTK/Qt/Windows/macOS shells (Jump List escaping, tray re-add, Keychain flush guard, UIA COM threading, SIGHUP graceful quit)
 - chore(ci): failed workflow runs now save their Rust build cache too (`cache-on-failure` on every `rust-cache` step), so a retry after a C++ or packaging failure skips the Rust build. YAML parse only
 - fix(macos): the minimum macOS is now 13 Ventura, and CI builds the bundled libopus for it instead of shipping Homebrew's, whose macOS 26 minimum most likely kept the DMGs from launching on anything older. A configure warning and a CI check catch a libopus built for a newer macOS. macOS arm64 build, CI DMG voice playback user-verified; not run on macOS 13
 - feat(packaging): the macOS DMGs are Developer ID signed (hardened runtime, mic/camera/location entitlements) and notarized in CI when the signing secrets are set, ad-hoc otherwise. CI-signed DMG user-verified on macOS (Gatekeeper, session kept on upgrade, mic/camera/location, voice playback, notifications, Launch at Login)

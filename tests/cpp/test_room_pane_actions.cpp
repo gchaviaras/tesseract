@@ -9,6 +9,7 @@
 
 #include "app/RoomPane.h"
 #include "app/ShellBase.h"
+#include "app/UploadDraft.h"
 #include "settings_guard.h"
 #include "shell_test_double.h"
 #include "views/ComposeBar.h"
@@ -114,6 +115,9 @@ struct RpShell : tesseract::test::TestShellBase
     using ShellBase::knock_requests_panel_room_id_;
     using ShellBase::rooms_;
     using ShellBase::pending_scroll_room_event_id_;
+    using ShellBase::handle_upload_complete_ui_;
+    using ShellBase::remember_upload_draft_;
+    using ShellBase::upload_drafts_;
 };
 
 struct RpFx
@@ -263,9 +267,10 @@ TEST_CASE("read receipts from the visible range are deduplicated", "[roompane][r
     RpFx f;
     f.view->on_receipt_needed("$a");
     f.view->on_receipt_needed("$a");
-    CHECK(f.s.last_sent_receipt_.at("!r:x") == "$a");
+    // The value records the sending account as well as the event id.
+    CHECK(f.s.last_sent_receipt_.at("!r:x").ends_with("$a"));
     f.view->on_receipt_needed("$b");
-    CHECK(f.s.last_sent_receipt_.at("!r:x") == "$b");
+    CHECK(f.s.last_sent_receipt_.at("!r:x").ends_with("$b"));
     f.view->on_thread_receipt_needed("$t1"); // no thread open: ignored
     CHECK(f.s.last_sent_thread_receipt_.empty());
     f.s.pump();
@@ -642,6 +647,73 @@ TEST_CASE("unsent text is restored into an empty composer only", "[roompane][dra
     CHECK(f.view->compose_bar()->current_text() == "stashed");
     f.pane().stash_unsent_draft_("", "x");
     f.pane().stash_unsent_draft_("!r:x", "");
+}
+
+namespace
+{
+std::shared_ptr<tesseract::UploadDraft> file_draft(const std::string& room = "!r:x")
+{
+    auto d = std::make_shared<tesseract::UploadDraft>();
+    d->user_id = "@me:x";
+    d->room_id = room;
+    d->caption = "my caption";
+    tesseract::views::ComposeBar::PendingAttachment pa;
+    pa.kind = tesseract::views::ComposeBar::PendingAttachment::Kind::File;
+    pa.bytes = {1, 2, 3};
+    pa.mime = "application/pdf";
+    pa.filename = "report.pdf";
+    d->items.push_back(std::move(pa));
+    return d;
+}
+} // namespace
+
+TEST_CASE("a failed attachment upload puts the attachment and caption back",
+          "[roompane][draft][upload]")
+{
+    RpFx f;
+    f.s.remember_upload_draft_(7, file_draft());
+    f.s.handle_upload_complete_ui_(7, false, "too large");
+    REQUIRE(f.view->compose_bar()->pending_count() == 1);
+    const auto* pa = f.view->compose_bar()->pending_for_test(0);
+    CHECK(pa->filename == "report.pdf");
+    CHECK(pa->bytes == std::vector<std::uint8_t>{1, 2, 3});
+    CHECK(f.view->compose_bar()->current_text() == "my caption");
+    CHECK(f.s.upload_drafts_.empty());
+}
+
+TEST_CASE("a finished or cancelled upload drops its draft without restoring",
+          "[roompane][draft][upload]")
+{
+    RpFx f;
+    f.s.remember_upload_draft_(1, file_draft());
+    f.s.handle_upload_complete_ui_(1, true, "");
+    f.s.remember_upload_draft_(2, file_draft());
+    f.s.handle_upload_complete_ui_(2, false, "cancelled");
+    CHECK(f.view->compose_bar()->pending_count() == 0);
+    CHECK(f.s.upload_drafts_.empty());
+}
+
+TEST_CASE("a failed upload does not overwrite a composer that is in use",
+          "[roompane][draft][upload]")
+{
+    RpFx f;
+    f.view->compose_bar()->add_pending_file({9}, "text/plain", "new.txt");
+    f.s.remember_upload_draft_(3, file_draft());
+    f.s.handle_upload_complete_ui_(3, false, "boom");
+    CHECK(f.view->compose_bar()->pending_count() == 1);
+    CHECK(f.view->compose_bar()->pending_for_test(0)->filename == "new.txt");
+}
+
+TEST_CASE("a failed upload for a room that is not on screen becomes that room's draft",
+          "[roompane][draft][upload]")
+{
+    RpFx f;
+    f.s.remember_upload_draft_(4, file_draft("!other:x"));
+    f.s.handle_upload_complete_ui_(4, false, "boom");
+    CHECK(f.view->compose_bar()->pending_count() == 0);
+    f.pane().apply_compose_draft_("!other:x");
+    REQUIRE(f.view->compose_bar()->pending_count() == 1);
+    CHECK(f.view->compose_bar()->pending_for_test(0)->filename == "report.pdf");
 }
 
 TEST_CASE("retargeting resets per-room caches and refreshes send busy",

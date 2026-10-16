@@ -442,3 +442,13 @@ TEST_CASE("TextArea: replace_range and insert_at_cursor mutate the backend's tex
     area.replace_range(0, 5, "goodbye");
     CHECK(area.text() == "goodbye world");
 }
+
+TEST_CASE("TextArea shown or focused before it is attached does not crash")
+{
+    auto area_owner = tk::create_root_widget<TextArea>(nullptr, 40.0f);
+    TextArea& area = *area_owner;
+    CHECK_NOTHROW(area.set_visible(false));
+    CHECK_NOTHROW(area.set_visible(true));
+    CHECK_NOTHROW(area.set_focused(true));
+    CHECK_NOTHROW(area.set_focused(false));
+}

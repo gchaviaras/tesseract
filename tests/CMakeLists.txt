@@ -89,6 +89,8 @@ add_executable(tesseract_tests
     cpp/test_tk_tab_view.cpp
     cpp/test_tk_quick_switcher.cpp
     cpp/test_html_spans.cpp
+    cpp/test_sdk_text.cpp
+    cpp/test_utf8.cpp
     cpp/test_table_layout.cpp
     cpp/test_call_tile_layout.cpp
     cpp/test_prefs.cpp
@@ -123,6 +125,7 @@ add_executable(tesseract_tests
     cpp/test_pixmap_cache.cpp
     cpp/test_compressed_image_cache.cpp
     cpp/test_interval_timer.cpp
+    cpp/test_worker_pool.cpp
     cpp/test_session_store_migration.cpp
     cpp/test_session_persist_queue.cpp
     cpp/test_server_info.cpp
@@ -240,6 +243,7 @@ add_executable(tesseract_tests
     cpp/test_maps_link.cpp
     cpp/test_i18n.cpp
     cpp/test_media_disk_cache.cpp
+    cpp/test_detached_launch.cpp
     cpp/test_tk_about_section.cpp
     cpp/test_tk_settings_view.cpp
     cpp/test_encryption_setup_overlay.cpp

@@ -609,6 +609,10 @@ void ShellBase::build_known_users_roster_()
                 {
                     if (cancel->load())
                         return; // bail early — keeps shutdown/switch responsive
+                    // Count first: a room over the cap is skipped without
+                    // building its member list.
+                    if (sess->client->room_joined_member_count(rid) > cap)
+                        continue;
                     auto members = sess->client->get_room_members(rid);
                     if (members.size() > cap)
                         continue; // skip very large rooms to keep this cheap
@@ -1075,6 +1079,11 @@ void ShellBase::handle_account_prefs_updated_ui_(std::string user_id,
     {
         restore_gate_ticks_ = 0;
         pending_restore_rooms_ = prefs.open_rooms;
+        // The synced list comes from any of the user's devices. Cap it, so a
+        // corrupt or hostile list cannot queue thousands of tab restores.
+        constexpr std::size_t kMaxRestoredRooms = 32;
+        if (pending_restore_rooms_.size() > kMaxRestoredRooms)
+            pending_restore_rooms_.resize(kMaxRestoredRooms);
         // Ensure last_room (active tab) is at [0].
         if (!prefs.last_room.empty() && pending_restore_rooms_[0] != prefs.last_room)
         {

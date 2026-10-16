@@ -325,7 +325,7 @@ TEST_CASE("detach() makes every later callback a silent no-op",
     f.bridge.on_message_removed("!r:s", 1);
     REQUIRE(f.rec.log.size() == 1);
     f.slot->detach();
-    CHECK(f.slot->load() == nullptr);
+    CHECK(f.slot->routes_to(nullptr)); // detached: routes to nothing
     f.bridge.on_message_removed("!r:s", 2);
     f.bridge.on_error("c", "m", false);
     f.bridge.on_image_packs_updated();

@@ -4,6 +4,7 @@ use hkdf::Hkdf;
 use rand::RngCore;
 use sha2::Sha256;
 use std::collections::HashMap;
+use zeroize::Zeroize;
 
 /// 32-byte raw key material (pre-HKDF).
 pub type KeyMaterial = [u8; 32];
@@ -17,6 +18,14 @@ pub struct E2eeManager {
     own_index: u8,
     /// member_id → (rotation_index → frame_key)
     peer_keys: HashMap<String, HashMap<u8, FrameKey>>,
+}
+
+// The stored key is wiped when the manager goes away. Copies handed out by
+// `own_raw_key` / `own_key_b64` are the caller's, and are not wiped here.
+impl Drop for E2eeManager {
+    fn drop(&mut self) {
+        self.own_key.zeroize();
+    }
 }
 
 impl E2eeManager {
@@ -56,6 +65,7 @@ impl E2eeManager {
     /// The caller is responsible for the 5-second delay before activating the
     /// new key in the FrameCryptor (coalesced by the session's debounce timer).
     pub fn rotate(&mut self) -> (u8, String) {
+        self.own_key.zeroize();
         self.own_key = Self::generate_key();
         self.own_index = self.own_index.wrapping_add(1);
         (self.own_index, self.own_key_b64())

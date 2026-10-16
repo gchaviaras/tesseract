@@ -22,6 +22,8 @@
 //! [`UnionVariantSchema`] not admitting the nested-illegal variants at all),
 //! and duplicate parameter keys or literal value/type mismatches set
 //! [`CommandDescription::valid`] to `false` rather than discarding the event.
+//! A command name outside `[a-z0-9_-]{1,32}` or more than
+//! [`MAX_COMMAND_PARAMETERS`] parameters also clears it.
 //! Positional-argument-to-schema *matching* (required params stay ordered,
 //! optional params don't) and user-input *coercion* are UI/client-layer
 //! concerns and live in `client/` and `ui/shared/app/SlashCommands.cpp`.
@@ -271,11 +273,29 @@ pub struct CommandDescription {
     pub state_key: String,
     pub room_id: String,
     /// `false` when the content is structurally parseable but violates a
-    /// value-level invariant (duplicate parameter keys, or a `literal`
-    /// node whose `value` doesn't match its `literal_type`). Callers should
+    /// value-level invariant (duplicate parameter keys, a `literal` node
+    /// whose `value` doesn't match its `literal_type`, a command name outside
+    /// `[a-z0-9_-]{1,32}`, or more than [`MAX_COMMAND_PARAMETERS`]
+    /// parameters). Callers should
     /// filter these out before offering the command for autocomplete/
     /// dispatch, but still surface them if ever showing raw diagnostics.
     pub valid: bool,
+}
+
+/// Longest command name accepted as valid.
+const MAX_COMMAND_NAME_LEN: usize = 32;
+/// Most parameters a command may declare and still be offered as valid.
+pub const MAX_COMMAND_PARAMETERS: usize = 16;
+
+/// `true` for a name of 1 to 32 characters drawn from `[a-z0-9_-]`. Any
+/// joined sender can publish a description, so the name is kept to a plain
+/// shape that cannot shadow a built-in with lookalike text or break the
+/// slash popup's layout.
+fn command_name_well_formed(name: &str) -> bool {
+    (1..=MAX_COMMAND_NAME_LEN).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'_' | b'-'))
 }
 
 /// Parse one command-description state event's `content` into a
@@ -283,9 +303,9 @@ pub struct CommandDescription {
 /// match the base wire shape (missing `command`, or a schema using illegal
 /// nesting/an unrecognized `schema_type`) — those are structurally
 /// unparseable, not merely invalid, and are not listed at all. Duplicate
-/// parameter keys and literal value/type mismatches are less severe: the
-/// description is still returned, with [`CommandDescription::valid`] set to
-/// `false`.
+/// parameter keys, literal value/type mismatches, a malformed command name
+/// and too many parameters are less severe: the description is still
+/// returned, with [`CommandDescription::valid`] set to `false`.
 pub fn parse_command_description(
     sender: &str,
     state_key: &str,
@@ -294,7 +314,8 @@ pub fn parse_command_description(
 ) -> Option<CommandDescription> {
     let raw: CommandDescriptionContent = serde_json::from_value(content.clone()).ok()?;
 
-    let mut valid = true;
+    let mut valid = command_name_well_formed(&raw.command)
+        && raw.parameters.len() <= MAX_COMMAND_PARAMETERS;
 
     let mut seen_keys = HashSet::with_capacity(raw.parameters.len());
     for p in &raw.parameters {
@@ -559,6 +580,40 @@ mod tests {
             }]
         });
         assert!(parse_command_description("@bot:h", "s", "!r:h", &c).is_none());
+    }
+
+    #[test]
+    fn command_name_outside_the_grammar_marks_invalid() {
+        for name in ["", "Ban", "ban user", "ban\nnow", "\u{202e}ban", &"a".repeat(33)] {
+            let c = json!({ "command": name });
+            let d = parse_command_description("@bot:h", "s", "!r:h", &c).unwrap();
+            assert!(!d.valid, "{name:?} should be invalid");
+        }
+    }
+
+    #[test]
+    fn command_name_within_the_grammar_is_valid() {
+        for name in ["ban", "set-topic", "x_1", &"a".repeat(32)] {
+            let c = json!({ "command": name });
+            let d = parse_command_description("@bot:h", "s", "!r:h", &c).unwrap();
+            assert!(d.valid, "{name:?} should be valid");
+        }
+    }
+
+    #[test]
+    fn too_many_parameters_marks_invalid_but_still_parses() {
+        let params: Vec<Value> = (0..=MAX_COMMAND_PARAMETERS)
+            .map(|i| {
+                json!({
+                    "key": format!("p{i}"),
+                    "schema": { "schema_type": "primitive", "type": "string" }
+                })
+            })
+            .collect();
+        let c = json!({ "command": "x", "parameters": params });
+        let d = parse_command_description("@bot:h", "s", "!r:h", &c).unwrap();
+        assert!(!d.valid);
+        assert_eq!(d.parameters.len(), MAX_COMMAND_PARAMETERS + 1);
     }
 
     #[test]

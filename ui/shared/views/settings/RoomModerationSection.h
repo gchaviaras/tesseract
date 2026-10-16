@@ -35,8 +35,9 @@ public:
     void set_loading(bool loading);
 
     // Replace the list. Empty → "No banned users" label, no rows. Clears
-    // loading state and every row's pending-unban state.
-    void set_banned_members(std::vector<tesseract::BannedMember> members);
+    // loading state and every row's pending-unban state. `complete` false
+    // adds a note that the list may be missing bans.
+    void set_banned_members(std::vector<tesseract::BannedMember> members, bool complete = true);
 
     // Disable one row's Unban button while its request is in flight (or
     // re-enable it after a failure). No-op for an unknown user_id.
@@ -55,6 +56,7 @@ public:
     const std::vector<tesseract::BannedMember>& banned_members() const { return members_; }
     bool showing_empty_label() const { return empty_label_ != nullptr; }
     bool showing_loading_label() const { return loading_label_ != nullptr; }
+    bool showing_incomplete_note() const { return incomplete_note_ != nullptr; }
     // Clicks row i's Unban button (as the user would). False if no such
     // row or the button is disabled.
     bool click_unban_for_test(int i);
@@ -64,12 +66,14 @@ private:
     void rebuild_();
 
     bool loading_ = false;
+    bool incomplete_ = false; // the fetch did not fully sync the member list
     std::vector<tesseract::BannedMember> members_;
     std::vector<std::string> pending_; // user_ids with an unban in flight
 
     SettingsGroup*         group_         = nullptr;
     tk::Label*             loading_label_ = nullptr;
     tk::Label*             empty_label_   = nullptr;
+    tk::Label*             incomplete_note_ = nullptr;
     std::vector<BannedRow*> rows_; // borrowed; owned by group_
 };
 

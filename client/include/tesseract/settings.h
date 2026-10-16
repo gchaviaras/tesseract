@@ -264,7 +264,10 @@ public:
     // Manual → proxy_url (`http(s)://[user:pass@]host:port`). Applied via
     // Client::set_proxy at launch; a change takes effect after restart,
     // except from the login screen, where it applies immediately.
-    // Credentials in proxy_url are stored in plain text in app_settings.json.
+    // A `user:pass@` in proxy_url is kept in the OS secret store, not in
+    // app_settings.json (see save_to_disk); proxy_url in memory has it, so
+    // the rest of the app sees one URL. Without a secret store the file keeps
+    // the credential, as it always has.
     enum class ProxyMode
     {
         System,
@@ -273,6 +276,11 @@ public:
     };
     ProxyMode proxy_mode = ProxyMode::System;
     std::string proxy_url;
+    // Where the credential of proxy_url lives, as of the last load or save.
+    // Bookkeeping for save_to_disk (const): not a setting.
+    mutable bool proxy_creds_in_keyring = false;
+    mutable bool proxy_creds_unreadable = false; // the keyring couldn't be read at load
+    mutable std::string proxy_creds_saved; // the userinfo last written there
 
     // ── MSC4278 media-preview controls ────────────────────────────────
     // In-memory mirror of the active account's global `m.media_preview_config`
@@ -496,5 +504,17 @@ const char* close_action_to_string(Settings::CloseAction action);
 // so a hand-edited or older settings.json can never make closing the window
 // start killing the app.
 Settings::CloseAction close_action_from_string(std::string_view value);
+
+/// A proxy URL split into the URL without its `user:pass@` and that userinfo
+/// (empty when the URL has none).
+struct ProxyUrlParts
+{
+    std::string url;
+    std::string userinfo;
+};
+ProxyUrlParts split_proxy_credentials(const std::string& url);
+/// Inverse of split_proxy_credentials; `url` is returned unchanged when
+/// `userinfo` is empty or `url` has no scheme.
+std::string join_proxy_credentials(const std::string& url, const std::string& userinfo);
 
 } // namespace tesseract

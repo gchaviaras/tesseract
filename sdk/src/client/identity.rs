@@ -39,7 +39,10 @@ pub(crate) fn room_key_recipient_strategy(exclude_insecure: bool) -> CollectStra
     if exclude_insecure {
         CollectStrategy::IdentityBasedStrategy
     } else {
-        CollectStrategy::AllDevices
+        // Default: every device of a member gets the key, but a send is refused
+        // when a verified member's identity has changed, rather than sending on
+        // past a warning the user may not read (Element X's default).
+        CollectStrategy::ErrorOnVerifiedUserProblem
     }
 }
 
@@ -266,8 +269,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_mode_shares_with_all_devices_and_decrypts_everything() {
-        assert!(matches!(room_key_recipient_strategy(false), CollectStrategy::AllDevices));
+    fn default_mode_refuses_sends_past_a_verified_identity_change() {
+        // Every device still gets the key, but a verified member's identity
+        // change fails the send instead of being sent past.
+        assert!(matches!(
+            room_key_recipient_strategy(false),
+            CollectStrategy::ErrorOnVerifiedUserProblem
+        ));
         assert!(matches!(
             decryption_settings(false).sender_device_trust_requirement,
             TrustRequirement::Untrusted

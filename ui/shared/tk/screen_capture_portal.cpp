@@ -24,6 +24,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <condition_variable>
 #include <cstdint>
 #include <memory>
@@ -48,28 +49,45 @@ static std::string next_token()
 
 // ── portal request helper ────────────────────────────────────────────────────
 
-struct PortalReply {
-    bool      done{false};
-    guint32   code{0};
-    GVariant* results{nullptr}; // owned by caller
+// One Response signal, kept until the request that owns it is matched.
+struct PortalResponse {
+    std::string path;     // object path of the Request the signal answers
+    guint32     code{0};
+    GVariant*   results{nullptr}; // owned until taken or the reply is destroyed
 };
 
-static void on_portal_response(GDBusConnection*, const gchar*, const gchar*,
+// Responses seen while the portal request is in progress. The subscription is
+// made before the method call, so a Response that arrives before the call
+// returns is kept rather than missed.
+struct PortalReply {
+    std::vector<PortalResponse> received;
+
+    ~PortalReply()
+    {
+        for (auto& r : received)
+            if (r.results) g_variant_unref(r.results);
+    }
+};
+
+static void on_portal_response(GDBusConnection*, const gchar*, const gchar* object_path,
                                 const gchar*, const gchar*,
                                 GVariant* params, gpointer user_data)
 {
+    constexpr std::size_t kMaxKept = 64; // unrelated requests on the bus are dropped
     auto* r = static_cast<PortalReply*>(user_data);
+    if (r->received.size() >= kMaxKept)
+        return;
     guint32   code    = 0;
     GVariant* results = nullptr;
     g_variant_get(params, "(u@a{sv})", &code, &results);
-    r->code    = code;
-    r->results = results;
-    r->done    = true;
+    r->received.push_back({object_path ? object_path : "", code, results});
 }
 
-// Call a portal method, read the actual request handle from the return value,
-// subscribe to the Response signal on that exact path, then iterate |ctx| until
-// the Response fires or |cancel| is cancelled.
+// Subscribe to the Response signal, call a portal method, read the request
+// handle from its return value, then iterate |ctx| until the Response on that
+// exact path arrives or |cancel| is cancelled. The subscription comes first:
+// a portal that can answer at once (a remembered grant) would otherwise emit
+// the Response before the subscription existed, and the wait would never end.
 // Returns the results GVariant (caller unrefs) or nullptr on failure/cancel.
 static GVariant* portal_request(GMainContext*    ctx,
                                  GCancellable*    cancel,
@@ -78,43 +96,52 @@ static GVariant* portal_request(GMainContext*    ctx,
                                  const char*      method,
                                  GVariant*        params) // consumed (floating ok)
 {
+    PortalReply reply;
+    guint sub = g_dbus_connection_signal_subscribe(
+        conn, "org.freedesktop.portal.Desktop",
+        "org.freedesktop.portal.Request", "Response",
+        nullptr, nullptr,
+        G_DBUS_SIGNAL_FLAGS_NONE,
+        on_portal_response, &reply, nullptr);
+
     GError*   err = nullptr;
     GVariant* ret = g_dbus_proxy_call_sync(
         proxy, method, params,
         G_DBUS_CALL_FLAGS_NONE, -1, cancel, &err);
     if (!ret) {
         if (err) g_error_free(err);
+        g_dbus_connection_signal_unsubscribe(conn, sub);
         return nullptr;
     }
 
-    // The portal immediately returns (o: request_handle_path).  Use that exact
-    // path for the Response subscription — computing it from the token is fragile.
-    const gchar* handle = nullptr;
-    g_variant_get(ret, "(&o)", &handle);
-    if (!handle) {
+    // The portal immediately returns (o: request_handle_path).  Match the
+    // Response on that exact path — computing it from the token is fragile.
+    const gchar* handle_c = nullptr;
+    g_variant_get(ret, "(&o)", &handle_c);
+    if (!handle_c) {
         g_variant_unref(ret);
+        g_dbus_connection_signal_unsubscribe(conn, sub);
         return nullptr;
     }
-
-    PortalReply reply;
-    guint sub = g_dbus_connection_signal_subscribe(
-        conn, nullptr,
-        "org.freedesktop.portal.Request", "Response",
-        handle, nullptr,
-        G_DBUS_SIGNAL_FLAGS_NONE,
-        on_portal_response, &reply, nullptr);
+    const std::string handle(handle_c);
     g_variant_unref(ret);
 
-    while (!reply.done && !g_cancellable_is_cancelled(cancel))
+    auto find = [&]() -> PortalResponse* {
+        for (auto& r : reply.received)
+            if (r.path == handle) return &r;
+        return nullptr;
+    };
+    while (!find() && !g_cancellable_is_cancelled(cancel))
         g_main_context_iteration(ctx, TRUE);
 
     g_dbus_connection_signal_unsubscribe(conn, sub);
 
-    if (!reply.done || reply.code != 0) {
-        if (reply.results) g_variant_unref(reply.results);
-        return nullptr;
-    }
-    return reply.results;
+    PortalResponse* got = find();
+    if (!got || got->code != 0)
+        return nullptr; // reply's destructor releases what was kept
+    GVariant* results = got->results;
+    got->results = nullptr;
+    return results;
 }
 
 // ── ScreenCapturePortal ──────────────────────────────────────────────────────
@@ -136,6 +163,8 @@ struct PortalCtx {
     std::mutex              done_mu;
     std::condition_variable done_cv;
     bool                    done{false}; // set right before run_() returns
+
+    tk::ScreenCapture::FailureCallback on_failure; // see ScreenCapture::set_failure_callback
 
     ~PortalCtx() { if (cancel) g_object_unref(cancel); }
 };
@@ -180,6 +209,7 @@ public:
             std::lock_guard<std::mutex> lk(ctx_->mu);
             new_ctx->callback = ctx_->callback;
         }
+        new_ctx->on_failure = on_failure_;
         ctx_ = std::move(new_ctx);
         ctx_->cancel = g_cancellable_new();
         thread_ = std::thread(&ScreenCapturePortal::run_, ctx_);
@@ -399,6 +429,11 @@ private:
             {
                 { std::lock_guard<std::mutex> lk(ctx->done_mu); ctx->done = true; }
                 ctx->done_cv.notify_one();
+                // A run that ends without a stop() failed: the picker was
+                // declined, a D-Bus or pipeline step failed, or the stream
+                // ended. stop() cancels the context before it returns.
+                if (ctx->on_failure && ctx->cancel && !g_cancellable_is_cancelled(ctx->cancel))
+                    ctx->on_failure();
             }
         } done_signal{ctx};
 

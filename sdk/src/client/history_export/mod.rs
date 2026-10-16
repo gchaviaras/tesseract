@@ -347,6 +347,35 @@ impl ClientFfi {
     }
 }
 
+/// The folder an export writes into: `chosen` when it is missing or empty,
+/// otherwise the first numbered sibling (`name (2)`, `name (3)`, ...) that
+/// is. An export never replaces files left by an earlier one in the same
+/// folder, and the links inside the document stay consistent with its media.
+fn fresh_export_dir(chosen: &std::path::Path) -> std::path::PathBuf {
+    let is_free = |p: &std::path::Path| match std::fs::read_dir(p) {
+        // The export's own staging directory lives inside the chosen folder.
+        Ok(mut entries) => !entries.any(|e| {
+            e.map_or(true, |e| !e.file_name().to_string_lossy().starts_with(".tesseract-export-tmp-"))
+        }),
+        Err(_) => !p.exists(),
+    };
+    if is_free(chosen) {
+        return chosen.to_path_buf();
+    }
+    let parent = chosen.parent().unwrap_or(std::path::Path::new(""));
+    let name = chosen
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "history".to_owned());
+    for n in 2u32.. {
+        let candidate = parent.join(format!("{name} ({n})"));
+        if is_free(&candidate) {
+            return candidate;
+        }
+    }
+    chosen.to_path_buf()
+}
+
 #[cfg(test)]
 impl ClientFfi {
     pub fn start_room_export_async(&self, _request_id: u64, _room_id: &str, _options: crate::ffi::RoomExportOptionsFfi) {}
@@ -1197,6 +1226,9 @@ async fn run_export(mut ctx: ExportCtx) {
     // for," not "reached the room's true start" — a satisfied time-range
     // cutoff is just as complete as truly reaching the start.
     let footer = sink.footer(&labels, outcome_reached_start || outcome_reached_stop, totals.events_written);
+    // From here the staging directory holds the decrypted document, so every
+    // exit, including the early error returns below, must clear it.
+    let _staging_cleanup = StagingCleanup(&staging);
     let concat_result = segment_writer.concatenate_reverse(&assembled_path, &header, &footer, |done| {
         emit_progress(&ctx, totals.events_written, totals.bytes_written, totals.oldest_ts_ms,
             totals.newest_ts_ms, room_created_ts_ms,
@@ -1210,7 +1242,12 @@ async fn run_export(mut ctx: ExportCtx) {
         return;
     }
 
-    let out_dir = PathBuf::from(&ctx.options.out_path);
+    let out_dir = fresh_export_dir(std::path::Path::new(&ctx.options.out_path));
+    if let Err(e) = std::fs::create_dir_all(&out_dir) {
+        emit_complete(&ctx.handler, ctx.request_id, false, false, outcome_reached_start, "", totals.events_written, totals.bytes_written,
+            &format!("failed to create output folder: {e}"));
+        return;
+    }
     let final_path = if ctx.options.zip_output {
         let zip_path = out_dir.join("history.zip");
         let zip_result = zip::write_zip(&zip_path, &zip_entries, |done| {
@@ -1228,10 +1265,14 @@ async fn run_export(mut ctx: ExportCtx) {
             }
         }
     } else {
-        if let Err(e) = std::fs::create_dir_all(&out_dir) {
-            emit_complete(&ctx.handler, ctx.request_id, false, false, outcome_reached_start, "", totals.events_written, totals.bytes_written,
-                &format!("failed to create output folder: {e}"));
-            return;
+        // The decrypted document is private: owner read/write only.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(
+                &assembled_path,
+                std::fs::Permissions::from_mode(0o600),
+            );
         }
         let dest_doc = out_dir.join(&doc_name);
         if let Err(e) = std::fs::rename(&assembled_path, &dest_doc) {
@@ -1268,6 +1309,15 @@ async fn run_export(mut ctx: ExportCtx) {
     emit_complete(&ctx.handler, ctx.request_id, true, false, outcome_reached_start, &out_path_str, totals.events_written, totals.bytes_written, "");
 }
 
+/// Removes the export's staging directory when dropped.
+struct StagingCleanup<'a>(&'a std::path::Path);
+
+impl Drop for StagingCleanup<'_> {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(self.0);
+    }
+}
+
 /// Scratch directory for one room's in-progress export: segment files, the
 /// assembled-but-not-yet-placed document, and (when requested) downloaded
 /// images. Lives *inside* the user's chosen destination folder (not some
@@ -1283,4 +1333,61 @@ async fn run_export(mut ctx: ExportCtx) {
 fn staging_dir(ctx: &ExportCtx) -> PathBuf {
     PathBuf::from(&ctx.options.out_path)
         .join(format!(".tesseract-export-tmp-{}", sanitize_room_dir_name(&ctx.room_id.to_string())))
+}
+
+#[cfg(test)]
+mod fresh_export_dir_tests {
+    use super::fresh_export_dir;
+
+    #[test]
+    fn uses_a_missing_or_empty_folder_as_is_and_numbers_a_used_one() {
+        let base = std::env::temp_dir().join(format!(
+            "tesseract-export-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        assert_eq!(fresh_export_dir(&base), base, "a missing folder is used");
+
+        std::fs::create_dir_all(&base).unwrap();
+        assert_eq!(fresh_export_dir(&base), base, "an empty folder is used");
+
+        std::fs::create_dir_all(base.join(".tesseract-export-tmp-room")).unwrap();
+        assert_eq!(fresh_export_dir(&base), base, "the export's own staging directory doesn't count");
+        std::fs::remove_dir_all(base.join(".tesseract-export-tmp-room")).unwrap();
+
+        std::fs::write(base.join("history.html"), b"old").unwrap();
+        let second = fresh_export_dir(&base);
+        assert_eq!(second.file_name().unwrap().to_string_lossy(), format!("{} (2)", base.file_name().unwrap().to_string_lossy()));
+        assert!(!second.exists() || std::fs::read_dir(&second).unwrap().next().is_none());
+
+        std::fs::create_dir_all(&second).unwrap();
+        std::fs::write(second.join("history.html"), b"older").unwrap();
+        let third = fresh_export_dir(&base);
+        assert!(third.ends_with(format!("{} (3)", base.file_name().unwrap().to_string_lossy())));
+
+        let _ = std::fs::remove_dir_all(&base);
+        let _ = std::fs::remove_dir_all(&second);
+    }
+}
+
+#[cfg(test)]
+mod staging_cleanup_tests {
+    use super::StagingCleanup;
+
+    #[test]
+    fn dropping_the_guard_removes_the_decrypted_staging_files() {
+        let dir = std::env::temp_dir().join(format!("tesseract-staging-cleanup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("history.html"), b"decrypted").unwrap();
+        {
+            let _guard = StagingCleanup(&dir);
+            assert!(dir.exists());
+        }
+        assert!(!dir.exists());
+    }
 }

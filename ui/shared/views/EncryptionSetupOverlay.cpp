@@ -19,6 +19,10 @@ namespace tesseract::views
 
 namespace
 {
+// Shortest recovery passphrase accepted, in characters. A one-character
+// passphrase protected the whole key backup against the homeserver operator.
+constexpr std::size_t kMinRecoveryPassphraseChars = 12;
+
 constexpr float kCardW    = 480.0f;
 constexpr float kCardPad  = 32.0f;
 constexpr float kCardRad  = 10.0f;
@@ -413,6 +417,22 @@ void EncryptionSetupOverlay::fire_primary_()
         case Step::PassphraseEntry:
         {
             if (!passphrases_match_()) return;
+            // The passphrase is the only thing protecting the key backup from
+            // the homeserver operator, so a short one is refused outright.
+            {
+                const std::string typed = passphrase_field_->text();
+                std::size_t chars = 0;
+                for (unsigned char c : typed)
+                    if ((c & 0xC0) != 0x80) ++chars; // count UTF-8 code points
+                if (chars < kMinRecoveryPassphraseChars)
+                {
+                    error_msg_ = tk::trf(
+                        tk::tr("A recovery passphrase must be at least {0} characters."),
+                        {std::to_string(kMinRecoveryPassphraseChars)});
+                    announce_(error_msg_, true);
+                    return;
+                }
+            }
             std::string pass = passphrase_field_->text();
             enable_passphrase_ = pass;
             advance_step_(Step::Progress);

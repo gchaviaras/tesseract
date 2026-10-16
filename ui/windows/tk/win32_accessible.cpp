@@ -474,7 +474,9 @@ public:
     {
         if (!pRetVal)
             return E_POINTER;
-        *pRetVal = ProviderOptions_ServerSideProvider;
+        // UseComThreading: UI Automation calls the provider on the window's STA
+        // thread, so the tree walk and the row callbacks stay on the UI thread.
+        *pRetVal = ProviderOptions_ServerSideProvider | ProviderOptions_UseComThreading;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetPatternProvider(PATTERNID patternId, IUnknown** pRetVal) override
@@ -1504,7 +1506,9 @@ public:
     {
         if (!pRetVal)
             return E_POINTER;
-        *pRetVal = ProviderOptions_ServerSideProvider;
+        // UseComThreading: UI Automation calls the provider on the window's STA
+        // thread, so the tree walk and the row callbacks stay on the UI thread.
+        *pRetVal = ProviderOptions_ServerSideProvider | ProviderOptions_UseComThreading;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetPatternProvider(PATTERNID id, IUnknown** pRetVal) override

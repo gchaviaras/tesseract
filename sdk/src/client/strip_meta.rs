@@ -371,11 +371,11 @@ fn skip_gif_sub_blocks(b: &[u8], mut pos: usize) -> Option<usize> {
 // ---- ISO base media (JPEG XL container, AVIF) ------------------------------
 
 /// One box: type, start of the box, start of its payload, end of the box.
-struct IsoBox {
-    ty: [u8; 4],
-    start: usize,
-    payload: usize,
-    end: usize,
+pub(super) struct IsoBox {
+    pub(super) ty: [u8; 4],
+    pub(super) start: usize,
+    pub(super) payload: usize,
+    pub(super) end: usize,
 }
 
 fn be16(b: &[u8], at: usize) -> Option<usize> {
@@ -393,7 +393,7 @@ fn be_n(b: &[u8], at: usize, n: usize) -> Option<usize> {
 }
 
 /// Child boxes of `[start, end)`. None when the layout is malformed.
-fn iso_boxes(b: &[u8], start: usize, end: usize) -> Option<Vec<IsoBox>> {
+pub(super) fn iso_boxes(b: &[u8], start: usize, end: usize) -> Option<Vec<IsoBox>> {
     let mut v = Vec::new();
     let mut pos = start;
     while pos + 8 <= end {

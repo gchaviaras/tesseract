@@ -86,6 +86,12 @@ JoinRoomView::JoinRoomView()
         {
             std::string id =
                 preview_.room_id.empty() ? alias_text_ : preview_.room_id;
+            // A pasted identifier often carries surrounding whitespace or a
+            // newline, which the homeserver then rejects as invalid.
+            const auto first = id.find_first_not_of(" \t\r\n");
+            id = first == std::string::npos
+                     ? std::string{}
+                     : id.substr(first, id.find_last_not_of(" \t\r\n") - first + 1);
             if (id.empty())
                 return;
             // Capture knock/reason before set_state — State::Joining is

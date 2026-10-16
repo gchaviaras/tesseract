@@ -11,8 +11,8 @@
 //!   1. higher `priority` first (Visible before Normal), then
 //!   2. lower `seq` first (FIFO within a priority — oldest enqueued wins).
 
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, HashMap};
 
 /// Lowest priority: a retry for a URL that has previously failed and is in
 /// exponential backoff. Never raised by `prioritize` — stays below normal
@@ -33,46 +33,35 @@ pub(super) struct Entry<T> {
     pub payload: T,
 }
 
-// Ordering is over (priority, seq) only — `T` need not be `Ord`. `BinaryHeap`
-// is a max-heap, so "greater" = popped first: higher priority is greater, and
-// within a priority a *lower* seq is greater (FIFO).
-impl<T> Ord for Entry<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.priority
-            .cmp(&other.priority)
-            .then_with(|| other.seq.cmp(&self.seq))
-    }
-}
-impl<T> PartialOrd for Entry<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl<T> PartialEq for Entry<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.priority == other.priority && self.seq == other.seq
-    }
-}
-impl<T> Eq for Entry<T> {}
+/// Position of a queued entry. The map is ascending, so its last key is the
+/// next grant: highest priority, then lowest `seq` (`Reverse` flips the order).
+type OrderKey = (u8, Reverse<u64>);
 
+/// Entries live in a `BTreeMap` ordered by [`OrderKey`], so a grant is
+/// `O(log n)` and `prioritize` moves only the entries it bumps — a
+/// whole-timeline prefetch can park thousands of waiters, and a visible-range
+/// change must not rebuild all of them.
 pub(super) struct MediaQueue<T> {
-    heap: BinaryHeap<Entry<T>>,
+    order: BTreeMap<OrderKey, Entry<T>>,
+    /// `(group_id, request_id)` → keys of the queued entries for that request.
+    by_request: HashMap<(u64, u64), Vec<OrderKey>>,
 }
 
 impl<T> MediaQueue<T> {
     pub(super) fn new() -> Self {
         Self {
-            heap: BinaryHeap::new(),
+            order: BTreeMap::new(),
+            by_request: HashMap::new(),
         }
     }
 
     pub(super) fn is_empty(&self) -> bool {
-        self.heap.is_empty()
+        self.order.is_empty()
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
     pub(super) fn len(&self) -> usize {
-        self.heap.len()
+        self.order.len()
     }
 
     pub(super) fn push(
@@ -83,18 +72,28 @@ impl<T> MediaQueue<T> {
         group_id: u64,
         payload: T,
     ) {
-        self.heap.push(Entry {
-            priority,
-            seq,
-            request_id,
-            group_id,
-            payload,
-        });
+        let key = (priority, Reverse(seq));
+        self.by_request
+            .entry((group_id, request_id))
+            .or_default()
+            .push(key);
+        self.order.insert(
+            key,
+            Entry {
+                priority,
+                seq,
+                request_id,
+                group_id,
+                payload,
+            },
+        );
     }
 
     /// Remove and return the highest-priority entry, or `None` if empty.
     pub(super) fn pop_highest(&mut self) -> Option<Entry<T>> {
-        self.heap.pop()
+        let (key, entry) = self.order.pop_last()?;
+        self.unindex(&key, entry.group_id, entry.request_id);
+        Some(entry)
     }
 
     /// Raise the priority of every queued entry whose `group_id` matches and
@@ -102,9 +101,7 @@ impl<T> MediaQueue<T> {
     /// number of entries actually bumped (already-running/unknown ids are
     /// absent and ignored). No-op when `new_priority` is not higher.
     ///
-    /// `BinaryHeap` has no cheap key-change, so this drains to a `Vec`, bumps
-    /// matching entries, and rebuilds. The heaps are bounded by the number of
-    /// still-pending fetches (tens at most), so the rebuild is negligible.
+    /// Costs `O(k log n)` for `k` listed ids — only the bumped entries move.
     pub(super) fn prioritize(
         &mut self,
         group_id: u64,
@@ -112,34 +109,61 @@ impl<T> MediaQueue<T> {
         new_priority: u8,
     ) -> usize {
         let mut bumped = 0;
-        let mut items: Vec<Entry<T>> = self.heap.drain().collect();
-        for e in &mut items {
-            if e.group_id == group_id
-                && e.priority != PRIO_BACKOFF
-                && e.priority < new_priority
-                && request_ids.contains(&e.request_id)
-            {
-                e.priority = new_priority;
+        for &request_id in request_ids {
+            let Some(keys) = self.by_request.get(&(group_id, request_id)).cloned() else {
+                continue;
+            };
+            for key in keys {
+                let raisable = self.order.get(&key).is_some_and(|e| {
+                    e.priority != PRIO_BACKOFF && e.priority < new_priority
+                });
+                if !raisable {
+                    continue;
+                }
+                let Some(mut entry) = self.order.remove(&key) else {
+                    continue;
+                };
+                entry.priority = new_priority;
+                let new_key = (new_priority, Reverse(entry.seq));
+                if let Some(keys) = self.by_request.get_mut(&(group_id, request_id)) {
+                    for k in keys.iter_mut().filter(|k| **k == key) {
+                        *k = new_key;
+                    }
+                }
+                self.order.insert(new_key, entry);
                 bumped += 1;
             }
         }
-        self.heap = items.into_iter().collect();
         bumped
     }
 
     /// Remove and return every queued entry in `group_id` (room-switch cancel).
     pub(super) fn drain_group(&mut self, group_id: u64) -> Vec<Entry<T>> {
-        let mut keep: Vec<Entry<T>> = Vec::with_capacity(self.heap.len());
-        let mut drained: Vec<Entry<T>> = Vec::new();
-        for e in self.heap.drain() {
-            if e.group_id == group_id {
-                drained.push(e);
-            } else {
-                keep.push(e);
+        let keys: Vec<OrderKey> = self
+            .order
+            .iter()
+            .filter(|(_, e)| e.group_id == group_id)
+            .map(|(key, _)| *key)
+            .collect();
+        let mut drained = Vec::with_capacity(keys.len());
+        for key in keys {
+            if let Some(entry) = self.order.remove(&key) {
+                self.unindex(&key, entry.group_id, entry.request_id);
+                drained.push(entry);
             }
         }
-        self.heap = keep.into_iter().collect();
         drained
+    }
+
+    /// Forget `key` for the request it belongs to, dropping the request's
+    /// index slot once it has no queued entries left.
+    fn unindex(&mut self, key: &OrderKey, group_id: u64, request_id: u64) {
+        if let Some(keys) = self.by_request.get_mut(&(group_id, request_id)) {
+            keys.retain(|k| k != key);
+            if keys.is_empty() {
+                self.by_request.remove(&(group_id, request_id));
+            }
+        }
     }
 }
 
@@ -242,5 +266,27 @@ mod tests {
         assert_eq!(ids, vec![1, 3]);
         assert_eq!(q.len(), 1, "group 6 entry remains");
         assert_eq!(q.pop_highest().unwrap().request_id, 2);
+    }
+
+    #[test]
+    fn index_stays_in_step_across_bumps_pops_and_drains() {
+        let mut q = q();
+        // Two entries share one request id (same group), one is bumped twice.
+        q.push(PRIO_NORMAL, 0, 7, 5, 1);
+        q.push(PRIO_NORMAL, 1, 7, 5, 2);
+        q.push(PRIO_NORMAL, 2, 8, 5, 3);
+        assert_eq!(q.prioritize(5, &[7, 7], PRIO_VISIBLE), 2);
+        assert_eq!(q.prioritize(5, &[7], PRIO_VISIBLE), 0, "already visible");
+        assert_eq!(q.pop_highest().unwrap().request_id, 7);
+        assert_eq!(q.pop_highest().unwrap().request_id, 7);
+        assert_eq!(q.pop_highest().unwrap().request_id, 8);
+        assert!(q.by_request.is_empty(), "no stale index slots after pops");
+
+        q.push(PRIO_NORMAL, 3, 9, 5, 4);
+        q.push(PRIO_NORMAL, 4, 9, 6, 5);
+        assert_eq!(q.drain_group(5).len(), 1);
+        assert_eq!(q.by_request.len(), 1, "group 6's slot is untouched");
+        assert_eq!(q.drain_group(6).len(), 1);
+        assert!(q.by_request.is_empty() && q.is_empty());
     }
 }

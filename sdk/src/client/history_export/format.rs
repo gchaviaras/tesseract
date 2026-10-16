@@ -182,6 +182,22 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (y, m, d)
 }
 
+/// Percent-encodes a relative export path for an `href` or `src`. A sender's
+/// file name can still hold `#`, `%` or `?`, which would end the path early.
+/// `/` stays as the separator.
+fn url_encode_path(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                out.push(char::from(b))
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
 fn html_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -323,7 +339,9 @@ impl ExportSink for HtmlSink {
     }
 
     fn header(&self, meta: &ExportMeta, labels: &Labels) -> String {
-        let title = labels.format(ExportLabel::HeaderTitle, &[&meta.room_name]);
+        // The room name is sender-controlled, so the title is escaped before it
+        // is placed in the <h1> below.
+        let title = html_escape(&labels.format(ExportLabel::HeaderTitle, &[&meta.room_name]));
         let exported = labels.format(ExportLabel::ExportedOn, &[&format_ts(meta.exported_at_ms)]);
         format!(
             "<!doctype html>\n<html><head><meta charset=\"utf-8\">\n\
@@ -410,7 +428,7 @@ impl ExportSink for HtmlSink {
             if is_cont {
                 out.push_str("<div></div>");
             } else if let Some(path) = ctx.avatar_path {
-                out.push_str(&format!("<img class=\"avatar\" src=\"{}\" alt=\"\">", html_escape(path)));
+                out.push_str(&format!("<img class=\"avatar\" src=\"{}\" alt=\"\">", html_escape(&url_encode_path(path))));
             } else {
                 out.push_str(&format!(
                     "<div class=\"avatar initials s{color_idx}\">{}</div>",
@@ -465,8 +483,8 @@ impl ExportSink for HtmlSink {
             AttachmentState::Saved(path) => {
                 let (w, h) = media_display_size(ev);
                 out.push_str(&format!(
-                    "<div class=\"attachment\"><a href=\"{path}\" target=\"_blank\"><img src=\"{path}\" alt=\"{alt}\" width=\"{w:.0}\" height=\"{h:.0}\"></a></div>",
-                    path = html_escape(path),
+                    "<div class=\"attachment\"><a href=\"{path}\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"{path}\" alt=\"{alt}\" width=\"{w:.0}\" height=\"{h:.0}\"></a></div>",
+                    path = html_escape(&url_encode_path(path)),
                     alt = html_escape(sender_display(ev)),
                     w = w, h = h,
                 ));
@@ -779,6 +797,24 @@ mod tests {
     }
 
     #[test]
+    fn url_encode_path_keeps_separators_and_encodes_delimiters() {
+        assert_eq!(url_encode_path("media/a-photo.jpg"), "media/a-photo.jpg");
+        assert_eq!(url_encode_path("media/a#b%c?d.png"), "media/a%23b%25c%3Fd.png");
+        assert_eq!(url_encode_path("media/é.png"), "media/%C3%A9.png");
+    }
+
+    #[test]
+    fn html_attachment_link_is_percent_encoded() {
+        let out = HtmlSink.event(
+            &base_event(),
+            &EventContext::default(),
+            AttachmentState::Saved("media/a#b.jpg"),
+            &labels(),
+        );
+        assert!(out.contains("<a href=\"media/a%23b.jpg\""), "{out}");
+    }
+
+    #[test]
     fn html_event_prefers_sanitized_formatted_body() {
         let mut ev = base_event();
         ev.formatted_body = "<b>bold</b>".into();
@@ -799,7 +835,7 @@ mod tests {
         let mut ev = base_event();
         ev.msg_type = "m.image".into();
         let out = HtmlSink.event(&ev, &EventContext::default(), AttachmentState::Saved("media/abc-photo.jpg"), &labels());
-        assert!(out.contains("<a href=\"media/abc-photo.jpg\" target=\"_blank\"><img"), "{out}");
+        assert!(out.contains("<a href=\"media/abc-photo.jpg\" target=\"_blank\" rel=\"noopener noreferrer\"><img"), "{out}");
     }
 
     #[test]
@@ -868,6 +904,24 @@ mod tests {
         let header = HtmlSink.header(&meta, &labels());
         assert!(header.contains("<html>"));
         assert!(header.contains("Test &amp; Room"));
+    }
+
+    #[test]
+    fn html_header_escapes_the_room_name_in_the_heading() {
+        let meta = ExportMeta {
+            room_name: "<img src=x onerror=alert(1)>".into(),
+            exported_at_ms: 0,
+        };
+        let header = HtmlSink.header(&meta, &labels());
+        assert!(!header.contains("<img src=x"), "{header}");
+        assert!(header.contains("&lt;img src=x"), "{header}");
+    }
+
+    #[test]
+    fn html_header_has_a_footer_and_is_balanced() {
+        let meta = ExportMeta { room_name: "R".into(), exported_at_ms: 0 };
+        let header = HtmlSink.header(&meta, &labels());
+        assert!(header.contains("<html>"));
         let footer = HtmlSink.footer(&labels(), true, 42);
         assert!(footer.contains("</html>"));
         assert!(footer.contains("42 messages"));

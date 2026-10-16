@@ -1334,6 +1334,14 @@ msgstr "Adjunto: {0}"
 msgid "Attachment too large: {0}"
 msgstr "Adjunto demasiado grande: {0}"
 
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That file isn't a PNG, JPEG, GIF or WebP image."
+msgstr "Este archivo no es una imagen PNG, JPEG, GIF o WebP."
+
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That image is too large to send."
+msgstr "Esta imagen es demasiado grande para enviarla."
+
 #: ui/shared/app/HistoryExportController.cpp:104
 msgid "Image unavailable: {0}"
 msgstr "Imagen no disponible: {0}"
@@ -1887,6 +1895,10 @@ msgstr "Permitir que los invitados se unan"
 #: ui/shared/views/settings/RoomSecuritySection.cpp:61
 msgid "History Visibility"
 msgstr "Visibilidad del historial"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "History: {0}"
+msgstr "Historial: {0}"
 
 #: ui/shared/views/settings/RoomSecuritySection.cpp:64
 msgid "Anyone"
@@ -3010,6 +3022,10 @@ msgstr "Moderación"
 msgid "Banned users"
 msgstr "Usuarios baneados"
 
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "Some bans may be missing: the room's member list did not fully load. Reopen settings to try again."
+msgstr "Puede que falten algunos baneos: la lista de miembros de la sala no se cargó por completo. Vuelva a abrir los ajustes para intentarlo de nuevo."
+
 #: ui/shared/views/settings/RoomModerationSection.cpp:145
 msgid "No banned users"
 msgstr "No hay usuarios baneados"
@@ -3913,6 +3929,10 @@ msgstr "Tesseract {0} disponible"
 msgid "empty session"
 msgstr "sesión vacía"
 
+#: ui/shared/app/ShellBase_accounts.cpp
+msgid "Could not restore the session: {0}"
+msgstr "No se pudo restaurar la sesión: {0}"
+
 #: ui/shared/app/ShellBase_accounts.cpp:315
 msgid "couldn't persist matrix store: {0}"
 msgstr "no se pudo guardar el almacén de Matrix: {0}"
@@ -4354,6 +4374,10 @@ msgstr "{0} mes."
 #: ui/shared/views/settings/DevicesSection.cpp:194
 msgid "Open in browser"
 msgstr "Abrir en el navegador"
+
+#: ui/shared/views/settings/DevicesSection.cpp
+msgid "Open in browser ({0})"
+msgstr "Abrir en el navegador ({0})"
 
 #: ui/shared/views/settings/DevicesSection.cpp:203
 msgid "I've confirmed"
@@ -6601,3 +6625,168 @@ msgid "{0} image can't be sent because its metadata can't be removed. Remove it 
 msgid_plural "{0} images can't be sent because their metadata can't be removed. Remove them to send the rest."
 msgstr[0] "No se puede enviar {0} imagen porque no se pueden eliminar sus metadatos. Quítala para enviar el resto."
 msgstr[1] "No se pueden enviar {0} imágenes porque no se pueden eliminar sus metadatos. Quítalas para enviar el resto."
+
+#: ui/shared/app/SlashCommands.cpp
+msgid "no display name given; use /myroomnick <name>"
+msgstr "no se indicó ningún nombre; usa /myroomnick <nombre>"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "A recovery passphrase must be at least {0} characters."
+msgstr "Una frase de recuperación debe tener al menos {0} caracteres."
+
+#: ui/shared/app/ShellBase_calls.cpp
+msgid "Screen sharing stopped: the screen could not be captured."
+msgstr "Se detuvo la compartición de pantalla: no se pudo capturar la pantalla."
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not pin the message: {0}"
+msgstr "No se pudo fijar el mensaje: {0}"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not unpin the message: {0}"
+msgstr "No se pudo desfijar el mensaje: {0}"
+
+#: ui/shared/views/MessageSearchView.cpp:29
+#: ui/shared/views/MessageSearchView.cpp:32
+msgid "now"
+msgstr "ahora"
+
+#: ui/shared/views/MessageSearchView.cpp:45
+msgid "{0}w"
+msgstr "{0} sem"
+
+#: ui/shared/views/MessageSearchView.cpp:46
+msgid "{0}y"
+msgstr "{0} a"
+
+#: ui/shared/app/ShellBase.cpp:240
+#, c++-format
+msgid "Couldn't save the sign-in for {0}. You may have to sign in again next time."
+msgstr "No se pudo guardar el inicio de sesión de {0}. Quizá tengas que volver a iniciar sesión la próxima vez."
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(image)"
+msgstr "(imagen)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(file)"
+msgstr "(archivo)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(voice)"
+msgstr "(mensaje de voz)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(audio)"
+msgstr "(audio)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(video)"
+msgstr "(vídeo)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(gallery)"
+msgstr "(galería)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(message)"
+msgstr "(mensaje)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(sticker)"
+msgstr "(sticker)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(deleted)"
+msgstr "(eliminado)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(unavailable)"
+msgstr "(no disponible)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(poll)"
+msgstr "(encuesta)"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "(poll) {0}"
+msgstr "(encuesta) {0}"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sent before you joined this room"
+msgstr "🔒 Enviado antes de que te unieras a esta sala"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's identity changed since you verified them"
+msgstr "🔒 La identidad del remitente cambió desde que la verificaste"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is not signed"
+msgstr "🔒 El dispositivo del remitente no está firmado"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is unknown"
+msgstr "🔒 El dispositivo del remitente es desconocido"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 History unavailable (key backup is off)"
+msgstr "🔒 Historial no disponible (la copia de claves está desactivada)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender blocked this device"
+msgstr "🔒 El remitente bloqueó este dispositivo"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Key was not shared with this device"
+msgstr "🔒 La clave no se compartió con este dispositivo"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Verify this device to access history"
+msgstr "🔒 Verifica este dispositivo para acceder al historial"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Unable to decrypt"
+msgstr "🔒 No se puede descifrar"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "cleared all pinned messages"
+msgstr "quitó todos los mensajes fijados"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "pinned a message"
+msgstr "fijó un mensaje"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "unpinned a message"
+msgstr "desfijó un mensaje"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "pinned {0} message"
+msgid_plural "pinned {0} messages"
+msgstr[0] "fijó {0} mensaje"
+msgstr[1] "fijó {0} mensajes"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "unpinned {0} message"
+msgid_plural "unpinned {0} messages"
+msgstr[0] "desfijó {0} mensaje"
+msgstr[1] "desfijó {0} mensajes"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "changed the pinned messages"
+msgstr "cambió los mensajes fijados"
+
+#: ui/shared/app/shell_helpers.cpp
+#, c++-format
+msgid "Sent {0} item"
+msgid_plural "Sent {0} items"
+msgstr[0] "Se envió {0} elemento"
+msgstr[1] "Se enviaron {0} elementos"
+
+#: ui/shared/app/ShellBase_accounts.cpp
+#, c++-format
+msgid "Couldn't start syncing: {0}. Retrying…"
+msgstr "No se pudo iniciar la sincronización: {0}. Reintentando…"

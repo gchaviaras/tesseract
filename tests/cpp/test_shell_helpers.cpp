@@ -215,3 +215,114 @@ TEST_CASE("write_private_text_file reports an unwritable path",
     CHECK_FALSE(err.empty());
 }
 #endif
+
+TEST_CASE("quote_command_line_arg leaves an ordinary value as the usual quoted form",
+          "[shell][shell_helpers][jumplist]")
+{
+    CHECK(sh::quote_command_line_arg(L"!room:example.org") == L"\"!room:example.org\"");
+    CHECK(sh::quote_command_line_arg(L"a\\b") == L"\"a\\b\"");
+    CHECK(sh::quote_command_line_arg(L"") == L"\"\"");
+}
+
+TEST_CASE("quote_command_line_arg escapes quotes and the backslashes before them",
+          "[shell][shell_helpers][jumplist]")
+{
+    // An embedded quote is escaped, so it cannot close the argument.
+    CHECK(sh::quote_command_line_arg(L"a\"b") == L"\"a\\\"b\"");
+    // A backslash before a quote is doubled, and the quote gets its own backslash.
+    CHECK(sh::quote_command_line_arg(L"a\\\"b") == L"\"a\\\\\\\"b\"");
+    // A trailing backslash is doubled so it does not escape the closing quote.
+    CHECK(sh::quote_command_line_arg(L"a\\") == L"\"a\\\\\"");
+}
+
+TEST_CASE("a room id cannot break out of its Jump List argument",
+          "[shell][shell_helpers][jumplist]")
+{
+    // The value that would add a flag if it were pasted between plain quotes.
+    const std::wstring hostile = L"x\" --logoutall";
+    const std::wstring quoted = sh::quote_command_line_arg(hostile);
+    // Still one quoted run: the only unescaped quotes are the first and last.
+    CHECK(quoted == L"\"x\\\" --logoutall\"");
+    CHECK(quoted.front() == L'"');
+    CHECK(quoted.back() == L'"');
+}
+
+namespace
+{
+namespace fs = std::filesystem;
+
+std::vector<std::uint8_t> tile_png()
+{
+    // The PNG signature plus a few bytes: enough to be a tile to is_png_bytes.
+    return {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3};
+}
+
+// A private directory per test; the tile sits at <dir>/2.png.
+fs::path tile_test_dir(const char* name)
+{
+    const fs::path dir = fs::temp_directory_path() / "tesseract_tile_tests" / name;
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    return dir;
+}
+} // namespace
+
+TEST_CASE("a map tile is stored and read back as the same PNG",
+          "[shell_helpers][tile_disk]")
+{
+    const fs::path dir = tile_test_dir("roundtrip");
+    const fs::path p = dir / "2.png";
+    CHECK(sh::write_tile_disk(p, tile_png()));
+    CHECK(sh::read_tile_disk(p) == tile_png());
+    // The temporary name is renamed away, never left beside the tile.
+    CHECK_FALSE(fs::exists(dir / "2.png.part"));
+    fs::remove_all(dir);
+}
+
+TEST_CASE("a non-PNG tile is refused on store",
+          "[shell_helpers][tile_disk]")
+{
+    const fs::path dir = tile_test_dir("refused");
+    const fs::path p = dir / "2.png";
+    CHECK_FALSE(sh::write_tile_disk(p, {'<', 'h', 't', 'm', 'l', '>'}));
+    CHECK_FALSE(fs::exists(p));
+    fs::remove_all(dir);
+}
+
+TEST_CASE("an empty or truncated tile on disk is dropped, not served",
+          "[shell_helpers][tile_disk]")
+{
+    const fs::path dir = tile_test_dir("dropped");
+    const fs::path empty = dir / "empty.png";
+    { std::ofstream f(empty, std::ios::binary); }
+    CHECK(fs::exists(empty));
+    CHECK(sh::read_tile_disk(empty).empty());
+    CHECK_FALSE(fs::exists(empty));
+
+    const fs::path truncated = dir / "truncated.png";
+    {
+        std::ofstream f(truncated, std::ios::binary);
+        f.write("\x89PN", 3); // a write cut short inside the signature
+    }
+    CHECK(sh::read_tile_disk(truncated).empty());
+    CHECK_FALSE(fs::exists(truncated));
+    fs::remove_all(dir);
+}
+
+TEST_CASE("a missing tile reads as empty and creates nothing",
+          "[shell_helpers][tile_disk]")
+{
+    const fs::path dir = tile_test_dir("missing");
+    CHECK(sh::read_tile_disk(dir / "2.png").empty());
+    CHECK_FALSE(fs::exists(dir / "2.png"));
+    fs::remove_all(dir);
+}
+
+TEST_CASE("gallery_caption_or_fallback keeps a typed caption and counts items otherwise",
+          "[shell_helpers]")
+{
+    using tesseract::shell_helpers::gallery_caption_or_fallback;
+    CHECK(gallery_caption_or_fallback("holiday", 3) == "holiday");
+    CHECK(gallery_caption_or_fallback("", 3) == "Sent 3 items");
+    CHECK(gallery_caption_or_fallback("", 1) == "Sent 1 item");
+}

@@ -262,6 +262,10 @@ public:
         {
             g_source_remove(blink_timer_id_);
         }
+        if (capture_source_id_)
+        {
+            g_source_remove(capture_source_id_);
+        }
         if (!entry_)
         {
             return;
@@ -536,11 +540,12 @@ private:
             return;
         }
         capture_scheduled_ = true;
-        g_idle_add(&GtkNativeTextField::on_capture_idle_cb, this);
+        capture_source_id_ = g_idle_add(&GtkNativeTextField::on_capture_idle_cb, this);
     }
     static gboolean on_capture_idle_cb(gpointer p)
     {
         auto* self = static_cast<GtkNativeTextField*>(p);
+        self->capture_source_id_ = 0;
         self->capture_scheduled_ = false;
         self->refresh_image();
         return G_SOURCE_REMOVE;
@@ -784,6 +789,9 @@ private:
     bool refresh_pending_ = false;
     // Guards request_capture()'s pending g_idle_add — see its doc comment.
     bool capture_scheduled_ = false;
+    // The g_idle_add source behind capture_scheduled_, so the destructor can
+    // cancel it: an idle callback left queued would run on a freed widget.
+    guint capture_source_id_ = 0;
     // Rect actually applied to entry_ by the last set_rect() call — see
     // rendered_image_rect(). Same units as set_rect()'s `r`.
     Rect applied_rect_{};
@@ -926,6 +934,10 @@ public:
         if (blink_timer_id_)
         {
             g_source_remove(blink_timer_id_);
+        }
+        if (capture_source_id_)
+        {
+            g_source_remove(capture_source_id_);
         }
         if (changed_id_ && buffer_)
         {
@@ -1968,11 +1980,12 @@ private:
             return;
         }
         capture_scheduled_ = true;
-        g_idle_add(&GtkNativeTextArea::on_capture_idle_cb, this);
+        capture_source_id_ = g_idle_add(&GtkNativeTextArea::on_capture_idle_cb, this);
     }
     static gboolean on_capture_idle_cb(gpointer p)
     {
         auto* self = static_cast<GtkNativeTextArea*>(p);
+        self->capture_source_id_ = 0;
         self->capture_scheduled_ = false;
         self->refresh_image();
         // Deferred to this idle callback rather than computed synchronously
@@ -2426,6 +2439,7 @@ private:
     bool refresh_pending_ = false;
     // Guards request_capture()'s pending g_idle_add — see its doc comment.
     bool capture_scheduled_ = false;
+    guint capture_source_id_ = 0; // cancelled in the destructor, see the field
     // Tracks on_focus_enter_cb/on_focus_leave_cb — see caret_blink_visible()
     // above.
     bool has_focus_ = false;

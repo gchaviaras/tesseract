@@ -185,6 +185,23 @@ pub(super) fn cap_media_bytes(bytes: Vec<u8>) -> Vec<u8> {
 /// notification still shows, just without the picture).
 pub(super) const NOTIF_IMAGE_CAP: usize = 2 * 1024 * 1024;
 
+/// Chunks the network loop may hand the decrypt thread before it waits.
+#[cfg(not(test))]
+const STREAM_DECRYPT_BACKLOG: usize = 8;
+
+/// What to download for a notification picture: a server-made thumbnail when
+/// the source is plain (the server can't thumbnail ciphertext, so an encrypted
+/// one is fetched whole and dropped if over the cap).
+#[cfg(not(test))]
+fn notif_format(is_plain: bool) -> matrix_sdk::media::MediaFormat {
+    use matrix_sdk::media::{MediaFormat, MediaThumbnailSettings};
+    if is_plain {
+        MediaFormat::Thumbnail(MediaThumbnailSettings::new(512u32.into(), 512u32.into()))
+    } else {
+        MediaFormat::File
+    }
+}
+
 /// Best-effort fetch of a message/sticker image for a notification preview.
 /// matrix-sdk decrypts encrypted `MediaSource`s transparently. Any failure
 /// or an over-cap payload yields an empty Vec — the notification then falls
@@ -194,11 +211,9 @@ pub(super) async fn fetch_notification_image(
     client: &Client,
     source: matrix_sdk::ruma::events::room::MediaSource,
 ) -> Vec<u8> {
-    use matrix_sdk::media::{MediaFormat, MediaRequestParameters};
-    let request = MediaRequestParameters {
-        source,
-        format: MediaFormat::File,
-    };
+    use matrix_sdk::media::MediaRequestParameters;
+    let format = notif_format(matches!(source, matrix_sdk::ruma::events::room::MediaSource::Plain(_)));
+    let request = MediaRequestParameters { source, format };
     match client.media().get_media_content(&request, true).await {
         Ok(b) if b.len() <= NOTIF_IMAGE_CAP => b,
         _ => Vec::new(),
@@ -207,19 +222,19 @@ pub(super) async fn fetch_notification_image(
 
 /// Shared logic for message and sticker notification handlers. Evaluates push
 /// rules, resolves display names and avatars, fetches the preview image, and
-/// calls `on_notification`. Callers extract the type-specific `body`,
-/// `msg_type_str`, and `preview_source` then delegate here.
+/// calls `on_notification`. Callers extract the type-specific `body`
+/// and `preview_source` then delegate here.
 #[cfg(not(test))]
 pub(super) async fn emit_notification(
     client: &Client,
     room: Room,
     sender_id: &matrix_sdk::ruma::UserId,
     body: &str,
-    msg_type_str: &str,
     event_id: &str,
     ts: u64,
     session_start_ms: u64,
     preview_source: Option<matrix_sdk::ruma::events::room::MediaSource>,
+    raw_event_json: &str,
     handler: &Arc<Mutex<SendHandler>>,
 ) {
     use super::notifications;
@@ -228,16 +243,8 @@ pub(super) async fn emit_notification(
         return;
     }
     let room_id = room.room_id().as_str().to_owned();
-    let synthetic = notifications::build_push_rule_json(
-        &room_id,
-        event_id,
-        sender_id.as_str(),
-        body,
-        msg_type_str,
-        ts,
-    );
     let (should_notify, is_mention) =
-        notifications::evaluate_push_rules(client, &room, &synthetic).await;
+        notifications::evaluate_push_rules(client, &room, raw_event_json).await;
     if !should_notify {
         return;
     }
@@ -266,7 +273,7 @@ pub(super) async fn emit_notification(
         .and_then(|m| m.display_name().map(str::to_owned))
         .unwrap_or_else(|| sender_id.localpart().to_string());
     let room_avatar = room
-        .avatar(matrix_sdk::media::MediaFormat::File)
+        .avatar(notif_format(true))
         .await
         .ok()
         .flatten()
@@ -278,7 +285,7 @@ pub(super) async fn emit_notification(
         use matrix_sdk::media::MediaRequestParameters;
         let req = MediaRequestParameters {
             source: MediaSource::Plain(url.to_owned()),
-            format: matrix_sdk::media::MediaFormat::File,
+            format: notif_format(true),
         };
         match client.media().get_media_content(&req, true).await {
             Ok(b) if b.len() <= NOTIF_IMAGE_CAP => b,
@@ -463,20 +470,20 @@ pub(super) async fn download_media(client: &Client, kind: u8, source: &str, w: u
 #[cfg(not(test))]
 const CHUNK_STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
-/// Stream an arbitrary HTTP(S) URL into a byte buffer, enforcing `max_bytes`
-/// both up-front (Content-Length) and mid-stream. Returns an empty Vec on any
-/// error. Shared by the blocking `fetch_url_bytes` / `fetch_gif_bytes` and the
-/// async `fetch_url_async` (map tiles); the caller wraps it in the
-/// timeout/stop race and supplies the appropriate size cap.
+/// Like `download_url`, for a URL a third party chose (a GIF provider's
+/// response). The fetch goes through the guarded client, so every redirect hop
+/// and every resolved address is checked against internal networks, and the
+/// body is capped the same way.
 #[cfg(not(test))]
-pub(super) async fn download_url(client: &reqwest::Client, url: &str, max_bytes: usize) -> Vec<u8> {
-    let resp = match client.get(url).send().await {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
+pub(super) async fn download_guarded(url: &str, max_bytes: usize, timeout: std::time::Duration) -> Vec<u8> {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return Vec::new();
     };
-    let resp = match resp.error_for_status() {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
+    let Some(client) = crate::net_guard::guarded_client(timeout) else {
+        return Vec::new();
+    };
+    let Some((resp, _)) = crate::net_guard::guarded_get(&client, parsed).await else {
+        return Vec::new();
     };
     read_body_capped(resp, url, max_bytes).await
 }
@@ -686,7 +693,7 @@ fn deliver_stream_terminal(handler: &Option<Arc<Mutex<SendHandler>>>, request_id
 /// every chunk boundary.
 #[cfg(not(test))]
 struct ChunkReader {
-    rx: std::sync::mpsc::Receiver<Vec<u8>>,
+    rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
     leftover: Vec<u8>,
     pos: usize,
 }
@@ -695,8 +702,8 @@ struct ChunkReader {
 impl std::io::Read for ChunkReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.pos >= self.leftover.len() {
-            match self.rx.recv() {
-                Ok(chunk) => {
+            match self.rx.blocking_recv() {
+                Some(chunk) => {
                     self.leftover = chunk;
                     self.pos = 0;
                 }
@@ -708,7 +715,7 @@ impl std::io::Read for ChunkReader {
                 // the C++ side (its pending-stream entry is already gone via
                 // cancel_media_group_), matching on_media_ready's existing
                 // "late callback ignored" contract.
-                Err(_) => return Ok(0),
+                None => return Ok(0),
             }
         }
         let n = std::cmp::min(buf.len(), self.leftover.len() - self.pos);
@@ -1078,7 +1085,9 @@ impl ClientFfi {
                     // Encrypted source: hand ciphertext to a blocking decrypt
                     // task over a channel; AttachmentDecryptor needs one
                     // persistent Read for its running hash to be meaningful.
-                    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+                    // Bounded: a fast network and a slow decryptor must not buffer
+                    // the whole file (up to MAX_STREAM_BYTES) in RAM.
+                    let (tx, rx) = tokio::sync::mpsc::channel::<Vec<u8>>(STREAM_DECRYPT_BACKLOG);
                     let decrypt_handler = handler.clone();
                     tokio::task::spawn_blocking(move || {
                         use std::io::Read;
@@ -1130,7 +1139,11 @@ impl ClientFfi {
                             deliver_stream_terminal(&handler, request_id, STREAM_FAILED);
                             return;
                         }
-                        if tx.send(chunk.to_vec()).is_err() {
+                        let sent = tokio::select! {
+                            r = tx.send(chunk.to_vec()) => r,
+                            _ = stop_fut(stop_rx.clone()) => return, // drops tx
+                        };
+                        if sent.is_err() {
                             return; // decrypt thread already gave up
                         }
                     }
@@ -1261,7 +1274,6 @@ impl ClientFfi {
         let origin = super::media_origin::origin_from_url(&url);
         let stop_rx = self.stop_rx.clone();
         let gate = Arc::clone(&self.media_gate_bulk);
-        let client = self.http_client.clone();
 
         let handle = self.rt.spawn(async move {
             let _permit = match gate
@@ -1283,7 +1295,7 @@ impl ClientFfi {
                 format!("media/url/{} group={}", url, group_id),
             );
             let bytes = tokio::select! {
-                b = download_url(&client, &url, MAX_URL_BYTES) => b,
+                b = download_guarded(&url, MAX_URL_BYTES, THUMBNAIL_FETCH_TIMEOUT) => b,
                 _ = tokio::time::sleep(THUMBNAIL_FETCH_TIMEOUT) => Vec::new(),
                 _ = stop_fut(stop_rx) => Vec::new(),
             };

@@ -16,7 +16,8 @@ constexpr float kMessageSearchPadX = 16.0f;
 constexpr float kMessageSearchFieldH = 32.0f;
 
 // Compact relative-time label for a result row ("now", "5m", "3h", "2d",
-// "10w", else a y-count). Best-effort; uses wall-clock now().
+// "10w", else a y-count). Best-effort; uses wall-clock now(). The unit
+// labels are translated, so a locale can use its own abbreviations.
 std::string relative_time(std::uint64_t ts_ms)
 {
     if (ts_ms == 0)
@@ -25,24 +26,24 @@ std::string relative_time(std::uint64_t ts_ms)
                          std::chrono::system_clock::now().time_since_epoch())
                          .count();
     if (static_cast<std::uint64_t>(now) <= ts_ms)
-        return "now";
+        return tk::tr("now");
     const std::uint64_t secs = (static_cast<std::uint64_t>(now) - ts_ms) / 1000;
     if (secs < 60)
-        return "now";
+        return tk::tr("now");
     const std::uint64_t mins = secs / 60;
     if (mins < 60)
-        return std::to_string(mins) + "m";
+        return tk::trf(tk::tr("{0}m"), {std::to_string(mins)});
     const std::uint64_t hours = mins / 60;
     if (hours < 24)
-        return std::to_string(hours) + "h";
+        return tk::trf(tk::tr("{0}h"), {std::to_string(hours)});
     const std::uint64_t days = hours / 24;
     if (days < 7)
-        return std::to_string(days) + "d";
+        return tk::trf(tk::tr("{0}d"), {std::to_string(days)});
     // Show weeks up to a full year, then years. Guard on `days` (not `weeks`)
     // so a ~52-week-old hit renders "52w" rather than rounding to "0y".
     if (days < 365)
-        return std::to_string(days / 7) + "w";
-    return std::to_string(days / 365) + "y";
+        return tk::trf(tk::tr("{0}w"), {std::to_string(days / 7)});
+    return tk::trf(tk::tr("{0}y"), {std::to_string(days / 365)});
 }
 
 // Collapse newlines/runs of whitespace into single spaces so a multi-line

@@ -3641,8 +3641,11 @@ public:
         if (FAILED(CoCreateInstance(CLSID_NetworkListManager, nullptr, CLSCTX_ALL,
                                      IID_PPV_ARGS(&mgr))) || !mgr)
             return true; // can't probe — don't block login on it
+        // IsConnected, not IsConnectedToInternet: the latter depends on NCSI's
+        // probe of Microsoft's endpoint, which fails behind firewalls that
+        // block it while the LAN or VPN still reaches the homeserver.
         VARIANT_BOOL connected = VARIANT_FALSE;
-        if (FAILED(mgr->get_IsConnectedToInternet(&connected))) return true;
+        if (FAILED(mgr->get_IsConnected(&connected))) return true;
         return connected != VARIANT_FALSE;
     }
 

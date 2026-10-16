@@ -703,7 +703,36 @@ pub struct Msc4075RtcNotificationEventContent {
     pub call_intent: Option<String>,
 }
 
-/// Send MSC4075 ring notification when we start a call.
+/// Body of the MSC4075 notification that announces a new call.
+///
+/// Only a direct message rings the peer, with an `@room` mention. A group room
+/// gets a plain `notification` with no mention, so a large room is not rung
+/// (and mentioned) for every member each time someone starts a call.
+pub fn rtc_notification_body(
+    is_direct: bool,
+    now_ms: u64,
+    call_intent: &str,
+    device_id: &str,
+) -> serde_json::Value {
+    let (notification_type, mentions) = if is_direct {
+        ("ring", serde_json::json!({ "room": true }))
+    } else {
+        ("notification", serde_json::json!({}))
+    };
+    let mut body = serde_json::json!({
+        "notification_type": notification_type,
+        "sender_ts": now_ms,
+        "lifetime": 30_000u64,
+        "device_id": device_id,
+        "m.mentions": mentions,
+    });
+    if !call_intent.is_empty() {
+        body["m.call.intent"] = serde_json::Value::String(call_intent.to_owned());
+    }
+    body
+}
+
+/// Send the MSC4075 notification that announces a call we are starting.
 /// Uses the unstable event type prefix for Element Web compatibility.
 /// Non-fatal: callers should log and continue on error.
 pub async fn send_rtc_notification(
@@ -716,17 +745,8 @@ pub async fn send_rtc_notification(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
-
-    let mut body = serde_json::json!({
-        "notification_type": "ring",
-        "sender_ts": now_ms,
-        "lifetime": 30_000u64,
-        "device_id": device_id,
-        "m.mentions": { "room": true },
-    });
-    if !call_intent.is_empty() {
-        body["m.call.intent"] = serde_json::Value::String(call_intent.to_owned());
-    }
+    let is_direct = room.is_direct().await.unwrap_or(false);
+    let body = rtc_notification_body(is_direct, now_ms, call_intent, device_id);
 
     // Use room.send_raw() so the event is automatically encrypted when the
     // room is encrypted. The previous room.client().send(raw_http_request)
@@ -791,6 +811,19 @@ pub async fn send_ring_ack(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn rtc_notification_rings_only_a_direct_message() {
+        let dm = super::rtc_notification_body(true, 1, "audio", "DEV");
+        assert_eq!(dm["notification_type"], "ring");
+        assert_eq!(dm["m.mentions"]["room"], true);
+        assert_eq!(dm["m.call.intent"], "audio");
+
+        let group = super::rtc_notification_body(false, 1, "", "DEV");
+        assert_eq!(group["notification_type"], "notification");
+        assert!(group["m.mentions"].as_object().is_some_and(|m| m.is_empty()));
+        assert!(group.get("m.call.intent").is_none());
+    }
+
     use super::*;
     use serde_json::json;
 

@@ -172,6 +172,20 @@ TEST_CASE("MentionController: member cache is reused for the same room",
     CHECK(r.ctl->visible());
 }
 
+TEST_CASE("MentionController: an expired member cache is refetched",
+          "[composer_controllers][mention]")
+{
+    MentionRig r;
+    r.build();
+    r.type("@");
+    REQUIRE(r.async_runs == 1);
+    // An empty roster (what a failed lookup leaves) is retried once its
+    // short TTL has passed.
+    r.ctl->expire_member_cache_for_test();
+    r.type("@r");
+    CHECK(r.async_runs == 2);
+}
+
 TEST_CASE("MentionController: a pending fetch is not duplicated",
           "[composer_controllers][mention]")
 {

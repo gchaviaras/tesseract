@@ -20,10 +20,14 @@
 #include <tesseract/media_source.h>
 
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -386,6 +390,63 @@ TEST_CASE("install_media_viewer_save_ asks the shell for a path and saves the it
     deferred("/tmp/tesseract-test-save-never-written.pdf");
     CHECK(f.s.pending_media_.size() == 1);
     f.viewer->on_close();
+}
+
+TEST_CASE("a saved attachment is written through a temp file and the outcome is reported",
+          "[roompane][widgets][save]")
+{
+    using tesseract::views::MediaViewerItem;
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "tesseract-save-attachment-test";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir);
+
+    RwFx f;
+    std::function<void(std::string)> deferred;
+    f.pane().install_media_viewer_save_(
+        [&](const tesseract::views::MediaSaveSpec&,
+            std::function<void(std::string)> done)
+        {
+            deferred = std::move(done);
+        });
+    MediaViewerItem item;
+    item.kind = MediaViewerItem::Kind::File;
+    item.source = tesseract::MediaSource::plain("mxc://hs/save-me")->fetch_token();
+    item.filename = "report.pdf";
+    f.viewer->open(item);
+    f.viewer->on_save(item);
+    REQUIRE(deferred);
+
+    // Each step chooses a destination, then delivers the downloaded bytes.
+    auto save = [&](const std::string& dest, std::vector<std::uint8_t> bytes)
+    {
+        deferred(dest);
+        REQUIRE(f.s.pending_media_.size() == 1);
+        f.s.handle_media_ready_ui_(f.s.pending_media_.begin()->first, std::move(bytes));
+        f.s.pump();
+    };
+
+    const std::string good = (dir / "report.pdf").string();
+    save(good, {'%', 'P', 'D', 'F'});
+    CHECK(f.s.statuses.back() == "Saved to " + good);
+    std::ifstream in(good, std::ios::binary);
+    std::string written((std::istreambuf_iterator<char>(in)), {});
+    CHECK(written == "%PDF");
+    CHECK_FALSE(fs::exists(good + ".part"));
+
+    // A write that cannot be made (missing folder) is reported, and no file appears.
+    const std::string missing = (dir / "no-such-folder" / "report.pdf").string();
+    save(missing, {'x'});
+    CHECK(f.s.statuses.back() == "Couldn't save the file.");
+    CHECK_FALSE(fs::exists(missing));
+
+    // An empty download is reported too, rather than writing an empty file.
+    save(good, {});
+    CHECK(f.s.statuses.back() == "Couldn't save the file.");
+
+    f.viewer->on_close();
+    fs::remove_all(dir, ec);
 }
 
 TEST_CASE("the forward picker confirms, tracks each request and reports failures",

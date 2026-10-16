@@ -4,6 +4,7 @@
 #include <tesseract/session_store.h>
 #include <tesseract/prefs.h>
 #include <algorithm>
+#include <chrono>
 #include <system_error>
 
 namespace tesseract
@@ -253,6 +254,33 @@ void ShellBase::restore_all_accounts_async_(
         });
 }
 
+// OAuth has completed, so the homeserver holds a device for this login. When
+// finalize fails after that point, nothing else signs the device out, and it
+// stays in the user's session list. Restore from the exported session into a
+// scratch store and log out. Best effort, and blocking: it runs on the worker
+// that finalizes the login.
+static void sign_out_abandoned_login(const std::string& session_json,
+                                     const std::vector<uint8_t>& store_key)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    // Under the private data dir, not the shared temp dir: the scratch store
+    // holds this login's keys.
+    const fs::path scratch = tesseract::SessionStore::account_dir(
+        "signout-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(scratch, ec);
+    {
+        tesseract::Client client;
+        client.set_data_dir(scratch.string());
+        if (!store_key.empty())
+            client.set_store_key(store_key);
+        if (client.restore_session(session_json))
+            (void)client.logout();
+    }
+    fs::remove_all(scratch, ec);
+}
+
 ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     std::unique_ptr<tesseract::Client> pending_client,
     std::filesystem::path pending_temp_dir)
@@ -312,6 +340,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
                 ec2);
             if (ec2)
             {
+                sign_out_abandoned_login(session_json, store_key);
                 out.error = tk::trf(tk::tr("couldn't persist matrix store: {0}"), {ec2.message()});
                 return io;
             }
@@ -320,10 +349,13 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     }
 
     // Persist the session blob (and the store key, if any) into the final
-    // per-account dir.
+    // per-account dir. A fresh login ends any logout refusal on this account's
+    // queued writes, so its token refreshes persist again.
+    tesseract::SessionStore::allow_session_updates(user_id);
     if (!tesseract::SessionStore::save_account_with_key(user_id, session_json,
                                                         store_key))
     {
+        sign_out_abandoned_login(session_json, store_key);
         out.error = tk::tr("couldn't persist session");
         return io;
     }
@@ -344,7 +376,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
     auto res = session->client->restore_session(session_json);
     if (!res)
     {
-        out.error = "restore: " + res.message;
+        out.error = tk::trf(tk::tr("Could not restore the session: {0}"), {res.message});
         tesseract::SessionStore::clear_account(user_id);
         return io;
     }
@@ -476,10 +508,22 @@ void ShellBase::finalize_login_async_(std::function<void(FinalizeLoginResult)> d
         FinalizeLoginResult out;
         out.rejected_duplicate = true;
         out.user_id            = user_id;
+        // OAuth has already created a device for this login. Sign it out, so it
+        // does not stay in the user's session list, then remove the temp
+        // directory. Off the UI thread: logout is a network call.
+        auto abandoned = std::make_shared<std::unique_ptr<tesseract::Client>>(
+            std::move(pending_login_client_));
         pending_login_client_.reset();
-        std::error_code ec;
-        std::filesystem::remove_all(pending_login_temp_dir_, ec);
+        auto temp_dir = pending_login_temp_dir_;
         pending_login_temp_dir_.clear();
+        run_async_("login/abandon", [abandoned, temp_dir]
+        {
+            if (*abandoned)
+                (void)(*abandoned)->logout(); // best effort
+            *abandoned = nullptr;
+            std::error_code ec;
+            std::filesystem::remove_all(temp_dir, ec);
+        });
         done(std::move(out));
         return;
     }
@@ -650,6 +694,10 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
         rooms.insert(visited_lru_.begin(), visited_lru_.end());
         for (const auto& kv : room_last_active_)
             rooms.insert(kv.first);
+        // The thread releases are queued on the mutable pool, behind any thread
+        // subscribe a panel transition queued there (RoomPane::apply_thread_
+        // transition_), so a release cannot overtake the subscribe it follows.
+        std::vector<std::pair<std::string, std::string>> thread_drops;
         for (auto it = thread_last_active_.begin(); it != thread_last_active_.end();)
         {
             if (pinned(it->first.first))
@@ -657,9 +705,17 @@ bool ShellBase::switch_active_account_impl_(const std::string& user_id)
                 ++it;
                 continue;
             }
-            client_->unsubscribe_thread(it->first.first, it->first.second);
+            thread_drops.push_back(it->first);
             it = thread_last_active_.erase(it);
         }
+        if (!thread_drops.empty())
+            run_async_mut_([sess = active_account_, drops = std::move(thread_drops)]
+            {
+                if (!sess || !sess->client)
+                    return;
+                for (const auto& [rid, root] : drops)
+                    sess->client->unsubscribe_thread(rid, root);
+            });
         for (const auto& rid : rooms)
         {
             if (rid.empty() || pinned(rid))
@@ -1079,6 +1135,10 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     {
         return out; // logged_out=false → shell does nothing
     }
+    // A call holds a raw pointer to this account's client, and its capture
+    // threads use the shell's client. Hang up before the client is destroyed.
+    if (call_session_)
+        end_call();
 
     const std::string uid = active_account_->user_id;
     auto& sess = *active_account_;
@@ -1176,6 +1236,9 @@ ShellBase::LogoutResult ShellBase::logout_active_account_impl_()
     // neither findable via AccountManager::find() nor flagged as draining.
     account_manager_.mark_draining(uid);
     account_manager_.remove_account(uid);
+    sync_error_restarts_.erase(uid);
+    for (auto it = upload_drafts_.begin(); it != upload_drafts_.end();)
+        it = (it->second && it->second->user_id == uid) ? upload_drafts_.erase(it) : std::next(it);
     // Move (not reset) so the barrier task posted below — not this function
     // — drops the session's last ShellBase-held reference, off the UI
     // thread. `sess` is not referenced again after this point.
@@ -1636,6 +1699,10 @@ void ShellBase::on_account_picker_select_(const std::string& uid)
             win->raise_and_activate_();
         return;
     }
+    // Switching accounts would send the call's frames to the new account's
+    // client while the session lives on the old one. Hang up first.
+    if (call_session_ && !(active_account_ && active_account_->user_id == uid))
+        end_call();
     if (is_ctrl_held_())
     {
         auto session = account_manager_.find(uid);
@@ -1685,16 +1752,27 @@ void ShellBase::schedule_sync_restart_(const std::string& user_id, int delay_ms)
                       });
 }
 
+// Wait before restarting sync after the `attempts`-th failure in a row: 5 s,
+// doubling, at most 5 minutes.
+static int sync_restart_delay_ms(int attempts)
+{
+    const int shift = std::min(std::max(attempts - 1, 0), 6);
+    return std::min(5000 << shift, 300000);
+}
+
 // Agnostic sync-error state machine, shared by every shell. Reacts to the
-// SDK sync-error callback's three contexts:
-//   - "sync_reconnect"   (transient): stop the affected account's sync and
-//     schedule a delayed restart via schedule_sync_restart_().
+// SDK sync-error callback's contexts:
+//   - "sync_error"       (terminal: the supervisor gave up): nothing else
+//     restarts sync, so stop it and restart with a bounded backoff (5 s,
+//     doubling, at most 5 min) via schedule_sync_restart_().
 //   - "sync_auth_error"  + soft_logout: restore the soft-logged-out session
 //     (refresh-token flow), re-fetch display_name / avatar_url onto the
 //     AccountSession, re-bind this window's identity strip when the affected
 //     account is the active one, and restart sync. If the session can't be
 //     restored (or this isn't a soft logout), clear the stored account, stop
 //     sync, and ask the shell to relogin via request_relogin_().
+//   - "sync_init" / "event_cache_init" (sync never started): show why, persistently,
+//     and retry on the same backoff.
 //   - else: surface `description` in the status bar.
 // Centralizing this fixes prior per-shell drift (notably macOS, which
 // skipped the post-refresh display-name/avatar re-fetch + strip re-bind).
@@ -1705,14 +1783,40 @@ void ShellBase::handle_sync_error_impl_(std::string context,
 {
     auto affected = account_manager_.find(user_id);
 
-    if (context == "sync_reconnect")
+    if (context == "sync_error")
     {
         show_status_message_(tk::tr("Sync error: reconnecting\xe2\x80\xa6"));
         if (affected && affected->client)
         {
-            affected->client->stop_sync();
+            // stop_sync can wait a long time, so it runs on the mutating pool.
+            // The restart is queued on the same pool afterwards, so it runs
+            // after the stop.
+            auto sess = affected;
+            run_async_mut_([sess]() {
+                if (sess && sess->client)
+                    sess->client->stop_sync();
+            });
             affected->sync_started = false;
-            schedule_sync_restart_(affected->user_id, 5000);
+            schedule_sync_restart_(affected->user_id,
+                                   sync_restart_delay_ms(++sync_error_restarts_[affected->user_id]));
+        }
+        return;
+    }
+
+    if (context == "sync_init" || context == "event_cache_init")
+    {
+        // start_sync gave up before syncing began (the sync service or the
+        // event cache wouldn't start), so nothing is running and nothing else
+        // retries. Say why until it works, and try again on the same bounded
+        // backoff as a terminal sync error. No stop_sync: nothing was started.
+        show_status_message_(
+            tk::trf(tk::tr("Couldn't start syncing: {0}. Retrying\xe2\x80\xa6"), {description}),
+            0);
+        if (affected && affected->client)
+        {
+            affected->sync_started = false;
+            schedule_sync_restart_(affected->user_id,
+                                   sync_restart_delay_ms(++sync_error_restarts_[affected->user_id]));
         }
         return;
     }

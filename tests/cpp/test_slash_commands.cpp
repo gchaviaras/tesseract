@@ -194,3 +194,21 @@ TEST_CASE("slash_success_message confirms only /myroomavatar", "[slash][myroomav
     CHECK_FALSE(tesseract::slash_success_message("/me waves").has_value());
     CHECK_FALSE(tesseract::slash_success_message("hello").has_value());
 }
+
+TEST_CASE("strip_command_from_html keeps formatting and mention pills", "[slash]")
+{
+    using tesseract::strip_command_from_html;
+    CHECK(strip_command_from_html("<p>/me <em>waves</em></p>", "me") == "<p><em>waves</em></p>");
+    CHECK(strip_command_from_html("/me <a href=\"https://matrix.to/#/@a:b\">A</a>", "me") ==
+          "<a href=\"https://matrix.to/#/@a:b\">A</a>");
+    CHECK(strip_command_from_html("<p>/shrug hi</p>", "shrug") == "<p>hi</p>");
+    CHECK(strip_command_from_html("<p>hello</p>", "me").empty());
+    CHECK(strip_command_from_html("", "me").empty());
+}
+
+TEST_CASE("append_to_html adds text inside the last paragraph", "[slash]")
+{
+    using tesseract::append_to_html;
+    CHECK(append_to_html("<p>hi</p>", " x") == "<p>hi x</p>");
+    CHECK(append_to_html("hi", " x") == "hi x");
+}

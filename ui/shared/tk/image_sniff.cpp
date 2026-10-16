@@ -211,6 +211,19 @@ bool is_jxl_bytes(std::span<const std::uint8_t> b)
            (b.size() >= 12 && std::memcmp(b.data(), kJxlSignatureBox, 12) == 0);
 }
 
+std::string_view sniff_image_mime(std::span<const std::uint8_t> b)
+{
+    if (has_prefix(b, "\x89PNG\r\n\x1a\n"))
+        return "image/png";
+    if (b.size() >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF)
+        return "image/jpeg";
+    if (has_prefix(b, "GIF87a") || has_prefix(b, "GIF89a"))
+        return "image/gif";
+    if (has_prefix(b, "RIFF") && has_prefix(b, "WEBP", 8))
+        return "image/webp";
+    return {};
+}
+
 bool bytes_may_be_animated(std::span<const std::uint8_t> bytes)
 {
     if (has_prefix(bytes, "GIF8"))

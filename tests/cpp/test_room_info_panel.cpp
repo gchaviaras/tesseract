@@ -204,3 +204,78 @@ TEST_CASE("ConfirmDialog: reason field hidden and on_reason unused by default",
     CHECK(confirmed);
     CHECK_FALSE(reason_fired);
 }
+
+TEST_CASE("RoomInfoPanel: the history badge names the room's visibility",
+          "[room_info_panel]")
+{
+    TestHost host(nullptr);
+    auto panel_owner = tk::create_root_widget<RoomInfoPanel>(&host);
+    host.set_root(panel_owner.get());
+    RoomInfoPanel& panel = *panel_owner;
+    tesseract::RoomInfo info;
+    info.id                = "!room:example.org";
+    info.name              = "Room";
+    info.history_visibility = "joined";
+    panel.open(info);
+    CHECK(panel.body_for_test()->badge_labels_for_test() == "History: Members (since joined)");
+
+    // An unknown wire value is shown as it arrived rather than dropped.
+    info.history_visibility = "something_new";
+    panel.open(info);
+    CHECK(panel.body_for_test()->badge_labels_for_test() == "something_new");
+}
+
+TEST_CASE("RoomInfoPanel: a collapsed roster lists the top five in display order",
+          "[room_info_panel]")
+{
+    auto surface = TestSurface::create(1000, 800);
+    tk::LayoutCtx lc{surface->factory(), tk::Theme::light()};
+    TestHost host(nullptr);
+    auto panel_owner = tk::create_root_widget<RoomInfoPanel>(&host);
+    host.set_root(panel_owner.get());
+    RoomInfoPanel& panel = *panel_owner;
+    tesseract::RoomInfo info;
+    info.id   = "!room:example.org";
+    info.name = "Room";
+    panel.open(info);
+
+    // Forty ordinary members arrive in reverse, plus three with a power level.
+    std::vector<tesseract::RoomMember> members;
+    for (int i = 39; i >= 0; --i)
+    {
+        tesseract::RoomMember m;
+        m.user_id      = "@m" + std::to_string(i) + ":example.org";
+        m.display_name = "m" + std::string(i < 10 ? "0" : "") + std::to_string(i);
+        members.push_back(m);
+    }
+    auto add = [&](const char* name, int64_t level) {
+        tesseract::RoomMember m;
+        m.user_id      = std::string("@") + name + ":example.org";
+        m.display_name = name;
+        m.power_level  = level;
+        members.push_back(m);
+    };
+    add("Zoe", 100);
+    add("adam", 100);
+    add("Mod", 50);
+    panel.set_members(members);
+
+    const tk::Rect bounds{0, 0, 1000, 800};
+    auto* body = panel.body_for_test();
+    REQUIRE(body);
+    panel.measure(lc, {bounds.w, bounds.h});
+    panel.arrange(lc, bounds);
+    // Admins sort first, names case-insensitively; the rest follow by name.
+    CHECK(body->shown_member_names_for_test() ==
+          std::vector<std::string>{"adam", "Zoe", "Mod", "m00", "m01"});
+
+    // Expanding orders the whole roster and lists every member.
+    body->expand_members_for_test();
+    panel.measure(lc, {bounds.w, bounds.h});
+    panel.arrange(lc, bounds);
+    const auto all = body->shown_member_names_for_test();
+    REQUIRE(all.size() == 43);
+    CHECK(all[0] == "adam");
+    CHECK(all[2] == "Mod");
+    CHECK(all.back() == "m39");
+}

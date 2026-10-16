@@ -148,8 +148,8 @@ TEST_CASE("Fresh: PassphraseEntry Continue fires on_enable_recovery once both "
     ov->on_enable_recovery = [&](std::string p) { fired = true; fired_passphrase = p; };
 
     // Mismatch: Continue is disabled and does nothing.
-    ov->passphrase_field()->set_text("s3cr3t");
-    ov->passphrase_confirm_field()->set_text("s3cr3");
+    ov->passphrase_field()->set_text("s3cr3t-passphrase");
+    ov->passphrase_confirm_field()->set_text("s3cr3t-passphrasX");
     st.run(*ov, {0, 0, 800, 600});
     CHECK_FALSE(ov->primary_enabled());
     ov->simulate_primary_action();
@@ -157,12 +157,35 @@ TEST_CASE("Fresh: PassphraseEntry Continue fires on_enable_recovery once both "
     CHECK(ov->step() == EncryptionSetupOverlay::Step::PassphraseEntry);
 
     // Match: Continue fires with the passphrase.
-    ov->passphrase_confirm_field()->set_text("s3cr3t");
+    ov->passphrase_confirm_field()->set_text("s3cr3t-passphrase");
     st.run(*ov, {0, 0, 800, 600});
     CHECK(ov->primary_enabled());
     ov->simulate_primary_action();
-    CHECK(fired_passphrase == "s3cr3t");
+    CHECK(fired_passphrase == "s3cr3t-passphrase");
     CHECK(ov->step() == EncryptionSetupOverlay::Step::Progress);
+}
+
+TEST_CASE("Fresh: a short recovery passphrase is refused, not sent",
+          "[encryption][overlay]")
+{
+    EncryptionSetupOverlayStage st;
+    StubHost host;
+    auto ov = tk::create_root_widget<EncryptionSetupOverlay>(&host, EncryptionSetupOverlay::Mode::Fresh);
+    st.run(*ov, {0, 0, 800, 600});
+    ov->simulate_select_passphrase_mode();
+    REQUIRE(ov->passphrase_field() != nullptr);
+    REQUIRE(ov->passphrase_confirm_field() != nullptr);
+    bool fired = false;
+    ov->on_enable_recovery = [&](std::string) { fired = true; };
+
+    // Both fields match, but the passphrase is one character: it must not be sent.
+    ov->passphrase_field()->set_text("x");
+    ov->passphrase_confirm_field()->set_text("x");
+    st.run(*ov, {0, 0, 800, 600});
+    ov->simulate_primary_action();
+    CHECK_FALSE(fired);
+    CHECK(ov->step() == EncryptionSetupOverlay::Step::PassphraseEntry);
+    CHECK(ov->error_msg().find("12") != std::string::npos);
 }
 
 TEST_CASE("Fresh: advance_progress Done → ShowKey with key string",

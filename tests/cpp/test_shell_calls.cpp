@@ -158,6 +158,19 @@ TEST_CASE("participant events build the roster and pin the session id",
     CHECK(s.call_session_->participants()[0].participant_id == "b");
 }
 
+TEST_CASE("a join for another session does not replace the known session id",
+          "[shell][calls]")
+{
+    tesseract::Client c;
+    CallShell s;
+    shell_calls_install_session(s, c, "!r:x");
+    s.handle_rtc_participant_joined_ui_(5, shell_calls_participant("a"));
+    REQUIRE(s.call_session_->session_id() == 5);
+    s.handle_rtc_participant_joined_ui_(9, shell_calls_participant("late"));
+    CHECK(s.call_session_->session_id() == 5);
+    CHECK(s.call_session_->participants().size() == 1);
+}
+
 TEST_CASE("a session end for another call is ignored", "[shell][calls]")
 {
     tesseract::Client c; // outlives the shell (its CallSession hangs up on it)

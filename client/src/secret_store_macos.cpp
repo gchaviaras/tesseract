@@ -244,6 +244,11 @@ void keychain_remove(const std::string& account_key)
 
 bool flush_map()
 {
+    // The consolidated item could not be read, so the in-memory map holds only
+    // what this run has added. Writing it would replace every other account's
+    // stored session with that partial map.
+    if (g_map_unreadable)
+        return false;
     return keychain_save(std::string(kConsAcct), g_map->dump());
 }
 

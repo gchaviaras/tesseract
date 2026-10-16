@@ -212,6 +212,7 @@ impl ClientFfi {
         };
         let handler = self.handler.clone();
         let searches = Arc::clone(&self.room_directory_searches);
+        let cancelled = Arc::clone(&self.room_directory_cancelled);
         let in_flight = Arc::clone(&self.in_flight);
         #[cfg(debug_assertions)]
         let in_flight_urls = Arc::clone(&self.in_flight_urls);
@@ -225,6 +226,13 @@ impl ClientFfi {
                 #[cfg(debug_assertions)]
                 "room_directory/next_page".to_string(),
             );
+            // Put the search back for the next page, unless it was cancelled while
+            // this page was in flight. A cancelled search must not come back.
+            let keep = |search| {
+                if !cancelled.lock().remove(&request_id) {
+                    searches.lock().insert(request_id, search);
+                }
+            };
 
             let prev_len = search.results().0.len();
             match tokio::time::timeout(ROOM_DIRECTORY_TIMEOUT, search.next_page()).await {
@@ -232,18 +240,18 @@ impl ClientFfi {
                     let (all_entries, reached_end) = snapshot(&search);
                     let new_entries: Vec<_> = all_entries.into_iter().skip(prev_len).collect();
                     deliver_page(&handler, request_id, &new_entries, reached_end);
-                    searches.lock().insert(request_id, search);
+                    keep(search);
                 }
                 Ok(Err(e)) => {
                     deliver_failed(&handler, request_id, &e.to_string());
-                    // Put the search back so the UI can retry the same page.
-                    searches.lock().insert(request_id, search);
+                    // Keep the search so the UI can retry the same page.
+                    keep(search);
                 }
                 Err(_) => {
                     // next_page() doesn't know the server name (RoomDirectorySearch
                     // has no public getter for it) — generic wording.
                     deliver_failed(&handler, request_id, &timeout_message(""));
-                    searches.lock().insert(request_id, search);
+                    keep(search);
                 }
             }
         });
@@ -252,6 +260,10 @@ impl ClientFfi {
     /// Drop the search stored under `request_id` (Browse tab closed, or a
     /// fresh search is about to replace it). No callback fires.
     pub fn cancel_room_directory_search(&self, request_id: u64) {
-        self.room_directory_searches.lock().remove(&request_id);
+        // A search absent from the map has a page in flight (it was taken for the
+        // fetch), and that search must not come back. An idle one is just removed.
+        if self.room_directory_searches.lock().remove(&request_id).is_none() {
+            self.room_directory_cancelled.lock().insert(request_id);
+        }
     }
 }

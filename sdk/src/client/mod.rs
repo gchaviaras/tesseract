@@ -40,6 +40,7 @@ pub(crate) mod rtc_ffi;
 pub(crate) mod search;
 mod send;
 mod session;
+mod strip_av;
 mod strip_meta;
 
 /// True when the image bytes can be confidently stripped of metadata (see
@@ -50,6 +51,8 @@ pub fn image_metadata_strippable(bytes: &[u8], mime_type: &str) -> bool {
 #[cfg(not(test))]
 mod sync;
 mod tags;
+pub(crate) mod text_code;
+pub(crate) use text_code::{text_code, text_code_arg, user_text};
 mod thread;
 mod timeline;
 mod timeline_convert;
@@ -388,10 +391,70 @@ pub(super) fn backup_progress_default() -> BackupProgress {
 /// `ClientFfi::set_data_dir` (e.g. to scope the store under a specific
 /// account directory in the multi-account layout).
 fn default_data_dir() -> PathBuf {
-    let base = dirs_like_home().unwrap_or_else(std::env::temp_dir);
+    let base = match dirs_like_home() {
+        Some(home) => home,
+        None => fallback_data_base(),
+    };
     let dir = base.join("tesseract").join("matrix-store");
     let _ = std::fs::create_dir_all(&dir);
     dir
+}
+
+/// Where the store goes when there is no home directory. The temp directory is
+/// shared, so the base is per user and owner-only; a fixed name there would let
+/// another local account read the E2EE store. On Unix an existing directory is
+/// only reused when it is a real directory (not a symlink) that this user owns
+/// and nobody else can enter; otherwise a fresh private one is made.
+fn fallback_data_base() -> PathBuf {
+    // The name comes from the environment, so keep it to plain characters: it
+    // must stay one path component.
+    let user: String = std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "user".to_owned())
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .take(32)
+        .collect();
+    let temp = std::env::temp_dir();
+    let base = temp.join(format!("tesseract-{user}"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+        let private = |p: &std::path::Path| -> bool {
+            let Ok(meta) = std::fs::symlink_metadata(p) else { return false };
+            // Our uid, read from a file this process just created.
+            let probe = temp.join(format!(".tesseract-uid-{}", std::process::id()));
+            let uid = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&probe)
+                .and_then(|f| f.metadata())
+                .map(|m| m.uid());
+            let _ = std::fs::remove_file(&probe);
+            meta.is_dir() && meta.mode() & 0o077 == 0 && uid.is_ok_and(|u| u == meta.uid())
+        };
+        // `mode` applies at creation, so there is no window where it is open.
+        let created = std::fs::DirBuilder::new().mode(0o700).create(&base).is_ok();
+        if created || private(&base) {
+            return base;
+        }
+        // Taken by someone else: use a name nobody could have planted.
+        let fresh = temp.join(format!(
+            "tesseract-{user}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::DirBuilder::new().mode(0o700).create(&fresh);
+        return fresh;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = std::fs::create_dir_all(&base);
+        base
+    }
 }
 
 fn dirs_like_home() -> Option<PathBuf> {
@@ -472,6 +535,23 @@ pub(super) struct KnockRequestsHandle {
     pub(super) requests: std::sync::Arc<parking_lot::RwLock<Vec<crate::ffi::KnockRequestInfo>>>,
     pub(super) abort: tokio::task::AbortHandle,
     pub(super) clear_seen_ids_abort: tokio::task::AbortHandle,
+}
+
+/// Numbers the saves of the application prefs document. Each `save_prefs`
+/// takes the next number, and a queued write whose number is no longer the
+/// newest is skipped. Every save carries the whole document, and the writes
+/// run as spawned tasks, so they can start in any order.
+#[derive(Default)]
+pub(super) struct PrefsSaveOrder(std::sync::atomic::AtomicU64);
+
+impl PrefsSaveOrder {
+    pub(super) fn next(&self) -> u64 {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+    }
+
+    pub(super) fn is_newest(&self, seq: u64) -> bool {
+        self.0.load(std::sync::atomic::Ordering::SeqCst) == seq
+    }
 }
 
 pub struct ClientFfi {
@@ -607,6 +687,11 @@ pub struct ClientFfi {
     /// call so previews persist even when a notable update overwrites the list.
     #[cfg(not(test))]
     pub(super) backfill_previews: Arc<Mutex<HashMap<String, BackfillPreview>>>,
+    /// Rooms whose last backfill attempt failed, with the failure count and the
+    /// earliest time the next attempt may run. Kept apart from `backfill_previews`
+    /// so a failure is retried later rather than cached as "no timestamp".
+    #[cfg(not(test))]
+    backfill_retry: Arc<Mutex<HashMap<String, backfill::BackfillRetry>>>,
     /// Per-account SQLite database for backfill state (`backfill_ts` table).
     /// Open for the lifetime of the sync session; `None` before first
     /// `start_sync` or after account switch.
@@ -636,6 +721,11 @@ pub struct ClientFfi {
     /// be cloned into spawned indexing tasks.
     #[cfg(not(test))]
     pub(super) search_indexing_enabled: Arc<std::sync::atomic::AtomicBool>,
+    /// Set once `start_sync` registers this client's RTC event sink, so
+    /// `logout` only drops a sink it owns. A second client for the same user
+    /// (an abandoned or duplicate login) never registered one and must not
+    /// remove the live account's.
+    pub(super) rtc_sink_registered: std::sync::atomic::AtomicBool,
     /// Abort handles for every long-lived task spawned by `start_sync`
     /// (session-refresh watcher, room/pack watcher, backup watchers, sync
     /// monitor, …). These outlive `self.handler.take()`, so without explicit
@@ -732,6 +822,8 @@ pub struct ClientFfi {
     /// across the whole cycle so writes apply on top of each other.
     #[cfg(not(test))]
     pub(super) account_data_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Orders `save_prefs` writes. See `PrefsSaveOrder`.
+    pub(super) prefs_saves: std::sync::Arc<PrefsSaveOrder>,
     /// Directory holding the matrix-sdk SQLite store for this client. Set via
     /// `set_data_dir` before `oauth_begin` / `restore_session`. Defaults to
     /// `default_data_dir()` for legacy single-account callers.
@@ -892,6 +984,10 @@ pub struct ClientFfi {
     #[cfg(not(test))]
     pub(super) room_directory_searches:
         Arc<Mutex<HashMap<u64, matrix_sdk::room_directory_search::RoomDirectorySearch>>>,
+    /// Ids cancelled while one of their pages was still being fetched. That fetch
+    /// returns its search to the map only when its id is not in here.
+    #[cfg(not(test))]
+    pub(super) room_directory_cancelled: Arc<Mutex<std::collections::HashSet<u64>>>,
     /// Set of `"kind:source"` cache keys for media that matrix-sdk's internal
     /// SQLite store already holds. `fetch_media_async` uses this to skip the
     /// priority gate for locally-cached media: a SQLite hit takes < 1 ms, so a
@@ -941,7 +1037,7 @@ impl Drop for ClientFfi {
         // (SqliteStateStore via matrix_sdk::Client, Timeline) with the runtime
         // handle in TLS.  Without enter() here, dropping pending_login_client_
         // from C++ (Qt event loop, no tokio context) causes a panic_in_cleanup
-        // abort — the same hazard oauth_await_callback / restore_session guard
+        // abort — the same hazard oauth_await_slice / restore_session guard
         // against with their own `let _guard = self.rt.enter()` blocks.
         {
             let _guard = self.rt.enter();
@@ -998,7 +1094,7 @@ impl Drop for ClientFfi {
                 });
             }
             // Explicit take, same reasoning as self.client above: a login
-            // cancelled before oauth_await_callback's browser wait ever
+            // cancelled before oauth_await_slice's browser wait ever
             // finishes leaves self.client None but self.oauth_flow holding
             // the half-built Client(s) (PendingFlowState::client /
             // PendingFlow::finished) — those drop here (runtime in TLS)
@@ -1212,6 +1308,8 @@ impl ClientFfi {
             #[cfg(not(test))]
             backfill_previews: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(not(test))]
+            backfill_retry: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(not(test))]
             app_cache_db: Arc::new(Mutex::new(None)),
             #[cfg(not(test))]
             search_db: Arc::new(Mutex::new(None)),
@@ -1219,6 +1317,7 @@ impl ClientFfi {
             thread_read_db: Arc::new(Mutex::new(None)),
             #[cfg(not(test))]
             search_indexing_enabled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            rtc_sink_registered: std::sync::atomic::AtomicBool::new(false),
             #[cfg(not(test))]
             sync_tasks: Vec::new(),
             #[cfg(not(test))]
@@ -1246,6 +1345,7 @@ impl ClientFfi {
             bot_commands: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(not(test))]
             account_data_lock: Arc::new(tokio::sync::Mutex::new(())),
+            prefs_saves: Arc::new(PrefsSaveOrder::default()),
             data_dir: default_data_dir(),
             store_key: None,
             http_client: crate::net_proxy::apply(reqwest::Client::builder())
@@ -1309,6 +1409,8 @@ impl ClientFfi {
             #[cfg(not(test))]
             room_directory_searches: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(not(test))]
+            room_directory_cancelled: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            #[cfg(not(test))]
             sdk_media_fetched: Arc::new(Mutex::new(media::MediaFetchedCache::new(
                 media::MEDIA_FETCHED_CAP,
             ))),
@@ -1361,6 +1463,8 @@ impl ClientFfi {
     #[cfg(test)]
     pub fn new() -> Self {
         Self {
+            prefs_saves: std::sync::Arc::new(PrefsSaveOrder::default()),
+            rtc_sink_registered: std::sync::atomic::AtomicBool::new(false),
             client: None,
             stop_tx: None,
             stop_rx: None,
@@ -1561,6 +1665,10 @@ pub(super) async fn stop_fut(stop_rx: Option<watch::Receiver<bool>>) {
     }
 }
 
+/// Rooms whose full state `fetch_room_state_cached` keeps at once.
+#[cfg(not(test))]
+const ROOM_STATE_CACHE_ROOMS: usize = 8;
+
 /// Per-room cache of the full `GET /rooms/{roomId}/state` response, shared
 /// by every consumer that needs to filter a room's live state for some
 /// event type — see `fetch_room_state_cached`.
@@ -1580,23 +1688,38 @@ pub(super) type RoomStateCache = Arc<Mutex<
 /// scoped to a small set of rooms (active/subscribed/currently-open), never
 /// a joined-rooms sweep.
 #[cfg(not(test))]
+///
+/// Returns `None` when the request fails. A failure is never cached: an empty
+/// list would read as "the room has no state" and drive writes. Callers that
+/// only display state use the empty default; callers that choose a key to
+/// write must stop instead.
 async fn fetch_room_state_cached(
     client: &Client,
     cache: &RoomStateCache,
     room_id: &OwnedRoomId,
-) -> Arc<Vec<matrix_sdk::ruma::serde::Raw<matrix_sdk::ruma::events::AnyStateEvent>>> {
+) -> Option<Arc<Vec<matrix_sdk::ruma::serde::Raw<matrix_sdk::ruma::events::AnyStateEvent>>>> {
     if let Some(existing) = cache.lock().get(room_id) {
-        return Arc::clone(existing);
+        return Some(Arc::clone(existing));
     }
     use matrix_sdk::ruma::api::client::state::get_state_events::v3 as state_api;
-    let room_state = client
-        .send(state_api::Request::new(room_id.clone()))
-        .await
-        .map(|r| r.room_state)
-        .unwrap_or_default();
-    let room_state = Arc::new(room_state);
-    cache.lock().insert(room_id.clone(), Arc::clone(&room_state));
-    room_state
+    let room_state = match client.send(state_api::Request::new(room_id.clone())).await {
+        Ok(r) => Arc::new(r.room_state),
+        Err(e) => {
+            tracing::warn!("fetch room state for {room_id} failed (not cached): {e}");
+            return None;
+        }
+    };
+    {
+        let mut cache = cache.lock();
+        // Whole-room state is megabytes for a big room: keep only a few.
+        if cache.len() >= ROOM_STATE_CACHE_ROOMS {
+            if let Some(evict) = cache.keys().find(|k| *k != room_id).cloned() {
+                cache.remove(&evict);
+            }
+        }
+        cache.insert(room_id.clone(), Arc::clone(&room_state));
+    }
+    Some(room_state)
 }
 
 /// Drop a room's cached full state so the next `fetch_room_state_cached`
@@ -1621,8 +1744,8 @@ async fn fetch_all_room_pack_contents(
     cache: &RoomStateCache,
     room_id: &OwnedRoomId,
     legacy_compat: bool,
-) -> Vec<(String, serde_json::Value)> {
-    let state = fetch_room_state_cached(client, cache, room_id).await;
+) -> Option<Vec<(String, serde_json::Value)>> {
+    let state = fetch_room_state_cached(client, cache, room_id).await?;
 
     let mut by_state_key: std::collections::BTreeMap<String, serde_json::Value> =
         std::collections::BTreeMap::new();
@@ -1645,7 +1768,7 @@ async fn fetch_all_room_pack_contents(
             by_state_key.insert(state_key, m);
         }
     }
-    by_state_key.into_iter().collect()
+    Some(by_state_key.into_iter().collect())
 }
 
 /// Discover every MSC4391 `m.bot.command_description` state event in a room
@@ -1664,7 +1787,9 @@ pub(super) async fn fetch_room_bot_commands(
     room_id: &OwnedRoomId,
     room_id_str: &str,
 ) -> Vec<crate::bot_commands::CommandDescription> {
-    let state = fetch_room_state_cached(client, cache, room_id).await;
+    let Some(state) = fetch_room_state_cached(client, cache, room_id).await else {
+        return Vec::new();
+    };
 
     let mut stable = Vec::new();
     let mut unstable = Vec::new();
@@ -1733,12 +1858,10 @@ pub(super) async fn room_pack_state_keys(
     cache: &RoomStateCache,
     room_id: &OwnedRoomId,
     legacy_compat: bool,
-) -> std::collections::BTreeSet<String> {
+) -> Option<std::collections::BTreeSet<String>> {
     fetch_all_room_pack_contents(client, cache, room_id, legacy_compat)
         .await
-        .into_iter()
-        .map(|(state_key, _)| state_key)
-        .collect()
+        .map(|pairs| pairs.into_iter().map(|(state_key, _)| state_key).collect())
 }
 
 /// Which of `ROOM_PACK_TYPES` currently have content for `state_key` in
@@ -1753,8 +1876,8 @@ pub(super) async fn room_pack_event_types_for_key(
     room_id: &OwnedRoomId,
     state_key: &str,
     legacy_compat: bool,
-) -> Vec<&'static str> {
-    let state = fetch_room_state_cached(client, cache, room_id).await;
+) -> Option<Vec<&'static str>> {
+    let state = fetch_room_state_cached(client, cache, room_id).await?;
     let mut types = Vec::new();
     for &ev_type_str in crate::image_packs::room_pack_types(legacy_compat) {
         let has_content = state.iter().any(|raw| {
@@ -1766,7 +1889,7 @@ pub(super) async fn room_pack_event_types_for_key(
             types.push(ev_type_str);
         }
     }
-    types
+    Some(types)
 }
 
 /// Discover and parse every pack a room defines (see
@@ -1786,7 +1909,9 @@ async fn discover_and_parse_room_packs(
     let mut room_name: Option<String> = None;
     let mut packs = Vec::new();
     for (state_key, content) in
-        fetch_all_room_pack_contents(client, cache, room_id, legacy_compat).await
+        fetch_all_room_pack_contents(client, cache, room_id, legacy_compat)
+            .await
+            .unwrap_or_default()
     {
         let source = crate::image_packs::PackSource::Room {
             room_id: room_id_str.to_owned(),
@@ -2180,6 +2305,8 @@ pub(super) struct LatestPreview {
 
 /// First non-empty line of `s`, trimmed. Splits on the first '\n'.
 pub(super) fn first_line(s: &str) -> String {
+    // Previews are decoded for codes; the sender's text must not be able to spell one.
+    let s = user_text(s);
     s.lines()
         .map(str::trim)
         .find(|l| !l.is_empty())
@@ -2364,14 +2491,11 @@ fn latest_event_preview(value: &matrix_sdk::latest_events::LatestEventValue) -> 
     };
 
     let text_kind = |body: &str, formatted: Option<&str>| -> LatestPreview {
+        // A formatted body that sanitises to nothing (a message that is all
+        // spoiler) must not fall back to the plain body, which has the text.
         let line = match formatted {
             Some(html) if !html.trim().is_empty() => html_first_line(html),
-            _ => String::new(),
-        };
-        let line = if line.is_empty() {
-            first_line(strip_plain_reply_fallback(body))
-        } else {
-            line
+            _ => first_line(strip_plain_reply_fallback(body)),
         };
         if line.is_empty() {
             LatestPreview::default()
@@ -2550,9 +2674,9 @@ fn latest_event_sender(
 /// Permalink-preview body for a poll start; an edit event carries no question.
 fn poll_permalink_preview(question: &str) -> String {
     if question.is_empty() {
-        "(poll)".to_owned()
+        text_code("poll")
     } else {
-        format!("(poll) {question}")
+        text_code_arg("poll", user_text(question))
     }
 }
 
@@ -2576,14 +2700,11 @@ fn extract_local_preview(content: &matrix_sdk::store::SerializableEventContent) 
         _ => return LatestPreview::default(),
     };
     let text_kind = |body: &str, formatted: Option<&str>| -> LatestPreview {
+        // A formatted body that sanitises to nothing (a message that is all
+        // spoiler) must not fall back to the plain body, which has the text.
         let line = match formatted {
             Some(html) if !html.trim().is_empty() => html_first_line(html),
-            _ => String::new(),
-        };
-        let line = if line.is_empty() {
-            first_line(strip_plain_reply_fallback(body))
-        } else {
-            line
+            _ => first_line(strip_plain_reply_fallback(body)),
         };
         if line.is_empty() {
             LatestPreview::default()
@@ -2711,18 +2832,18 @@ fn message_type_preview(msgtype: &matrix_sdk::ruma::events::room::message::Messa
         MessageType::Text(t) => first_line(&t.body),
         MessageType::Notice(n) => first_line(&n.body),
         MessageType::Emote(e) => first_line(&e.body),
-        MessageType::Image(_) => "(image)".to_owned(),
-        MessageType::File(_) => "(file)".to_owned(),
+        MessageType::Image(_) => text_code("image"),
+        MessageType::File(_) => text_code("file"),
         MessageType::Audio(a) => {
             if a.voice.is_some() {
-                "(voice)".to_owned()
+                text_code("voice")
             } else {
-                "(audio)".to_owned()
+                text_code("audio")
             }
         }
-        MessageType::Video(_) => "(video)".to_owned(),
-        MessageType::Gallery(_) => "(gallery)".to_owned(),
-        _ => "(message)".to_owned(),
+        MessageType::Video(_) => text_code("video"),
+        MessageType::Gallery(_) => text_code("gallery"),
+        _ => text_code("message"),
     }
 }
 
@@ -2798,21 +2919,21 @@ async fn resolve_pinned_event(
     {
         Ok(pair) => pair,
         Err(_) => {
-            out.body_preview = "(unavailable)".to_owned();
+            out.body_preview = text_code("unavailable");
             return out;
         }
     };
 
     // Body / kind preview — mirrors `msglike_snippet` in timeline_convert.rs.
     let Ok(any) = ev.raw().deserialize() else {
-        out.body_preview = "(unavailable)".to_owned();
+        out.body_preview = text_code("unavailable");
         return out;
     };
 
     let (sender, ts_ms, mut body) = match any {
         AnySyncTimelineEvent::MessageLike(AnySyncMessageLikeEvent::RoomMessage(m)) => {
             let Some(orig) = m.as_original() else {
-                out.body_preview = "(deleted)".to_owned();
+                out.body_preview = text_code("deleted");
                 return out;
             };
             (
@@ -2823,19 +2944,19 @@ async fn resolve_pinned_event(
         }
         AnySyncTimelineEvent::MessageLike(AnySyncMessageLikeEvent::Sticker(s)) => {
             let Some(orig) = s.as_original() else {
-                out.body_preview = "(deleted)".to_owned();
+                out.body_preview = text_code("deleted");
                 return out;
             };
             (
                 Some(orig.sender.clone()),
                 u64::from(orig.origin_server_ts.0),
-                "(sticker)".to_owned(),
+                text_code("sticker"),
             )
         }
         AnySyncTimelineEvent::MessageLike(AnySyncMessageLikeEvent::UnstablePollStart(p)) => {
             use matrix_sdk::ruma::events::poll::unstable_start::UnstablePollStartEventContent;
             let Some(orig) = p.as_original() else {
-                out.body_preview = "(deleted)".to_owned();
+                out.body_preview = text_code("deleted");
                 return out;
             };
             let question = match &orig.content {
@@ -2849,7 +2970,7 @@ async fn resolve_pinned_event(
             )
         }
         _ => {
-            out.body_preview = "(message)".to_owned();
+            out.body_preview = text_code("message");
             return out;
         }
     };
@@ -3472,6 +3593,16 @@ pub(super) struct RoomListFingerprintKey {
     pinned_ids: String,
     successor_room_id: String,
     successor_joined: bool,
+    // The badge, mute icon, DM section and preview all come from these.
+    notification_count: u64,
+    highlight_count: u64,
+    muted: bool,
+    is_direct: bool,
+    last_message_body: String,
+    last_message_sender_name: String,
+    last_message_kind: String,
+    last_message_sticker_url: String,
+    last_message_thumbnail_url: String,
 }
 
 /// Change-detection fingerprint for the room-list snapshot. The sync watcher
@@ -3603,6 +3734,15 @@ pub(super) fn room_list_fingerprint(
                 // touches unread/name/recency, so they must perturb the key.
                 successor_room_id: r.successor_room_id.clone(),
                 successor_joined: r.successor_joined,
+                notification_count: r.notification_count,
+                highlight_count: r.highlight_count,
+                muted: r.muted,
+                is_direct: r.is_direct,
+                last_message_body: r.last_message_body.clone(),
+                last_message_sender_name: r.last_message_sender_name.clone(),
+                last_message_kind: r.last_message_kind.clone(),
+                last_message_sticker_url: r.last_message_sticker_url.clone(),
+                last_message_thumbnail_url: r.last_message_thumbnail_url.clone(),
             }
         })
         .collect()
@@ -3761,6 +3901,15 @@ pub(super) async fn build_knocked_room_infos(client: &Client) -> Vec<crate::ffi:
 mod tests {
     use super::*;
 
+    #[test]
+    fn prefs_save_order_skips_saves_that_have_been_superseded() {
+        let order = PrefsSaveOrder::default();
+        let first = order.next();
+        let second = order.next();
+        assert!(!order.is_newest(first));
+        assert!(order.is_newest(second));
+    }
+
     // Build a minimal RoomInfo for fingerprint tests.
     fn room(id: &str) -> crate::ffi::RoomInfo {
         crate::ffi::RoomInfo {
@@ -3818,6 +3967,28 @@ mod tests {
         assert!(!caps(serde_json::json!("garbage")));
         assert!(!caps(serde_json::json!(null)));
         assert!(!caps(serde_json::json!([1, 2])));
+    }
+
+    #[test]
+    fn fingerprint_changes_for_every_field_the_ui_shows() {
+        // Each field the room list draws or sections by must perturb the key,
+        // otherwise a change to it is dropped until something else changes.
+        let fresh = || room("!a:example.org");
+        let fp = |r: &crate::ffi::RoomInfo| room_list_fingerprint(std::slice::from_ref(r));
+        let before = fp(&fresh());
+        let mut changed: Vec<crate::ffi::RoomInfo> = Vec::new();
+        let mut r = fresh(); r.notification_count = 3; changed.push(r);
+        let mut r = fresh(); r.highlight_count = 1; changed.push(r);
+        let mut r = fresh(); r.muted = true; changed.push(r);
+        let mut r = fresh(); r.is_direct = true; changed.push(r);
+        let mut r = fresh(); r.last_message_body = "hi".into(); changed.push(r);
+        let mut r = fresh(); r.last_message_sender_name = "Ann".into(); changed.push(r);
+        let mut r = fresh(); r.last_message_kind = "m.image".into(); changed.push(r);
+        let mut r = fresh(); r.last_message_sticker_url = "mxc://x/s".into(); changed.push(r);
+        let mut r = fresh(); r.last_message_thumbnail_url = "mxc://x/t".into(); changed.push(r);
+        for (i, r) in changed.iter().enumerate() {
+            assert_ne!(before, fp(r), "field change #{i} must change the fingerprint");
+        }
     }
 
     #[test]
@@ -4041,7 +4212,7 @@ mod tests {
         r.pinned_events.push(crate::ffi::PinnedEvent {
             event_id: "$pinned:example.org".to_owned(),
             sender_name: String::new(),
-            body_preview: "(unavailable)".to_owned(),
+            body_preview: text_code("unavailable"),
             timestamp: 0,
         });
         let before = room_list_fingerprint(std::slice::from_ref(&r));
@@ -5220,8 +5391,8 @@ mod tests_latest_event_body {
 
     #[test]
     fn poll_permalink_preview_falls_back_without_question() {
-        assert_eq!(super::poll_permalink_preview(""), "(poll)");
-        assert_eq!(super::poll_permalink_preview("Lunch?"), "(poll) Lunch?");
+        assert_eq!(super::poll_permalink_preview(""), "\u{1}poll");
+        assert_eq!(super::poll_permalink_preview("Lunch?"), "\u{1}poll\u{1}Lunch?");
     }
 
     #[test]
@@ -5592,8 +5763,8 @@ mod utd_message_tests {
             let m = utd_message_for_cause(cause);
             assert!(!m.is_empty(), "cause {cause:?} had empty message");
             assert!(
-                m.starts_with('🔒'),
-                "cause {cause:?} message {m:?} should start with padlock"
+                m.starts_with("\u{1}utd_"),
+                "cause {cause:?} message {m:?} should be a utd_ code"
             );
             assert!(
                 !m.contains('\n'),

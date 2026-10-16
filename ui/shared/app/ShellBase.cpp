@@ -3,6 +3,7 @@
 #include "views/MainAppWidget.h"
 #include "views/SettingsView.h"
 #include <tesseract/open_media.h>
+#include <tesseract/session_store.h>
 #include <algorithm>
 #include <iterator>
 #ifndef _WIN32
@@ -56,8 +57,10 @@ void ShellBase::save_settings_debounced_()
 {
     if (tearing_down_)
         return;
+    settings_save_pending_ = true;
     debounce_(DebounceSlot::SaveSettings, 500,
-              []() {
+              [this]() {
+                  settings_save_pending_ = false;
                   tesseract::Settings::instance().save_to_disk(
                       tesseract::config_dir());
               });
@@ -227,16 +230,41 @@ void ShellBase::init_pool_callbacks_()
 ShellBase::ShellBase(AccountManager& account_manager)
     : account_manager_(account_manager)
 {
+    // A token refresh that could not be saved is lost for good (the server has
+    // already retired the old one), so say so until something newer replaces it.
+    tesseract::SessionStore::set_save_failure_handler(
+        [this](const std::string& user_id)
+        {
+            post_to_ui_alive_(
+                [this, user_id]
+                {
+                    show_status_message_(
+                        tk::trf(tk::tr("Couldn't save the sign-in for {0}. You may have to sign in again next time."),
+                                {user_id}),
+                        0);
+                });
+        });
 }
 
 ShellBase::~ShellBase()
 {
+    tesseract::SessionStore::set_save_failure_handler({});
+
     // Signal any UI-thread continuations queued via post_to_ui_alive_ that this
     // shell is gone; they will no-op rather than dereference freed members.
     invalidate_weak_self();
 
     // Decrypted attachments handed to external apps don't outlive the session.
     tesseract::purge_open_media_dir();
+
+    // Land the last token refreshes before the process can exit. Writes are
+    // queued off the SDK thread, so this is the one place that waits for them.
+    tesseract::SessionStore::flush_session_updates();
+
+    // A debounced settings save that has not run yet would be dropped with this
+    // shell, so the settings are written here.
+    if (settings_save_pending_)
+        tesseract::Settings::instance().save_to_disk(tesseract::config_dir());
 
     // Stop the media-sweep timer before the derived shell is torn down: a
     // pending tick must not re-arm (post_to_ui_after_ is pure-virtual once the
@@ -275,6 +303,12 @@ ShellBase::~ShellBase()
     // ~RoomWindowBase while those maps are intact.
     teardown_activity_monitor_();
     owned_secondary_windows_.clear();
+
+    // ~RoomPane drops its entries from media_view_paginate_owners_, which is
+    // declared after main_room_pane_ and so would already be destroyed when the
+    // member destructors reach the pane. Destroy the main pane here, while the
+    // map is alive.
+    main_room_pane_.reset();
 }
 
 #ifdef TESSERACT_SCREENSHOT_MODE_ENABLED

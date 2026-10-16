@@ -1,16 +1,25 @@
 #include "LinuxNotifier.h"
 #include <QDBusArgument>
 #include <QDBusConnection>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDBusReply>
 #include <QDir>
+#include <QFile>
 #include <QGuiApplication>
 #include <QImage>
 #include <QMetaType>
+#include <QStandardPaths>
+#include <QTemporaryFile>
 #include "../../shared/linux_portal.h"
 #include "tk/i18n.h"
 
 namespace
 {
+
+// Bound on each synchronous notification-daemon call. QDBusInterface's default
+// is about 25 s, which froze the UI for that long when a daemon hung.
+constexpr int kNotifyBusTimeoutMs = 3000;
 
 // Several notification daemons (dunst, mako, GNOME Shell) render a subset
 // of Pango markup in the body. Server-supplied message text must be escaped
@@ -20,10 +29,10 @@ QString escape_markup(const std::string& s)
     return QString::fromStdString(s).toHtmlEscaped();
 }
 
-// Write pic bytes (PNG/JPEG/WebP) to a fixed temp path and return a
-// file:// URI. Returns an empty string on failure.
-// A fixed path is safe because daemons read image-path synchronously when
-// they handle the Notify call, so there is no race between notifications.
+// Write pic bytes (PNG/JPEG/WebP) to a private file and return a file:// URI.
+// Returns an empty string on failure.
+// Daemons read image-path when they handle the Notify call, and a connection's
+// calls are handled in order, so the previous file can go once the next is written.
 QString write_image_path(const std::vector<uint8_t>& pic)
 {
     if (pic.empty())
@@ -37,12 +46,39 @@ QString write_image_path(const std::vector<uint8_t>& pic)
         return {};
     }
     img = img.scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    const QString path =
-        QDir::tempPath() + QStringLiteral("/tesseract-notif.png");
+
+    // A fixed, world-visible path in the shared temp dir let another local
+    // user pre-create a symlink there (clobbering a file) and read the image.
+    // Use a per-user 0700 directory and a QTemporaryFile, which creates a new
+    // 0600 file exclusively. The daemon reads the file when it handles Notify,
+    // so the previous image is removed only once the next one is written.
+    static QString last_path;
+    const QString dir =
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation) +
+        QStringLiteral("/notifications");
+    if (!QDir().mkpath(dir))
+    {
+        return {};
+    }
+    QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                   QFileDevice::ExeOwner);
+    QTemporaryFile file(dir + QStringLiteral("/notif-XXXXXX.png"));
+    file.setAutoRemove(false);
+    if (!file.open())
+    {
+        return {};
+    }
+    const QString path = file.fileName();
+    file.close();
     if (!img.save(path, "PNG"))
     {
         return {};
     }
+    if (!last_path.isEmpty() && last_path != path)
+    {
+        QFile::remove(last_path);
+    }
+    last_path = path;
     return QStringLiteral("file://") + path;
 }
 
@@ -61,6 +97,8 @@ LinuxNotifierQt::LinuxNotifierQt(
       on_activate_(std::move(on_activate)),
       on_reply_(std::move(on_reply))
 {
+    iface_.setTimeout(kNotifyBusTimeoutMs);
+    portal_.setTimeout(kNotifyBusTimeoutMs);
     QDBusConnection::sessionBus().connect(
         "org.freedesktop.Notifications", "/org/freedesktop/Notifications",
         "org.freedesktop.Notifications", "ActionInvoked", this,
@@ -145,8 +183,11 @@ void LinuxNotifierQt::notify(const tesseract::Notification& n)
         // notification for the same room reuses the same id (replacing the
         // prior one), so this just tracks the latest event_id per room.
         correlation_.record_portal(pid.toStdString(), n.room_id, n.event_id);
-        QVariantMap portalMap{{"title", escape_markup(n.sender)},
-                              {"body", escape_markup(n.body)},
+        // The portal's plain `body` is not parsed as markup (libportal sends
+        // markup under a separate `markup-body` key), so it is sent unescaped.
+        // Escaping here would show literal "&amp;" in Flatpak builds.
+        QVariantMap portalMap{{"title", QString::fromStdString(n.sender)},
+                              {"body", QString::fromStdString(n.body)},
                               {"default-action", QStringLiteral("default")}};
         if (portal_reply_supported_)
         {
@@ -179,7 +220,9 @@ void LinuxNotifierQt::notify(const tesseract::Notification& n)
         // Portal "icon" uses (sv); themed icons are simplest to marshal.
         // Avatar bytes require GIcon serialisation which is not straightforward
         // over Qt D-Bus, so skip for now — the app icon fallback is fine.
-        portal_.call("AddNotification", pid, portalMap);
+        // Asynchronous: a slow or starting portal must not hold the UI thread.
+        // The portal's reply is not used.
+        portal_.asyncCall("AddNotification", pid, portalMap);
         return;
     }
 
@@ -230,15 +273,25 @@ void LinuxNotifierQt::notify(const tesseract::Notification& n)
         hints[QString::fromUtf8(tesseract::linux_notify::kHintSubmitLabel)] =
             QString::fromStdString(tk::tr("Send"));
     }
-    QDBusReply<uint> reply =
-        iface_.call("Notify", QString("Tesseract"), 0u, QString(""),
-                    escape_markup(n.sender), escape_markup(n.body), actions,
-                    hints, 5000);
-
-    if (reply.isValid())
-    {
-        correlation_.record(reply.value(), n.room_id, n.event_id);
-    }
+    // Asynchronous: the daemon's reply carries the id this notification needs
+    // for its later ActionInvoked, so it is recorded when the reply arrives.
+    // A slow or starting daemon must not hold the UI thread for the call.
+    QDBusPendingCall pending =
+        iface_.asyncCall("Notify", QString("Tesseract"), 0u, QString(""),
+                         escape_markup(n.sender), escape_markup(n.body), actions,
+                         hints, 5000);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, room_id = n.room_id, event_id = n.event_id](
+                QDBusPendingCallWatcher* w)
+            {
+                QDBusPendingReply<uint> reply = *w;
+                if (!reply.isError())
+                {
+                    correlation_.record(reply.value(), room_id, event_id);
+                }
+                w->deleteLater();
+            });
 }
 
 void LinuxNotifierQt::onActionInvoked(uint id, const QString& /*action*/)

@@ -5273,6 +5273,7 @@ dependencies = [
  "url",
  "webp",
  "webrtc-sys",
+ "zeroize",
  "zip 2.4.2",
 ]
 

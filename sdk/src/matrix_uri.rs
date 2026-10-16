@@ -115,7 +115,15 @@ fn try_matrix_uri(uri: &str) -> Option<MatrixLinkResult> {
     let value = percent_decode(parts.next()?);
     let event = match parts.next() {
         None => None,
-        Some("e") => Some(percent_decode(parts.next()?)),
+        // The spec form omits the `$` sigil; a client that wrote it anyway is
+        // still accepted.
+        Some("e") => {
+            let id = percent_decode(parts.next()?);
+            if id.is_empty() || id == "$" {
+                return None;
+            }
+            Some(if id.starts_with('$') { id } else { format!("${id}") })
+        }
         Some(legacy) => Some(percent_decode(legacy)),
     };
 
@@ -354,6 +362,15 @@ mod tests {
     }
 
     #[test]
+    fn matrix_uri_roomid_with_sigil_less_event() {
+        // The spec writes the event id without its `$`.
+        let r = parse_matrix_link("matrix:roomid/abc123:example.com/e/xyz789:example.com");
+        assert_eq!(r, event("!abc123:example.com", "$xyz789:example.com"));
+        let r = parse_matrix_link("matrix:r/general:example.com/e/xyz789:example.com");
+        assert_eq!(r.event_id, "$xyz789:example.com");
+    }
+
+    #[test]
     fn matrix_uri_roomid_with_legacy_event_tail() {
         let r = parse_matrix_link("matrix:roomid/abc123:example.com/$xyz789:example.com");
         assert_eq!(r, event("!abc123:example.com", "$xyz789:example.com"));
@@ -380,7 +397,7 @@ mod tests {
         assert_eq!(parse_matrix_link("matrix:roomid/").kind, KIND_UNKNOWN);
         assert_eq!(parse_matrix_link("matrix:r/").kind, KIND_UNKNOWN);
         assert_eq!(
-            parse_matrix_link("matrix:roomid/abc123:example.com/e/notanevent").kind,
+            parse_matrix_link("matrix:roomid/abc123:example.com/e/").kind,
             KIND_UNKNOWN
         );
         assert_eq!(parse_matrix_link("matrix:roomid").kind, KIND_UNKNOWN);

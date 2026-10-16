@@ -1373,6 +1373,13 @@ public:
     {
         return chip_hit_rects_;
     }
+    // Per-card geometry from the most recent paint pass: the world-coords hit
+    // rect of each URL-preview card and the URL its click opens. Public for tests.
+    const std::vector<UrlPreviewCardDisplay::PreviewCardHit>&
+    preview_card_hits_for_test() const
+    {
+        return previews_.geometry();
+    }
 
     // Number of live body-text layouts retained by the shared layout cache.
     // Exposed so tests can assert the cache stays memory-bounded.

@@ -30,6 +30,7 @@ ThreadPanelController::compute_transition(ThreadPanel cur, ThreadPanel prev,
             t.new_prev  = ThreadPanel::Closed;
             t.new_root.clear();
             t.unsubscribe_room_threads_ = true;
+            t.closes_list_              = true;
         }
         else // Open
         {
@@ -41,7 +42,10 @@ ThreadPanelController::compute_transition(ThreadPanel cur, ThreadPanel prev,
             t.threads_to_unsubscribe.push_back(current_root);
             t.new_root.clear();
             if (prev == ThreadPanel::List)
+            {
                 t.unsubscribe_room_threads_ = true;
+                t.closes_list_              = true;
+            }
         }
         break;
 
@@ -71,8 +75,6 @@ ThreadPanelController::compute_transition(ThreadPanel cur, ThreadPanel prev,
         t.new_state = prev; // back to whatever opened us
         t.new_prev  = ThreadPanel::Closed;
         t.new_root.clear();
-        if (prev == ThreadPanel::Closed)
-            t.unsubscribe_room_threads_ = false; // never subscribed
         break;
 
     case ThreadTrigger::RoomSwitch:

@@ -79,6 +79,7 @@
 
 #include "app/AccountManager.h"
 #include "app/ShellBase.h"
+#include "app/shell_helpers.h"
 #include "app/EventHandlerBase.h"
 #include "app/SettingsController.h"
 
@@ -1006,22 +1007,29 @@ tesseract::CallWindowBase* MacShell::create_call_window_()
     return tesseract::make_mac_call_window(this);
 }
 
+// A queued block can outlive the shell (teardown does not cancel dispatched
+// work), so each one runs only while the shell's liveness flag is still set,
+// as the other shells' posts do. The heap copy is freed either way.
 void MacShell::post_to_ui_(std::function<void()> fn)
 {
+    std::weak_ptr<bool> alive = weak_flag();
     auto* heap = new std::function<void()>(std::move(fn));
     dispatch_async(dispatch_get_main_queue(), ^{
-        (*heap)();
+        if (!alive.expired())
+            (*heap)();
         delete heap;
     });
 }
 
 void MacShell::post_to_ui_after_(int ms, std::function<void()> fn)
 {
+    std::weak_ptr<bool> alive = weak_flag();
     auto* heap = new std::function<void()>(std::move(fn));
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW, (int64_t)ms * NSEC_PER_MSEC),
         dispatch_get_main_queue(), ^{
-            (*heap)();
+            if (!alive.expired())
+                (*heap)();
             delete heap;
         });
 }
@@ -2485,10 +2493,17 @@ void MacShell::request_more_history(std::string room_id)
         room_view_->set_paginating(true);
     start_anim_tick_();
 
+    // The account is captured here, not read from client_ on the worker: a switch
+    // or sign-out on the main thread would otherwise race that read.
+    auto sess = active_account_;
     __weak MainWindowController* wc = ctrl_;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        auto pr = client_->paginate_back_with_status(room_id, 50);
-        BOOL reached = pr.ok && pr.reached_start;
+        BOOL reached = NO;
+        if (sess && sess->client)
+        {
+            auto pr = sess->client->paginate_back_with_status(room_id, 50);
+            reached = pr.ok && pr.reached_start;
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
             if (MainWindowController* c = wc)
                 [c handlePaginateResultForRoom:room_id reached_start:reached];
@@ -4267,93 +4282,84 @@ private:
                     {
                         auto alive = c->_gifAlive;
                         auto url = result.preview_url;
-                        shell->run_async_(
-                            [gc, url, alive, shell]
+                        // Completion handler for a preview. `store` is set for a
+                        // network fetch (its bytes go to the disk cache); bytes
+                        // read from the disk cache are not written back.
+                        auto make_on_preview = [gc, url, alive, shell](bool store)
+                        {
+                            return [gc, url, alive, shell, store](std::vector<uint8_t> b) mutable
                             {
-                                // Disk-cache the preview too, symmetrically with
-                                // the animated source. Otherwise a GIF whose MP4
-                                // is already on disk loads its video faster than
-                                // its preview downloads, leaving the cell blank
-                                // until the video appears instead of the
-                                // thumbnail first.
+                                if (!*alive) return;
+                                MainWindowController* c2 = gc;
+                                if (!c2) return;
+                                c2->_gifPreviewInflight.erase(url);
+                                if (b.empty()) return;
+                                if (store)
+                                    shell->account_manager_.media_disk_cache().store(
+                                        tk::CacheKey::gif_source(url), b);
+                                NSData* d =
+                                    [NSData dataWithBytes:b.data()
+                                                  length:b.size()];
+                                CGImageSourceRef src =
+                                    CGImageSourceCreateWithData(
+                                        (__bridge CFDataRef)d, nullptr);
+                                if (!src) return;
+                                CGImageRef cg =
+                                    CGImageSourceCreateImageAtIndex(
+                                        src, 0, nullptr);
+                                CFRelease(src);
+                                if (!cg) return;
+                                c2->_gifPreviews[tk::CacheKey::gif_preview(url)] =
+                                    tk::cg::make_image(cg);
+                                CGImageRelease(cg);
+                                if (c2->_gifPopup)
+                                    c2->_gifPopup->request_relayout();
+                            };
+                        };
+                        // Only the disk read runs on a worker. Media request
+                        // bookkeeping (begin_media_req_, handle_media_ready_ui_)
+                        // is UI-thread-only, so the worker posts its result back
+                        // and the UI thread starts the fetch or delivers the bytes.
+                        shell->run_async_(
+                            [gc, url, alive, shell, make_on_preview]
+                            {
                                 const tk::CacheKey disk_key =
                                     tk::CacheKey::gif_source(url);
                                 std::vector<std::uint8_t> bytes =
                                     shell->account_manager_.media_disk_cache().load(disk_key);
                                 if (!bytes.empty())
                                 {
-                                    shell->handle_media_ready_ui_(
-                                        shell->begin_media_req_(0,
-                                            [gc, url, alive, shell](std::vector<uint8_t> b) mutable
-                                            {
-                                                if (!*alive) return;
-                                                MainWindowController* c2 = gc;
-                                                if (!c2) return;
-                                                c2->_gifPreviewInflight.erase(url);
-                                                if (b.empty()) return;
-                                                NSData* d =
-                                                    [NSData dataWithBytes:b.data()
-                                                                  length:b.size()];
-                                                CGImageSourceRef src =
-                                                    CGImageSourceCreateWithData(
-                                                        (__bridge CFDataRef)d, nullptr);
-                                                if (!src) return;
-                                                CGImageRef cg =
-                                                    CGImageSourceCreateImageAtIndex(
-                                                        src, 0, nullptr);
-                                                CFRelease(src);
-                                                if (!cg) return;
-                                                c2->_gifPreviews[tk::CacheKey::gif_preview(url)] =
-                                                    tk::cg::make_image(cg);
-                                                CGImageRelease(cg);
-                                                if (c2->_gifPopup)
-                                                    c2->_gifPopup->request_relayout();
-                                            }),
-                                        bytes);
-                                }
-                                else if (shell->client_)
-                                {
-                                    auto req_id = shell->begin_media_req_(0,
-                                        [gc, url, alive, shell](std::vector<uint8_t> b) mutable
-                                        {
-                                            if (!*alive) return;
-                                            MainWindowController* c2 = gc;
-                                            if (!c2) return;
-                                            c2->_gifPreviewInflight.erase(url);
-                                            if (b.empty()) return;
-                                            if (!b.empty())
-                                                shell->account_manager_.media_disk_cache().store(
-                                                    tk::CacheKey::gif_source(url), b);
-                                            NSData* d =
-                                                [NSData dataWithBytes:b.data()
-                                                              length:b.size()];
-                                            CGImageSourceRef src =
-                                                CGImageSourceCreateWithData(
-                                                    (__bridge CFDataRef)d, nullptr);
-                                            if (!src) return;
-                                            CGImageRef cg =
-                                                CGImageSourceCreateImageAtIndex(
-                                                    src, 0, nullptr);
-                                            CFRelease(src);
-                                            if (!cg) return;
-                                            c2->_gifPreviews[tk::CacheKey::gif_preview(url)] =
-                                                tk::cg::make_image(cg);
-                                            CGImageRelease(cg);
-                                            if (c2->_gifPopup)
-                                                c2->_gifPopup->request_relayout();
-                                        });
-                                    shell->client_->fetch_url_async(req_id, 0, url);
-                                }
-                                else
-                                {
                                     shell->post_to_ui_(
-                                        [gc, url, alive]()
+                                        [shell, make_on_preview,
+                                         bytes = std::move(bytes)]() mutable
                                         {
-                                            if (!*alive) return;
-                                            MainWindowController* c2 = gc;
-                                            if (c2) c2->_gifPreviewInflight.erase(url);
+                                            auto req_id = shell->begin_media_req_(
+                                                0, make_on_preview(false));
+                                            shell->handle_media_ready_ui_(
+                                                req_id, std::move(bytes));
                                         });
+                                    return;
                                 }
+                                // Disk-cache the preview too, symmetrically with
+                                // the animated source. Otherwise a GIF whose MP4
+                                // is already on disk loads its video faster than
+                                // its preview downloads, leaving the cell blank
+                                // until the video appears instead of the
+                                // thumbnail first.
+                                shell->post_to_ui_(
+                                    [gc, url, alive, shell, make_on_preview]()
+                                    {
+                                        if (!shell->client_)
+                                        {
+                                            MainWindowController* c2 = gc;
+                                            if (*alive && c2)
+                                                c2->_gifPreviewInflight.erase(url);
+                                            return;
+                                        }
+                                        auto req_id = shell->begin_media_req_(
+                                            0, make_on_preview(true));
+                                        shell->client_->fetch_url_async(req_id, 0, url);
+                                    });
                             });
                     }
                     // Kick off the strip-display fetch (strip_url: WebP/GIF). The
@@ -4527,40 +4533,44 @@ private:
                                 {
                                     do_decode(std::move(bytes));
                                 }
-                                else if (shell->client_)
-                                {
-                                    auto req_id = shell->begin_media_req_(0,
-                                        [gc, anim_url, alive, shell,
-                                         do_decode = std::move(do_decode)](
-                                            std::vector<uint8_t> b) mutable
-                                        {
-                                            // Callback is on UI thread; dispatch
-                                            // the heavy decode to a worker.
-                                            if (!b.empty())
-                                                shell->account_manager_.media_disk_cache().store(
-                                                    tk::CacheKey::gif_source(anim_url), b);
-                                            auto bptr =
-                                                std::make_shared<std::vector<uint8_t>>(
-                                                    std::move(b));
-                                            shell->run_async_(
-                                                [do_decode = std::move(do_decode),
-                                                 bptr]() mutable
-                                                {
-                                                    do_decode(std::move(*bptr));
-                                                });
-                                        });
-                                    shell->client_->fetch_url_async(
-                                        req_id, 0, anim_url);
-                                }
                                 else
                                 {
+                                    // Request bookkeeping and the fetch start are
+                                    // UI-thread work; this worker only got here to
+                                    // find the disk cache empty.
                                     shell->post_to_ui_(
-                                        [gc, anim_url, alive]()
+                                        [gc, anim_url, alive, shell,
+                                         do_decode = std::move(do_decode)]() mutable
                                         {
-                                            if (!*alive) return;
-                                            MainWindowController* c2 = gc;
-                                            if (c2)
-                                                c2->_gifAnimInflight.erase(anim_url);
+                                            if (!shell->client_)
+                                            {
+                                                MainWindowController* c2 = gc;
+                                                if (*alive && c2)
+                                                    c2->_gifAnimInflight.erase(anim_url);
+                                                return;
+                                            }
+                                            auto req_id = shell->begin_media_req_(0,
+                                                [gc, anim_url, alive, shell,
+                                                 do_decode = std::move(do_decode)](
+                                                    std::vector<uint8_t> b) mutable
+                                                {
+                                                    // Callback is on UI thread; dispatch
+                                                    // the heavy decode to a worker.
+                                                    if (!b.empty())
+                                                        shell->account_manager_.media_disk_cache().store(
+                                                            tk::CacheKey::gif_source(anim_url), b);
+                                                    auto bptr =
+                                                        std::make_shared<std::vector<uint8_t>>(
+                                                            std::move(b));
+                                                    shell->run_async_(
+                                                        [do_decode = std::move(do_decode),
+                                                         bptr]() mutable
+                                                        {
+                                                            do_decode(std::move(*bptr));
+                                                        });
+                                            });
+                                            shell->client_->fetch_url_async(
+                                                req_id, 0, anim_url);
                                         });
                                 }
                             });
@@ -6572,7 +6582,9 @@ private:
         _roomView->set_current_text({});
     }
     _shell->client_->send_gallery_async(0, _shell->current_room_id_, out_items,
-                                        caption, reply_event_id);
+                                        tesseract::shell_helpers::gallery_caption_or_fallback(
+                                            caption, out_items.size()),
+                                        reply_event_id);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

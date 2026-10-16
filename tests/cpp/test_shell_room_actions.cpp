@@ -5,6 +5,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+
 #include "app/ShellBase.h"
 #include "settings_guard.h"
 #include "shell_test_double.h"
@@ -643,11 +645,15 @@ TEST_CASE("a failed AddSpaceChild reverts the optimistic cache entry",
           "[shell][rooms][complete]")
 {
     RaFx f;
+    // The space is listed, so the rebuild that follows a failure re-derives the
+    // lists from the server's view. This test's client reports no children, so
+    // what is checked is that the failed room is no longer listed.
+    f.s.rooms_ = {ra_room("!space", true)};
     f.s.space_children_cache_["!space"] = {"!keep", "!added"};
     f.s.pending_room_actions_[1] = {"!added", RaKind::AddSpaceChild, "!space"};
     f.s.handle_room_action_complete_ui_(1, false, "", "x");
-    CHECK(f.s.space_children_cache_["!space"] ==
-          std::vector<std::string>{"!keep"});
+    const auto& joined = f.s.space_children_cache_["!space"];
+    CHECK(std::find(joined.begin(), joined.end(), "!added") == joined.end());
 }
 
 TEST_CASE("successful accept selects the room", "[shell][rooms][complete]")

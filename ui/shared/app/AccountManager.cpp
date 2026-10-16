@@ -1,10 +1,18 @@
 #include "AccountManager.h"
+#include <tesseract/session_store.h>
 #include <algorithm>
 
 namespace tesseract {
 
 AccountManager::AccountManager()  = default;
-AccountManager::~AccountManager() = default;
+AccountManager::~AccountManager()
+{
+    // Destroying a session stops its client, which can report a last token
+    // refresh. ~ShellBase flushes the queued writes earlier than that, so wait
+    // for the stragglers once the sessions are gone.
+    accounts_.clear();
+    SessionStore::flush_session_updates();
+}
 
 void AccountManager::add_account(std::shared_ptr<AccountSession> session)
 {
@@ -12,7 +20,9 @@ void AccountManager::add_account(std::shared_ptr<AccountSession> session)
     // live session, never append a second entry for the same user (which would
     // duplicate it in every account picker and start its sync twice). Keep the
     // already-registered session.
-    if (session && find(session->user_id))
+    // A null session is refused: every later lookup reads the user id from each
+    // entry, so one null entry would crash find() and remove_account().
+    if (!session || find(session->user_id))
         return;
     accounts_.push_back(std::move(session));
 }

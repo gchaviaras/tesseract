@@ -1,5 +1,7 @@
 #include "SendPipeline.h"
 
+#include <cstdio>
+#include <exception>
 #include <utility>
 
 namespace tesseract
@@ -88,8 +90,23 @@ void SendPipeline::pump_(const std::string& room_id)
         hooks_.run_send([this, post_ui, room_id, send = std::move(e.send),
                          prepared = std::move(e.prepared)]
         {
+            // A throwing send still counts as done: the room's queue must not stall
+            // with this entry outstanding for good.
             if (send)
-                send(prepared);
+            {
+                try
+                {
+                    send(prepared);
+                }
+                catch (const std::exception& ex)
+                {
+                    std::fprintf(stderr, "[send] send failed: %s\n", ex.what());
+                }
+                catch (...)
+                {
+                    std::fprintf(stderr, "[send] send failed\n");
+                }
+            }
             post_ui([this, room_id] { on_sent_(room_id); });
         });
     }

@@ -177,6 +177,78 @@ TEST_CASE("ComposeBar send-button click fires on_send with the current text",
     CHECK(got == "hi there");
 }
 
+TEST_CASE("ComposeBar Enter on blank text keeps reply and edit mode",
+          "[tk][view][compose]")
+{
+    TkComposeBarStage st;
+    auto bar_owner = tk::create_root_widget<ComposeBar>(nullptr);
+    ComposeBar& bar = *bar_owner;
+    int replies = 0;
+    int edits = 0;
+    bar.on_send_reply = [&](const std::string&, const std::string&)
+    {
+        ++replies;
+    };
+    bar.on_send_edit = [&](const std::string&, const std::string&, bool)
+    {
+        ++edits;
+    };
+    st.run(bar, {0, 0, 640, ComposeBar::kMinHeight});
+
+    bar.set_reply_to("$reply", "Alice", "hi");
+    bar.set_current_text(" \n\t ");
+    bar.trigger_send();
+    CHECK(replies == 0);
+    CHECK(bar.has_reply());
+
+    bar.set_current_text("thanks");
+    bar.trigger_send();
+    CHECK(replies == 1);
+    CHECK_FALSE(bar.has_reply());
+
+    bar.set_editing("$edit", false);
+    bar.set_current_text("   ");
+    bar.trigger_send();
+    CHECK(edits == 0);
+    CHECK(bar.has_editing());
+
+    // A caption may be cleared, so an empty caption edit still goes out.
+    bar.set_editing("$caption", true);
+    bar.set_current_text("");
+    bar.trigger_send();
+    CHECK(edits == 1);
+    CHECK_FALSE(bar.has_editing());
+}
+
+TEST_CASE("ComposeBar holds Send while a video's metadata is loading",
+          "[tk][view][compose][media]")
+{
+    TkComposeBarStage st;
+    auto bar_owner = tk::create_root_widget<ComposeBar>(nullptr);
+    ComposeBar& bar = *bar_owner;
+    st.run(bar, {0, 0, 640, ComposeBar::kMinHeight});
+
+    Button* send = find_button_compose_bar(bar, "Send");
+    REQUIRE(send);
+
+    bar.add_pending_video({0x00, 0x01}, "video/mp4", "clip.mp4");
+    CHECK_FALSE(send->enabled());
+
+    // Enter does not get past the held Send: the attachment stays queued.
+    bar.trigger_send();
+    REQUIRE(bar.has_pending());
+    CHECK(bar.pending_for_test()->loading);
+
+    tesseract::views::MediaInfo info;
+    info.pending_gen = bar.pending_gen();
+    info.video_w = 640;
+    info.video_h = 480;
+    info.duration_ms = 1000;
+    bar.update_pending_attachment(info);
+    CHECK_FALSE(bar.pending_for_test()->loading);
+    CHECK(send->enabled());
+}
+
 TEST_CASE("ComposeBar emoji-button click fires on_emoji", "[tk][view][compose]")
 {
     TkComposeBarStage st;

@@ -7,9 +7,12 @@ namespace tesseract::views
 namespace
 {
 
+// Bot command names are [a-z0-9_-]{1,32}, the rule the client applies to bot
+// commands on the way in, so the popup must accept the same characters.
 constexpr bool is_name_char(char c)
 {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_' || c == '-';
 }
 
 // Compact positional hint shown next to "/name" in the popup row, e.g.
@@ -60,9 +63,9 @@ SlashCommandEngine::find_prefix(std::string_view text, int cursor_byte_pos) cons
     if (text.empty() || text[0] != '/') return std::nullopt;
     if (cursor_byte_pos != (int)text.size()) return std::nullopt;
 
-    // All chars after the leading '/' must be name chars (no spaces,
-    // no digits, no punctuation). The first space terminates the popup
-    // because the user has moved on to typing args.
+    // All chars after the leading '/' must be name chars (letters, digits,
+    // '_' and '-'). The first space terminates the popup because the user
+    // has moved on to typing args.
     for (std::size_t i = 1; i < text.size(); ++i)
     {
         if (!is_name_char(text[i])) return std::nullopt;

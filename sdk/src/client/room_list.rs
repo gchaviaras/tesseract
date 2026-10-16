@@ -2006,6 +2006,27 @@ impl ClientFfi {
         Vec::new()
     }
 
+    /// Joined-member count of a room, from its cached summary. Builds no member
+    /// list, so a caller can skip a large room before paying for its members.
+    /// 0 when the room is unknown.
+    #[cfg(not(test))]
+    pub fn room_joined_member_count(&self, room_id: &str) -> u64 {
+        let Some(client) = self.client.as_ref() else {
+            return 0;
+        };
+        let Ok(room_id) = room_id.parse::<OwnedRoomId>() else {
+            return 0;
+        };
+        client
+            .get_room(&room_id)
+            .map_or(0, |room| room.joined_members_count())
+    }
+
+    #[cfg(test)]
+    pub fn room_joined_member_count(&self, _room_id: &str) -> u64 {
+        0
+    }
+
     /// Banned members of a room (Room Settings → Moderation). Unlike
     /// `get_room_members`, this does sync the member list first: with lazy
     /// loading, ban events for users who never spoke aren't in the local
@@ -2014,17 +2035,22 @@ impl ClientFfi {
     /// timeout/error it falls back to whatever the store already has.
     /// Blocks — worker thread.
     #[cfg(not(test))]
-    pub fn get_banned_members(&self, room_id: &str) -> Vec<crate::ffi::BannedMember> {
+    pub fn get_banned_members(&self, room_id: &str) -> crate::ffi::BannedMemberList {
+        use crate::ffi::BannedMemberList;
         let _enter = self.rt.enter();
+        let unknown = || BannedMemberList {
+            members: Vec::new(),
+            complete: false,
+        };
         let Some(client) = self.client.as_ref() else {
-            return Vec::new();
+            return unknown();
         };
         let room_id: OwnedRoomId = match room_id.parse() {
             Ok(id) => id,
-            Err(_) => return Vec::new(),
+            Err(_) => return unknown(),
         };
         let Some(room) = client.get_room(&room_id) else {
-            return Vec::new();
+            return unknown();
         };
         let _guard = super::InFlightGuard::new(
             &self.in_flight,
@@ -2034,44 +2060,53 @@ impl ClientFfi {
             #[cfg(debug_assertions)]
             "room_list/get_banned_members".to_string(),
         );
-        let _ = self.rt.block_on(tokio::time::timeout(
+        // A timeout or a failed sync leaves the cache as it is, which may not
+        // hold every ban yet; the caller is told so it can say the list is partial.
+        let synced = self.rt.block_on(tokio::time::timeout(
             std::time::Duration::from_secs(10),
             room.sync_members(),
         ));
+        let complete = matches!(synced, Ok(Ok(())));
         let own = client.user_id().map(ToOwned::to_owned);
         let power_levels = self.rt.block_on(room.power_levels()).ok();
         match self
             .rt
             .block_on(room.members_no_sync(matrix_sdk::RoomMemberships::BAN))
         {
-            Ok(members) => members
-                .into_iter()
-                .map(|m| {
-                    let event = m.event();
-                    let can_unban = match (&own, &power_levels) {
-                        (Some(own), Some(pl)) => pl.user_can_unban_user(own, m.user_id()),
-                        _ => false,
-                    };
-                    crate::ffi::BannedMember {
-                        user_id: m.user_id().to_string(),
-                        display_name: m
-                            .display_name()
-                            .map(str::to_owned)
-                            .unwrap_or_else(|| m.user_id().localpart().to_string()),
-                        avatar_url: m.avatar_url().map(|u| u.to_string()).unwrap_or_default(),
-                        reason: event.reason().unwrap_or_default().to_owned(),
-                        banned_by: event.sender().to_string(),
-                        can_unban,
-                    }
-                })
-                .collect(),
-            Err(_) => Vec::new(),
+            Ok(members) => BannedMemberList {
+                members: members
+                    .into_iter()
+                    .map(|m| {
+                        let event = m.event();
+                        let can_unban = match (&own, &power_levels) {
+                            (Some(own), Some(pl)) => pl.user_can_unban_user(own, m.user_id()),
+                            _ => false,
+                        };
+                        crate::ffi::BannedMember {
+                            user_id: m.user_id().to_string(),
+                            display_name: m
+                                .display_name()
+                                .map(str::to_owned)
+                                .unwrap_or_else(|| m.user_id().localpart().to_string()),
+                            avatar_url: m.avatar_url().map(|u| u.to_string()).unwrap_or_default(),
+                            reason: event.reason().unwrap_or_default().to_owned(),
+                            banned_by: event.sender().to_string(),
+                            can_unban,
+                        }
+                    })
+                    .collect(),
+                complete,
+            },
+            Err(_) => unknown(),
         }
     }
 
     #[cfg(test)]
-    pub fn get_banned_members(&self, _room_id: &str) -> Vec<crate::ffi::BannedMember> {
-        Vec::new()
+    pub fn get_banned_members(&self, _room_id: &str) -> crate::ffi::BannedMemberList {
+        crate::ffi::BannedMemberList {
+            members: Vec::new(),
+            complete: false,
+        }
     }
 
     /// Send an m.room.topic state event. Blocks — worker thread.
@@ -2332,10 +2367,12 @@ impl ClientFfi {
     }
 
     /// Send an updated m.room.power_levels state event with the 10 fields
-    /// from `levels`. Reads the current power levels first (preserving every
-    /// field this tab doesn't edit, e.g. per-user overrides and other
-    /// per-event-type overrides), mutates only the 10 fields the Permissions
-    /// tab exposes, then sends the result. Blocks — worker thread.
+    /// from `levels`. Re-fetches the server's copy of the event right before
+    /// editing it: the room's cached copy can lag a concurrent change, and
+    /// building the event from it would silently revert that change. Only the
+    /// 10 fields the Permissions tab exposes are written; per-user overrides
+    /// and other per-event-type overrides are kept as the server holds them.
+    /// Blocks — worker thread.
     #[cfg(not(test))]
     pub fn set_room_power_levels(
         &self,
@@ -2343,52 +2380,14 @@ impl ClientFfi {
         levels: crate::ffi::RoomPowerLevelsFfi,
     ) -> OpResult {
         let _enter = self.rt.enter();
+        use matrix_sdk::ruma::api::client::state::get_state_event_for_key;
         use matrix_sdk::ruma::events::room::power_levels::RoomPowerLevelsEventContent;
-        use matrix_sdk::ruma::events::TimelineEventType;
-        use matrix_sdk::ruma::Int;
+        use matrix_sdk::ruma::events::StateEventType;
 
         let Some(client) = self.client.as_ref() else {
             return err("not logged in");
         };
-        let (_, room) = try_op!(require_room(client, room_id));
-        let mut pl = match self.rt.block_on(room.power_levels()) {
-            Ok(p) => p,
-            Err(e) => return err(e.to_string()),
-        };
-
-        fn to_int(val: i64) -> Result<Int, OpResult> {
-            Int::new(val).ok_or_else(|| err(format!("power level {val} out of range")))
-        }
-        pl.users_default = try_op!(to_int(levels.default_role));
-        pl.events_default = try_op!(to_int(levels.send_messages));
-        pl.invite = try_op!(to_int(levels.invite_users));
-        pl.state_default = try_op!(to_int(levels.change_settings));
-        pl.kick = try_op!(to_int(levels.kick_users));
-        pl.ban = try_op!(to_int(levels.ban_users));
-        pl.redact = try_op!(to_int(levels.remove_messages));
-        pl.notifications.room = try_op!(to_int(levels.notify_everyone));
-        pl.events.insert(
-            TimelineEventType::from("m.room.power_levels"),
-            try_op!(to_int(levels.change_permissions)),
-        );
-        pl.events.insert(
-            TimelineEventType::from("org.matrix.msc3401.call"),
-            try_op!(to_int(levels.start_calls)),
-        );
-        let join_calls_level = try_op!(to_int(levels.join_calls));
-        pl.events.insert(
-            TimelineEventType::from("org.matrix.msc4143.rtc.member"),
-            join_calls_level,
-        );
-        pl.events.insert(
-            TimelineEventType::from("org.matrix.msc3401.call.member"),
-            join_calls_level,
-        );
-
-        let content = match RoomPowerLevelsEventContent::try_from(pl) {
-            Ok(c) => c,
-            Err(e) => return err(e.to_string()),
-        };
+        let (id, room) = try_op!(require_room(client, room_id));
         let _guard = super::InFlightGuard::new(
             &self.in_flight,
             &self.handler,
@@ -2397,6 +2396,23 @@ impl ClientFfi {
             #[cfg(debug_assertions)]
             "room_list/set_room_power_levels".to_string(),
         );
+        let request = get_state_event_for_key::v3::Request::new(
+            id,
+            StateEventType::RoomPowerLevels,
+            String::new(),
+        );
+        let response = match self.rt.block_on(async { client.send(request).await }) {
+            Ok(r) => r,
+            Err(e) => return err(e.to_string()),
+        };
+        let mut content: RoomPowerLevelsEventContent =
+            match serde_json::from_str(response.event_or_content.get()) {
+                Ok(c) => c,
+                Err(e) => return err(e.to_string()),
+            };
+        if let Err(msg) = apply_power_level_levels(&mut content, &levels) {
+            return err(msg);
+        }
         match self.rt.block_on(room.send_state_event(content)) {
             Ok(_) => ok(""),
             Err(e) => err(e.to_string()),
@@ -2597,7 +2613,9 @@ impl ClientFfi {
             let mut history_visibility = "shared".to_string();
 
             {
-                let room_state = super::fetch_room_state_cached(&client, &room_state_cache, &rid).await;
+                let room_state = super::fetch_room_state_cached(&client, &room_state_cache, &rid)
+                    .await
+                    .unwrap_or_default();
                 for raw in room_state.iter() {
                     let Ok(Some(ty)) = raw.get_field::<String>("type") else {
                         continue;
@@ -3418,6 +3436,45 @@ impl ClientFfi {
     }
 }
 
+/// Writes the 10 Permissions-tab fields of `levels` into `pl`. Every other
+/// field (per-user overrides, other per-event-type overrides) is left as the
+/// server sent it.
+fn apply_power_level_levels(
+    pl: &mut matrix_sdk::ruma::events::room::power_levels::RoomPowerLevelsEventContent,
+    levels: &crate::ffi::RoomPowerLevelsFfi,
+) -> Result<(), String> {
+    use matrix_sdk::ruma::events::TimelineEventType;
+    use matrix_sdk::ruma::Int;
+
+    let to_int = |val: i64| Int::new(val).ok_or_else(|| format!("power level {val} out of range"));
+    pl.users_default = to_int(levels.default_role)?;
+    pl.events_default = to_int(levels.send_messages)?;
+    pl.invite = to_int(levels.invite_users)?;
+    pl.state_default = to_int(levels.change_settings)?;
+    pl.kick = to_int(levels.kick_users)?;
+    pl.ban = to_int(levels.ban_users)?;
+    pl.redact = to_int(levels.remove_messages)?;
+    pl.notifications.room = to_int(levels.notify_everyone)?;
+    pl.events.insert(
+        TimelineEventType::from("m.room.power_levels"),
+        to_int(levels.change_permissions)?,
+    );
+    pl.events.insert(
+        TimelineEventType::from("org.matrix.msc3401.call"),
+        to_int(levels.start_calls)?,
+    );
+    let join_calls_level = to_int(levels.join_calls)?;
+    pl.events.insert(
+        TimelineEventType::from("org.matrix.msc4143.rtc.member"),
+        join_calls_level,
+    );
+    pl.events.insert(
+        TimelineEventType::from("org.matrix.msc3401.call.member"),
+        join_calls_level,
+    );
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Tests (content-shape only — state-event sends require a live homeserver).
 // Mirrors the style of pins.rs's `mod tests`.
@@ -3570,6 +3627,77 @@ mod room_settings_tests {
         // info was never set — must be omitted, not null, per its
         // skip_serializing_if.
         assert!(v.get("info").is_none());
+    }
+}
+
+#[cfg(test)]
+mod room_power_levels_tests {
+    use super::apply_power_level_levels;
+    use crate::ffi::RoomPowerLevelsFfi;
+    use matrix_sdk::ruma::events::room::power_levels::RoomPowerLevelsEventContent;
+    use matrix_sdk::ruma::events::TimelineEventType;
+
+    // The server's copy: a per-user override and an event-type override the
+    // Permissions tab does not expose. Both must survive the edit.
+    fn server_content() -> RoomPowerLevelsEventContent {
+        serde_json::from_value(serde_json::json!({
+            "users": { "@mod:example.org": 50 },
+            "users_default": 0,
+            "events": { "m.room.name": 50 },
+            "events_default": 0,
+            "state_default": 50,
+            "ban": 50,
+            "kick": 50,
+            "redact": 50,
+            "invite": 0,
+            "notifications": { "room": 50 }
+        }))
+        .unwrap()
+    }
+
+    fn event_level(pl: &RoomPowerLevelsEventContent, event_type: &str) -> i64 {
+        i64::from(pl.events[&TimelineEventType::from(event_type)])
+    }
+
+    fn levels() -> RoomPowerLevelsFfi {
+        RoomPowerLevelsFfi {
+            default_role: 0,
+            send_messages: 0,
+            invite_users: 25,
+            change_settings: 100,
+            kick_users: 75,
+            ban_users: 100,
+            remove_messages: 50,
+            notify_everyone: 20,
+            change_permissions: 100,
+            start_calls: 0,
+            join_calls: 0,
+        }
+    }
+
+    #[test]
+    fn edit_writes_the_tab_fields_and_keeps_the_rest() {
+        let mut pl = server_content();
+        apply_power_level_levels(&mut pl, &levels()).unwrap();
+
+        assert_eq!(i64::from(pl.invite), 25);
+        assert_eq!(i64::from(pl.state_default), 100);
+        assert_eq!(i64::from(pl.kick), 75);
+        assert_eq!(i64::from(pl.notifications.room), 20);
+        assert_eq!(event_level(&pl, "m.room.power_levels"), 100);
+        assert_eq!(event_level(&pl, "org.matrix.msc3401.call.member"), 0);
+
+        assert_eq!(i64::from(pl.users["@mod:example.org"]), 50);
+        assert_eq!(event_level(&pl, "m.room.name"), 50);
+    }
+
+    #[test]
+    fn out_of_range_level_is_refused() {
+        let mut pl = server_content();
+        let mut bad = levels();
+        bad.kick_users = i64::MAX;
+        let msg = apply_power_level_levels(&mut pl, &bad).unwrap_err();
+        assert!(msg.contains("out of range"), "{msg}");
     }
 }
 

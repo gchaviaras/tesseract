@@ -1126,4 +1126,17 @@ bool DatePickerView::today_enabled() const
            (ty == max_year_ && tm == max_month_ && td <= max_day_);
 }
 
+std::uint64_t local_midnight_ms(int year, int month, int day)
+{
+    std::tm t{};
+    t.tm_year = year - 1900;
+    t.tm_mon = month - 1;
+    t.tm_mday = day;
+    t.tm_isdst = -1; // let the zone rules decide whether DST applies
+    const std::time_t secs = std::mktime(&t);
+    if (secs < 0)
+        return 0;
+    return static_cast<std::uint64_t>(secs) * 1000ULL;
+}
+
 } // namespace tesseract::views

@@ -74,6 +74,20 @@ public:
         remove_entry_(recovery_key_for(user_id));
     }
 
+    /// The manual proxy's `user:password`, kept out of app_settings.json. One
+    /// entry per profile; same semantics as load() / save() / remove().
+    /// `failed` is set when the secure storage couldn't be read, as opposed to
+    /// the entry not existing.
+    static std::optional<std::string> load_proxy_credentials(bool* failed)
+    {
+        return load_entry_(proxy_credentials_key(), failed);
+    }
+    static bool save_proxy_credentials(const std::string& userinfo)
+    {
+        return save_entry_(proxy_credentials_key(), userinfo, "Tesseract proxy");
+    }
+    static void remove_proxy_credentials() { remove_entry_(proxy_credentials_key()); }
+
     /// The backend key actually used for `user_id`: the bare MXID in the
     /// default profile (unchanged from before profiles existed, so no
     /// migration), `profile:<name>/<user_id>` under `--profile=<name>` so the
@@ -90,6 +104,14 @@ public:
     static std::string recovery_key_for(const std::string& user_id)
     {
         return "recovery-key:" + key_for(user_id);
+    }
+
+    /// The backend key of the proxy-credentials entry (per profile, behind a
+    /// prefix no MXID or other key starts with).
+    static std::string proxy_credentials_key()
+    {
+        const std::string& p = profile();
+        return p.empty() ? "proxy-credentials:" : "proxy-credentials:profile:" + p;
     }
 
 private:

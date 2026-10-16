@@ -2,12 +2,69 @@
 
 #include "tesseract/session_store.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <exception>
 #include <utility>
 
 namespace tesseract
 {
+
+bool save_with_retries(const std::function<bool()>& attempt, int attempts,
+                       std::chrono::milliseconds first_backoff,
+                       const std::function<bool()>& cancelled)
+{
+    auto backoff = first_backoff;
+    for (int i = 1; i <= attempts; ++i)
+    {
+        if (cancelled && cancelled())
+            return false;
+        try
+        {
+            if (attempt())
+                return true;
+        }
+        catch (...)
+        {
+            // Counted as a failed attempt like a false return.
+        }
+        if (i < attempts)
+        {
+            // Sliced so a cancel (the account signing out) is noticed promptly.
+            const auto until = std::chrono::steady_clock::now() + backoff;
+            while (std::chrono::steady_clock::now() < until)
+            {
+                if (cancelled && cancelled())
+                    return false;
+                std::this_thread::sleep_for(std::min(
+                    std::chrono::milliseconds(25),
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        until - std::chrono::steady_clock::now()) + std::chrono::milliseconds(1)));
+            }
+            backoff *= 2;
+        }
+    }
+    return false;
+}
+
+namespace
+{
+std::mutex g_save_failed_mutex;
+std::function<void(const std::string&)> g_save_failed_handler;
+} // namespace
+
+void set_session_save_failed_handler(std::function<void(const std::string& user_id)> handler)
+{
+    std::lock_guard<std::mutex> lk(g_save_failed_mutex);
+    g_save_failed_handler = std::move(handler);
+}
+
+void report_session_save_failed(const std::string& user_id)
+{
+    std::lock_guard<std::mutex> lk(g_save_failed_mutex);
+    if (g_save_failed_handler)
+        g_save_failed_handler(user_id);
+}
 
 SessionPersistQueue::SessionPersistQueue(Writer writer) : writer_(writer)
 {
@@ -31,6 +88,8 @@ void SessionPersistQueue::enqueue(std::string user_id, std::string json)
 {
     {
         std::lock_guard<std::mutex> lk(mutex_);
+        if (tombstones_.count(user_id) != 0)
+            return; // logged out: a late refresh must not recreate the account
         // Coalesce: if a job for this user_id is already pending (not yet
         // picked up by the writer), replace its json so only the newest token
         // is written. The in-flight job — if any — is left alone; a job that is
@@ -113,6 +172,7 @@ std::size_t SessionPersistQueue::pending()
 void SessionPersistQueue::discard(const std::string& user_id)
 {
     std::unique_lock<std::mutex> lk(mutex_);
+    tombstones_.insert(user_id);
     for (auto it = queue_.begin(); it != queue_.end();)
     {
         if (it->user_id == user_id)
@@ -123,14 +183,46 @@ void SessionPersistQueue::discard(const std::string& user_id)
     cv_.wait(lk, [this, &user_id] { return !(busy_ && busy_user_ == user_id); });
 }
 
+void SessionPersistQueue::revive(const std::string& user_id)
+{
+    std::lock_guard<std::mutex> lk(mutex_);
+    tombstones_.erase(user_id);
+}
+
+bool SessionPersistQueue::is_discarded(const std::string& user_id)
+{
+    std::lock_guard<std::mutex> lk(mutex_);
+    return tombstones_.count(user_id) != 0;
+}
+
 namespace
 {
+constexpr int kPersistAttempts = 4;
+constexpr std::chrono::milliseconds kPersistFirstBackoff{500};
+
 void default_writer(const std::string& user_id, const std::string& json)
 {
     // save_session_update, not save_account: this fires on every OAuth
     // token refresh, which must not silently strip a store-encryption key
     // persisted at login time (see SessionStore::save_session_update).
-    SessionStore::save_session_update(user_id, json);
+    //
+    // A rotated refresh token is single-use on the server, so an unsaved one
+    // is lost. Retry transient failures (a locked keyring, a full disk)
+    // before giving up. This runs on the writer thread, so the SDK is not
+    // blocked, and jobs queued meanwhile still coalesce.
+    const bool saved = save_with_retries(
+        [&] { return SessionStore::save_session_update(user_id, json); },
+        kPersistAttempts, kPersistFirstBackoff,
+        // A sign-out waits in discard() for this write, so stop retrying for it.
+        [&] { return session_persist_queue().is_discarded(user_id); });
+    if (!saved && !session_persist_queue().is_discarded(user_id))
+    {
+        std::fprintf(stderr,
+                     "[tesseract] could not save the session for %s after %d "
+                     "attempts; the next launch may need a sign-in\n",
+                     user_id.c_str(), kPersistAttempts);
+        report_session_save_failed(user_id);
+    }
 }
 } // namespace
 

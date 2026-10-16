@@ -86,6 +86,15 @@ public:
     // (empty if that row isn't laid out).
     const std::vector<PopupMenu::Item>& member_menu_items_for_test() const;
     tk::Rect member_row_rect_for_test(int i) const;
+    // Test-only: display names of the rows laid out, in list order.
+    std::vector<std::string> shown_member_names_for_test() const;
+    // Test-only: expands the member list as its "Show all" button does.
+    void expand_members_for_test() { expand_members_(); }
+    // Test-only: the joined labels of the badge row (encrypted, history, language, bridged).
+    std::string badge_labels_for_test() const;
+
+    // Puts back the topic a failed save had shown (no-op if it has changed since).
+    void topic_save_failed(const std::string& attempted);
 
     // Self-owned topic-edit control — see tk::TextArea. Non-null whenever
     // this body was constructed with a real Host.
@@ -157,6 +166,7 @@ private:
     std::string display_name_;
     std::string avatar_url_;
     std::string topic_;
+    std::string topic_before_save_; // the topic a pending save replaced
     std::string topic_html_;
     std::vector<tk::TextSpan> topic_spans_; // non-empty when plain topic has links
     bool        is_encrypted_      = false;
@@ -168,6 +178,9 @@ private:
 
     // Members
     std::vector<tesseract::RoomMember> members_;
+    std::size_t members_ordered_ = 0; // leading members_ entries in display order
+    void order_members_(std::size_t count);
+    void expand_members_();
     bool members_expanded_ = false;
 
     // Topic edit state
@@ -348,6 +361,9 @@ public:
     // Test-only access to the body (member-row rects are body-local).
     RoomInfoPanelBody* body_for_test() const { return body_; }
 
+    // Puts back the topic a failed save had shown.
+    void topic_save_failed(const std::string& attempted);
+
     // Self-owned topic-edit control — see tk::TextArea. Non-null whenever
     // this panel was constructed with a real Host.
     tk::TextArea* topic_field() const;
@@ -366,6 +382,7 @@ public:
     std::function<void(std::string room_id)>                on_fetch_members;
     std::function<void(std::string room_id, std::string t)> on_save_topic;
     std::function<void(std::string room_id)>                on_leave_room;
+
     // Fired when the "Invite people" button is clicked. RoomView closes
     // this panel and opens its InviteDialog.
     std::function<void(std::string room_id)>                on_invite_requested;

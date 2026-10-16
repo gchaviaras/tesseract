@@ -201,3 +201,17 @@ TEST_CASE("DevicesSection: wheel is a no-op when content fits the viewport",
     REQUIRE(sec.on_wheel({10.0f, 10.0f}, 0.0f, 120.0f) == false);
     REQUIRE(sec.on_wheel({10.0f, 10.0f}, 0.0f, -120.0f) == false);
 }
+
+TEST_CASE("url_destination_host names the host a sign-in page opens on",
+          "[devices][uia]")
+{
+    using tesseract::views::url_destination_host;
+    CHECK(url_destination_host("https://matrix.example.org/_matrix/client/r0/login") ==
+          "matrix.example.org");
+    CHECK(url_destination_host("https://matrix.example.org:8448/auth?x=1") ==
+          "matrix.example.org:8448");
+    CHECK(url_destination_host("https://user@evil.example/#/x") == "evil.example");
+    CHECK(url_destination_host("https://example.org") == "example.org");
+    CHECK(url_destination_host("example.org/path").empty());
+    CHECK(url_destination_host("").empty());
+}

@@ -82,6 +82,20 @@ std::string compose_subline(const tesseract::Client::Device& d)
 
 } // namespace
 
+std::string url_destination_host(const std::string& url)
+{
+    const auto scheme_end = url.find("://");
+    if (scheme_end == std::string::npos)
+        return {};
+    const std::size_t start = scheme_end + 3;
+    const std::size_t end   = url.find_first_of("/?#", start);
+    std::string authority   = url.substr(start, end == std::string::npos ? std::string::npos
+                                                                          : end - start);
+    if (const auto at = authority.rfind('@'); at != std::string::npos)
+        authority.erase(0, at + 1);
+    return authority;
+}
+
 // ---------------------------------------------------------------------------
 // DeviceRow — one device's row. Owns its action buttons as children and paints
 // its own text + chips. Switches between "normal" (Sign out) and "UIA pending"
@@ -190,9 +204,15 @@ void DevicesSection::DeviceRow::rebuild_buttons_()
 
     if (uia_)
     {
+        // The page is on the homeserver's own host and asks for credentials, so
+        // the destination is named on the button before the user opens it.
+        const std::string url  = uia_fallback_url_;
+        const std::string host = url_destination_host(url);
+        const std::string open_label = host.empty()
+            ? tk::tr("Open in browser")
+            : tk::trf(tk::tr("Open in browser ({0})"), {host});
         auto open = tk::create_widget<tk::Button>(
-            this, tk::tr("Open in browser"), std::function<void()>{}, tk::Button::Variant::Subtle);
-        const std::string url = uia_fallback_url_;
+            this, open_label, std::function<void()>{}, tk::Button::Variant::Subtle);
         open->set_on_click([url]
         {
             tesseract::Client::open_in_browser(url);

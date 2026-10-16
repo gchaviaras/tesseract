@@ -1686,6 +1686,21 @@ TEST_CASE("find_emoji_byte_ranges: mixed text yields byte-accurate ranges",
          "\xF0\x9F\x98\x80");
 }
 
+TEST_CASE("utf16_indices_for_byte_offsets: maps ASCII, BMP and astral text in one pass",
+          "[html_spans][emoji]")
+{
+    // "a" (1 byte, 1 unit), "é" (2 bytes, 1 unit), "😀" (4 bytes, 2 units), "b".
+    const std::string s = "a\xC3\xA9\xF0\x9F\x98\x80" "b";
+    using tk::utf16_indices_for_byte_offsets;
+    // Out of order, with one past the end: results follow the request order.
+    CHECK(utf16_indices_for_byte_offsets(s, {7, 0, 3, 1, 8, 99}) ==
+          std::vector<std::size_t>{4, 0, 2, 1, 5, 5});
+    // Inside the emoji's code point: maps to the index just after it.
+    CHECK(utf16_indices_for_byte_offsets(s, {5}) == std::vector<std::size_t>{4});
+    CHECK(utf16_indices_for_byte_offsets("", {0, 3}) ==
+          std::vector<std::size_t>{0, 0});
+}
+
 TEST_CASE("find_emoji_byte_ranges: multiple runs are returned in order",
           "[html_spans][emoji]")
 {
@@ -1694,4 +1709,21 @@ TEST_CASE("find_emoji_byte_ranges: multiple runs are returned in order",
     REQUIRE(ranges.size() == 2);
     CHECK(ranges[0].start_byte < ranges[1].start_byte);
     CHECK(ranges[0].end_byte <= ranges[1].start_byte);
+}
+
+TEST_CASE("neutralize_literal_carriers turns a literal U+FFFC in text into U+FFFD",
+          "[html_spans]")
+{
+    using tesseract::views::neutralize_literal_carriers;
+    tk::TextSpan text;
+    text.text = "a\xEF\xBF\xBC" "b\xEF\xBF\xBC";
+    tk::TextSpan pill;
+    pill.is_image = true; // an image span's carrier is filled in later
+    std::vector<tk::TextSpan> spans{text, pill};
+
+    neutralize_literal_carriers(spans);
+
+    CHECK(spans[0].text == "a\xEF\xBF\xBD" "b\xEF\xBF\xBD");
+    CHECK(spans[1].is_image);
+    CHECK(spans[1].text.empty());
 }

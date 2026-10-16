@@ -4,8 +4,6 @@
 #include "tk/blurhash.h"
 #include "views/MainAppWidget.h"
 #include <algorithm>
-#include <fstream>
-#include <system_error>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -506,17 +504,18 @@ void ShellBase::ensure_viewer_fullres_(const std::string& url)
                         viewer_fullres_in_flight_.erase(fkey);
                         return;
                     }
+                    auto sess = active_account_;
                     auto id = begin_media_req_(
                         /*group_id=*/0,
-                        [this, url, fkey](std::vector<std::uint8_t>&& net)
+                        [this, url, fkey, sess](std::vector<std::uint8_t>&& net)
                         {
                             if (net.empty())
                             {
                                 viewer_fullres_in_flight_.erase(fkey);
-                                note_media_fetch_failed_(fkey);
+                                note_media_fetch_failed_(fkey, sess);
                                 return;
                             }
-                            note_media_fetch_ok_(fkey);
+                            note_media_fetch_ok_(fkey, sess);
                             decode_fullres_and_store_(url, fkey, std::move(net),
                                                       /*persist=*/true);
                         },
@@ -1006,24 +1005,11 @@ void ShellBase::ensure_tile_async(int z, int x, int y)
     spec.group_id = 0;
     spec.load_disk_ = [disk_path]
     {
-        std::vector<std::uint8_t> bytes;
-        if (std::filesystem::exists(disk_path))
-        {
-            std::ifstream f(disk_path, std::ios::binary);
-            bytes.assign(std::istreambuf_iterator<char>(f), {});
-        }
-        return bytes;
+        return shell_helpers::read_tile_disk(disk_path);
     };
     spec.store_disk_ = [disk_path](const std::vector<std::uint8_t>& net)
     {
-        std::error_code ec;
-        std::filesystem::create_directories(disk_path.parent_path(), ec);
-        if (!ec)
-        {
-            std::ofstream f(disk_path, std::ios::binary);
-            f.write(reinterpret_cast<const char*>(net.data()),
-                    static_cast<std::streamsize>(net.size()));
-        }
+        shell_helpers::write_tile_disk(disk_path, net);
     };
     spec.erase_inflight_ = [this, key] { tile_fetches_in_flight_.erase(key); };
     spec.start_fetch_ = [this, url](std::uint64_t id)

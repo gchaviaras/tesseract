@@ -50,6 +50,13 @@ const ForeignOption* find_foreign(std::span<const ForeignOption> foreign,
     return nullptr;
 }
 
+// "--x" or "-x" (but not a lone "-", the usual stdin marker). Such an argument
+// is an option, so it is never taken as the value of the option before it.
+bool looks_like_option(std::string_view arg)
+{
+    return arg.size() > 1 && arg.front() == '-';
+}
+
 } // namespace
 
 bool ParseResult::has(std::string_view id) const
@@ -163,7 +170,7 @@ ParseResult parse(std::span<const OptionSpec> specs,
             {
                 record(*spec, std::string(body.substr(eq + 1)), as_typed);
             }
-            else if (i + 1 < args.size())
+            else if (i + 1 < args.size() && !looks_like_option(args[i + 1]))
             {
                 record(*spec, args[++i], as_typed);
             }
@@ -202,7 +209,7 @@ ParseResult parse(std::span<const OptionSpec> specs,
                 }
                 record(*spec, std::string(rest), as_typed);
             }
-            else if (i + 1 < args.size())
+            else if (i + 1 < args.size() && !looks_like_option(args[i + 1]))
             {
                 record(*spec, args[++i], as_typed);
             }

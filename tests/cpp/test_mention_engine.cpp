@@ -146,3 +146,23 @@ TEST_CASE("mention engine: max_results is honoured", "[mention][engine]")
     auto r = e.lookup("", sample_members(), 2, false);
     CHECK(r.size() == 2);
 }
+
+TEST_CASE("mention engine: a name in another script keeps the @ token going",
+          "[mention][engine]")
+{
+    // "Иван" is UTF-8 bytes D0 98 D0 B2 D0 B0 D0 BD.
+    const std::string ivan = "\xD0\x98\xD0\xB2\xD0\xB0\xD0\xBD";
+    MentionEngine e;
+    const std::string text = "hey @" + ivan;
+    auto m = e.find_prefix(text, static_cast<int>(text.size()));
+    REQUIRE(m.has_value());
+    CHECK(m->prefix == ivan);
+
+    const std::vector<RoomMember> members = {
+        {"@ivan:example.org", ivan + " Petrov", ""},
+        {"@bob:example.org", "Bob", ""},
+    };
+    auto r = e.lookup(ivan, members, 8, /*include_room=*/false);
+    REQUIRE(r.size() == 1);
+    CHECK(r[0].user_id == "@ivan:example.org");
+}

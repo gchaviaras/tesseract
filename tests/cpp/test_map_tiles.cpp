@@ -158,3 +158,16 @@ TEST_CASE("lat_lon_to_tile stays in range for out-of-range coordinates",
     const auto huge = tesseract::views::lat_lon_to_tile(0.0, 0.0, 500);
     CHECK(huge.z <= 19);
 }
+
+TEST_CASE("is_png_bytes accepts the PNG signature and refuses other bodies", "[map_tiles]")
+{
+    using tesseract::views::is_png_bytes;
+    const std::vector<std::uint8_t> png{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0};
+    CHECK(is_png_bytes(png));
+    // An HTML error page from a tile server is not a tile.
+    const std::vector<std::uint8_t> html{'<', 'h', 't', 'm', 'l', '>', '\n'};
+    CHECK_FALSE(is_png_bytes(html));
+    CHECK_FALSE(is_png_bytes({}));
+    // A truncated signature is not enough.
+    CHECK_FALSE(is_png_bytes({0x89, 'P', 'N', 'G'}));
+}

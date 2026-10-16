@@ -92,7 +92,7 @@ TEST_CASE("sessionless Client: list and value queries come back empty",
 {
     Client c;
     CHECK(c.get_room_members(kRoom).empty());
-    CHECK(c.get_banned_members(kRoom).empty());
+    CHECK(c.get_banned_members(kRoom).members.empty());
     CHECK(c.list_room_threads(kRoom).empty());
     CHECK(c.recent_emoji_top(5).empty());
     CHECK(c.fetch_source_bytes("mxc://x/y").empty());

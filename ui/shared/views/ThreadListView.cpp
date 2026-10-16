@@ -479,10 +479,11 @@ std::string ThreadListView::access_name_for_row(std::size_t index) const
 {
     if (index == 0)
         return {};
-    const std::size_t ti = index - 1;
-    if (ti >= threads_.size())
+    // Rows are the filtered list, the same mapping on_row_clicked uses.
+    const std::size_t fi = index - 1;
+    if (fi >= filtered_indices_.size())
         return {};
-    const auto& t = threads_[ti];
+    const auto& t = threads_[filtered_indices_[fi]];
 
     // Mirrors paint_row's top-line construction ("<sender>: <body>").
     std::string name;
@@ -502,9 +503,9 @@ std::string ThreadListView::access_name_for_row(std::size_t index) const
 
 bool ThreadListView::access_activate_row(std::size_t index)
 {
-    if (index < 1 || index > threads_.size() || !on_thread_clicked)
+    if (index < 1 || index > filtered_indices_.size() || !on_thread_clicked)
         return false;
-    on_thread_clicked(threads_[index - 1].root_event_id);
+    on_thread_clicked(threads_[filtered_indices_[index - 1]].root_event_id);
     return true;
 }
 

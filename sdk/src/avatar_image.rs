@@ -13,8 +13,10 @@ use std::io::Cursor;
 
 /// Source images larger than this on either side are rejected up-front.
 const MAX_SRC_DIM: u32 = 16384;
-/// Cap on decoder allocations (decompression-bomb guard).
-const MAX_ALLOC_BYTES: u64 = 512 * 1024 * 1024;
+/// Cap on decoder allocations (decompression-bomb guard). Sized to take a 48 MP
+/// phone photo; the avatar itself is at most `max_side` square, so the output
+/// needs far less.
+const MAX_ALLOC_BYTES: u64 = 256 * 1024 * 1024;
 /// Cap on animation length; frames are held (already downscaled) in memory.
 const MAX_FRAMES: usize = 200;
 /// Cap on total *source* pixels decoded across an animation.
@@ -39,11 +41,16 @@ fn decode_err(e: image::ImageError) -> String {
     format!("could not decode image: {e}")
 }
 
-/// Center-crop to a square and downscale to at most `max_side`.
-fn square(img: &RgbaImage, max_side: u32) -> RgbaImage {
+/// Center-crop to a square and downscale to at most `max_side`. A source that
+/// is already square is taken as it is, without a crop copy.
+fn square(img: RgbaImage, max_side: u32) -> RgbaImage {
     let (w, h) = img.dimensions();
     let s = w.min(h);
-    let cropped = imageops::crop_imm(img, (w - s) / 2, (h - s) / 2, s, s).to_image();
+    let cropped = if w == h {
+        img
+    } else {
+        imageops::crop_imm(&img, (w - s) / 2, (h - s) / 2, s, s).to_image()
+    };
     let target = s.min(max_side);
     if target < s {
         imageops::resize(&cropped, target, target, FilterType::Lanczos3)
@@ -83,7 +90,7 @@ fn collect_frames(frames: image::Frames<'_>, max_side: u32) -> Result<Anim, Stri
             return Err(format!("animation is too long (max {MAX_FRAMES} frames)"));
         }
         let delay = delay_ms(frame.delay());
-        out.push((square(frame.buffer(), max_side), delay));
+        out.push((square(frame.into_buffer(), max_side), delay));
     }
     if out.is_empty() {
         return Err("image has no frames".into());
@@ -150,7 +157,7 @@ fn encode_animated(anim: &Anim) -> Result<Vec<u8>, String> {
 }
 
 fn encode_still(img: DynamicImage, max_side: u32) -> Result<(Vec<u8>, &'static str), String> {
-    let sq = square(&img.to_rgba8(), max_side);
+    let sq = square(img.into_rgba8(), max_side);
     let opaque = sq.pixels().all(|p| p.0[3] == 255);
     let mut out = Vec::new();
     if opaque {
@@ -257,5 +264,13 @@ mod tests {
         let frames = dec.into_frames().collect_frames().unwrap();
         assert_eq!(frames.len(), 3);
         assert_eq!(delay_ms(frames[0].delay()), 200);
+    }
+
+    #[test]
+    fn a_square_source_is_downscaled_without_a_crop() {
+        let img = RgbaImage::from_pixel(64, 64, Rgba([1, 2, 3, 255]));
+        let out = square(img, 32);
+        assert_eq!(out.dimensions(), (32, 32));
+        assert_eq!(out.get_pixel(0, 0).0, [1, 2, 3, 255]);
     }
 }

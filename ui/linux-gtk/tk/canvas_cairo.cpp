@@ -134,6 +134,12 @@ public:
         return height_;
     }
 
+    // The decoded pixels, for painting at a scale without a resampled copy.
+    cairo_surface_t* source_surface() const
+    {
+        return surface_;
+    }
+
     std::size_t memory_bytes() const override
     {
         if (!surface_)
@@ -803,6 +809,21 @@ private:
         // canvas_qpainter.cpp; profiled at ~87% of CPU in libpixman before.
         const int target_w = std::max(1, static_cast<int>(std::lround(dst.w)));
         const int target_h = std::max(1, static_cast<int>(std::lround(dst.h)));
+        // Only a downscale is resampled into a copy. A draw at or above the
+        // source size is painted from the source under a scale matrix: a copy
+        // at the zoomed size grows without bound (gigabytes at high zoom).
+        if (static_cast<double>(target_w) * target_h >=
+            static_cast<double>(image.width()) * image.height())
+        {
+            cairo_save(cr_);
+            cairo_translate(cr_, dst.x, dst.y);
+            cairo_scale(cr_, dst.w / image.width(), dst.h / image.height());
+            cairo_set_source_surface(cr_, image.source_surface(), 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr_), CAIRO_FILTER_GOOD);
+            cairo_paint(cr_);
+            cairo_restore(cr_);
+            return;
+        }
         cairo_surface_t* scaled = image.scaled_surface_for(target_w, target_h);
 
         cairo_save(cr_);

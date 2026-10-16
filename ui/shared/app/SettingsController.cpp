@@ -1,5 +1,7 @@
 #include "SettingsController.h"
 
+#include <algorithm>
+
 #include "tesseract/paths.h"
 #include "tk/i18n.h"
 #include "tesseract/settings.h"
@@ -523,6 +525,7 @@ void SettingsController::save_user_pack_changes(
             if (!ui.owner_alive()) // owner gone before the job started
                 return;
             bool all_ok = true;
+            bool add_failed = false;
             std::string first_error;
             auto note = [&](const tesseract::Result& r)
             {
@@ -533,9 +536,9 @@ void SettingsController::save_user_pack_changes(
                 }
             };
 
-            for (const auto& shortcode : diff.removed_shortcodes)
-                note(c->remove_user_pack_image(shortcode));
-
+            // Uploads and saves go first, removals last. A removal that ran
+            // ahead of a failed upload would delete the image it was meant
+            // to replace, with nothing in its place.
             for (const auto& img : diff.images)
             {
                 if (!img.existing_url.empty())
@@ -544,9 +547,11 @@ void SettingsController::save_user_pack_changes(
                     // edited in place) — upsert re-saves it under the current
                     // shortcode/body/info, and favorite is synced separately
                     // below since save_sticker_to_user_pack doesn't take it.
-                    note(c->save_sticker_to_user_pack(img.shortcode, img.body,
-                                                      img.existing_url,
-                                                      img.info_json));
+                    const auto saved = c->save_sticker_to_user_pack(
+                        img.shortcode, img.body, img.existing_url, img.info_json);
+                    note(saved);
+                    if (!saved.ok)
+                        add_failed = true;
                     if (img.favorite)
                         note(c->toggle_favorite_sticker(img.existing_url));
                 }
@@ -559,13 +564,33 @@ void SettingsController::save_user_pack_changes(
                     if (!upload.ok)
                     {
                         note(upload);
+                        add_failed = true;
                         continue;
                     }
-                    note(c->save_sticker_to_user_pack(img.shortcode, img.body,
-                                                      upload.message,
-                                                      img.info_json));
+                    const auto saved = c->save_sticker_to_user_pack(
+                        img.shortcode, img.body, upload.message, img.info_json);
+                    note(saved);
+                    if (!saved.ok)
+                        add_failed = true;
                     if (img.favorite)
                         note(c->toggle_favorite_sticker(upload.message));
+                }
+            }
+
+            // Nothing is removed while an add has failed: the images the user
+            // marked for removal stay until a retry, rather than vanishing
+            // alongside a replacement that never arrived. A shortcode that is
+            // written again in this batch is never removed, so the new image
+            // keeps its name when a removed one is re-used.
+            if (!add_failed)
+            {
+                for (const auto& shortcode : diff.removed_shortcodes)
+                {
+                    const bool rewritten = std::any_of(
+                        diff.images.begin(), diff.images.end(),
+                        [&](const auto& img) { return img.shortcode == shortcode; });
+                    if (!rewritten)
+                        note(c->remove_user_pack_image(shortcode));
                 }
             }
 

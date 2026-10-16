@@ -1459,7 +1459,7 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             const auto body = hit->body;
             const auto info_json = hit->info_json;
             const bool already_saved =
-                client_->user_pack_has_sticker(mxc_url, info_json);
+                client_ && client_->user_pack_has_sticker(mxc_url, info_json);
             auto* menu = new QMenu(this);
             menu->setAttribute(Qt::WA_DeleteOnClose);
             menu->setStyleSheet(tk::qt6::build_menu_qss(current_theme_));
@@ -1472,13 +1472,31 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
                 connect(add, &QAction::triggered, this,
                         [this, mxc_url, body, info_json]
                         {
-                            auto res = client_->save_sticker_to_user_pack(
-                                body, body, mxc_url, info_json);
-                            if (!res.ok)
-                            {
-                                statusBar()->showMessage(
-                                    QString::fromStdString(res.message), 6000);
-                            }
+                            if (!client_)
+                                return;
+                            // The save is a network and account-data write, so it
+                            // runs on the mutable pool; the status line is set back
+                            // on the UI thread.
+                            // The session is held so a switch or sign-out mid-save
+                            // cannot free the client under the worker.
+                            auto sess = active_account_;
+                            if (!sess || !sess->client)
+                                return;
+                            run_async_mut_(
+                                [this, sess, mxc_url, body, info_json]()
+                                {
+                                    auto res = sess->client->save_sticker_to_user_pack(
+                                        body, body, mxc_url, info_json);
+                                    if (res.ok)
+                                        return;
+                                    QMetaObject::invokeMethod(
+                                        this,
+                                        [this, message = res.message]()
+                                        {
+                                            statusBar()->showMessage(
+                                                QString::fromStdString(message), 6000);
+                                        });
+                                });
                         });
             }
             menu->popup(mainAppSurface_->mapToGlobal(pos));
@@ -1668,6 +1686,10 @@ MainWindow::~MainWindow()
     // still drains its own per-window pools below.
     if (!is_pinned_window_)
     {
+        // Hang up an active call while the SDK can still send the leave. Once
+        // request_stop() and stop_sync() run, the call would only end when the
+        // session is destroyed, and the others would still see us in it.
+        end_call();
         // Signal every account first, in its own pass, before any stop_sync()
         // call below: request_stop() only needs a shared FFI lock, so it wins
         // the race against a concurrent send_message/subscribe_room on that
@@ -3094,13 +3116,25 @@ void MainWindow::pick_image_file_(
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly))
         return;
+    // The file is chosen by the user but read here on the UI thread, so refuse
+    // anything too large to be a still worth sending before reading it.
+    constexpr qint64 kMaxPickedImageBytes = 64LL * 1024 * 1024;
+    if (f.size() > kMaxPickedImageBytes)
+    {
+        show_status_message_(tk::tr("That image is too large to send."));
+        return;
+    }
     QByteArray data = f.readAll();
-    const std::string mime =
-        path.endsWith(".png",  Qt::CaseInsensitive) ? "image/png"  :
-        path.endsWith(".gif",  Qt::CaseInsensitive) ? "image/gif"  :
-        path.endsWith(".webp", Qt::CaseInsensitive) ? "image/webp" :
-        "image/jpeg";
     std::vector<uint8_t> bytes(data.begin(), data.end());
+    // The type comes from the content, not the extension: a mislabelled file
+    // would otherwise be uploaded with the wrong MIME type.
+    const std::string_view sniffed = tk::sniff_image_mime(bytes);
+    if (sniffed.empty())
+    {
+        show_status_message_(tk::tr("That file isn't a PNG, JPEG, GIF or WebP image."));
+        return;
+    }
+    const std::string mime(sniffed);
     post_to_ui_([cb = std::move(cb), bytes = std::move(bytes), mime]() mutable
     {
         cb(std::move(bytes), mime);
@@ -3527,6 +3561,11 @@ void MainWindow::extract_drop_media_(std::uint32_t pending_gen,
     }
 }
 
+// A backend can parse a file and then never report a frame, a loaded status or an
+// error (audio-only data in a video container, a stalled pipeline). Without a limit
+// the player and its copy of the file would live until the window closed.
+constexpr int kMediaProbeTimeoutMs = 10000;
+
 void MainWindow::extract_drop_video_(std::uint32_t pending_gen,
                                      std::vector<std::uint8_t> bytes,
                                      tesseract::views::ComposeBar* target,
@@ -3589,6 +3628,18 @@ void MainWindow::extract_drop_video_(std::uint32_t pending_gen,
             player->deleteLater();
             post_pending_attachment_(state->info, target, target_alive);
         });
+    auto* timeout = new QTimer(player);
+    timeout->setSingleShot(true);
+    QObject::connect(timeout, &QTimer::timeout, player,
+        [this, player, state, target, target_alive]()
+        {
+            if (state->done) return;
+            state->done = true;
+            player->stop();
+            player->deleteLater();
+            post_pending_attachment_(state->info, target, target_alive);
+        });
+    timeout->start(kMediaProbeTimeoutMs);
     player->play();
 }
 
@@ -3638,6 +3689,20 @@ void MainWindow::extract_drop_audio_(std::uint32_t pending_gen,
             info.pending_gen = pending_gen;
             post_pending_attachment_(info, target, target_alive);
         });
+    auto* timeout = new QTimer(player);
+    timeout->setSingleShot(true);
+    QObject::connect(timeout, &QTimer::timeout, player,
+        [this, player, pending_gen, done, target, target_alive]()
+        {
+            if (*done) return;
+            *done = true;
+            player->stop();
+            player->deleteLater();
+            tesseract::views::MediaInfo info;
+            info.pending_gen = pending_gen;
+            post_pending_attachment_(info, target, target_alive);
+        });
+    timeout->start(kMediaProbeTimeoutMs);
     player->play();
 }
 
@@ -3705,6 +3770,19 @@ void MainWindow::decode_video_first_frame_(
             player->deleteLater();
             done({});
         });
+    auto* timeout = new QTimer(player);
+    timeout->setSingleShot(true);
+    QObject::connect(timeout, &QTimer::timeout, player,
+        [done, player, fired]() mutable
+        {
+            if (*fired)
+                return;
+            *fired = true;
+            player->stop();
+            player->deleteLater();
+            done({});
+        });
+    timeout->start(kMediaProbeTimeoutMs);
     player->play();
 }
 
@@ -4722,6 +4800,11 @@ std::optional<tk::Color> parse_portal_accent_(const QVariant& v)
 }
 } // namespace
 
+// A portal that is still starting can hold a call for D-Bus's default 25 s, which
+// would stall window creation. A timed-out read keeps the defaults, and the
+// portal's own change signal corrects them later.
+static constexpr int kPortalReadTimeoutMs = 1000;
+
 void MainWindow::read_portal_accent_color_()
 {
     QDBusInterface iface(QStringLiteral("org.freedesktop.portal.Desktop"),
@@ -4732,6 +4815,7 @@ void MainWindow::read_portal_accent_color_()
     {
         return;
     }
+    iface.setTimeout(kPortalReadTimeoutMs);
     QDBusReply<QDBusVariant> reply = iface.call(
         QStringLiteral("ReadOne"), QStringLiteral("org.freedesktop.appearance"),
         QStringLiteral("accent-color"));
@@ -4757,6 +4841,7 @@ void MainWindow::read_portal_color_scheme_()
         return;
     }
 
+    iface.setTimeout(kPortalReadTimeoutMs);
     // ReadOne (portal interface v2+), not the deprecated Read: Read
     // double-wraps its return value in an extra D-Bus variant layer, which
     // makes QVariant::toInt() silently yield 0 instead of the real setting.

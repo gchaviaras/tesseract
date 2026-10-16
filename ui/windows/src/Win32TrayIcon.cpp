@@ -48,6 +48,15 @@ std::wstring widen_capped(const std::string& s, std::size_t max_chars)
     return out;
 }
 
+// Explorer broadcasts this when it (re)creates the taskbar, including after a
+// crash or restart. Top-level windows receive broadcasts and message-only
+// windows do not, so wnd_proc handles it on the never-shown menu window too.
+UINT taskbar_created_message()
+{
+    static const UINT msg = RegisterWindowMessageW(L"TaskbarCreated");
+    return msg;
+}
+
 } // namespace
 
 LRESULT CALLBACK Win32TrayIcon::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
@@ -55,6 +64,13 @@ LRESULT CALLBACK Win32TrayIcon::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
 {
     auto* self = reinterpret_cast<Win32TrayIcon*>(
         GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+
+    if (self && msg == taskbar_created_message())
+    {
+        // Explorer restarted and dropped the icon: put it back.
+        self->added_ = self->add_icon_();
+        return 0;
+    }
 
     switch (msg)
     {
@@ -148,12 +164,6 @@ Win32TrayIcon::Win32TrayIcon(HINSTANCE hInst, std::function<void()> on_show,
                           reinterpret_cast<LONG_PTR>(this));
     }
 
-    NOTIFYICONDATAW nid{};
-    nid.cbSize = sizeof(nid);
-    nid.hWnd = hwnd_;
-    nid.uID = kIconId;
-    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-    nid.uCallbackMessage = WM_TESSERACT_TRAY;
     hIcon_ = static_cast<HICON>(
         LoadImageW(hInst_, MAKEINTRESOURCEW(IDI_TESSERACT), IMAGE_ICON,
                    GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
@@ -162,21 +172,33 @@ Win32TrayIcon::Win32TrayIcon(HINSTANCE hInst, std::function<void()> on_show,
     {
         hIcon_ = LoadIconW(nullptr, IDI_APPLICATION);
     }
-    nid.hIcon = hIcon_;
-    // szTip is a fixed wchar_t[128]. Manual bounded copy keeps us portable
-    // across MSVC and MinGW (the wcsncpy_s array overload is MSVC-only).
-    {
-        const wchar_t* t = L"Tesseract";
-        std::size_t n = wcslen(t);
-        if (n >= sizeof(nid.szTip) / sizeof(nid.szTip[0]))
-        {
-            n = sizeof(nid.szTip) / sizeof(nid.szTip[0]) - 1;
-        }
-        std::copy(t, t + n, nid.szTip);
-        nid.szTip[n] = L'\0';
-    }
+    added_ = add_icon_();
+}
 
-    added_ = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+bool Win32TrayIcon::add_icon_()
+{
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = hwnd_;
+    nid.uID = kIconId;
+    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    nid.uCallbackMessage = WM_TESSERACT_TRAY;
+    nid.hIcon = displayed_overlay_ ? displayed_overlay_ : hIcon_;
+    std::copy(tooltip_.begin(), tooltip_.end(), nid.szTip);
+    nid.szTip[tooltip_.size()] = L'\0';
+
+    // NIM_ADD fails when the icon is still registered (a repeated broadcast);
+    // updating it in place leaves the same icon in the same state.
+    if (Shell_NotifyIconW(NIM_ADD, &nid) == FALSE &&
+        Shell_NotifyIconW(NIM_MODIFY, &nid) == FALSE)
+    {
+        return false;
+    }
+    // Version 4 delivers a left click as NIN_SELECT and keyboard activation as
+    // NIN_KEYSELECT, instead of the legacy mouse messages.
+    nid.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIconW(NIM_SETVERSION, &nid);
+    return true;
 }
 
 Win32TrayIcon::~Win32TrayIcon()
@@ -214,6 +236,9 @@ Win32TrayIcon::~Win32TrayIcon()
 
 void Win32TrayIcon::set_tooltip(const std::string& text)
 {
+    // szTip is wchar_t[128]; leave room for NUL.
+    constexpr std::size_t kTipMax = sizeof(NOTIFYICONDATAW::szTip) / sizeof(wchar_t);
+    tooltip_ = widen_capped(text, kTipMax - 1);
     if (!added_)
     {
         return;
@@ -223,11 +248,8 @@ void Win32TrayIcon::set_tooltip(const std::string& text)
     nid.hWnd = hwnd_;
     nid.uID = kIconId;
     nid.uFlags = NIF_TIP;
-    // szTip is wchar_t[128]; leave room for NUL.
-    constexpr std::size_t kTipMax = sizeof(nid.szTip) / sizeof(nid.szTip[0]);
-    std::wstring w = widen_capped(text, kTipMax - 1);
-    std::copy(w.begin(), w.end(), nid.szTip);
-    nid.szTip[w.size()] = L'\0';
+    std::copy(tooltip_.begin(), tooltip_.end(), nid.szTip);
+    nid.szTip[tooltip_.size()] = L'\0';
     Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
@@ -245,10 +267,22 @@ void Win32TrayIcon::on_tray_message(WPARAM /*icon_id*/, LPARAM lParam)
         // double-click action.
         if (on_toggle_)
         {
+            last_toggle_tick_ = GetTickCount64();
             on_toggle_();
         }
         return;
     case WM_LBUTTONDBLCLK:
+        return;
+    case NIN_SELECT:
+    case NIN_KEYSELECT:
+        // Version 4 sends a left click, and Enter or Space on the focused icon,
+        // as these. A mouse click may deliver WM_LBUTTONUP as well, so a
+        // select arriving right behind a toggle is the same click.
+        if (on_toggle_ && GetTickCount64() - last_toggle_tick_ > 150)
+        {
+            last_toggle_tick_ = GetTickCount64();
+            on_toggle_();
+        }
         return;
     case WM_RBUTTONUP:
     case WM_CONTEXTMENU:

@@ -241,12 +241,16 @@ void ShellBase::maybe_send_read_receipt_(const std::string& room_id,
     {
         return;
     }
+    // Keyed by room, but the value records which account sent the receipt: two
+    // accounts in one room each need their own receipt for the same event.
+    const std::string who = acting ? acting->user_id : std::string{};
+    const std::string sent = who + '\x1f' + event_id;
     auto& last = last_sent_receipt_[room_id];
-    if (last == event_id)
+    if (last == sent)
     {
         return;
     }
-    last = event_id;
+    last = sent;
     auto sess = acting;
     run_async_mut_(
         [sess, room_id, event_id]()

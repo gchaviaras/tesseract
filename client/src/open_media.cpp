@@ -2,6 +2,7 @@
 
 #include "tesseract/client.h"
 #include "tesseract/paths.h"
+#include "detached_launch.h"
 
 #include <cerrno>
 #include <cstdio>
@@ -246,29 +247,8 @@ bool open_local_file(const fs::path& path)
 #else
     const char* opener = "xdg-open";
 #endif
-    const std::string arg = path.string();
-    // Double-fork so the UI thread never waits on the viewer; see
-    // Client::open_in_browser for the same pattern.
-    pid_t pid = fork();
-    if (pid < 0)
-        return false;
-    if (pid == 0)
-    {
-        pid_t inner = fork();
-        if (inner == 0)
-        {
-            execlp(opener, opener, arg.c_str(), static_cast<const char*>(nullptr));
-            _exit(127);
-        }
-        _exit(inner < 0 ? 1 : 0);
-    }
-    int status = 0;
-    pid_t reaped = -1;
-    do
-    {
-        reaped = waitpid(pid, &status, 0); // EINTR is not a failed launch
-    } while (reaped < 0 && errno == EINTR);
-    return reaped == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    // Starts the viewer without waiting on it; see detached_launch.cpp.
+    return detail::launch_detached(opener, path.string());
 #endif
 }
 

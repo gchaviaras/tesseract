@@ -2,6 +2,7 @@
 #include "Win32PackageContext.h"
 #include "resource.h"
 
+#include "app/shell_helpers.h"
 #include "tk/i18n.h"
 #include <tesseract/launch_args.h>
 #include <tesseract/paths.h>
@@ -652,8 +653,9 @@ void Win32Taskbar::rebuild_classic_jump_list_()
             UINT added = 0;
             for (const auto& room : recent_rooms_)
             {
-                const std::wstring args =
-                    with_profile(L"--open-room=\"" + room.room_id + L"\"");
+                const std::wstring args = with_profile(
+                    L"--open-room=" + tesseract::shell_helpers::quote_command_line_arg(
+                                          room.room_id));
                 if (removed_arguments.contains(args)) continue;
                 if (auto link = make_task_link(exe, args.c_str(),
                                                room.title.c_str(),
@@ -771,7 +773,9 @@ void Win32Taskbar::rebuild_packaged_jump_list_()
         const auto group = to_wide(tk::tr("Recent rooms"));
         for (const auto& room : recent_rooms_)
         {
-            append(with_profile(L"--open-room=\"" + room.room_id + L"\""),
+            append(with_profile(L"--open-room=" +
+                                tesseract::shell_helpers::quote_command_line_arg(
+                                    room.room_id)),
                    room.title,
                    group, packaged_avatar_uri_(room.room_id));
         }

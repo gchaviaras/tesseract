@@ -17,6 +17,7 @@ add_library(tesseract_client STATIC
     src/session_persist_queue.cpp
     src/paths.cpp
     src/open_media.cpp
+    src/detached_launch.cpp
     src/emoji.cpp
     src/prefs.cpp
     src/settings.cpp

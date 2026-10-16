@@ -11,7 +11,7 @@ use matrix_sdk::{
 use serde::{Deserialize, Serialize};
 
 use super::{err, oauth_err, ok, ClientFfi};
-use crate::ffi::{OAuthBegin, OpResult, ServerInfoFfi, SpecVersionFfi};
+use crate::ffi::{OAuthBegin, OAuthWaitStep, OpResult, ServerInfoFfi, SpecVersionFfi};
 use crate::oauth;
 
 use std::sync::atomic::Ordering;
@@ -242,10 +242,14 @@ async fn build_server_info(
         Err(_) => serde_json::Value::Null,
     };
 
+    // A failed or unreadable capabilities request tells us nothing about the
+    // server, so optional features default off. A valid response that omits a
+    // key still means available, as the spec says (see preview_url_enabled).
+    let caps_known = caps.is_object();
     let cap_bool = |key: &str| -> bool {
         caps.pointer(&format!("/capabilities/{key}/enabled"))
             .and_then(|v| v.as_bool())
-            .unwrap_or(true)
+            .unwrap_or(caps_known)
     };
     let default_room_ver = caps
         .pointer("/capabilities/m.room_versions/default")
@@ -255,8 +259,8 @@ async fn build_server_info(
     let profile_fields_enabled = caps
         .pointer("/capabilities/m.profile_fields/enabled")
         .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-    let preview_url_enabled = preview_url_enabled(&caps);
+        .unwrap_or(caps_known);
+    let preview_url_enabled = caps_known && preview_url_enabled(&caps);
     preview_url_slot.store(preview_url_enabled, Ordering::Relaxed);
 
     let supports_calls = crate::client::rtc::transport::probe_livekit_support(&client, &http).await;
@@ -333,7 +337,7 @@ impl ClientFfi {
         // Keep a tokio context in TLS for the whole call so the throwaway Client
         // built inside `supports_registration` drops with a runtime handle
         // available — matrix-sdk's store/crypto teardown calls Handle::current()
-        // in Drop. Same hazard guarded by oauth_await_callback / restore_session /
+        // in Drop. Same hazard guarded by oauth_commit / restore_session /
         // ClientFfi::drop. catch_unwind then ensures no panic crosses the cxx
         // `-> bool` boundary (which would abort, not raise a C++ exception); the
         // probe is best-effort, so any panic degrades to `false`.
@@ -355,26 +359,42 @@ impl ClientFfi {
         .unwrap_or(false)
     }
 
-    // `&self` (not `&mut self`) so the C++ side (client.cpp) can call this
-    // under a shared lock instead of the exclusive one — this blocks for the
-    // whole OAuth wait (potentially minutes), and holding the exclusive lock
-    // for that long would make `oauth_cancel` (which needs the same lock to
-    // trip the flow's shutdown handle) deadlock behind it. Storing the
-    // resulting `Client` needs `&mut self`, so that step is split out into
-    // `oauth_commit`, called separately once this returns success — mirrors
-    // the `Mutex<Option<…>>` + `&self` pattern in `qr_grant.rs`.
-    pub fn oauth_await_callback(&self) -> OpResult {
+    // One slice of the OAuth browser wait. `&self` (not `&mut self`) so the C++
+    // side (client.cpp) can call it under a shared lock. The wait itself runs
+    // as a background task, and each slice waits only briefly for its outcome.
+    // The C++ side releases the shared lock between slices, so `oauth_cancel`
+    // and writers queued behind the sign-in are not held for minutes. Storing
+    // the resulting `Client` needs `&mut self`, so that step stays in
+    // `oauth_commit`, called once a slice reports success.
+    pub fn oauth_await_slice(&self) -> OAuthWaitStep {
         let Some(flow) = self.oauth_flow.as_ref() else {
-            return err("no oauth flow in progress; call oauth_begin first");
+            return OAuthWaitStep {
+                pending: false,
+                ok: false,
+                message: "no oauth flow in progress; call oauth_begin first".into(),
+            };
         };
 
-        match self.rt.block_on(oauth::await_callback(flow)) {
-            Ok(()) => ok(""),
-            Err(e) => err(format!("{e:#}")),
+        match self.rt.block_on(oauth::await_slice(flow)) {
+            None => OAuthWaitStep {
+                pending: true,
+                ok: false,
+                message: String::new(),
+            },
+            Some(Ok(())) => OAuthWaitStep {
+                pending: false,
+                ok: true,
+                message: String::new(),
+            },
+            Some(Err(e)) => OAuthWaitStep {
+                pending: false,
+                ok: false,
+                message: format!("{e:#}"),
+            },
         }
     }
 
-    /// Store the `Client` a successful `oauth_await_callback` produced. Fast
+    /// Store the `Client` a successful `oauth_await_slice` produced. Fast
     /// and non-blocking (no network I/O), so briefly taking `&mut self` here
     /// cannot deadlock a concurrent `oauth_cancel` the way holding it across
     /// the whole await did.
@@ -395,7 +415,7 @@ impl ClientFfi {
         }
     }
 
-    // `&self`, like `oauth_await_callback` above — this is the one thing
+    // `&self`, like `oauth_await_slice` above — this is the one thing
     // that must be reachable *while* that call is blocked.
     pub fn oauth_cancel(&self) {
         if let Some(flow) = self.oauth_flow.as_ref() {
@@ -532,7 +552,7 @@ impl ClientFfi {
             }
             // {e:#} includes the full anyhow context chain — e.to_string()
             // would print only the outermost .context(...) label (see the
-            // matching oauth_await_callback error conversion above).
+            // matching oauth_await_slice error conversion above).
             Err(e) => err(format!("{e:#}")),
         }
     }
@@ -789,6 +809,13 @@ impl ClientFfi {
             let _ = std::fs::remove_dir_all(&self.data_dir);
             return ok("");
         };
+
+        // The account is going away: stop routing its call events to its handler.
+        if self.rtc_sink_registered.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            if let Some(uid) = client.user_id() {
+                super::rtc::unregister_sink(uid.as_str());
+            }
+        }
 
         let is_oauth = client.oauth().full_session().is_some();
         let revoke: Result<(), String> = self.rt.block_on(async {
@@ -1205,9 +1232,10 @@ mod ffi_state_tests {
     }
 
     #[test]
-    fn oauth_await_callback_requires_a_flow() {
+    fn oauth_await_slice_requires_a_flow() {
         let c = ClientFfi::new();
-        let r = c.oauth_await_callback();
+        let r = c.oauth_await_slice();
+        assert!(!r.pending);
         assert!(!r.ok);
         assert!(r.message.contains("oauth_begin"), "{}", r.message);
     }

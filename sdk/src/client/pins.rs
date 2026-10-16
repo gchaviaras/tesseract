@@ -39,15 +39,19 @@ impl ClientFfi {
         );
 
         // Read existing m.room.pinned_events (may be absent → start empty).
+        // Writing back a list we could not read would replace every existing
+        // pin with the one being added, so an unreadable list is an error.
         let existing: Vec<OwnedEventId> = match self
             .rt
             .block_on(room.get_state_event_static::<RoomPinnedEventsEventContent>())
         {
             Ok(Some(raw)) => match raw.deserialize() {
                 Ok(SyncOrStrippedState::Sync(SyncStateEvent::Original(o))) => o.content.pinned,
-                // Redacted or stripped variants: treat as no existing pins.
-                Ok(_) => Vec::new(),
-                Err(_) => Vec::new(),
+                // A redacted event has no list, so there is nothing to keep.
+                Ok(SyncOrStrippedState::Sync(SyncStateEvent::Redacted(_))) => Vec::new(),
+                Ok(_) | Err(_) => {
+                    return err("could not read the current pinned events; nothing changed")
+                }
             },
             Ok(None) => Vec::new(),
             Err(e) => return err(format!("read pinned: {e}")),
@@ -100,9 +104,11 @@ impl ClientFfi {
         {
             Ok(Some(raw)) => match raw.deserialize() {
                 Ok(SyncOrStrippedState::Sync(SyncStateEvent::Original(o))) => o.content.pinned,
-                // Redacted/stripped: nothing to unpin from.
-                Ok(_) => return ok(""),
-                Err(_) => return ok(""),
+                // A redacted event has no list, so there is nothing to unpin from.
+                Ok(SyncOrStrippedState::Sync(SyncStateEvent::Redacted(_))) => return ok(""),
+                Ok(_) | Err(_) => {
+                    return err("could not read the current pinned events; nothing changed")
+                }
             },
             Ok(None) => return ok(""),
             Err(e) => return err(format!("read pinned: {e}")),

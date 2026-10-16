@@ -346,3 +346,22 @@ TEST_CASE("probe_image_dimensions: junk byte before SOF does not hide the size")
     big.insert(big.begin() + static_cast<std::ptrdiff_t>(sof_at), std::uint8_t{0x00});
     CHECK_FALSE(tk::decode_size_allowed(big, false));
 }
+
+TEST_CASE("sniff_image_mime: labels a file by its signature, not its name",
+          "[image-sniff]")
+{
+    CHECK(tk::sniff_image_mime(bytes_of("\x89PNG\r\n\x1a\n\0\0\0\rIHDR")) == "image/png");
+    CHECK(tk::sniff_image_mime(bytes_of("\xFF\xD8\xFF\xE0\0\x10JFIF")) == "image/jpeg");
+    CHECK(tk::sniff_image_mime(bytes_of("GIF89a\x01\0\x01\0")) == "image/gif");
+    CHECK(tk::sniff_image_mime(webp_vp8x(0)) == "image/webp");
+}
+
+TEST_CASE("sniff_image_mime: anything else is refused, not labelled",
+          "[image-sniff]")
+{
+    CHECK(tk::sniff_image_mime(bytes_of("<html>not an image</html>")).empty());
+    // A JPEG XL file is not in the picker's set, so it is refused too.
+    CHECK(tk::sniff_image_mime(bytes_of("\xFF\x0A\x00\x00")).empty());
+    CHECK(tk::sniff_image_mime(bytes_of("\x89PN")).empty()); // truncated signature
+    CHECK(tk::sniff_image_mime({}).empty());
+}

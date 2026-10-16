@@ -51,6 +51,22 @@ inline tk::Color card_bg(const tk::Theme& t)
     return t.palette.compose_card_bg;
 }
 
+// Spaces, tabs and line breaks only. The send button and the reply/edit
+// send paths both treat such text as empty.
+inline bool is_blank_text(const std::string& text)
+{
+    return std::all_of(text.begin(), text.end(), [](char c)
+                       { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; });
+}
+
+// True while a queued video or audio attachment is still reading its metadata.
+inline bool any_loading(const std::vector<ComposeBar::PendingAttachment>& pending)
+{
+    return std::any_of(pending.begin(), pending.end(),
+                       [](const ComposeBar::PendingAttachment& pa)
+                       { return pa.loading; });
+}
+
 } // namespace
 
 std::string ComposeBar::make_filename(const std::string& mime)
@@ -269,6 +285,10 @@ void ComposeBar::trigger_send()
 {
     if (recording_)
         return;
+    // A video or audio attachment goes out only once its metadata is in.
+    // Enter reaches here without the send button's enabled state, so check again.
+    if (any_loading(pending_))
+        return;
     if (pending_.size() == 1)
     {
         std::string reply_id = reply_event_id_;
@@ -363,6 +383,10 @@ void ComposeBar::trigger_send()
     }
     else if (has_editing())
     {
+        // Blank text is not sent as a message edit. Keep edit mode so the
+        // user is not dropped out of it without a send. A caption may be cleared.
+        if (!edit_is_caption_ && is_blank_text(current_text_))
+            return;
         std::string ev = edit_event_id_;
         std::string text = current_text_;
         bool is_caption = edit_is_caption_;
@@ -374,6 +398,9 @@ void ComposeBar::trigger_send()
     }
     else if (has_reply())
     {
+        // Same as an edit: blank text keeps reply mode rather than exiting it.
+        if (is_blank_text(current_text_))
+            return;
         std::string id = reply_event_id_;
         std::string text = current_text_;
         clear_reply();
@@ -725,6 +752,7 @@ void ComposeBar::update_pending_attachment(const MediaInfo& info)
         pa.thumb_height = info.thumb_h;
         pa.duration_ms = info.duration_ms;
         pa.preview.reset(); // decoded lazily from thumb_bytes_raw in arrange()
+        pa.decode_failed = false; // new bytes deserve a fresh decode attempt
         break;
     case PendingAttachment::Kind::Audio:
         pa.duration_ms = info.duration_ms;
@@ -739,6 +767,7 @@ void ComposeBar::update_pending_attachment(const MediaInfo& info)
     file_name_layout_.reset(); // force duration text re-layout
     file_size_layout_.reset();
     file_layout_key_.clear();
+    refresh_send_enabled(); // Send was held while this item was loading
     notify_size_changed_();
 }
 
@@ -951,16 +980,9 @@ void ComposeBar::refresh_send_enabled()
     {
         return;
     }
-    bool any_text = false;
-    for (char c : current_text_)
-    {
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
-        {
-            any_text = true;
-            break;
-        }
-    }
-    send_btn_->set_enabled(enabled_ && (any_text || !pending_.empty()));
+    const bool any_text = !is_blank_text(current_text_);
+    send_btn_->set_enabled(enabled_ && !any_loading(pending_) &&
+                           (any_text || !pending_.empty()));
 }
 
 tk::Size ComposeBar::measure(tk::LayoutCtx&, tk::Size constraints)
@@ -978,10 +1000,12 @@ void ComposeBar::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     if (pending_.size() == 1)
     {
         PendingAttachment& pa = pending_.front();
-        if (pa.kind == PendingAttachment::Kind::Image && !pa.preview)
+        if (pa.kind == PendingAttachment::Kind::Image && !pa.preview && !pa.decode_failed)
         {
             auto img = ctx.factory.decode_image(std::span<const std::uint8_t>(
                 pa.bytes.data(), pa.bytes.size()));
+            if (!img)
+                pa.decode_failed = true;
             if (img)
             {
                 pa.width = static_cast<std::uint32_t>(img->width());
@@ -1012,10 +1036,12 @@ void ComposeBar::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
 
         // ── Decode video thumbnail lazily once extraction fills thumb_bytes_raw ──
         if (pa.kind == PendingAttachment::Kind::Video && !pa.preview &&
-            !pa.thumb_bytes_raw.empty())
+            !pa.decode_failed && !pa.thumb_bytes_raw.empty())
         {
             auto img = ctx.factory.decode_image(std::span<const std::uint8_t>(
                 pa.thumb_bytes_raw.data(), pa.thumb_bytes_raw.size()));
+            if (!img)
+                pa.decode_failed = true;
             if (img)
             {
                 pa.thumb_width = static_cast<std::uint32_t>(img->width());
@@ -1069,12 +1095,11 @@ void ComposeBar::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     }
     else if (pending_.size() >= 2)
     {
-        // Multi-attachment mode: decode each item's thumbnail lazily
-        // (small chips, so no scale_image downsampling needed — arrange()
-        // just needs a decode so measure()/paint() have dimensions/pixels).
+        // Multi-attachment mode: decode each item's thumbnail lazily. The
+        // chips are small, so the decoded copy is scaled down to chip size.
         for (auto& pa : pending_)
         {
-            if (pa.kind == PendingAttachment::Kind::Image && !pa.preview)
+            if (pa.kind == PendingAttachment::Kind::Image && !pa.preview && !pa.decode_failed)
             {
                 if (auto img = ctx.factory.decode_image(
                         std::span<const std::uint8_t>(pa.bytes.data(),
@@ -1082,11 +1107,21 @@ void ComposeBar::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
                 {
                     pa.width = static_cast<std::uint32_t>(img->width());
                     pa.height = static_cast<std::uint32_t>(img->height());
-                    pa.preview = std::move(img);
+                    // Keep a chip-sized copy: twenty full-resolution photos
+                    // would hold about a gigabyte of pixels while staged.
+                    constexpr int kChipPx = static_cast<int>(kPreviewBandH) * 4;
+                    if (auto scaled = ctx.factory.scale_image(*img, kChipPx, kChipPx))
+                        pa.preview = std::move(scaled);
+                    else
+                        pa.preview = std::move(img);
+                }
+                else
+                {
+                    pa.decode_failed = true;
                 }
             }
             else if (pa.kind == PendingAttachment::Kind::Video && !pa.preview &&
-                     !pa.thumb_bytes_raw.empty())
+                     !pa.decode_failed && !pa.thumb_bytes_raw.empty())
             {
                 if (auto img = ctx.factory.decode_image(
                         std::span<const std::uint8_t>(pa.thumb_bytes_raw.data(),
@@ -1095,6 +1130,10 @@ void ComposeBar::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
                     pa.thumb_width = static_cast<std::uint32_t>(img->width());
                     pa.thumb_height = static_cast<std::uint32_t>(img->height());
                     pa.preview = std::move(img);
+                }
+                else
+                {
+                    pa.decode_failed = true;
                 }
             }
         }

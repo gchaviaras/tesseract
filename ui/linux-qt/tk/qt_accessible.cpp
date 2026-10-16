@@ -12,6 +12,7 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace tk::qt6
 {
@@ -166,6 +167,7 @@ class AccessBridge
 {
 public:
     explicit AccessBridge(Surface* surface) : surface_(surface) {}
+    ~AccessBridge();
 
     Surface* surface() const
     {
@@ -486,6 +488,8 @@ public:
     }
     QWindow* window() const override
     {
+        if (!bridge_)
+            return nullptr;
         return bridge_->surface()->windowHandle();
     }
     QAccessibleInterface* childAt(int x, int y) const override
@@ -502,6 +506,8 @@ public:
     }
     QAccessibleInterface* parent() const override
     {
+        if (!bridge_)
+            return nullptr;
         return bridge_->parent_interface_for(key_);
     }
     QAccessibleInterface* child(int index) const override
@@ -794,15 +800,48 @@ public:
         return {};
     }
 
+    // Called when the bridge is destroyed while Qt still holds this interface.
+    // Every query then answers "nothing" rather than reaching freed memory.
+    void detach()
+    {
+        bridge_ = nullptr;
+    }
+
 private:
     const AccessNode* node() const
     {
+        if (!bridge_)
+            return nullptr;
         return bridge_->find(key_);
     }
 
     AccessBridge* bridge_;
     AccessKey key_;
 };
+
+// Interfaces are registered with Qt, so they outlive the bridge; an AT that
+// still holds an object path reaches them. Detach them now, so any call from
+// here on answers "nothing", and retire them on the next event-loop turn, after
+// posted accessibility events for them have been delivered (see
+// rebuild_if_dirty for why deletion is deferred).
+AccessBridge::~AccessBridge()
+{
+    std::vector<QAccessible::Id> ids;
+    ids.reserve(ids_.size());
+    for (const auto& entry : ids_)
+    {
+        ids.push_back(entry.second);
+        if (auto* node = dynamic_cast<NodeAccessible*>(
+                QAccessible::accessibleInterface(entry.second)))
+            node->detach();
+    }
+    ids_.clear();
+    QTimer::singleShot(0, qApp, [ids]()
+    {
+        for (QAccessible::Id id : ids)
+            QAccessible::deleteAccessibleInterface(id);
+    });
+}
 
 QAccessibleInterface* AccessBridge::interface_for(const AccessKey& key)
 {

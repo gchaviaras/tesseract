@@ -427,16 +427,32 @@ impl ClientFfi {
             .map(|u| u.to_owned());
         if let Some(ref me) = me {
             let me_str = me.as_str();
+            let room = self.client.as_ref().and_then(|c| c.get_room(&rid));
+            // `@room` counts only from a sender the room lets ping everyone: the
+            // server's push rules enforce that for the notification, but this local
+            // flag would otherwise trust the sender's `m.mentions` as written. The
+            // room's power levels are read once, and only when a reply uses `@room`.
+            let mut levels = None;
             for (info, item) in out.iter_mut().zip(items.iter()) {
                 info.mentions_me = item
                     .latest_event
                     .as_ref()
-                    .and_then(|e| e.content.as_ref())
-                    .and_then(|c| c.as_message())
-                    .and_then(|m| m.mentions())
-                    .map(|men| {
+                    .and_then(|e| {
+                        let men = e
+                            .content
+                            .as_ref()
+                            .and_then(|c| c.as_message())
+                            .and_then(|m| m.mentions())?;
+                        let room_ping = men.room
+                            && levels
+                                .get_or_insert_with(|| {
+                                    room.as_ref()
+                                        .and_then(|r| self.rt.block_on(r.power_levels()).ok())
+                                })
+                                .as_ref()
+                                .is_some_and(|pl| pl.user_can_trigger_room_notification(&e.sender));
                         let ids: Vec<&str> = men.user_ids.iter().map(|u| u.as_str()).collect();
-                        any_mention(&ids, men.room, me_str)
+                        Some(any_mention(&ids, room_ping, me_str))
                     })
                     .unwrap_or(false);
             }

@@ -28,7 +28,8 @@ extern "C" {
 namespace
 {
 
-// SIGINT/SIGTERM (Ctrl+C, `kill`, session-manager shutdown, ...) default to
+// SIGINT/SIGTERM/SIGHUP (Ctrl+C, `kill`, session-manager shutdown, a closed
+// terminal, ...) default to
 // killing the process outright, which skips every C++ destructor — including
 // the one that flushes the Rust SDK's session/token state to disk. If a
 // background OAuth token refresh has completed but not yet persisted at that
@@ -80,8 +81,11 @@ void install_graceful_shutdown_signal_handlers(QApplication& app)
     sa.sa_handler = handle_shutdown_signal;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
+    // SIGHUP is what a closing terminal or SSH session sends: it needs the same
+    // graceful quit, or the token flush above is skipped.
     sigaction(SIGINT, &sa, nullptr);
     sigaction(SIGTERM, &sa, nullptr);
+    sigaction(SIGHUP, &sa, nullptr);
 }
 
 } // namespace

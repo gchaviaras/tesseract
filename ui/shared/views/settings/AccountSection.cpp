@@ -140,9 +140,13 @@ AccountSection::Content::Content()
 void AccountSection::Content::set_display_name(std::string name)
 {
     if (display_name_ == name) return;
+    // The field shows the saved name until the user edits it. Replace its text
+    // only while it still holds that name, so an echo of an earlier save or a
+    // change from another device never overwrites what the user is typing.
+    const bool field_untouched = !name_field_ || name_field_->text() == display_name_;
     display_name_ = name;
     invalidate_text();
-    if (name_field_) name_field_->set_text(std::move(name));
+    if (field_untouched && name_field_) name_field_->set_text(std::move(name));
 }
 
 void AccountSection::Content::set_user_id(std::string uid)

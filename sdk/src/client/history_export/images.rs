@@ -138,13 +138,15 @@ fn unique_file_name(original_name: &str, used: &mut HashSet<String>) -> String {
     } else {
         sanitize_component(original_name)
     };
-    if used.insert(base_name.clone()) {
+    // Collisions are checked case-insensitively: the default filesystems on
+    // Windows and macOS treat `Photo.jpg` and `photo.JPG` as one file.
+    if used.insert(base_name.to_lowercase()) {
         return base_name;
     }
     let mut n = 1u32;
     loop {
         let alt = insert_disambiguator(&base_name, n);
-        if used.insert(alt.clone()) {
+        if used.insert(alt.to_lowercase()) {
             return alt;
         }
         n += 1;
@@ -214,7 +216,9 @@ fn sanitize_component(s: &str) -> String {
         })
         .collect();
     let trimmed = cleaned.trim().trim_matches('.');
+    // Truncation can end on a dot or space, which Windows silently strips.
     let capped: String = trimmed.chars().take(120).collect();
+    let capped = capped.trim_end_matches(['.', ' ']).to_string();
     if capped.is_empty() {
         return "file".to_string();
     }
@@ -320,6 +324,19 @@ mod tests {
     fn sanitize_component_empty_falls_back_to_file() {
         assert_eq!(sanitize_component(""), "file");
         assert_eq!(sanitize_component("..."), "file");
+    }
+
+    #[test]
+    fn sanitize_component_drops_a_dot_left_by_the_length_cap() {
+        let name = format!("{}. b", "a".repeat(119));
+        assert_eq!(sanitize_component(&name), "a".repeat(119));
+    }
+
+    #[test]
+    fn unique_file_name_collides_case_insensitively() {
+        let mut used = HashSet::new();
+        assert_eq!(unique_file_name("Photo.jpg", &mut used), "Photo.jpg");
+        assert_eq!(unique_file_name("photo.JPG", &mut used), "photo-1.JPG");
     }
 
     #[test]

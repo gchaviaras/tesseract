@@ -21,6 +21,7 @@
 #pragma pop_macro("signals")
 
 #include <cstdint>
+#include <cstdio>
 #include <ctime>
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -160,14 +161,30 @@ void write_cache(const std::string& path,
                  const std::vector<std::string>& working,
                  const std::vector<std::string>& broken)
 {
-    std::ofstream f(path);
-    if (!f.is_open())
+    // Written beside the cache and renamed over it, so an instance reading the
+    // file while another writes it sees the old cache or the new one, never a
+    // truncated file that parses as a valid, all-working result.
+    const std::string tmp = path + ".tmp-" + std::to_string(getpid());
     {
-        return;
+        std::ofstream f(tmp);
+        if (!f.is_open())
+        {
+            return;
+        }
+        f << static_cast<std::int64_t>(std::time(nullptr)) << '\n';
+        for (const auto& name : working) { f << '+' << name << '\n'; }
+        for (const auto& name : broken)  { f << '-' << name << '\n'; }
+        f.close();
+        if (!f)
+        {
+            std::remove(tmp.c_str());
+            return;
+        }
     }
-    f << static_cast<std::int64_t>(std::time(nullptr)) << '\n';
-    for (const auto& name : working) { f << '+' << name << '\n'; }
-    for (const auto& name : broken)  { f << '-' << name << '\n'; }
+    if (std::rename(tmp.c_str(), path.c_str()) != 0)
+    {
+        std::remove(tmp.c_str());
+    }
 }
 
 void demote(const std::vector<std::string>& broken)

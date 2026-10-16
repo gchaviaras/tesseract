@@ -5,6 +5,7 @@
 //!
 //! Split out of `client/mod.rs` in the modularization refactor; behavior unchanged.
 
+use super::{text_code, text_code_arg, user_text};
 #[cfg(not(test))]
 use crate::ffi::{ReactionGroup, ReadReceipt, TimelineEvent};
 
@@ -178,19 +179,19 @@ pub(crate) fn utd_message_for_cause(
 ) -> &'static str {
     use matrix_sdk_base::crypto::types::events::UtdCause;
     match cause {
-        UtdCause::SentBeforeWeJoined => "🔒 Sent before you joined this room",
-        UtdCause::VerificationViolation => "🔒 Sender's identity changed since you verified them",
-        UtdCause::UnsignedDevice => "🔒 Sender's device is not signed",
-        UtdCause::UnknownDevice => "🔒 Sender's device is unknown",
+        UtdCause::SentBeforeWeJoined => "\u{1}utd_sent_before_join",
+        UtdCause::VerificationViolation => "\u{1}utd_identity_changed",
+        UtdCause::UnsignedDevice => "\u{1}utd_unsigned_device",
+        UtdCause::UnknownDevice => "\u{1}utd_unknown_device",
         UtdCause::HistoricalMessageAndBackupIsDisabled => {
-            "🔒 History unavailable (key backup is off)"
+            "\u{1}utd_backup_off"
         }
-        UtdCause::WithheldForUnverifiedOrInsecureDevice => "🔒 Sender blocked this device",
-        UtdCause::WithheldBySender => "🔒 Key was not shared with this device",
+        UtdCause::WithheldForUnverifiedOrInsecureDevice => "\u{1}utd_withheld_insecure",
+        UtdCause::WithheldBySender => "\u{1}utd_withheld_sender",
         UtdCause::HistoricalMessageAndDeviceIsUnverified => {
-            "🔒 Verify this device to access history"
+            "\u{1}utd_verify_device"
         }
-        UtdCause::Unknown => "🔒 Unable to decrypt",
+        UtdCause::Unknown => "\u{1}utd_unknown",
     }
 }
 
@@ -567,17 +568,17 @@ pub(crate) fn pinned_events_action(
     // "cleared" when >=3 items disappear all at once; smaller bulk removals
     // are reported as "unpinned N messages" so the message stays concise.
     if new_set.is_empty() && old_set.len() >= 3 {
-        "cleared all pinned messages".to_owned()
+        text_code("pin_cleared")
     } else if added == 1 && removed == 0 {
-        "pinned a message".to_owned()
+        text_code("pin_added")
     } else if added == 0 && removed == 1 {
-        "unpinned a message".to_owned()
+        text_code("pin_removed")
     } else if added > 1 && removed == 0 {
-        format!("pinned {} messages", added)
+        text_code_arg("pin_added_n", added)
     } else if added == 0 && removed > 1 {
-        format!("unpinned {} messages", removed)
+        text_code_arg("pin_removed_n", removed)
     } else {
-        "changed the pinned messages".to_owned()
+        text_code("pin_changed")
     }
 }
 
@@ -825,32 +826,32 @@ pub(crate) fn msglike_snippet(content: &TimelineItemContent) -> String {
             kind: MsgLikeKind::Message(m),
             ..
         }) => match m.msgtype() {
-            MessageType::Text(t) => t.body.clone(),
-            MessageType::Image(_) => "(image)".to_owned(),
-            MessageType::File(_) => "(file)".to_owned(),
+            MessageType::Text(t) => user_text(&t.body),
+            MessageType::Image(_) => text_code("image"),
+            MessageType::File(_) => text_code("file"),
             MessageType::Audio(a) => {
                 if a.voice.is_some() {
-                    "(voice)".to_owned()
+                    text_code("voice")
                 } else {
-                    "(audio)".to_owned()
+                    text_code("audio")
                 }
             }
-            MessageType::Video(_) => "(video)".to_owned(),
-            MessageType::Gallery(_) => "(gallery)".to_owned(),
-            _ => "(message)".to_owned(),
+            MessageType::Video(_) => text_code("video"),
+            MessageType::Gallery(_) => text_code("gallery"),
+            _ => text_code("message"),
         },
         TimelineItemContent::MsgLike(MsgLikeContent {
             kind: MsgLikeKind::Sticker(_),
             ..
-        }) => "(sticker)".to_owned(),
+        }) => text_code("sticker"),
         TimelineItemContent::MsgLike(MsgLikeContent {
             kind: MsgLikeKind::Poll(_),
             ..
-        }) => "(poll)".to_owned(),
+        }) => text_code("poll"),
         TimelineItemContent::MsgLike(MsgLikeContent {
             kind: MsgLikeKind::Redacted,
             ..
-        }) => "(deleted)".to_owned(),
+        }) => text_code("deleted"),
         _ => String::new(),
     }
 }
@@ -1878,7 +1879,7 @@ pub(super) async fn timeline_item_to_ffi(
             }
         }
         MessageType::Gallery(g) => {
-            let formatted_body = g
+            let fallback = g
                 .formatted
                 .as_ref()
                 .filter(|f| {
@@ -1889,6 +1890,11 @@ pub(super) async fn timeline_item_to_ffi(
                 })
                 .map(|f| f.body.clone())
                 .unwrap_or_default();
+            // Caption HTML goes through the same sanitiser as text: matrix-sdk-ui
+            // does not sanitise gallery content, so raw tags would reach the parser.
+            // The fallback is sanitised too, for when the event JSON is unavailable.
+            let fallback = crate::html_sanitize::sanitize_formatted_body(&fallback, false);
+            let formatted_body = resanitized_formatted_body(event_item, fallback);
             TimelineEvent {
                 body: g.body.clone(),
                 formatted_body,
@@ -2032,7 +2038,7 @@ mod pinned_action_tests {
     fn pin_one() {
         assert_eq!(
             pinned_events_action(&["$a"], &[] as &[&str]),
-            "pinned a message"
+            "\u{1}pin_added"
         );
     }
 
@@ -2040,7 +2046,7 @@ mod pinned_action_tests {
     fn unpin_one() {
         assert_eq!(
             pinned_events_action(&[] as &[&str], &["$a"]),
-            "unpinned a message"
+            "\u{1}pin_removed"
         );
     }
 
@@ -2048,7 +2054,7 @@ mod pinned_action_tests {
     fn pin_many() {
         assert_eq!(
             pinned_events_action(&["$a", "$b", "$c"], &[] as &[&str]),
-            "pinned 3 messages"
+            "\u{1}pin_added_n\u{1}3"
         );
     }
 
@@ -2056,7 +2062,7 @@ mod pinned_action_tests {
     fn unpin_many() {
         assert_eq!(
             pinned_events_action(&[] as &[&str], &["$a", "$b"]),
-            "unpinned 2 messages"
+            "\u{1}pin_removed_n\u{1}2"
         );
     }
 
@@ -2065,7 +2071,7 @@ mod pinned_action_tests {
         // "cleared" fires only when new list is empty AND old list had >=3 items.
         assert_eq!(
             pinned_events_action(&[] as &[&str], &["$a", "$b", "$c"]),
-            "cleared all pinned messages"
+            "\u{1}pin_cleared"
         );
     }
 
@@ -2074,7 +2080,7 @@ mod pinned_action_tests {
         // Only 2 removed => threshold not met, so "unpinned N messages" fires instead.
         assert_eq!(
             pinned_events_action(&[] as &[&str], &["$a", "$b"]),
-            "unpinned 2 messages"
+            "\u{1}pin_removed_n\u{1}2"
         );
     }
 
@@ -2082,7 +2088,7 @@ mod pinned_action_tests {
     fn mixed_change() {
         assert_eq!(
             pinned_events_action(&["$b"], &["$a"]),
-            "changed the pinned messages"
+            "\u{1}pin_changed"
         );
     }
 
@@ -2092,7 +2098,7 @@ mod pinned_action_tests {
         // The fallthrough branch returns this, but a real caller won't reach it.
         assert_eq!(
             pinned_events_action(&["$a"], &["$a"]),
-            "changed the pinned messages"
+            "\u{1}pin_changed"
         );
     }
 }
@@ -2198,6 +2204,25 @@ mod membership_action_tests {
 #[cfg(test)]
 mod resanitized_formatted_body_tests {
     use super::resanitized_formatted_body_from_json;
+
+    #[test]
+    fn gallery_caption_html_is_sanitised() {
+        // A gallery caption is not sanitised by matrix-sdk-ui, so the markup
+        // has to be cleaned here: no remote image, no script.
+        let json = serde_json::json!({
+            "type": "m.room.message",
+            "content": {
+                "msgtype": "m.gallery",
+                "body": "caption",
+                "format": "org.matrix.custom.html",
+                "formatted_body": "<b>hi</b><img src=\"https://evil.example/x.png\"><script>x()</script>"
+            }
+        });
+        let out = resanitized_formatted_body_from_json(&json, String::new());
+        assert!(out.contains("<b>hi</b>"), "{out}");
+        assert!(!out.contains("evil.example"), "{out}");
+        assert!(!out.contains("<script"), "{out}");
+    }
 
     #[test]
     fn plain_text_edit_ignores_synthetic_fallback_html() {

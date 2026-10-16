@@ -33,6 +33,10 @@ namespace tesseract::views
 
 class SettingsGroup;
 
+// The host a URL opens, for display: the authority with any user info removed,
+// the port kept. Empty when the URL has no scheme.
+std::string url_destination_host(const std::string& url);
+
 class DevicesSection : public SettingsPage
 {
 public:

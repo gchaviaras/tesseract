@@ -309,7 +309,8 @@ TEST_CASE("read receipts are deduplicated and arm one deferred fully-read",
     CHECK(f.s.last_sent_receipt_.empty());
 
     f.s.maybe_send_read_receipt_("!r:x", "$e1");
-    CHECK(f.s.last_sent_receipt_.at("!r:x") == "$e1");
+    // The value records the sending account as well as the event id.
+    CHECK(f.s.last_sent_receipt_.at("!r:x").ends_with("$e1"));
     REQUIRE(f.s.pending_fully_read_.size() == 1);
     CHECK(f.s.delayed.size() == 1);
     CHECK(f.s.delayed[0].first == TlShell::kFullyReadLingerMs);

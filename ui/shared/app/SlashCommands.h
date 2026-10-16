@@ -53,6 +53,16 @@ struct SpoilerMessage
     std::string formatted_body;  // <span data-mx-spoiler[="reason"]>…</span>
 };
 
+/// `html` (the composer's rendered `formatted_body`) with the leading
+/// "/<command>" and one following space removed, so a command's text keeps its
+/// formatting and mention pills. A leading `<p>` is kept. Empty when `html`
+/// doesn't start with the command, or is empty.
+std::string strip_command_from_html(const std::string& html, std::string_view command);
+
+/// `html` with `tail` added at the end of its last paragraph (or at the end
+/// when there is none).
+std::string append_to_html(const std::string& html, const std::string& tail);
+
 // Build a spoiler message from the text following the `/spoiler ` prefix. A
 // leading `(reason)` (balanced parens) sets the spoiler reason; everything
 // after it is the hidden content, rendered through inline markdown. Returns

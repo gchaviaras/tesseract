@@ -1,6 +1,7 @@
 #include "tesseract/settings.h"
 
 #include "fs_util.h"
+#include "tesseract/secret_store.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -12,6 +13,29 @@
 
 namespace tesseract
 {
+
+ProxyUrlParts split_proxy_credentials(const std::string& url)
+{
+    const auto scheme = url.find("://");
+    if (scheme == std::string::npos)
+        return {url, {}};
+    const auto auth_start = scheme + 3;
+    const auto auth_end = url.find_first_of("/?#", auth_start);
+    const auto authority = url.substr(
+        auth_start, auth_end == std::string::npos ? std::string::npos : auth_end - auth_start);
+    const auto at = authority.rfind('@');
+    if (at == std::string::npos)
+        return {url, {}};
+    return {url.substr(0, auth_start) + url.substr(auth_start + at + 1), authority.substr(0, at)};
+}
+
+std::string join_proxy_credentials(const std::string& url, const std::string& userinfo)
+{
+    const auto scheme = url.find("://");
+    if (userinfo.empty() || scheme == std::string::npos)
+        return url;
+    return url.substr(0, scheme + 3) + userinfo + "@" + url.substr(scheme + 3);
+}
 
 namespace
 {
@@ -112,6 +136,28 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
                    : pm == "manual" ? ProxyMode::Manual
                                     : ProxyMode::System;
         proxy_url = j.value("proxy_url", std::string());
+        proxy_creds_in_keyring = false;
+        proxy_creds_unreadable = false;
+        proxy_creds_saved.clear();
+        // The credential was moved to the secret store when it was saved; put
+        // it back so the rest of the app sees one URL.
+        if (j.value("proxy_credentials", std::string()) == "keyring" &&
+            split_proxy_credentials(proxy_url).userinfo.empty())
+        {
+            bool failed = false;
+            if (auto userinfo = SecretStore::load_proxy_credentials(&failed))
+            {
+                proxy_url = join_proxy_credentials(proxy_url, *userinfo);
+                proxy_creds_saved = std::move(*userinfo);
+            }
+            else if (failed)
+            {
+                // Don't treat an unreadable keyring as "no credential": a later
+                // save must neither delete the secret nor drop the marker.
+                proxy_creds_unreadable = true;
+            }
+            proxy_creds_in_keyring = true;
+        }
     }
     group_inactive_rooms         = j.value("group_inactive_rooms",         false);
     group_unread_rooms            = j.value("group_unread_rooms",            false);
@@ -327,6 +373,37 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
 
     const char* close_action_str = close_action_to_string(close_action);
 
+    // The proxy credential goes to the secret store; the file keeps the URL
+    // without it. If the store is unavailable the file keeps it, as before.
+    std::string proxy_url_to_write = proxy_url;
+    bool creds_in_keyring = false;
+    {
+        const auto parts = split_proxy_credentials(proxy_url);
+        if (!parts.userinfo.empty())
+        {
+            if ((parts.userinfo == proxy_creds_saved && proxy_creds_in_keyring) ||
+                SecretStore::save_proxy_credentials(parts.userinfo))
+            {
+                proxy_creds_saved = parts.userinfo;
+                proxy_creds_in_keyring = true;
+                proxy_creds_unreadable = false;
+                proxy_url_to_write = parts.url;
+                creds_in_keyring = true;
+            }
+        }
+        else if (proxy_creds_unreadable)
+        {
+            creds_in_keyring = true; // keep the marker; the secret is still there
+        }
+        else if (proxy_creds_in_keyring)
+        {
+            // The user took the credential out of the URL.
+            SecretStore::remove_proxy_credentials();
+            proxy_creds_in_keyring = false;
+            proxy_creds_saved.clear();
+        }
+    }
+
     nlohmann::json j = {
         {"theme",                            theme_str},
         {"theme_accent",                     theme_accent_str},
@@ -344,7 +421,8 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         {"proxy_mode",                       proxy_mode == ProxyMode::None   ? "none"
                                            : proxy_mode == ProxyMode::Manual ? "manual"
                                                                              : "system"},
-        {"proxy_url",                        proxy_url},
+        {"proxy_url",                        proxy_url_to_write},
+        {"proxy_credentials",                creds_in_keyring ? "keyring" : ""},
         {"group_inactive_rooms",             group_inactive_rooms},
         {"group_unread_rooms",            group_unread_rooms},
         {"inactive_room_threshold_days",     inactive_room_threshold_days},

@@ -12,7 +12,11 @@
 #include "tk/canvas.h"
 #include "tk/theme.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -35,6 +39,11 @@ bool account_has_unread(const std::vector<RoomInfo>& rooms);
 std::string find_existing_dm(const std::vector<RoomInfo>& rooms,
                              const std::string& user_id);
 
+// The text an m.gallery event carries when the user typed no caption. The
+// event's body is a required field and what clients without galleries show, so
+// it is "Sent N items" in the sender's language.
+std::string gallery_caption_or_fallback(const std::string& caption, std::size_t item_count);
+
 // "A is typing…" / "A and B are typing…" / "A, B and N others are typing…".
 std::string format_typing_text(const std::vector<std::string>& names);
 
@@ -46,5 +55,22 @@ tk::AccentTheme to_tk_accent(tesseract::Settings::ThemeAccent accent);
 // Write a secret to `path` owner-only (0600 on POSIX); sets `error` on failure.
 bool write_private_text_file(const std::string& path, const std::string& text,
                              std::string& error);
+
+// Quote `arg` for a Windows command line, so CommandLineToArgvW and the C runtime
+// read it back as one argument. An embedded quote is escaped, and each backslash
+// that precedes a quote, or the closing quote, is doubled. Other text is left as
+// it is, so an ordinary value gets the same string it always did.
+std::wstring quote_command_line_arg(std::wstring_view arg);
+
+// Map tile disk cache. A cached tile is served only when it is a PNG: an entry
+// that is empty or not a PNG (a crash mid-write, an older build) is removed, so
+// it is fetched again rather than shown for ever. Returns empty on a miss.
+std::vector<std::uint8_t> read_tile_disk(const std::filesystem::path& path);
+
+// Stores `png` under a temporary name and renames it into place, so a crash
+// never leaves a truncated tile under the real name. Refuses anything that is
+// not a PNG, so a tile-server error page is never kept. Returns false on failure.
+bool write_tile_disk(const std::filesystem::path& path,
+                     const std::vector<std::uint8_t>& png);
 
 } // namespace tesseract::shell_helpers

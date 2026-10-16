@@ -91,6 +91,16 @@ impl GifProvider for KlipyProvider {
     }
 }
 
+/// Whether `bytes` really are the media type the provider claimed. Only the
+/// three GIF formats we send are accepted, and the content must sniff as that
+/// exact type. The provider's MIME string is never trusted on its own.
+fn content_matches_mime(bytes: &[u8], claimed: &str) -> bool {
+    if !matches!(claimed, "image/gif" | "image/webp" | "video/mp4") {
+        return false;
+    }
+    infer::get(bytes).is_some_and(|k| k.mime_type() == claimed)
+}
+
 /// Parse a single Klipy `data.data[]` entry. Returns `None` (skip) when the
 /// entry has no usable animated form. Send-form priority: MP4 (broadest bridge
 /// compatibility) → WebP (smaller than GIF) → GIF (universal fallback). The
@@ -526,7 +536,6 @@ impl ClientFfi {
         let preview_url = preview_url.to_owned();
         let reply = reply_event_id.to_owned();
         let thread = thread_root.to_owned();
-        let http = self.http_client.clone();
         let stop_rx = self.stop_rx.clone();
 
         self.rt.spawn(async move {
@@ -535,7 +544,7 @@ impl ClientFfi {
             let (image_bytes, preview_bytes) = tokio::join!(
                 async {
                     tokio::select! {
-                        b = super::media::download_url(&http, &image_url, super::media::MAX_MEDIA_BYTES) => b,
+                        b = super::media::download_guarded(&image_url, super::media::MAX_MEDIA_BYTES, super::media::FULL_MEDIA_FETCH_TIMEOUT) => b,
                         _ = tokio::time::sleep(super::media::FULL_MEDIA_FETCH_TIMEOUT) => Vec::new(),
                         _ = super::stop_fut(stop_rx) => Vec::new(),
                     }
@@ -545,7 +554,7 @@ impl ClientFfi {
                         Vec::new()
                     } else {
                         tokio::select! {
-                            b = super::media::download_url(&http, &preview_url, super::media::MAX_URL_BYTES) => b,
+                            b = super::media::download_guarded(&preview_url, super::media::MAX_URL_BYTES, super::media::THUMBNAIL_FETCH_TIMEOUT) => b,
                             _ = tokio::time::sleep(super::media::THUMBNAIL_FETCH_TIMEOUT) => Vec::new(),
                             _ = super::stop_fut(stop2) => Vec::new(),
                         }
@@ -553,10 +562,17 @@ impl ClientFfi {
                 },
             );
 
-            if image_bytes.is_empty() {
+            // The provider chose the MIME type. Check the bytes match it before
+            // uploading, and drop a preview that is not an image.
+            if image_bytes.is_empty() || !content_matches_mime(&image_bytes, &image_mime) {
                 deliver(false, "Couldn't load GIF");
                 return;
             }
+            let preview_bytes = if infer::get(&preview_bytes).is_some_and(|k| k.mime_type().starts_with("image/")) {
+                preview_bytes
+            } else {
+                Vec::new()
+            };
 
             let mime: mime::Mime = match image_mime.parse() {
                 Ok(m) => m,
@@ -949,5 +965,33 @@ mod tests {
         assert_eq!(c["m.relates_to"]["rel_type"], "m.thread");
         assert_eq!(c["m.relates_to"]["event_id"], "$root");
         assert_eq!(c["m.relates_to"]["is_falling_back"], true);
+    }
+}
+
+#[cfg(test)]
+mod content_mime_tests {
+    use super::content_matches_mime;
+
+    const GIF: &[u8] = b"GIF89a\x01\x00\x01\x00\x00\x00\x00;";
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR";
+
+    #[test]
+    fn gif_bytes_match_only_a_gif_claim() {
+        assert!(content_matches_mime(GIF, "image/gif"));
+        assert!(!content_matches_mime(GIF, "video/mp4"));
+        assert!(!content_matches_mime(GIF, "image/webp"));
+    }
+
+    #[test]
+    fn png_bytes_are_refused_even_when_claimed_as_gif() {
+        assert!(!content_matches_mime(PNG, "image/gif"));
+    }
+
+    #[test]
+    fn unlisted_claims_are_refused() {
+        // The allow-list is the three GIF formats; anything else is not sent.
+        assert!(!content_matches_mime(PNG, "image/png"));
+        assert!(!content_matches_mime(GIF, "text/html"));
+        assert!(!content_matches_mime(b"", "image/gif"));
     }
 }

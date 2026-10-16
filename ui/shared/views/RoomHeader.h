@@ -143,7 +143,7 @@ public:
     std::function<void(const std::string& url)> on_link_hovered;
 
     // Fired when the user confirms a date in the picker (ms since Unix epoch,
-    // midnight UTC on the selected day). Replaces on_jump_to_date_requested.
+    // local midnight on the selected day). Replaces on_jump_to_date_requested.
     std::function<void(std::uint64_t ts_ms)> on_date_jump;
 
     // Fired each time the date picker opens, so the owner can refresh the
@@ -242,7 +242,6 @@ private:
     void hide_date_picker_();
     void apply_picker_max_();
     std::uint64_t jump_max_ts_ = 0;
-    static std::uint64_t date_to_midnight_utc_ms_(int year, int month, int day);
 
 public:
     // Test-only accessor for the threads button's world-coordinate rect.

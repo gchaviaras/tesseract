@@ -500,9 +500,9 @@ mod live {
         client: &Client,
         db: &Arc<Mutex<Option<Connection>>>,
         room_id: &str,
-    ) {
+    ) -> bool {
         let Ok(rid) = room_id.parse::<OwnedRoomId>() else {
-            return;
+            return false;
         };
         let events = {
             // The cross-process lock guard drops at the end of this block,
@@ -515,10 +515,10 @@ mod live {
                         .await
                     {
                         Ok(e) => e,
-                        Err(_) => return,
+                        Err(_) => return false,
                     }
                 }
-                Err(_) => return,
+                Err(_) => return false,
             }
         };
 
@@ -554,10 +554,15 @@ mod live {
             }
         }
 
+        // Only a completed write counts: the caller marks the room seeded on
+        // true, and a room marked seeded after a failed write never gets a
+        // second try.
         let mut guard = db.lock();
-        if let Some(conn) = guard.as_mut() {
-            upsert_many(conn, room_id, &rows);
-        }
+        let Some(conn) = guard.as_mut() else {
+            return false;
+        };
+        upsert_many(conn, room_id, &rows);
+        true
     }
 
     impl ClientFfi {
@@ -592,11 +597,16 @@ mod live {
                     g.as_ref().map(|c| !is_seeded(c, &room_id)).unwrap_or(false)
                 };
                 if need_seed {
-                    if let Some(client) = &client {
-                        seed_room_media(client, &db, &room_id).await;
-                    }
-                    if let Some(c) = db.lock().as_ref() {
-                        mark_seeded(c, &room_id);
+                    // A failed or skipped seed leaves the room unseeded, so the
+                    // next page request tries again.
+                    let seeded = match &client {
+                        Some(client) => seed_room_media(client, &db, &room_id).await,
+                        None => false,
+                    };
+                    if seeded {
+                        if let Some(c) = db.lock().as_ref() {
+                            mark_seeded(c, &room_id);
+                        }
                     }
                 }
 

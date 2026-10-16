@@ -110,6 +110,10 @@ void LinuxQtTrayIcon::rebuild_menu(
                      [this] { if (on_quit_) on_quit_(); });
 
     tray_->setContextMenu(new_menu.get());
+    // The previous menu can be on screen (a fallback tray shows it as a popup
+    // while it is open), so it is deleted on the next event-loop turn, not here.
+    if (menu_)
+        menu_.release()->deleteLater();
     menu_ = std::move(new_menu);
 }
 

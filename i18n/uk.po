@@ -518,6 +518,14 @@ msgstr "Вкладення: {0}"
 msgid "Attachment too large: {0}"
 msgstr "Вкладення завелике: {0}"
 
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That file isn't a PNG, JPEG, GIF or WebP image."
+msgstr "Цей файл не є зображенням PNG, JPEG, GIF або WebP."
+
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That image is too large to send."
+msgstr "Це зображення занадто велике для надсилання."
+
 #: ui/shared/app/HistoryExportController.cpp:104
 #, c++-format
 msgid "Image unavailable: {0}"
@@ -991,6 +999,10 @@ msgstr "Вийти з облікового запису {0}"
 #: ui/shared/app/ShellBase_accounts.cpp:274
 msgid "empty session"
 msgstr "порожній сеанс"
+
+#: ui/shared/app/ShellBase_accounts.cpp
+msgid "Could not restore the session: {0}"
+msgstr "Не вдалося відновити сеанс: {0}"
 
 #: ui/shared/app/ShellBase_accounts.cpp:315
 #, c++-format
@@ -4787,6 +4799,10 @@ msgstr "Не підтверджено"
 msgid "Open in browser"
 msgstr "Відкрити у браузері"
 
+#: ui/shared/views/settings/DevicesSection.cpp
+msgid "Open in browser ({0})"
+msgstr "Відкрити в браузері ({0})"
+
 #: ui/shared/views/settings/DevicesSection.cpp:203
 msgid "I've confirmed"
 msgstr "Я підтвердив(-ла)"
@@ -5218,6 +5234,10 @@ msgstr "Зняти блокування (у вас немає дозволу с�
 msgid "Banned users"
 msgstr "Заблоковані користувачі"
 
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "Some bans may be missing: the room's member list did not fully load. Reopen settings to try again."
+msgstr "Деякі блокування можуть бути відсутні: список учасників кімнати завантажено не повністю. Відкрийте налаштування знову, щоб повторити спробу."
+
 #: ui/shared/views/settings/RoomModerationSection.cpp:145
 msgid "No banned users"
 msgstr "Немає заблокованих користувачів"
@@ -5325,6 +5345,10 @@ msgstr "Дозволити гостям приєднуватися"
 #: ui/shared/views/settings/RoomSecuritySection.cpp:61
 msgid "History Visibility"
 msgstr "Видимість історії"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "History: {0}"
+msgstr "Історія: {0}"
 
 #: ui/shared/views/settings/RoomSecuritySection.cpp:64
 msgid "Anyone"
@@ -7075,3 +7099,171 @@ msgid_plural "{0} images can't be sent because their metadata can't be removed. 
 msgstr[0] "{0} зображення не можна надіслати, бо його метадані неможливо видалити. Приберіть його, щоб надіслати решту."
 msgstr[1] "{0} зображення не можна надіслати, бо їхні метадані неможливо видалити. Приберіть їх, щоб надіслати решту."
 msgstr[2] "{0} зображень не можна надіслати, бо їхні метадані неможливо видалити. Приберіть їх, щоб надіслати решту."
+
+#: ui/shared/app/SlashCommands.cpp
+msgid "no display name given; use /myroomnick <name>"
+msgstr "не вказано відображуване ім'я; використовуйте /myroomnick <ім'я>"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "A recovery passphrase must be at least {0} characters."
+msgstr "Фраза відновлення має містити щонайменше {0} символів."
+
+#: ui/shared/app/ShellBase_calls.cpp
+msgid "Screen sharing stopped: the screen could not be captured."
+msgstr "Показ екрана зупинено: не вдалося зафіксувати екран."
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not pin the message: {0}"
+msgstr "Не вдалося закріпити повідомлення: {0}"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not unpin the message: {0}"
+msgstr "Не вдалося відкріпити повідомлення: {0}"
+
+#: ui/shared/views/MessageSearchView.cpp:29
+#: ui/shared/views/MessageSearchView.cpp:32
+msgid "now"
+msgstr "зараз"
+
+#: ui/shared/views/MessageSearchView.cpp:45
+msgid "{0}w"
+msgstr "{0} тиж."
+
+#: ui/shared/views/MessageSearchView.cpp:46
+msgid "{0}y"
+msgstr "{0} р."
+
+#: ui/shared/app/ShellBase.cpp:240
+#, c++-format
+msgid "Couldn't save the sign-in for {0}. You may have to sign in again next time."
+msgstr "Не вдалося зберегти вхід для {0}. Наступного разу, можливо, доведеться увійти знову."
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(image)"
+msgstr "(зображення)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(file)"
+msgstr "(файл)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(voice)"
+msgstr "(голосове повідомлення)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(audio)"
+msgstr "(аудіо)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(video)"
+msgstr "(відео)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(gallery)"
+msgstr "(галерея)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(message)"
+msgstr "(повідомлення)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(sticker)"
+msgstr "(стікер)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(deleted)"
+msgstr "(видалено)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(unavailable)"
+msgstr "(недоступно)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(poll)"
+msgstr "(опитування)"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "(poll) {0}"
+msgstr "(опитування) {0}"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sent before you joined this room"
+msgstr "🔒 Надіслано до того, як ви приєдналися до цієї кімнати"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's identity changed since you verified them"
+msgstr "🔒 Особа відправника змінилася після того, як ви її верифікували"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is not signed"
+msgstr "🔒 Пристрій відправника не підписаний"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is unknown"
+msgstr "🔒 Пристрій відправника невідомий"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 History unavailable (key backup is off)"
+msgstr "🔒 Історія недоступна (резервне копіювання ключів вимкнено)"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender blocked this device"
+msgstr "🔒 Відправник заблокував цей пристрій"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Key was not shared with this device"
+msgstr "🔒 Ключ не було надано цьому пристрою"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Verify this device to access history"
+msgstr "🔒 Верифікуйте цей пристрій, щоб отримати доступ до історії"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Unable to decrypt"
+msgstr "🔒 Не вдалося розшифрувати"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "cleared all pinned messages"
+msgstr "відкріпив усі закріплені повідомлення"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "pinned a message"
+msgstr "закріпив повідомлення"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "unpinned a message"
+msgstr "відкріпив повідомлення"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "pinned {0} message"
+msgid_plural "pinned {0} messages"
+msgstr[0] "закріпив {0} повідомлення"
+msgstr[1] "закріпив {0} повідомлення"
+msgstr[2] "закріпив {0} повідомлень"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "unpinned {0} message"
+msgid_plural "unpinned {0} messages"
+msgstr[0] "відкріпив {0} повідомлення"
+msgstr[1] "відкріпив {0} повідомлення"
+msgstr[2] "відкріпив {0} повідомлень"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "changed the pinned messages"
+msgstr "змінив закріплені повідомлення"
+
+#: ui/shared/app/shell_helpers.cpp
+#, c++-format
+msgid "Sent {0} item"
+msgid_plural "Sent {0} items"
+msgstr[0] "Надіслано {0} елемент"
+msgstr[1] "Надіслано {0} елементи"
+msgstr[2] "Надіслано {0} елементів"
+
+#: ui/shared/app/ShellBase_accounts.cpp
+#, c++-format
+msgid "Couldn't start syncing: {0}. Retrying…"
+msgstr "Не вдалося запустити синхронізацію: {0}. Повторна спроба…"

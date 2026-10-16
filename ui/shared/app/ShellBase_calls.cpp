@@ -236,16 +236,35 @@ void ShellBase::do_start_screen_share_(const std::string& source_id,
         return;
     }
     cap->set_source(source_id);
-    cap->set_callback([this](const tk::ScreenCapture::Frame& f) {
-        if (client_)
-            client_->rtc_push_screen_frame_i420(
+    cap->set_callback([account = call_account_](const tk::ScreenCapture::Frame& f) {
+        // Runs on the capture thread: the call's own account, held weakly.
+        if (auto s = account.lock(); s && s->client)
+            s->client->rtc_push_screen_frame_i420(
                 f.y, f.u, f.v, f.width, f.height,
                 f.stride_y, f.stride_u, f.stride_v);
+    });
+    // The share is announced only once capture is running. A capture that
+    // ends on its own (declined portal, failed step, closed window) stops the
+    // share here, rather than leaving a live track with no frames behind it.
+    const std::uint64_t serial = ++screen_share_serial_;
+    cap->set_failure_callback([this, serial, alive = weak_flag()]() {
+        // Runs on the capture thread, which can outlive this shell.
+        if (alive.expired())
+            return;
+        post_to_ui_alive_([this, serial]() { on_screen_capture_failed_(serial); });
     });
     cap->start();
     screen_capture_ = std::move(cap);
     if (auto* ov = active_call_overlay_())
         ov->set_screen_sharing(true);
+}
+
+void ShellBase::on_screen_capture_failed_(std::uint64_t serial)
+{
+    if (serial != screen_share_serial_ || !screen_capture_)
+        return;
+    stop_screen_share_();
+    show_status_message_(tk::tr("Screen sharing stopped: the screen could not be captured."));
 }
 
 void ShellBase::stop_screen_share_()
@@ -319,11 +338,13 @@ void ShellBase::start_call_video_capture_()
         return;
     }
     vc->set_callback(
-        [this](const tk::VideoCapture::Frame& f)
+        [account = call_account_](const tk::VideoCapture::Frame& f)
         {
-            client_->rtc_push_video_frame_i420(
-                f.y, f.u, f.v, f.width, f.height,
-                f.stride_y, f.stride_u, f.stride_v);
+            // Runs on the capture thread: the call's own account, held weakly.
+            if (auto s = account.lock(); s && s->client)
+                s->client->rtc_push_video_frame_i420(
+                    f.y, f.u, f.v, f.width, f.height,
+                    f.stride_y, f.stride_u, f.stride_v);
         });
     vc->set_error_callback(on_error);
     call_video_capture_ = std::move(vc);
@@ -390,6 +411,7 @@ void ShellBase::start_call(const std::string& room_id, const std::string& slot_i
     }
 
     call_session_ = std::make_unique<CallSession>(client_, room_id, slot_id);
+    call_account_ = active_account_;
     call_audio_output_ = make_call_audio_output_();
     if (start_audio_muted)
         call_session_->mute_audio(true);
@@ -607,6 +629,12 @@ void ShellBase::end_call()
     // cancel() stops capture without firing on_stopped (which would try to send a voice msg).
     if (capture_ && capture_->is_recording())
         capture_->cancel();
+    {
+        // Release the playback stream now: the session-ended event returns early
+        // once call_session_ is reset, so it would hold the device until the next call.
+        std::lock_guard<std::mutex> lock(call_audio_mutex_);
+        call_audio_output_.reset();
+    }
     if (call_session_)
     {
         call_session_->hang_up();
@@ -629,6 +657,11 @@ void ShellBase::handle_rtc_participant_joined_ui_(std::uint64_t session_id,
                                                    RtcParticipantInfo info)
 {
     if (!call_session_)
+        return;
+    // Adopt the session id only while it is unknown. A join for another session,
+    // such as a late event from an earlier call, must not replace the known one.
+    const std::uint64_t known = call_session_->session_id();
+    if (known != 0 && known != session_id)
         return;
     call_session_->set_session_id(session_id);
     call_session_->on_participant_joined(info);
@@ -689,6 +722,9 @@ void ShellBase::handle_rtc_session_ended_ui_(std::uint64_t session_id,
 
     call_session_->on_session_ended({});
     stop_call_video_capture_();
+    // A screen share must not outlive the call: stop capture (and the OS
+    // "recording" indicator) for any end reason, not only a local hang-up.
+    stop_screen_share_();
     {
         std::lock_guard<std::mutex> lock(call_audio_mutex_);
         call_audio_output_.reset();
@@ -722,6 +758,34 @@ views::CallOverlayWidget* ShellBase::active_call_overlay_() const
     if (main_app_)
         return main_app_->call_panel_for_room();
     return nullptr;
+}
+
+namespace
+{
+// How long the call overlay reuses one member snapshot. Its name and avatar
+// providers run per participant per paint, so the room's member list (which
+// can be large) is read at most this often rather than on every lookup.
+constexpr auto kCallOverlayRosterMaxAge = std::chrono::seconds(2);
+} // namespace
+
+const ShellBase::CallOverlayRoster&
+ShellBase::call_overlay_roster_for_(const std::string& room_id)
+{
+    const auto now = std::chrono::steady_clock::now();
+    auto& roster = call_overlay_roster_;
+    if (roster.room_id == room_id && now - roster.built_at < kCallOverlayRosterMaxAge)
+        return roster;
+
+    roster.room_id = room_id;
+    roster.built_at = now;
+    roster.people.clear();
+    if (client_)
+    {
+        for (const auto& mem : client_->get_room_members(room_id))
+            roster.people.emplace(mem.user_id,
+                                  std::make_pair(mem.display_name, mem.avatar_url));
+    }
+    return roster;
 }
 
 // Tear down the current overlay, switch to the requested mode, remount,
@@ -781,11 +845,12 @@ void ShellBase::on_call_overlay_mode_requested_(views::CallOverlayWidget::Mode m
     {
         if (call_session_ && client_)
         {
-            const auto members = client_->get_room_members(call_session_->room_id());
-            for (const auto& mem : members)
+            const auto& people = call_overlay_roster_for_(call_session_->room_id()).people;
+            const auto it = people.find(user_id);
+            if (it != people.end() && !it->second.second.empty())
             {
-                if (mem.user_id == user_id && !mem.avatar_url.empty())
-                    return avatar_image_(mem.avatar_url);
+                const std::string mxc = it->second.second;
+                return avatar_image_(mxc);
             }
         }
         return nullptr;
@@ -795,12 +860,10 @@ void ShellBase::on_call_overlay_mode_requested_(views::CallOverlayWidget::Mode m
         // Primary: room member list for the active call room.
         if (call_session_ && client_)
         {
-            const auto members = client_->get_room_members(call_session_->room_id());
-            for (const auto& mem : members)
-            {
-                if (mem.user_id == user_id && !mem.display_name.empty())
-                    return mem.display_name;
-            }
+            const auto& people = call_overlay_roster_for_(call_session_->room_id()).people;
+            const auto it = people.find(user_id);
+            if (it != people.end() && !it->second.first.empty())
+                return it->second.first;
         }
         // Secondary: global known-users roster.
         auto it = known_users_.find(user_id);
@@ -942,7 +1005,8 @@ void ShellBase::on_call_float_position_changed_(float x, float y)
 {
     Settings::instance().call_overlay_float_x = x;
     Settings::instance().call_overlay_float_y = y;
-    Settings::instance().save_to_disk(tesseract::config_dir());
+    // Debounced: a drag reports every step, and each step wrote the file.
+    save_settings_debounced_();
     request_relayout_();
 }
 } // namespace tesseract

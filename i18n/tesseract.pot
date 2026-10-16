@@ -510,6 +510,14 @@ msgstr ""
 msgid "Attachment too large: {0}"
 msgstr ""
 
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That file isn't a PNG, JPEG, GIF or WebP image."
+msgstr ""
+
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That image is too large to send."
+msgstr ""
+
 #: ui/shared/app/HistoryExportController.cpp:104
 #, c++-format
 msgid "Image unavailable: {0}"
@@ -908,6 +916,10 @@ msgstr ""
 
 #: ui/shared/app/ShellBase_accounts.cpp:274
 msgid "empty session"
+msgstr ""
+
+#: ui/shared/app/ShellBase_accounts.cpp
+msgid "Could not restore the session: {0}"
 msgstr ""
 
 #: ui/shared/app/ShellBase_accounts.cpp:315
@@ -5088,6 +5100,10 @@ msgstr ""
 msgid "Open in browser"
 msgstr ""
 
+#: ui/shared/views/settings/DevicesSection.cpp
+msgid "Open in browser ({0})"
+msgstr ""
+
 #: ui/shared/views/settings/DevicesSection.cpp:203
 msgid "I've confirmed"
 msgstr ""
@@ -5671,6 +5687,10 @@ msgstr ""
 msgid "Banned users"
 msgstr ""
 
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "Some bans may be missing: the room's member list did not fully load. Reopen settings to try again."
+msgstr ""
+
 #: ui/shared/views/settings/RoomModerationSection.cpp:145
 msgid "No banned users"
 msgstr ""
@@ -5771,6 +5791,10 @@ msgstr ""
 
 #: ui/shared/views/settings/RoomSecuritySection.cpp:61
 msgid "History Visibility"
+msgstr ""
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "History: {0}"
 msgstr ""
 
 #: ui/shared/views/settings/RoomSecuritySection.cpp:64
@@ -7029,4 +7053,163 @@ msgstr ""
 
 #: client/src/emoji.cpp:191
 msgid "Flags"
+msgstr ""
+
+#: ui/shared/app/ShellBase_calls.cpp
+msgid "Screen sharing stopped: the screen could not be captured."
+msgstr ""
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not pin the message: {0}"
+msgstr ""
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not unpin the message: {0}"
+msgstr ""
+
+#: ui/shared/views/MessageSearchView.cpp:29
+#: ui/shared/views/MessageSearchView.cpp:32
+msgid "now"
+msgstr ""
+
+#: ui/shared/views/MessageSearchView.cpp:45
+#, c++-format
+msgid "{0}w"
+msgstr ""
+
+#: ui/shared/views/MessageSearchView.cpp:46
+#, c++-format
+msgid "{0}y"
+msgstr ""
+
+#: ui/shared/app/ShellBase.cpp:240
+#, c++-format
+msgid "Couldn't save the sign-in for {0}. You may have to sign in again next time."
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(image)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(file)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(voice)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(audio)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(video)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(gallery)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(message)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(sticker)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(deleted)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(unavailable)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(poll)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "(poll) {0}"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sent before you joined this room"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's identity changed since you verified them"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is not signed"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is unknown"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 History unavailable (key backup is off)"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender blocked this device"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Key was not shared with this device"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Verify this device to access history"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Unable to decrypt"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "cleared all pinned messages"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "pinned a message"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "unpinned a message"
+msgstr ""
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "pinned {0} message"
+msgid_plural "pinned {0} messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "unpinned {0} message"
+msgid_plural "unpinned {0} messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/shared/views/sdk_text.cpp
+msgid "changed the pinned messages"
+msgstr ""
+
+#: ui/shared/app/shell_helpers.cpp
+#, c++-format
+msgid "Sent {0} item"
+msgid_plural "Sent {0} items"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/shared/app/ShellBase_accounts.cpp
+#, c++-format
+msgid "Couldn't start syncing: {0}. Retrying…"
 msgstr ""

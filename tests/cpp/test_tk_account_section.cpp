@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "views/settings/AccountSection.h"
+#include "tk_test_host.h"
 #include "tk_test_surface.h"
 
 #include <memory>
@@ -220,4 +221,40 @@ TEST_CASE("AccountSection: extended profile fields hidden until server "
     sec.set_profile_fields_editable(false);
     st.run(sec, {0.0f, 0.0f, 640.0f, 200.0f});
     CHECK(sec.content_height_for_testing() == hidden_h);
+}
+
+TEST_CASE("AccountSection: a server update does not overwrite a name being typed",
+          "[account][section]")
+{
+    TestHost host(nullptr); // the name field is only built with a host
+    auto sec_owner = tk::create_root_widget<AccountSection>(&host);
+    host.set_root(sec_owner.get());
+    AccountSection& sec = *sec_owner;
+    sec.set_editable(true);
+    sec.set_display_name("Alice");
+    TkAccountSectionStage st;
+    st.run(sec, {0.0f, 0.0f, 640.0f, 200.0f});
+    REQUIRE(sec.name_field() != nullptr);
+    CHECK(sec.name_field()->text() == "Alice");
+
+    // The user edits the field; a change from another device must not replace it.
+    sec.name_field()->set_text("Alice Smith");
+    sec.set_display_name("Alicia");
+    CHECK(sec.name_field()->text() == "Alice Smith");
+}
+
+TEST_CASE("AccountSection: a field still showing the saved name follows the server",
+          "[account][section]")
+{
+    TestHost host(nullptr); // the name field is only built with a host
+    auto sec_owner = tk::create_root_widget<AccountSection>(&host);
+    host.set_root(sec_owner.get());
+    AccountSection& sec = *sec_owner;
+    sec.set_editable(true);
+    sec.set_display_name("Alice");
+    TkAccountSectionStage st;
+    st.run(sec, {0.0f, 0.0f, 640.0f, 200.0f});
+    sec.set_display_name("Bob");
+    REQUIRE(sec.name_field() != nullptr);
+    CHECK(sec.name_field()->text() == "Bob");
 }

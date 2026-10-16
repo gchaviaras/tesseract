@@ -307,35 +307,39 @@ void ComboButton::set_expanded_(bool expanded)
 {
     if (expanded_ == expanded)
         return;
-    expanded_ = expanded;
 
+    if (!expanded)
+    {
+        // Collapsing needs no host, so it always takes effect.
+        expanded_ = false;
+        if (popup_)
+            popup_->set_visible(false);
+        return;
+    }
+
+    // Expanding needs a host and a popup surface. Without them the button
+    // stays collapsed, so it does not swallow keys with no dropdown open.
     auto* h = host();
     if (!h)
         return;
 
-    if (expanded)
+    if (!popup_)
     {
+        popup_ = h->make_popup_surface();
         if (!popup_)
-        {
-            popup_ = h->make_popup_surface();
-            if (!popup_)
-                return;
-            popup_->set_corner_radius(kCBDropRadius);
-            auto list = std::make_unique<DropdownList>();
-            dropdown_ = list.get();
-            dropdown_->on_row_activated = [this](std::size_t idx) { commit_(idx); };
-            dropdown_->on_hover_changed = [this](int row) { set_hovered_(row); };
-            popup_->set_root(std::move(list));
-        }
-        dropdown_->set_options(&options_, selected_value_);
-        dropdown_->set_hovered(hovered_option_);
-        reposition_popup_();
-        popup_->set_visible(true);
+            return;
+        popup_->set_corner_radius(kCBDropRadius);
+        auto list = std::make_unique<DropdownList>();
+        dropdown_ = list.get();
+        dropdown_->on_row_activated = [this](std::size_t idx) { commit_(idx); };
+        dropdown_->on_hover_changed = [this](int row) { set_hovered_(row); };
+        popup_->set_root(std::move(list));
     }
-    else if (popup_)
-    {
-        popup_->set_visible(false);
-    }
+    expanded_ = true;
+    dropdown_->set_options(&options_, selected_value_);
+    dropdown_->set_hovered(hovered_option_);
+    reposition_popup_();
+    popup_->set_visible(true);
 }
 
 void ComboButton::reposition_popup_()

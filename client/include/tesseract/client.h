@@ -1656,13 +1656,18 @@ public:
                           const std::string& reason = "");
 
     /// Banned members of a room. Syncs the member list first (bounded by a
-    /// timeout) so bans of users who never spoke are included.
+    /// timeout) so bans of users who never spoke are included. When that sync
+    /// does not finish, `complete` is false and the list may be partial.
     /// Blocks the calling thread — call from a worker thread.
-    std::vector<BannedMember> get_banned_members(const std::string& room_id);
+    BannedMemberList get_banned_members(const std::string& room_id);
 
     /// Fetch the joined member list for a room.
     /// Blocks the calling thread — call from a worker thread.
     std::vector<RoomMember> get_room_members(const std::string& room_id);
+
+    /// Joined-member count of a room, from its cached summary. Builds no member
+    /// list; 0 when the room is unknown.
+    uint64_t room_joined_member_count(const std::string& room_id);
 
     /// Send an m.room.topic state event to update the room topic.
     /// Blocks the calling thread — call from a worker thread.

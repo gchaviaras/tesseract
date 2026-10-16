@@ -459,10 +459,19 @@ void ShellBase::apply_msc2545_legacy_compat_()
     // set_msc2545_legacy_compat synchronously rebuilds the image-pack cache
     // and fires on_image_packs_updated Rust-side, which the shells already
     // handle to refresh list_image_packs()-driven UI — no extra refresh
-    // call needed here.
-    if (client_)
-        client_->set_msc2545_legacy_compat(
-            tesseract::Settings::instance().msc2545_legacy_compat);
+    // call needed here. That rebuild is a network-bound fetch, so it runs on
+    // the mutable pool, never the UI thread (see apply_msc2545_legacy_compat_pref_).
+    if (!client_)
+        return;
+    auto sess = active_account_;
+    const bool want = tesseract::Settings::instance().msc2545_legacy_compat;
+    run_async_mut_(
+        [sess, want]()
+        {
+            if (!sess || !sess->client)
+                return;
+            sess->client->set_msc2545_legacy_compat(want);
+        });
 }
 
 void ShellBase::refresh_all_message_lists_display_prefs_()

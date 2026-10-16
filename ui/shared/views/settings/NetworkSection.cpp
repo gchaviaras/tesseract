@@ -37,7 +37,14 @@ NetworkSection::NetworkSection(SettingBinder& binder) : binder_(&binder)
 
     auto field = tk::create_widget<tk::TextField>(this, 32.0f);
     field->set_placeholder(tk::tr("http://proxy.example.com:8080"));
-    field->set_on_changed([this](const std::string&) { on_url_edited_(); });
+    // Typing only updates the field's state. The proxy is applied, and the
+    // settings saved, once the URL is finished: on Enter or when focus leaves.
+    field->set_on_changed([this](const std::string&) { refresh_url_state_(); });
+    field->set_on_submit([this] { commit_url_(); });
+    field->set_on_focus_changed([this](bool focused) {
+        if (!focused)
+            commit_url_();
+    });
     field->set_layout_hints({.fill_main = true});
     url_field_ = url_row->add_child(std::move(field));
     group->add_widget(std::move(url_row));
@@ -96,6 +103,12 @@ void NetworkSection::on_mode_changed_(const std::string&)
 }
 
 void NetworkSection::on_url_edited_()
+{
+    refresh_url_state_();
+    commit_url_();
+}
+
+void NetworkSection::commit_url_()
 {
     refresh_url_state_();
     if (mode_() != ProxyMode::Manual)

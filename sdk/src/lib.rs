@@ -253,6 +253,12 @@ pub mod ffi {
         pub can_unban: bool,
     }
 
+    #[derive(Debug, Clone, Default)]
+    pub struct BannedMemberList {
+        pub members: Vec<BannedMember>,
+        pub complete: bool,
+    }
+
     #[derive(Debug, PartialEq, Default)]
     pub struct UserProfile {
         pub exists: bool,
@@ -636,6 +642,21 @@ pub mod ffi {
         pub ok: bool,
         pub message: String,
         pub verification_uri: String,
+    }
+
+    #[derive(Debug, PartialEq, Default)]
+    pub struct QrWaitStep {
+        pub pending: bool,
+        pub ok: bool,
+        pub message: String,
+        pub verification_uri: String,
+    }
+
+    #[derive(Debug, PartialEq, Default)]
+    pub struct OAuthWaitStep {
+        pub pending: bool,
+        pub ok: bool,
+        pub message: String,
     }
 
     #[derive(Debug, PartialEq, Default, Clone)]

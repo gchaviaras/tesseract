@@ -1062,3 +1062,49 @@ TEST_CASE("RoomModerationSection: rows replace the empty label and Unban fires t
     CHECK(mod->showing_empty_label());
     st.run(*view, {0, 0, 800, 600});
 }
+
+TEST_CASE("RoomModerationSection: a partial member sync adds a note that bans may be missing",
+          "[room_settings][moderation]")
+{
+    TkRoomSettingsViewStage st;
+    auto view = tk::create_root_widget<RoomSettingsView>(nullptr);
+    view->open(make_room_info());
+    auto* mod = view->moderation_section();
+    REQUIRE(mod);
+    CHECK_FALSE(mod->showing_incomplete_note());
+
+    view->set_banned_members({banned("@bob:example.org")}, /*complete=*/false);
+    CHECK(mod->showing_incomplete_note());
+    CHECK(mod->banned_members().size() == 1);
+    st.run(*view, {0, 0, 800, 600});
+
+    // An empty list that is partial still says so.
+    view->set_banned_members({}, /*complete=*/false);
+    CHECK(mod->showing_empty_label());
+    CHECK(mod->showing_incomplete_note());
+
+    // A complete sync (the next open fetches again) clears the note.
+    view->set_banned_members({banned("@bob:example.org")});
+    CHECK_FALSE(mod->showing_incomplete_note());
+    st.run(*view, {0, 0, 800, 600});
+}
+
+TEST_CASE("RoomSettingsView: a same-room update keeps the user's edit and follows the rest",
+          "[room_settings][view]")
+{
+    StubHost host;
+    auto v_owner = tk::create_root_widget<RoomSettingsView>(&host);
+    RoomSettingsView& v = *v_owner;
+    v.open(make_room_info()); // name "My Room", topic "My Topic"
+    REQUIRE(v.name_field() != nullptr);
+    REQUIRE(v.topic_field() != nullptr);
+
+    // The user renames the room while the server changes the topic.
+    v.name_field()->set_text("Mine");
+    auto info = make_room_info();
+    info.topic = "Server topic";
+    v.refresh_room_info(info);
+
+    CHECK(v.name_field()->text() == "Mine");
+    CHECK(v.topic_field()->text() == "Server topic");
+}

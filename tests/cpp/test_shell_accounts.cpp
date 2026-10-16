@@ -116,7 +116,7 @@ std::shared_ptr<tesseract::AccountSession> acct(const std::string& uid,
 
 } // namespace
 
-TEST_CASE("a transient reconnect stops sync and schedules a delayed restart",
+TEST_CASE("a terminal sync error stops sync and schedules a delayed restart",
           "[shell][accounts][sync_error]")
 {
     AccountsShell s;
@@ -124,18 +124,54 @@ TEST_CASE("a transient reconnect stops sync and schedules a delayed restart",
     a->sync_started = true;
     s.account_manager_.add_account(a);
 
-    s.handle_sync_error_impl_("sync_reconnect", "@a:x", "", false);
+    s.handle_sync_error_impl_("sync_error", "@a:x", "", false);
     REQUIRE(s.status.size() == 1);
     CHECK_FALSE(a->sync_started);
     CHECK(s.restarts_scheduled(5000) == 1);
     CHECK(s.relogins.empty());
 }
 
-TEST_CASE("a reconnect for an unknown account only shows the status",
+TEST_CASE("a sync that failed to start is retried and the reason stays up",
+          "[shell][accounts][sync_error]")
+{
+    for (const char* context : {"sync_init", "event_cache_init"})
+    {
+        AccountsShell s;
+        auto a = acct("@a:x", true);
+        a->sync_started = true;
+        s.account_manager_.add_account(a);
+
+        s.handle_sync_error_impl_(context, "@a:x", "disk full", false);
+        REQUIRE(s.status.size() == 1);
+        CHECK(s.status[0].find("disk full") != std::string::npos);
+        CHECK_FALSE(a->sync_started);
+        CHECK(s.restarts_scheduled(5000) == 1);
+        s.handle_sync_error_impl_(context, "@a:x", "disk full", false);
+        CHECK(s.restarts_scheduled(10000) == 1);
+        CHECK(s.relogins.empty());
+    }
+}
+
+TEST_CASE("repeated terminal sync errors back off, capped at five minutes",
           "[shell][accounts][sync_error]")
 {
     AccountsShell s;
-    s.handle_sync_error_impl_("sync_reconnect", "@ghost:x", "", false);
+    auto a = acct("@a:x", true);
+    s.account_manager_.add_account(a);
+
+    s.handle_sync_error_impl_("sync_error", "@a:x", "", false);
+    s.handle_sync_error_impl_("sync_error", "@a:x", "", false);
+    CHECK(s.restarts_scheduled(10000) == 1);
+    for (int i = 0; i < 10; ++i)
+        s.handle_sync_error_impl_("sync_error", "@a:x", "", false);
+    CHECK(s.restarts_scheduled(300000) == 6); // attempts 7 through 12
+}
+
+TEST_CASE("a terminal sync error for an unknown account only shows the status",
+          "[shell][accounts][sync_error]")
+{
+    AccountsShell s;
+    s.handle_sync_error_impl_("sync_error", "@ghost:x", "", false);
     CHECK(s.status.size() == 1);
     CHECK(s.restarts_scheduled(5000) == 0);
 }

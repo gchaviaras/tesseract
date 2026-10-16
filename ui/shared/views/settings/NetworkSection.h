@@ -46,6 +46,8 @@ private:
     void commit_(tesseract::Settings::ProxyMode mode, const std::string& url);
     void on_mode_changed_(const std::string& value);
     void on_url_edited_();
+    // Applies the typed URL when it is a valid manual proxy (Enter, focus out).
+    void commit_url_();
     void refresh_url_state_();
     tesseract::Settings::ProxyMode mode_() const;
 

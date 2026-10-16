@@ -1,7 +1,9 @@
 #include "tesseract/client.h"
+#include "tesseract/utf8.h"
 #include "tesseract/event_handler_bridge.h"
 #include "tesseract/markdown.h"
 #include "tesseract/settings.h"
+#include "detached_launch.h"
 
 // cxx-generated header (produced by corrosion_add_cxxbridge)
 #include "ffi_convert.h"
@@ -10,11 +12,13 @@
 
 #include <cctype>
 #include <cerrno>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <thread>
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -133,7 +137,7 @@ Client& Client::operator=(Client&&) noexcept = default;
 void Client::set_data_dir(const std::string& path)
 {
     MUT_FFI;
-    impl_->ffi->set_data_dir(path);
+    impl_->ffi->set_data_dir(utf8_lossy(path));
 }
 
 void Client::set_store_key(const std::vector<uint8_t>& key)
@@ -175,32 +179,47 @@ bool Client::homeserver_supports_oauth(const std::string& homeserver)
     return impl_->ffi->homeserver_supports_oauth(homeserver);
 }
 
+// The browser and QR waits run in slices of about 50 ms, each under the shared
+// FFI lock. The lock is released between slices, so a writer queued behind a wait
+// gets in, and cancel_oauth() / cancel_qr_grant() can reach the flow.
+namespace
+{
+constexpr auto kWaitGap = std::chrono::milliseconds(10);
+
+template <typename Slice>
+auto run_slices(Slice slice)
+{
+    for (;;)
+    {
+        auto step = slice();
+        if (!step.pending)
+            return step;
+        std::this_thread::sleep_for(kWaitGap);
+    }
+}
+} // namespace
+
 Result Client::await_oauth()
 {
-    // SH_FFI (shared), not MUT_FFI: this blocks for the whole OAuth wait —
-    // potentially minutes, until the browser redirects back — and holding
-    // the exclusive lock for that long would make a concurrent
-    // cancel_oauth() (which needs ffi_mu just to reach the flow's shutdown
-    // handle) block forever behind it, freezing the UI thread. Storing the
-    // resulting Client needs `&mut`, so that step is a separate, fast,
-    // MUT_FFI-guarded call below.
-    Result r;
+    // Waits in slices (see run_slices). Each slice holds the shared lock only for
+    // its own duration, so cancel_oauth() gets in between slices and ends the wait.
+    // Storing the Client needs the exclusive lock, so that step runs once the
+    // wait has succeeded.
+    const auto step = run_slices([this]
     {
         SH_FFI;
-        r = from_ffi(impl_->ffi->oauth_await_callback());
-    }
-    if (r)
-    {
-        MUT_FFI;
-        r = from_ffi(impl_->ffi->oauth_commit());
-    }
-    return r;
+        return impl_->ffi->oauth_await_slice();
+    });
+    if (!step.ok)
+        return {false, std::string(step.message)};
+    MUT_FFI;
+    return from_ffi(impl_->ffi->oauth_commit());
 }
 
 void Client::cancel_oauth()
 {
-    // SH_FFI: must be reachable while await_oauth()'s SH_FFI call above is
-    // blocked — see the comment there.
+    // SH_FFI: each await slice holds the shared lock only briefly, so this gets in
+    // between slices.
     SH_FFI;
     impl_->ffi->oauth_cancel();
 }
@@ -223,8 +242,12 @@ Client::QrGrantBitmap Client::begin_qr_grant()
 
 Result Client::await_qr_scanned()
 {
-    SH_FFI;
-    return from_ffi(impl_->ffi->qr_grant_await_scanned());
+    const auto step = run_slices([this]
+    {
+        SH_FFI;
+        return impl_->ffi->qr_grant_wait_scanned();
+    });
+    return {step.ok, std::string(step.message)};
 }
 
 Result Client::submit_qr_check_code(uint8_t code)
@@ -235,14 +258,26 @@ Result Client::submit_qr_check_code(uint8_t code)
 
 Client::QrGrantAuth Client::await_qr_auth()
 {
-    SH_FFI;
-    return from_ffi(impl_->ffi->qr_grant_await_auth());
+    const auto step = run_slices([this]
+    {
+        SH_FFI;
+        return impl_->ffi->qr_grant_wait_auth();
+    });
+    return {
+        .ok               = step.ok,
+        .message          = std::string(step.message),
+        .verification_uri = std::string(step.verification_uri),
+    };
 }
 
 Result Client::await_qr_complete()
 {
-    SH_FFI;
-    return from_ffi(impl_->ffi->qr_grant_await_complete());
+    const auto step = run_slices([this]
+    {
+        SH_FFI;
+        return impl_->ffi->qr_grant_wait_complete();
+    });
+    return {step.ok, std::string(step.message)};
 }
 
 void Client::cancel_qr_grant()
@@ -305,7 +340,7 @@ Client::MediaTypeCheck Client::check_media_file(
     const std::vector<std::uint8_t>& head)
 {
     const auto r = tesseract_ffi::check_media_file(
-        rust::Str(filename.data(), filename.size()),
+        rust::Str(utf8_lossy(filename)),
         rust::Str(declared_mime.data(), declared_mime.size()),
         rust::Slice<const std::uint8_t>(head.data(), head.size()));
     MediaTypeCheck out;
@@ -343,42 +378,16 @@ bool Client::open_in_browser(const std::string& url)
                                  SW_SHOWNORMAL);
     return reinterpret_cast<INT_PTR>(hi) > 32;
 #else
-    // Double-fork so we never block the (typically UI) caller waiting for
-    // the launcher. The middle process exits immediately; the grandchild is
-    // reparented to init and exec's the opener, so there is no zombie and no
-    // wait on the browser itself. We can only report that the launch was
-    // dispatched, not its eventual exit code (which is fine — `xdg-open`
-    // returning does not mean the page is up anyway).
+    // Dispatches the launch and does not wait on the opener; see
+    // detached_launch.cpp. We can only report that the launch was dispatched,
+    // not its eventual exit code (which is fine: `xdg-open` returning does not
+    // mean the page is up anyway).
 #if defined(__APPLE__)
     const char* opener = "open";
 #else
     const char* opener = "xdg-open";
 #endif
-    pid_t pid = fork();
-    if (pid < 0)
-    {
-        return false;
-    }
-    if (pid == 0)
-    {
-        pid_t inner = fork();
-        if (inner == 0)
-        {
-            execlp(opener, opener, url.c_str(),
-                   static_cast<const char*>(nullptr));
-            _exit(127);
-        }
-        _exit(inner < 0 ? 1 : 0);
-    }
-    int status = 0;
-    // Reaps only the fast middle process, not the opener. A signal during the
-    // wait (EINTR) must not read as a failed launch, so retry the wait.
-    pid_t reaped = -1;
-    do
-    {
-        reaped = waitpid(pid, &status, 0);
-    } while (reaped < 0 && errno == EINTR);
-    return reaped == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    return detail::launch_detached(opener, url);
 #endif
 }
 
@@ -415,42 +424,53 @@ Result Client::logout()
     return from_ffi(impl_->ffi->logout());
 }
 
+// detach() waits for callbacks that are running through a slot, and such a
+// callback may call back into this Client and want the shared FFI lock. So a
+// slot is only ever detached with the FFI lock released.
 void Client::start_sync(IEventHandler* handler)
 {
-    MUT_FFI;
-    // Detach any prior slot (e.g. a previous start_sync without an intervening
-    // stop_sync) so its bridge stops dispatching, then publish a fresh slot —
-    // unless it already routes to this same handler (attach_event_handler +
-    // start_encryption_sync during a gated login): callbacks registered then
-    // (the incoming-verification handler, an in-flight verification's
-    // watchers) hold that slot's bridge and must keep working after the
-    // handover.
-    if (!impl_->handler_slot || impl_->handler_slot->load() != handler)
+    std::shared_ptr<tesseract_ffi::HandlerSlot> retired;
     {
-        if (impl_->handler_slot)
+        MUT_FFI;
+        // Retire any prior slot (e.g. a previous start_sync without an
+        // intervening stop_sync) so its bridge stops dispatching, then publish
+        // a fresh slot — unless it already routes to this same handler
+        // (attach_event_handler + start_encryption_sync during a gated login):
+        // callbacks registered then (the incoming-verification handler, an
+        // in-flight verification's watchers) hold that slot's bridge and must
+        // keep working after the handover.
+        if (!impl_->handler_slot || !impl_->handler_slot->routes_to(handler))
         {
-            impl_->handler_slot->detach();
+            retired = std::move(impl_->handler_slot);
+            impl_->handler_slot =
+                std::make_shared<tesseract_ffi::HandlerSlot>(handler);
         }
-        impl_->handler_slot =
-            std::make_shared<tesseract_ffi::HandlerSlot>(handler);
+        impl_->ffi->start_sync(
+            std::make_unique<tesseract_ffi::EventHandlerBridge>(
+                impl_->handler_slot));
     }
-    impl_->ffi->start_sync(
-        std::make_unique<tesseract_ffi::EventHandlerBridge>(
-            impl_->handler_slot));
+    if (retired)
+    {
+        retired->detach();
+    }
 }
 
 void Client::attach_event_handler(IEventHandler* handler)
 {
-    MUT_FFI;
-    if (impl_->handler_slot)
+    std::shared_ptr<tesseract_ffi::HandlerSlot> retired;
     {
-        impl_->handler_slot->detach();
+        MUT_FFI;
+        retired = std::move(impl_->handler_slot);
+        impl_->handler_slot =
+            std::make_shared<tesseract_ffi::HandlerSlot>(handler);
+        impl_->ffi->attach_event_handler(
+            std::make_unique<tesseract_ffi::EventHandlerBridge>(
+                impl_->handler_slot));
     }
-    impl_->handler_slot =
-        std::make_shared<tesseract_ffi::HandlerSlot>(handler);
-    impl_->ffi->attach_event_handler(
-        std::make_unique<tesseract_ffi::EventHandlerBridge>(
-            impl_->handler_slot));
+    if (retired)
+    {
+        retired->detach();
+    }
 }
 
 void Client::start_encryption_sync()
@@ -472,15 +492,21 @@ void Client::request_stop()
 
 void Client::stop_sync()
 {
-    MUT_FFI;
     // Sever the handler link *before* aborting the Rust tasks: a callback
     // already in flight on the sync-task thread will then observe a null
     // handler (under the slot mutex) and drop, even though tokio's abort()
     // only requests cancellation and cannot wait for that callback to finish.
-    if (impl_->handler_slot)
+    // Done without the FFI lock held (see start_sync).
+    std::shared_ptr<tesseract_ffi::HandlerSlot> slot;
     {
-        impl_->handler_slot->detach();
+        SH_FFI;
+        slot = impl_->handler_slot;
     }
+    if (slot)
+    {
+        slot->detach();
+    }
+    MUT_FFI;
     impl_->ffi->stop_sync();
 }
 
@@ -939,7 +965,7 @@ Result Client::send_image(const std::string& room_id,
 {
     SH_FFI;
     rust::Slice<const std::uint8_t> slice{bytes.data(), bytes.size()};
-    return from_ffi(impl_->ffi->send_image(room_id, slice, mime_type, filename,
+    return from_ffi(impl_->ffi->send_image(room_id, slice, mime_type, utf8_lossy(filename),
                                            caption, width, height, is_animated,
                                            reply_event_id, thread_root));
 }
@@ -960,7 +986,7 @@ Result Client::send_video(const std::string& room_id,
     rust::Slice<const std::uint8_t> slice{bytes.data(), bytes.size()};
     rust::Slice<const std::uint8_t> thumb_slice{thumb_bytes.data(),
                                                 thumb_bytes.size()};
-    return from_ffi(impl_->ffi->send_video(room_id, slice, mime_type, filename,
+    return from_ffi(impl_->ffi->send_video(room_id, slice, mime_type, utf8_lossy(filename),
                                            caption, width, height, thumb_slice,
                                            thumb_width, thumb_height,
                                            duration_ms, reply_event_id,
@@ -978,7 +1004,7 @@ Result Client::send_audio(const std::string& room_id,
 {
     SH_FFI;
     rust::Slice<const std::uint8_t> slice{bytes.data(), bytes.size()};
-    return from_ffi(impl_->ffi->send_audio(room_id, slice, mime_type, filename,
+    return from_ffi(impl_->ffi->send_audio(room_id, slice, mime_type, utf8_lossy(filename),
                                            caption, duration_ms,
                                            reply_event_id, thread_root));
 }
@@ -991,7 +1017,7 @@ Client::send_file(const std::string& room_id, const std::vector<uint8_t>& bytes,
 {
     SH_FFI;
     rust::Slice<const std::uint8_t> slice{bytes.data(), bytes.size()};
-    return from_ffi(impl_->ffi->send_file(room_id, slice, mime_type, filename,
+    return from_ffi(impl_->ffi->send_file(room_id, slice, mime_type, utf8_lossy(filename),
                                           caption, reply_event_id, thread_root));
 }
 
@@ -1013,7 +1039,7 @@ void Client::send_image_async(std::uint64_t request_id,
     SH_FFI;
     rust::Slice<const std::uint8_t> slice{bytes.data(), bytes.size()};
     impl_->ffi->send_image_async(request_id, room_id, slice, mime_type,
-                                  filename, caption, width, height, is_animated,
+                                  utf8_lossy(filename), caption, width, height, is_animated,
                                   reply_event_id, thread_root);
 }
 
@@ -1040,7 +1066,7 @@ void Client::send_video_async(std::uint64_t request_id,
     rust::Slice<const std::uint8_t> thumb_slice{thumb_bytes.data(),
                                                 thumb_bytes.size()};
     impl_->ffi->send_video_async(request_id, room_id, slice, mime_type,
-                                  filename, caption, width, height, thumb_slice,
+                                  utf8_lossy(filename), caption, width, height, thumb_slice,
                                   thumb_width, thumb_height, duration_ms,
                                   reply_event_id, thread_root);
 }
@@ -1091,7 +1117,7 @@ void Client::send_gallery_async(std::uint64_t request_id,
             .kind             = gallery_item_kind_str(item.kind),
             .bytes            = to_rust_vec(item.bytes),
             .mime_type        = item.mime_type,
-            .filename         = item.filename,
+            .filename         = utf8_lossy(item.filename),
             .width            = item.width,
             .height           = item.height,
             .is_animated      = item.is_animated,
@@ -1122,7 +1148,7 @@ void Client::send_audio_async(std::uint64_t request_id,
     SH_FFI;
     rust::Slice<const std::uint8_t> slice{bytes.data(), bytes.size()};
     impl_->ffi->send_audio_async(request_id, room_id, slice, mime_type,
-                                  filename, caption, duration_ms,
+                                  utf8_lossy(filename), caption, duration_ms,
                                   reply_event_id, thread_root);
 }
 
@@ -1142,7 +1168,7 @@ void Client::send_file_async(std::uint64_t request_id,
     SH_FFI;
     rust::Slice<const std::uint8_t> slice{bytes.data(), bytes.size()};
     impl_->ffi->send_file_async(request_id, room_id, slice, mime_type,
-                                 filename, caption, reply_event_id, thread_root);
+                                 utf8_lossy(filename), caption, reply_event_id, thread_root);
 }
 
 Result Client::send_voice(const std::string& room_id,
@@ -2278,17 +2304,24 @@ std::vector<RoomMember> Client::get_room_members(const std::string& room_id)
     return out;
 }
 
-std::vector<BannedMember> Client::get_banned_members(const std::string& room_id)
+uint64_t Client::room_joined_member_count(const std::string& room_id)
+{
+    SH_FFI;
+    return impl_->ffi->room_joined_member_count(room_id);
+}
+
+BannedMemberList Client::get_banned_members(const std::string& room_id)
 {
     SH_FFI;
     auto raw = impl_->ffi->get_banned_members(room_id);
-    std::vector<BannedMember> out;
-    out.reserve(raw.size());
-    for (const auto& m : raw)
+    BannedMemberList out;
+    out.complete = raw.complete;
+    out.members.reserve(raw.members.size());
+    for (const auto& m : raw.members)
     {
-        out.push_back({std::string(m.user_id), std::string(m.display_name),
-                       std::string(m.avatar_url), std::string(m.reason),
-                       std::string(m.banned_by), m.can_unban});
+        out.members.push_back({std::string(m.user_id), std::string(m.display_name),
+                               std::string(m.avatar_url), std::string(m.reason),
+                               std::string(m.banned_by), m.can_unban});
     }
     return out;
 }
@@ -3193,14 +3226,14 @@ Result Client::export_room_keys(const std::string& path,
                                 const std::string& passphrase)
 {
     SH_FFI;
-    return from_ffi(impl_->ffi->export_room_keys(path, passphrase));
+    return from_ffi(impl_->ffi->export_room_keys(utf8_lossy(path), passphrase));
 }
 
 Result Client::import_room_keys(const std::string& path,
                                 const std::string& passphrase)
 {
     SH_FFI;
-    return from_ffi(impl_->ffi->import_room_keys(path, passphrase));
+    return from_ffi(impl_->ffi->import_room_keys(utf8_lossy(path), passphrase));
 }
 
 Client::CryptoResetBegin Client::begin_reset_crypto_identity()
@@ -3367,13 +3400,13 @@ void Client::rtc_end_call()
 
 void Client::rtc_set_audio_muted(bool muted)
 {
-    MUT_FFI;
+    SH_FFI;
     impl_->ffi->rtc_set_audio_muted(muted);
 }
 
 void Client::rtc_set_video_muted(bool muted)
 {
-    MUT_FFI;
+    SH_FFI;
     impl_->ffi->rtc_set_video_muted(muted);
 }
 
@@ -3392,7 +3425,7 @@ void Client::rtc_push_video_frame_i420(const std::uint8_t* y,
         width > 8192 || height > 8192)
         return;
 
-    MUT_FFI;
+    SH_FFI;
     const std::size_t h_uv   = (static_cast<std::size_t>(height) + 1) / 2;
     const std::size_t y_size = static_cast<std::size_t>(stride_y) * height;
     const std::size_t u_size = static_cast<std::size_t>(stride_u) * h_uv;
@@ -3429,7 +3462,7 @@ void Client::rtc_push_screen_frame_i420(const std::uint8_t* y,
     const std::size_t   y_size = static_cast<std::size_t>(stride_y) * height;
     const std::size_t   u_size = static_cast<std::size_t>(stride_u) * h_uv;
     const std::size_t   v_size = static_cast<std::size_t>(stride_v) * h_uv;
-    MUT_FFI;
+    SH_FFI;
     impl_->ffi->rtc_push_screen_frame_i420(
         rust::Slice<const std::uint8_t>{y, y_size},
         rust::Slice<const std::uint8_t>{u, u_size},

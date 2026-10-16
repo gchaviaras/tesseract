@@ -95,7 +95,8 @@ void ShellBase::run_media_fetch_(MediaFetchSpec spec)
         });
 }
 
-void ShellBase::note_media_fetch_failed_(const std::string& key)
+void ShellBase::note_media_fetch_failed_(const std::string& key,
+                                          const std::shared_ptr<AccountSession>& sess)
 {
     auto& e    = media_fetch_failed_[key];
     e.attempts = std::min<std::uint32_t>(e.attempts + 1, 7);
@@ -112,7 +113,6 @@ void ShellBase::note_media_fetch_failed_(const std::string& key)
     // Dispatch SH_FFI off the UI thread (ffi_mu must not be acquired on the
     // UI thread while SH_FFI network calls may be holding it shared).
     const auto attempts = e.attempts;
-    auto sess = active_account_;
     run_async_([sess, key, attempts, deadline_secs]()
     {
         if (sess && sess->client)
@@ -120,10 +120,10 @@ void ShellBase::note_media_fetch_failed_(const std::string& key)
     });
 }
 
-void ShellBase::note_media_fetch_ok_(const std::string& key)
+void ShellBase::note_media_fetch_ok_(const std::string& key,
+                                     const std::shared_ptr<AccountSession>& sess)
 {
     media_fetch_failed_.erase(key);
-    auto sess = active_account_;
     run_async_([sess, key]()
     {
         if (sess && sess->client)
@@ -698,9 +698,11 @@ void ShellBase::fetch_media_pipeline_(
             : tesseract::Client::MediaPriority::Normal;
         client_->fetch_media_async(id, group_id, kind, source, w, h, animated, prio);
     };
-    spec.on_empty_ = [this, cache_key, out_kind, deliver_key]
+    // The account the fetch is issued for: its back-off belongs to that account.
+    auto sess = active_account_;
+    spec.on_empty_ = [this, cache_key, out_kind, deliver_key, sess]
     {
-        note_media_fetch_failed_(cache_key);
+        note_media_fetch_failed_(cache_key, sess);
         // Release the decode-dedup guard set at dispatch time so a retry
         // (backoff or the user reopening the room) isn't silently dropped
         // for up to kDecodePendingWindowMs. No-op for kinds that never set
@@ -710,9 +712,9 @@ void ShellBase::fetch_media_pipeline_(
     };
     spec.deliver_ =
         [this, cache_key, out_kind, animated, deliver_key,
-         gen = avatar_mode_gen_](std::vector<std::uint8_t>&& bytes)
+         gen = avatar_mode_gen_, sess](std::vector<std::uint8_t>&& bytes)
     {
-        note_media_fetch_ok_(cache_key);
+        note_media_fetch_ok_(cache_key, sess);
         // Fetched under a different avatar animation mode than the current one
         // (setting toggled / low power entered or left mid-flight): the bytes
         // are the wrong variant — a still would mask the animation, an
@@ -1016,14 +1018,16 @@ void ShellBase::clear_all_caches_(
 
         // The MediaDiskCache is owned by the shared AccountManager and is
         // touched (load/store/prune/evict) from every window's worker pool.
-        // It has no internal lock — concurrent ops are only safe because each
-        // op is filesystem-atomic on a distinct key; clear() (remove_all +
-        // recreate dir) is *not* in that set and would race a concurrent
-        // load/store/prune on another window's worker. Defer it to the UI
-        // thread alongside the in-memory clears.
+        // It has no internal lock, and a recursive delete of its directory
+        // would race those ops. So the UI thread only renames the directory
+        // aside, which is one syscall, and a worker deletes the aside copy.
         post_to_ui_alive_([this, recalc = std::move(recalc)]() mutable
         {
-            account_manager_.media_disk_cache().clear();
+            const auto retired = account_manager_.media_disk_cache().retire_for_clear();
+            run_async_([this, retired]
+            {
+                account_manager_.media_disk_cache().finish_clear(retired);
+            });
             account_manager_.compressed_cache().clear();
             account_manager_.thumbnail_cache().clear();
             account_manager_.image_cache().clear();

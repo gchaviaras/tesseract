@@ -820,6 +820,13 @@ private:
         {
             return qi.image();
         }
+        // Only a downscale is resampled into a copy. A copy at or above the
+        // source size is drawn from the source (SmoothPixmapTransform): at high
+        // zoom the copy would grow to gigabytes.
+        if (static_cast<std::int64_t>(tw) * th >= static_cast<std::int64_t>(sw) * sh)
+        {
+            return qi.image();
+        }
         return qi.scaled_for(tw, th, dpr);
     }
 

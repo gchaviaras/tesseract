@@ -2,6 +2,8 @@
 
 #include "canvas.h" // tk::TextSpan
 
+#include <algorithm>
+
 namespace tk
 {
 
@@ -315,6 +317,53 @@ bool text_has_emoji(std::string_view utf8)
     if (!maybe)
         return false;
     return !find_emoji_byte_ranges(std::string(utf8)).empty();
+}
+
+std::vector<std::size_t> utf16_indices_for_byte_offsets(
+    std::string_view utf8, const std::vector<std::size_t>& byte_offsets)
+{
+    std::vector<std::size_t> order(byte_offsets.size());
+    for (std::size_t i = 0; i < order.size(); ++i)
+        order[i] = i;
+    std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b)
+              { return byte_offsets[a] < byte_offsets[b]; });
+
+    std::vector<std::size_t> out(byte_offsets.size());
+    std::size_t byte = 0;
+    std::size_t units = 0;
+    for (std::size_t i : order)
+    {
+        const std::size_t target = std::min(byte_offsets[i], utf8.size());
+        while (byte < target)
+        {
+            // UTF-8 sequence length from the lead byte; stray continuation bytes
+            // count as one unit, as QString::fromUtf8 renders them.
+            const auto lead = static_cast<unsigned char>(utf8[byte]);
+            std::size_t len = 1;
+            if (lead >= 0xF0)
+            {
+                len = 4;
+                units += 2; // a surrogate pair in UTF-16
+            }
+            else if (lead >= 0xE0)
+            {
+                len = 3;
+                units += 1;
+            }
+            else if (lead >= 0xC0)
+            {
+                len = 2;
+                units += 1;
+            }
+            else
+            {
+                units += 1;
+            }
+            byte += len;
+        }
+        out[i] = units;
+    }
+    return out;
 }
 
 } // namespace tk

@@ -7,12 +7,15 @@
 #include "pixmap_cache.h"
 #include "qt_accessible.h"
 #include "emoji_segmentation.h"
+#include "tk/image_sniff.h"
 
 #include <tesseract/settings.h>
 
 #include <cmath>
 #include <optional>
+#include <span>
 
+#include <QtCore/QDebug>
 #include <QtCore/QHash>
 #include <QtGui/QFontDatabase>
 #include <QtCore/QObject>
@@ -2194,15 +2197,24 @@ private:
         const qreal emoji_pt =
             tk::font_role_pt(tk::FontRole::InlineEmoji, base_pt) *
             tk::kEmojiSizeAdjust * tk::qt6::kQtEmojiStockComp;
-        for (const auto& r : tk::find_emoji_byte_ranges(utf8))
+        // Map every run edge in one walk of the text. Mapping each edge with
+        // utf8_byte_to_qt_cursor copies the whole document per call, which is
+        // quadratic in the number of emoji.
+        const auto runs = tk::find_emoji_byte_ranges(utf8);
+        std::vector<std::size_t> edges;
+        edges.reserve(runs.size() * 2);
+        for (const auto& r : runs)
         {
-            int qs = utf8_byte_to_qt_cursor(full,
-                                            static_cast<int>(r.start_byte));
-            int qe = utf8_byte_to_qt_cursor(full,
-                                            static_cast<int>(r.end_byte));
+            edges.push_back(r.start_byte);
+            edges.push_back(r.end_byte);
+        }
+        const auto qt_pos = tk::utf16_indices_for_byte_offsets(utf8, edges);
+        for (std::size_t i = 0; i < runs.size(); ++i)
+        {
             QTextCursor cur(edit_->document());
-            cur.setPosition(qs);
-            cur.setPosition(qe, QTextCursor::KeepAnchor);
+            cur.setPosition(static_cast<int>(qt_pos[2 * i]));
+            cur.setPosition(static_cast<int>(qt_pos[2 * i + 1]),
+                            QTextCursor::KeepAnchor);
             QTextCharFormat fmt;
             fmt.setFontPointSize(emoji_pt);
             cur.mergeCharFormat(fmt);
@@ -2570,6 +2582,15 @@ public:
         // on the QObject's thread (the GUI thread, for surface_).
         if (!surface_)
         {
+            // The surface is gone, so the task never runs. Log the first one,
+            // which is the only one a caller that must run exactly once would
+            // otherwise miss.
+            static bool warned = false;
+            if (!warned)
+            {
+                warned = true;
+                qWarning("post_to_ui: surface destroyed; dropping UI task");
+            }
             return;
         }
         QMetaObject::invokeMethod(surface_, std::move(task),
@@ -2596,7 +2617,10 @@ public:
             info = QNetworkInformation::instance();
         }
         if (!info) return true; // no reachability backend loaded — don't block
-        return info->reachability() == QNetworkInformation::Reachability::Online;
+        // Only "no network at all" blocks. Local, Site and Unknown mean a link
+        // exists (a LAN, VPN or intranet homeserver may still be reachable),
+        // and a disabled or failed connectivity check reports Unknown.
+        return info->reachability() != QNetworkInformation::Reachability::Disconnected;
     }
 
     std::unique_ptr<NativeTextField> make_text_field() override
@@ -2640,6 +2664,14 @@ public:
     {
         EncodedImage out{};
         if (!data || len == 0)
+        {
+            return out;
+        }
+
+        // Refuse over-budget images before any codec allocates, as the receive
+        // path does (tk/image_sniff.h); an empty result is refused upstream.
+        const std::span<const std::uint8_t> view(data, len);
+        if (!tk::decode_size_allowed(view, tk::bytes_may_be_animated(view)))
         {
             return out;
         }

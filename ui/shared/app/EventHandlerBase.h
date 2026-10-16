@@ -2,7 +2,11 @@
 #include <tesseract/event_handler.h>
 #include <atomic>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -10,6 +14,25 @@ namespace tesseract
 {
 
 class ShellBase; // forward declaration — full definition in ShellBase.h
+
+// Latest-frame slots for call video and screen frames. A busy UI thread would
+// otherwise queue a full frame per callback, each holding megabytes. Here a
+// newer frame replaces the pending one for its key, and at most one UI task per
+// key is outstanding. The UI task takes whatever is pending when it runs.
+class FrameMailbox
+{
+public:
+    // Stores `deliver` as the newest for `key`. Returns true when the caller
+    // must post a UI task that calls take(key).
+    bool put(const std::string& key, std::function<void()> deliver);
+    // Ends the queued state for `key` and returns the pending delivery, if any.
+    std::function<void()> take(const std::string& key);
+
+private:
+    std::mutex mu_;
+    std::map<std::string, std::function<void()>> pending_;
+    std::set<std::string> queued_;
+};
 
 // Centralised IEventHandler adapter shared by all four platform shells.
 // Stores a ShellBase* and marshals every callback to the UI thread via
@@ -231,6 +254,11 @@ protected:
     // Read via shell() in callback bodies.
     std::atomic<ShellBase*> shell_;
     std::string user_id_;
+    // Newest call video / screen frame per participant; see FrameMailbox.
+    std::shared_ptr<FrameMailbox> frames_ = std::make_shared<FrameMailbox>();
+    // Posts `deliver` to the UI thread as the newest frame for `key`, coalescing
+    // with any frame not yet delivered.
+    void post_latest_frame_(const std::string& key, std::function<void()> deliver);
 
     ShellBase* shell() const { return shell_.load(std::memory_order_acquire); }
 };

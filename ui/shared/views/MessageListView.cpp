@@ -1,5 +1,6 @@
 #include "MessageListView.h"
 #include "views/poll_logic.h"
+#include "views/sdk_text.h"
 #include "format.h"
 #include "html_spans.h"
 #include "IrcFormat.h"
@@ -480,7 +481,7 @@ MessageRowData make_row_data(const tesseract::Event& ev,
     {
         std::string flat;
         flat.reserve(ev.in_reply_to_body.size());
-        for (char c : ev.in_reply_to_body)
+        for (char c : sdk_text::localize(ev.in_reply_to_body))
             flat += (c == '\n' || c == '\r') ? ' ' : c;
         row.in_reply_to_body = std::move(flat);
     }
@@ -498,7 +499,7 @@ MessageRowData make_row_data(const tesseract::Event& ev,
     row.is_thread_root = ev.is_thread_root;
     row.thread_reply_count = ev.thread_reply_count;
     row.thread_latest_sender_name = ev.thread_latest_sender_name;
-    row.thread_latest_body = ev.thread_latest_body;
+    row.thread_latest_body = sdk_text::localize(ev.thread_latest_body);
     row.thread_latest_ts = ev.thread_latest_ts;
 
     if (ev.pending_state == "sending")
@@ -648,6 +649,7 @@ MessageRowData make_row_data(const tesseract::Event& ev,
         break;
     case tesseract::EventType::Utd:
         row.kind = Kind::Utd;
+        row.body = sdk_text::localize(ev.body); // the SDK sends a reason code
         break;
     case tesseract::EventType::Unhandled:
         row.kind = Kind::Unhandled;
@@ -663,6 +665,7 @@ MessageRowData make_row_data(const tesseract::Event& ev,
         break;
     case tesseract::EventType::PinnedEvent:
         row.kind = Kind::PinnedEvent;
+        row.body = sdk_text::localize(ev.body); // the SDK sends an action code
         break;
     case tesseract::EventType::CallNotification:
         row.kind = Kind::CallNotification;
@@ -4322,6 +4325,12 @@ private:
         {
             owner_.request_repaint_();
         }
+        // A row that has faded back out at rest needs no entry. Without this
+        // every row ever painted kept one, for the life of the list.
+        if (!target_on && !tween.still_animating())
+        {
+            hover_fade_.erase(key);
+        }
         return value;
     }
 
@@ -5861,6 +5870,8 @@ private:
     // InlineEmoji's font-size bump).
     static void substitute_image_placeholders(std::vector<tk::TextSpan>& spans)
     {
+        // Before the carriers are filled in, so text cannot supply one.
+        neutralize_literal_carriers(spans);
         for (auto& sp : spans)
         {
             if (sp.is_image && sp.text.empty())

@@ -64,16 +64,9 @@ template <class F>
 void with_handler(const char* where, const std::shared_ptr<HandlerSlot>& slot,
                   F&& fn) noexcept
 {
-    guard(where,
-          [&]
-          {
-              auto* handler_ = slot->load();
-              if (!handler_)
-              {
-                  return;
-              }
-              fn(handler_);
-          });
+    // The slot is held shared while `fn` runs, so Client::stop_sync()'s detach()
+    // waits for it: the shell cannot destroy the handler under a callback.
+    guard(where, [&] { slot->with_handler(fn); });
 }
 } // namespace
 
@@ -258,8 +251,15 @@ void EventHandlerBridge::on_messages_updated_batch(
           [&](tesseract::IEventHandler* handler_)
           {
               const std::size_t n = indices.size();
-              if (n == 0 || n != events.size())
+              if (n == 0)
               {
+                  return;
+              }
+              if (n != events.size())
+              {
+                  std::fprintf(stderr,
+                               "[tesseract] on_messages_updated_batch: %zu indices for %zu events (dropped)\n",
+                               n, events.size());
                   return;
               }
               std::vector<std::size_t> idxs;
@@ -268,6 +268,9 @@ void EventHandlerBridge::on_messages_updated_batch(
               {
                   if (!index_fits(i))
                   {
+                      std::fprintf(stderr,
+                                   "[tesseract] on_messages_updated_batch: index %llu out of range (dropped)\n",
+                                   static_cast<unsigned long long>(i));
                       return;
                   }
                   idxs.push_back(static_cast<std::size_t>(i));

@@ -2035,4 +2035,20 @@ std::vector<BodyBlock> html_to_blocks(std::string_view html, bool dark)
     return blocks;
 }
 
+void neutralize_literal_carriers(std::vector<tk::TextSpan>& spans)
+{
+    static constexpr std::string_view kCarrier = "\xEF\xBF\xBC";      // U+FFFC
+    static constexpr std::string_view kReplacement = "\xEF\xBF\xBD"; // U+FFFD
+    for (auto& sp : spans)
+    {
+        if (sp.is_image)
+            continue;
+        for (std::size_t pos = sp.text.find(kCarrier); pos != std::string::npos;
+             pos = sp.text.find(kCarrier, pos + kReplacement.size()))
+        {
+            sp.text.replace(pos, kCarrier.size(), kReplacement);
+        }
+    }
+}
+
 } // namespace tesseract::views

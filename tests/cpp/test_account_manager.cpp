@@ -316,3 +316,18 @@ TEST_CASE("AccountManager draining - wait_until_drained times out and leaves the
     // Not force-cleared on timeout — a later caller must still see the truth.
     CHECK(mgr.is_draining("@alice:example.org"));
 }
+
+TEST_CASE("AccountManager - add_account refuses a null session", "[account_manager]")
+{
+    AccountManager mgr;
+    mgr.add_account(nullptr);
+    CHECK(mgr.accounts().empty());
+
+    mgr.add_account(make_session("@a:x"));
+    mgr.add_account(nullptr);
+    REQUIRE(mgr.accounts().size() == 1);
+    // Every lookup reads the user id from each entry, so no entry may be null.
+    CHECK(mgr.find("@a:x") != nullptr);
+    mgr.remove_account("@a:x");
+    CHECK(mgr.accounts().empty());
+}

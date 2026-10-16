@@ -1,6 +1,8 @@
 #pragma once
 #include "tk/canvas.h"
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iomanip>
 #include <locale>
 #include <sstream>
@@ -130,6 +132,15 @@ inline std::vector<TileCoord> tiles_in_view(MapViewport vp, tk::Rect map_rect)
 }
 
 /// Stable image-cache key for a tile: "tile:z/x/y".
+// True when `bytes` start with the PNG signature. Tiles are cached on disk only
+// when they do, so an error page from the tile server is never kept as a tile.
+inline bool is_png_bytes(const std::vector<std::uint8_t>& bytes)
+{
+    static constexpr std::uint8_t kSignature[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    return bytes.size() >= sizeof kSignature &&
+           std::equal(std::begin(kSignature), std::end(kSignature), bytes.begin());
+}
+
 inline std::string tile_cache_key(TileCoord t)
 {
     return "tile:" + std::to_string(t.z) + "/" + std::to_string(t.x) + "/" +

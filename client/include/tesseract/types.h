@@ -135,6 +135,14 @@ struct BannedMember
     bool can_unban = false;
 };
 
+/// A room's banned users. `complete` is false when the member sync timed out
+/// or failed, so `members` may be missing bans.
+struct BannedMemberList
+{
+    std::vector<BannedMember> members;
+    bool complete = true;
+};
+
 /// One `m.pronouns` (MSC4247) entry: a language-tagged pronoun summary plus
 /// an optional grammatical gender. `language` is a BCP-47 tag (empty only for
 /// the legacy plain-string fallback shape). `grammatical_gender` is empty

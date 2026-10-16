@@ -3,6 +3,7 @@
 #include "../../shared/linux_notification_reply.h"
 #include <gio/gio.h>
 #include <functional>
+#include <memory>
 #include <string>
 
 class LinuxNotifierGtk final : public tesseract::INotifier
@@ -71,4 +72,7 @@ private:
     // tokens, shared verbatim with LinuxNotifierQt — see its definition for
     // why this is composition rather than a base class.
     tesseract::linux_notify::NotificationCorrelation correlation_;
+    // Reply handlers of asynchronous Notify calls hold a weak reference to this
+    // and do nothing once the notifier is gone. Reset in the destructor.
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 };

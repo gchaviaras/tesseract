@@ -1574,6 +1574,41 @@ bool MainAppWidget::dismiss_top_transient_()
         room_view_->close_room_search();
         return true;
     }
+    // Panels that have no keyboard dismissal of their own. Escape closes them
+    // the same way their close buttons do.
+    if (room_view_)
+    {
+        if (auto* p = room_view_->room_settings_view(); p && p->is_open())
+        {
+            p->close();
+            return true;
+        }
+        if (auto* p = room_view_->user_profile_panel(); p && p->is_open())
+        {
+            p->close();
+            return true;
+        }
+        if (auto* p = room_view_->knock_requests_panel(); p && p->is_open())
+        {
+            p->close();
+            return true;
+        }
+        if (auto* p = room_view_->room_info_panel(); p && p->is_open())
+        {
+            p->close();
+            return true;
+        }
+        if (auto* p = room_view_->call_lobby(); p && p->is_open())
+        {
+            p->close();
+            return true;
+        }
+    }
+    if (export_history_dialog_ && export_history_dialog_->is_open())
+    {
+        export_history_dialog_->close();
+        return true;
+    }
     return false;
 }
 
@@ -1987,6 +2022,7 @@ bool MainAppWidget::any_modal_open_() const
            (message_search_    && message_search_->is_open()) ||
            (forward_picker_    && forward_picker_->is_open()) ||
            (add_room_view_     && add_room_view_->is_open()) ||
+           (export_history_dialog_ && export_history_dialog_->is_open()) ||
            camera_widget_ ||
            screen_picker_;
     // Docked mode is NOT modal — it sits inside RoomView and doesn't suppress

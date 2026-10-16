@@ -88,13 +88,25 @@ pub(crate) fn strip_owned(bytes: Vec<u8>, mime_type: &str, scope: StripScope) ->
 
 /// Metadata-stripped bytes for one gallery item. An "image" item is a picture
 /// the user meant to share as such (full stripper); a "file" item only loses
-/// metadata if it is a photo container; audio and video are passed through.
+/// metadata if it is a photo container; audio and video are stripped separately
+/// by [`strip_av_owned`] (they can be refused).
 /// Content-based, so the declared mime is only a fallback hint.
 pub(crate) fn strip_gallery_item_bytes(kind: &str, bytes: Vec<u8>, mime_type: &str) -> Vec<u8> {
     match kind {
         "image" => strip_owned(bytes, mime_type, StripScope::Image),
         "file" => strip_owned(bytes, mime_type, StripScope::File),
         _ => bytes,
+    }
+}
+
+/// `bytes` of an audio or video upload with its tags, GPS atoms and comments
+/// removed. Err when the container can't be verifiably stripped: the original
+/// is never uploaded in its place.
+pub(crate) fn strip_av_owned(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    match super::strip_av::strip_av_for_upload(&bytes) {
+        Some(std::borrow::Cow::Owned(v)) => Ok(v),
+        Some(std::borrow::Cow::Borrowed(_)) => Ok(bytes),
+        None => Err("metadata can't be removed from this file".to_owned()),
     }
 }
 
@@ -178,7 +190,9 @@ pub(crate) fn build_animated_image_content(
 /// Synthesize a fallback `body` for an outgoing `m.gallery` (MSC4274) event.
 /// `GalleryMessageEventContent.body` is a required field, and per the MSC it
 /// doubles as the description non-supporting clients fall back to — so an
-/// empty user caption still needs *some* text, not an empty string.
+/// empty user caption still needs *some* text, not an empty string. The shells
+/// pass a localised "Sent N items" as the caption, so this English default is
+/// only a safety net.
 pub(crate) fn gallery_fallback_body(caption: &str, item_count: usize) -> String {
     if !caption.is_empty() {
         return caption.to_owned();
@@ -860,9 +874,39 @@ impl ClientFfi {
             RoomMessageEventContent::text_html(body, &html)
         };
         content.mentions = mentions;
-        content.relates_to = Some(Relation::Reply(Reply::new(InReplyTo::new(event_id))));
+        content.relates_to = Some(Relation::Reply(Reply::new(InReplyTo::new(event_id.clone()))));
         set_url_previews(&mut content, parse_url_previews_json(url_previews_json));
-        match self.block_on_cancellable(async move { room.send(content).await }) {
+        let own_id = client.user_id().map(|u| u.to_owned());
+        match self.block_on_cancellable(async move {
+            // Mention the author being replied to, as Element does, so the reply
+            // notifies them even when the text has no pill. Our own messages are not mentioned.
+            // Bounded: an event outside the local cache is a network fetch, and
+            // an offline or slow reply must still be queued.
+            let author = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                room.event(&event_id, None),
+            )
+            .await
+            .ok()
+            .and_then(|r| r.ok())
+            .and_then(|ev| ev.raw().get_field::<matrix_sdk::ruma::OwnedUserId>("sender").ok().flatten());
+            // The event came from the server, so only a user the room already
+            // knows as a member is mentioned, never an arbitrary id it names.
+            let author = match author {
+                Some(a) if Some(&a) != own_id.as_ref() => {
+                    matches!(room.get_member_no_sync(&a).await, Ok(Some(_))).then_some(a)
+                }
+                _ => None,
+            };
+            if let Some(author) = author {
+                content
+                    .mentions
+                    .get_or_insert_with(matrix_sdk::ruma::events::Mentions::new)
+                    .user_ids
+                    .insert(author);
+            }
+            room.send(content).await
+        }) {
             Some(Ok(_)) => ok(""),
             Some(Err(e)) => err(e.to_string()),
             None => err("cancelled"),
@@ -1351,6 +1395,10 @@ impl ClientFfi {
             "send/audio".to_string(),
         );
 
+        let bytes = match strip_av_owned(bytes.to_vec()) {
+            Ok(v) => v,
+            Err(e) => return err(e),
+        };
         let info = AttachmentInfo::Audio(BaseAudioInfo {
             duration: if duration_ms > 0 {
                 Some(Duration::from_millis(duration_ms))
@@ -1366,7 +1414,7 @@ impl ClientFfi {
             Err(e) => return err(e),
         };
 
-        let data = bytes.to_vec();
+        let data = bytes;
         let filename = filename.to_owned();
 
         match self.block_on_cancellable(do_send_attachment(room, filename, mime, data, config)) {
@@ -1435,6 +1483,10 @@ impl ClientFfi {
             "send/video".to_string(),
         );
 
+        let bytes = match strip_av_owned(bytes.to_vec()) {
+            Ok(v) => v,
+            Err(e) => return err(e),
+        };
         let info = AttachmentInfo::Video(BaseVideoInfo {
             duration: if duration_ms > 0 {
                 Some(Duration::from_millis(duration_ms))
@@ -1459,7 +1511,7 @@ impl ClientFfi {
                 Err(e) => return err(e),
             };
 
-        let data = bytes.to_vec();
+        let data = bytes;
         let filename = filename.to_owned();
 
         match self.block_on_cancellable(do_send_attachment(room, filename, mime, data, config)) {
@@ -1512,6 +1564,10 @@ impl ClientFfi {
         use matrix_sdk::ruma::UInt;
 
         let Some(client) = self.client.clone() else {
+            // Not logged in: resolve the upload, or its pending entry never clears.
+            if let Some(h) = &self.handler {
+                h.lock().on_upload_complete(request_id, false, "not logged in");
+            }
             return;
         };
         let handler = self.handler.clone();
@@ -1606,8 +1662,9 @@ impl ClientFfi {
             }
 
             let info = AttachmentInfo::Image(BaseImageInfo {
-                width: UInt::new(width as u64),
-                height: UInt::new(height as u64),
+                // 0 means unknown, as the synchronous path maps it.
+                width: if width != 0 { UInt::new(width as u64) } else { None },
+                height: if height != 0 { UInt::new(height as u64) } else { None },
                 size: UInt::new(bytes.len() as u64),
                 blurhash: None,
                 is_animated: None,
@@ -1667,6 +1724,10 @@ impl ClientFfi {
         use matrix_sdk::ruma::UInt;
 
         let Some(client) = self.client.clone() else {
+            // Not logged in: resolve the upload, or its pending entry never clears.
+            if let Some(h) = &self.handler {
+                h.lock().on_upload_complete(request_id, false, "not logged in");
+            }
             return;
         };
         let handler = self.handler.clone();
@@ -1764,6 +1825,10 @@ impl ClientFfi {
         use std::time::Duration;
 
         let Some(client) = self.client.clone() else {
+            // Not logged in: resolve the upload, or its pending entry never clears.
+            if let Some(h) = &self.handler {
+                h.lock().on_upload_complete(request_id, false, "not logged in");
+            }
             return;
         };
         let handler = self.handler.clone();
@@ -1798,6 +1863,13 @@ impl ClientFfi {
                 Ok(m) => m,
                 Err(e) => {
                     deliver(false, &format!("invalid mime: {e}"));
+                    return;
+                }
+            };
+            let bytes = match strip_av_owned(bytes) {
+                Ok(v) => v,
+                Err(e) => {
+                    deliver(false, &e);
                     return;
                 }
             };
@@ -1870,6 +1942,10 @@ impl ClientFfi {
         use std::time::Duration;
 
         let Some(client) = self.client.clone() else {
+            // Not logged in: resolve the upload, or its pending entry never clears.
+            if let Some(h) = &self.handler {
+                h.lock().on_upload_complete(request_id, false, "not logged in");
+            }
             return;
         };
         let handler = self.handler.clone();
@@ -1905,6 +1981,13 @@ impl ClientFfi {
                 Ok(m) => m,
                 Err(e) => {
                     deliver(false, &format!("invalid mime: {e}"));
+                    return;
+                }
+            };
+            let bytes = match strip_av_owned(bytes) {
+                Ok(v) => v,
+                Err(e) => {
+                    deliver(false, &e);
                     return;
                 }
             };
@@ -2014,6 +2097,10 @@ impl ClientFfi {
         use std::time::Duration;
 
         let Some(client) = self.client.clone() else {
+            // Not logged in: resolve the upload, or its pending entry never clears.
+            if let Some(h) = &self.handler {
+                h.lock().on_upload_complete(request_id, false, "not logged in");
+            }
             return;
         };
         let handler = self.handler.clone();
@@ -2045,6 +2132,15 @@ impl ClientFfi {
                 // Originals can be sent unmodified, so strip EXIF/GPS/XMP here
                 // as the single-image and file paths do (content-based).
                 item.bytes = strip_gallery_item_bytes(&item.kind, std::mem::take(&mut item.bytes), &item.mime_type);
+                if matches!(item.kind.as_str(), "audio" | "video") {
+                    match strip_av_owned(std::mem::take(&mut item.bytes)) {
+                        Ok(v) => item.bytes = v,
+                        Err(e) => {
+                            deliver(false, &e);
+                            return;
+                        }
+                    }
+                }
                 let mime: mime::Mime = match item.mime_type.parse() {
                     Ok(m) => m,
                     Err(e) => {
@@ -2200,13 +2296,7 @@ impl ClientFfi {
             Err(e) => return err(format!("encode failed: {e}")),
         };
 
-        // Normalise waveform samples (0–1024) into f32 (0.0–1.0), capped at 256.
-        let waveform_f32: Vec<f32> = waveform
-            .iter()
-            .copied()
-            .take(256)
-            .map(|v| (v as f32) / 1024.0)
-            .collect();
+        let waveform_f32 = normalise_waveform(waveform);
 
         let size = UInt::new(ogg_bytes.len() as u64);
         let dur = if duration_ms > 0 {
@@ -2331,10 +2421,7 @@ impl ClientFfi {
                     return;
                 }
             };
-            let waveform_f32: Vec<f32> = waveform
-                .iter().copied().take(256)
-                .map(|v| (v as f32) / 1024.0)
-                .collect();
+            let waveform_f32 = normalise_waveform(&waveform);
             let info = BaseAudioInfo {
                 duration: (duration_ms > 0)
                     .then(|| Duration::from_millis(duration_ms)),
@@ -3007,11 +3094,15 @@ impl ClientFfi {
             Ok(id) => id,
             Err(e) => return err(format!("invalid event id: {e}")),
         };
-        let mut new_content = if formatted_body.is_empty() {
+        // Same mention handling as a send: a mention added in an edit notifies,
+        // and an @room anchor becomes the room mention rather than a stray link.
+        let (mentions, html) = derive_mentions(formatted_body);
+        let mut new_content = if html.is_empty() {
             RoomMessageEventContent::text_plain(new_body)
         } else {
-            RoomMessageEventContent::text_html(new_body, formatted_body)
+            RoomMessageEventContent::text_html(new_body, &html)
         };
+        new_content.mentions = mentions;
         set_url_previews(&mut new_content, parse_url_previews_json(url_previews_json));
         match self.block_on_cancellable(async move {
             let edit_event = room
@@ -3344,16 +3435,9 @@ impl ClientFfi {
                     .await
                     .map_err(|e| e.to_string())?;
                 let json_str = tl_event.raw().json().get();
-                let mut envelope: serde_json::Value =
+                let envelope: serde_json::Value =
                     serde_json::from_str(json_str).map_err(|e| e.to_string())?;
-                let event_type = envelope["type"]
-                    .as_str()
-                    .ok_or_else(|| "missing event type".to_owned())?
-                    .to_owned();
-                let mut content = envelope["content"].take();
-                if let Some(obj) = content.as_object_mut() {
-                    obj.remove("m.relates_to");
-                }
+                let (event_type, content) = forwardable_content(&envelope)?;
                 target_room
                     .send_raw(&event_type, content)
                     .await
@@ -3922,5 +4006,142 @@ mod gallery_strip_tests {
         // send_image_async / send_file_async both go through strip_owned.
         assert!(!has(&strip_owned(TIFF.to_vec(), "image/tiff", StripScope::Image), b"SECRETMAKE"));
         assert_eq!(strip_owned(TIFF.to_vec(), "image/tiff", StripScope::File), TIFF);
+    }
+}
+
+/// What `forward_event` sends for a source event: its type and content.
+///
+/// Only messages, stickers and polls are forwarded. An edited message sends
+/// the newest edit's `m.new_content` (the bundled edit under
+/// `unsigned.m.relations.m.replace`), not the original text. `m.mentions` is
+/// dropped so the forward doesn't ping the original recipients again. An
+/// undecrypted `m.room.encrypted` event is refused rather than forwarded as
+/// ciphertext.
+fn forwardable_content(envelope: &serde_json::Value) -> Result<(String, serde_json::Value), String> {
+    let event_type = envelope["type"]
+        .as_str()
+        .ok_or_else(|| "missing event type".to_owned())?;
+    match event_type {
+        "m.room.message" | "m.sticker" | "m.poll.start" => {}
+        "m.room.encrypted" => {
+            return Err("this message could not be decrypted, so it can't be forwarded".into())
+        }
+        other => return Err(format!("{other} events can't be forwarded")),
+    }
+
+    let own = &envelope["content"];
+    // The server bundles the edit, so it is used only when it names the
+    // original's own sender: a replacement by anyone else is not an edit, and
+    // forwarding it would send someone else's words as the original's.
+    let replace = &envelope["unsigned"]["m.relations"]["m.replace"];
+    let same_sender = matches!(
+        (replace["sender"].as_str(), envelope["sender"].as_str()),
+        (Some(a), Some(b)) if a == b
+    );
+    let bundled_edit = if same_sender {
+        &replace["content"]["m.new_content"]
+    } else {
+        &serde_json::Value::Null
+    };
+    let own_is_edit = own["m.relates_to"]["rel_type"].as_str() == Some("m.replace");
+    let mut content = if bundled_edit.is_object() {
+        bundled_edit.clone()
+    } else if own_is_edit && own["m.new_content"].is_object() {
+        own["m.new_content"].clone()
+    } else {
+        own.clone()
+    };
+    if let Some(obj) = content.as_object_mut() {
+        obj.remove("m.relates_to");
+        obj.remove("m.mentions");
+    }
+    Ok((event_type.to_owned(), content))
+}
+
+/// MSC1767 waveform samples (0–1024) as f32 in 0.0–1.0. A sample above 1024 is
+/// clamped to 1024 first, so no value leaves above 1.0. At most 256 samples are kept.
+fn normalise_waveform(waveform: &[u16]) -> Vec<f32> {
+    waveform
+        .iter()
+        .take(256)
+        .map(|&v| f32::from(v.min(1024)) / 1024.0)
+        .collect()
+}
+
+#[cfg(test)]
+mod waveform_tests {
+    use super::normalise_waveform;
+
+    #[test]
+    fn values_are_scaled_clamped_and_capped() {
+        assert_eq!(normalise_waveform(&[0, 512, 1024]), vec![0.0, 0.5, 1.0]);
+        // Above the documented range: clamped, never above 1.0.
+        assert_eq!(normalise_waveform(&[4096, 2000]), vec![1.0, 1.0]);
+        // At most 256 samples are kept.
+        let long = vec![1u16; 300];
+        assert_eq!(normalise_waveform(&long).len(), 256);
+        assert!(normalise_waveform(&[]).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod forwardable_content_tests {
+    use super::forwardable_content;
+    use serde_json::json;
+
+    #[test]
+    fn edited_message_forwards_the_latest_text_without_mentions() {
+        let ev = json!({
+            "type": "m.room.message",
+            "content": { "msgtype": "m.text", "body": "* new", "m.relates_to": { "rel_type": "m.replace", "event_id": "$o" },
+                         "m.new_content": { "msgtype": "m.text", "body": "new", "m.mentions": { "user_ids": ["@a:x"] } } },
+            "sender": "@o:x",
+            "unsigned": { "m.relations": { "m.replace": { "sender": "@o:x", "content": { "m.new_content": { "msgtype": "m.text", "body": "newest", "m.mentions": { "user_ids": ["@a:x"] } } } } } }
+        });
+        let (ty, content) = forwardable_content(&ev).unwrap();
+        assert_eq!(ty, "m.room.message");
+        assert_eq!(content["body"], "newest");
+        assert!(content.get("m.mentions").is_none());
+        assert!(content.get("m.relates_to").is_none());
+    }
+
+    #[test]
+    fn plain_message_keeps_its_content_and_loses_mentions() {
+        let ev = json!({
+            "type": "m.room.message",
+            "content": { "msgtype": "m.text", "body": "hi", "m.mentions": { "user_ids": ["@a:x"] } }
+        });
+        let (_, content) = forwardable_content(&ev).unwrap();
+        assert_eq!(content, json!({ "msgtype": "m.text", "body": "hi" }));
+    }
+
+    #[test]
+    fn undecrypted_and_other_event_types_are_refused() {
+        let enc = json!({ "type": "m.room.encrypted", "content": { "ciphertext": "x" } });
+        assert!(forwardable_content(&enc).is_err());
+        let call = json!({ "type": "org.matrix.msc3401.call.member", "content": {} });
+        assert!(forwardable_content(&call).is_err());
+        let redaction = json!({ "type": "m.reaction", "content": {} });
+        assert!(forwardable_content(&redaction).is_err());
+    }
+
+    #[test]
+    fn a_bundled_edit_by_someone_else_is_not_forwarded() {
+        let ev = json!({
+            "type": "m.room.message",
+            "sender": "@o:x",
+            "content": { "msgtype": "m.text", "body": "original" },
+            "unsigned": { "m.relations": { "m.replace": { "sender": "@evil:x", "content": {
+                "m.new_content": { "msgtype": "m.text", "body": "forged" } } } } }
+        });
+        assert_eq!(forwardable_content(&ev).unwrap().1["body"], "original");
+    }
+
+    #[test]
+    fn sticker_and_poll_are_forwarded() {
+        let sticker = json!({ "type": "m.sticker", "content": { "body": "s", "url": "mxc://x/y" } });
+        assert_eq!(forwardable_content(&sticker).unwrap().0, "m.sticker");
+        let poll = json!({ "type": "m.poll.start", "content": { "m.poll": {} } });
+        assert_eq!(forwardable_content(&poll).unwrap().0, "m.poll.start");
     }
 }

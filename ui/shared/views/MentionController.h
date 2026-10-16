@@ -4,6 +4,7 @@
 #include "views/MentionEngine.h"
 #include "views/MentionPopup.h"
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
@@ -95,6 +96,9 @@ public:
     }
     void hide();
 
+    // Test hook: marks the cached member list stale, so the next '@' refetches.
+    void expire_member_cache_for_test();
+
 private:
     // Selection-only repaint: hooks_.repaint_selection if set, else hooks_.repaint.
     void repaint_selection_();
@@ -109,6 +113,7 @@ private:
     std::vector<MentionCandidate> candidates_;
     std::vector<tesseract::RoomMember> cached_members_;
     std::string cached_members_room_;
+    std::chrono::steady_clock::time_point cached_members_at_{};
     std::string fetching_room_;
     bool visible_ = false;
 };

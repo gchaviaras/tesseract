@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -183,6 +184,17 @@ public:
     /// wins per account) instead of racing a direct write.
     static void queue_session_update(const std::string& user_id,
                                      const std::string& session_json);
+
+    /// Register a callback for a queued session write that still failed after
+    /// its retries (the next launch may need a sign-in). It runs on the writer
+    /// thread, so it must only hand off to the UI thread. An empty function
+    /// clears it, and returns only once a call in progress has finished.
+    static void set_save_failure_handler(std::function<void(const std::string& user_id)> handler);
+
+    /// Lift the refusal that clear_account() put on queued writes for
+    /// `user_id`. Call on a fresh login, before the account's first save, so
+    /// a logged-out-then-logged-in account can persist token refreshes again.
+    static void allow_session_updates(const std::string& user_id);
 
     /// Block until every queued session write has landed. Used where the
     /// caller needs the write on disk before continuing (clean shutdown).

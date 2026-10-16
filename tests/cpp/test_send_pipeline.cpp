@@ -1,6 +1,8 @@
 #include "app/SendPipeline.h"
 #include <catch2/catch_test_macros.hpp>
 
+#include <stdexcept>
+
 #include <functional>
 #include <string>
 #include <utility>
@@ -73,6 +75,21 @@ TEST_CASE("SendPipeline sends without a prepare step go straight to the worker",
     REQUIRE(h.pipeline.outstanding("!a") == 1);
     h.drain_sends();
     REQUIRE(h.sent == std::vector<std::string>{"!a:one:"});
+    REQUIRE(h.pipeline.outstanding("!a") == 0);
+}
+
+TEST_CASE("SendPipeline counts a throwing send as done and keeps the room moving",
+          "[send_pipeline]")
+{
+    Harness h;
+    h.pipeline.submit("!a", nullptr,
+                      [](const std::string&) { throw std::runtime_error("boom"); });
+    h.pipeline.submit("!a", nullptr, h.recorder("!a", "two"));
+    REQUIRE(h.sends.size() == 2);
+    h.drain_sends();
+    // The throw did not stall the queue: the next message still went out, and
+    // nothing is left outstanding.
+    REQUIRE(h.sent == std::vector<std::string>{"!a:two:"});
     REQUIRE(h.pipeline.outstanding("!a") == 0);
 }
 

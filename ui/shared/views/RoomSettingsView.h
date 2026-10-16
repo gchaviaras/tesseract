@@ -148,6 +148,10 @@ public:
     // to a DM counterpart's avatar the user doesn't own and shouldn't be
     // able to "clear").
     void open(const tesseract::RoomInfo& info);
+    // A same-room update from the server while the view is open. A field the
+    // user has not edited follows the server; an edited one keeps the user's
+    // value. The server's value becomes the baseline Accept diffs against.
+    void refresh_room_info(const tesseract::RoomInfo& info);
     void close();
     bool is_open() const { return open_; }
     const std::string& room_id() const { return room_id_; }
@@ -313,8 +317,9 @@ public:
     // set_banned_members(). Unban applies immediately (not staged for
     // Accept, like the Bridge override): on_unban_requested fires on click,
     // the shell marks the row pending via set_unban_pending() and removes it
-    // via remove_banned_member() on success.
-    void set_banned_members(std::vector<tesseract::BannedMember> members);
+    // via remove_banned_member() on success. `complete` is false when the
+    // server's member list did not fully load, so the list may be partial.
+    void set_banned_members(std::vector<tesseract::BannedMember> members, bool complete = true);
     void set_unban_pending(const std::string& user_id, bool pending);
     void remove_banned_member(const std::string& user_id);
     RoomModerationSection* moderation_section() const { return moderation_; }

@@ -5,9 +5,13 @@
 #include "tk/theme.h"
 #include "tk/widget.h"
 #include "tk_test_surface.h"
+#include "views/DatePickerView.h"
 #include "views/RoomHeader.h"
 
+#include <cstdlib>
+#include <ctime>
 #include <memory>
+#include <string>
 
 using tesseract::views::RoomHeader;
 
@@ -292,3 +296,34 @@ TEST_CASE("The title block keeps the name and topic labels where RoomHeader plac
     CHECK(topic.y > name.y);            // topic sits below the name
     CHECK(name.y + name.h <= topic.y + 0.5f);
 }
+
+#ifndef _WIN32
+TEST_CASE("local_midnight_ms starts the picked day at local midnight",
+          "[tk][view][room_header][jump]")
+{
+    // The caller's TZ is restored when the case ends.
+    const char* saved = std::getenv("TZ");
+    const std::string saved_tz = saved ? saved : "";
+    auto set_tz = [](const char* tz)
+    {
+        setenv("TZ", tz, 1);
+        tzset();
+    };
+
+    // POSIX zone strings: "XYZ-3" is three hours ahead of UTC, "PST+8" eight behind.
+    set_tz("XYZ-3");
+    CHECK(tesseract::views::local_midnight_ms(2026, 10, 12) == 1791752400000ULL);
+    set_tz("PST+8");
+    CHECK(tesseract::views::local_midnight_ms(2026, 10, 12) == 1791792000000ULL);
+    set_tz("UTC");
+    CHECK(tesseract::views::local_midnight_ms(2026, 10, 12) == 1791763200000ULL);
+
+    if (saved)
+        set_tz(saved_tz.c_str());
+    else
+    {
+        unsetenv("TZ");
+        tzset();
+    }
+}
+#endif

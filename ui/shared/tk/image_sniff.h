@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string_view>
 
 namespace tk
 {
@@ -18,6 +19,11 @@ bool bytes_may_be_animated(std::span<const std::uint8_t> bytes);
 // True when `bytes` start with a JPEG XL signature: a bare codestream
 // (`FF 0A`) or an ISOBMFF container (`JXL ` signature box). Pure header sniff.
 bool is_jxl_bytes(std::span<const std::uint8_t> bytes);
+
+// The MIME type of a PNG, JPEG, GIF or WebP file, from its signature. Empty for
+// anything else (JPEG XL included), so a caller can refuse the file rather than
+// label it with the wrong type.
+std::string_view sniff_image_mime(std::span<const std::uint8_t> bytes);
 
 struct ImageDims
 {

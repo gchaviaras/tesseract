@@ -150,10 +150,11 @@ void ShellBase::handle_forward_failed_ui_(std::uint64_t      request_id,
 }
 
 void ShellBase::handle_search_failed_ui_(std::uint64_t request_id,
-                                         const std::string& /*message*/)
+                                         const std::string& message)
 {
     // Treat a failure as an empty result set for the issuing query so the
-    // overlay shows "No matches" rather than spinning.
+    // overlay stops spinning. The reason goes to the status line, so a broken
+    // search is not mistaken for one with no matches.
     auto it = search_pending_queries_.find(request_id);
     if (it == search_pending_queries_.end())
         return;
@@ -161,6 +162,7 @@ void ShellBase::handle_search_failed_ui_(std::uint64_t request_id,
     search_pending_queries_.erase(it);
     if (request_id != search_request_id_)
         return;
+    show_status_message_(tk::trf(tk::tr("Search failed: {0}"), {message}));
     if (main_app_ && main_app_->message_search())
     {
         main_app_->message_search()->set_results({}, for_query);
@@ -331,7 +333,7 @@ void ShellBase::handle_in_room_search_results_ui_(
 }
 
 void ShellBase::handle_in_room_search_failed_ui_(std::uint64_t request_id,
-                                                  const std::string&)
+                                                  const std::string& message)
 {
     auto it = in_room_search_pending_.find(request_id);
     if (it == in_room_search_pending_.end())
@@ -339,6 +341,7 @@ void ShellBase::handle_in_room_search_failed_ui_(std::uint64_t request_id,
     in_room_search_pending_.erase(it);
     if (request_id != in_room_search_request_id_)
         return;
+    show_status_message_(tk::trf(tk::tr("Search failed: {0}"), {message}));
     in_room_search_matches_.clear();
     in_room_search_current_ = -1;
     in_room_search_apply_highlights_();
@@ -393,12 +396,16 @@ void ShellBase::in_room_search_focus_current_()
             bool found = false;
             for (const auto& m : ml->messages())
                 if (m.event_id == hit.event_id) { found = true; break; }
-            if (!found && client_ && main_room_pane_)
+            // The pop-out's own pane and account: it may belong to an account
+            // other than the active one, and only that account's client can load
+            // the match.
+            if (!found && in_room_search_active_win_->pane())
             {
                 const std::string search_room = in_room_search_room_id_;
                 const std::string eid         = hit.event_id;
-                main_room_pane_->begin_focused_subscription_(search_room, eid);
-                auto sess = active_account_;
+                in_room_search_active_win_->pane()->begin_focused_subscription_(
+                    search_room, eid);
+                auto sess = in_room_search_active_win_->owner_session();
                 run_async_mut_([sess, search_room, eid]() {
                     if (!sess || !sess->client) return;
                     sess->client->subscribe_room_at(search_room, eid);

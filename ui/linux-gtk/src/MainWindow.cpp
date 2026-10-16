@@ -2718,6 +2718,25 @@ MainWindow::~MainWindow()
         g_source_remove(sync_status_debounce_id_);
         sync_status_debounce_id_ = 0;
     }
+    // Both of these capture this window in a raw pointer, not a weak guard, so
+    // they must not outlive it (M85).
+    if (mark_read_timer_id_)
+    {
+        g_source_remove(mark_read_timer_id_);
+        mark_read_timer_id_ = 0;
+    }
+    if (tk_inflight_tick_id_)
+    {
+        g_source_remove(tk_inflight_tick_id_);
+        tk_inflight_tick_id_ = 0;
+    }
+    // The dark-theme handler is on the global GtkSettings, which outlives this
+    // window, and it was connected with this window as its data.
+    if (prefer_dark_notify_id_)
+    {
+        g_signal_handler_disconnect(gtk_settings_get_default(), prefer_dark_notify_id_);
+        prefer_dark_notify_id_ = 0;
+    }
     // Send this window's deferred "New messages" moves before the clients
     // stop (request_stop() would cancel them).
     flush_pending_fully_read_now_();
@@ -2733,6 +2752,10 @@ MainWindow::~MainWindow()
     // windows; it still drains its own per-window pools below.
     if (!is_pinned_window_)
     {
+        // Hang up an active call while the SDK can still send the leave. Once
+        // request_stop() and stop_sync() run, the call would only end when the
+        // session is destroyed, and the others would still see us in it.
+        end_call();
         // Signal every account first, in its own pass, before any stop_sync()
         // call below: request_stop() only needs a shared FFI lock, so it wins
         // the race against a concurrent send_message/subscribe_room on that
@@ -3331,17 +3354,25 @@ void MainWindow::request_more_history(const std::string& room_id)
     start_anim_tick_();
 
     // Worker thread: invoke the blocking SDK call, marshal the result
-    // back via g_idle_add on the main loop.
+    // back via g_idle_add on the main loop. The account is captured here, not
+    // read from client_ on the worker: a switch or sign-out on the UI thread
+    // would otherwise race the read and paginate the wrong account's client.
+    auto sess = active_account_;
     run_async_(
-        [this, room_id]
+        [this, sess, room_id]
         {
-            auto pr =
-                client_->paginate_back_with_status(room_id, kPaginationBatch);
+            bool reached = false;
+            if (sess && sess->client)
+            {
+                auto pr = sess->client->paginate_back_with_status(
+                    room_id, kPaginationBatch);
+                reached = pr.ok && pr.reached_start;
+            }
             // guarded() is called here, on the worker thread, at the exact
             // point the old code read its own alive_ member — same risk
             // profile as before, just consolidated onto the shared guard.
             gtk_post_idle(guarded(
-                [this, room_id, reached = pr.ok && pr.reached_start]() mutable
+                [this, room_id, reached]() mutable
                 {
                     push_paginate_result(std::move(room_id), reached);
                 }));
@@ -4119,7 +4150,11 @@ void MainWindow::stop_anim_tick_()
 gboolean MainWindow::on_tk_inflight_tick_(gpointer user_data)
 {
     auto* self = static_cast<MainWindow*>(user_data);
-    return self->inflight_tick_() ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
+    if (self->inflight_tick_())
+        return G_SOURCE_CONTINUE;
+    // The source is going away: forget its id, so a later start re-arms it.
+    self->tk_inflight_tick_id_ = 0;
+    return G_SOURCE_REMOVE;
 }
 
 void MainWindow::start_inflight_tick_()
@@ -4130,6 +4165,10 @@ void MainWindow::start_inflight_tick_()
 
 void MainWindow::stop_inflight_tick_()
 {
+    // Remove the source, not just forget its id: a tick left queued would fire
+    // on this window after it is freed (M85).
+    if (tk_inflight_tick_id_)
+        g_source_remove(tk_inflight_tick_id_);
     tk_inflight_tick_id_ = 0;
 }
 
@@ -4474,30 +4513,46 @@ void MainWindow::pick_image_file_(
                 GTK_FILE_DIALOG(dialog_obj), res, &err);
             if (file)
             {
+                // The file is chosen by the user but read here on the UI thread,
+                // so refuse anything too large to be a still worth sending
+                // before reading it. Same limit as the Qt picker.
+                constexpr goffset kMaxPickedImageBytes = 64LL * 1024 * 1024;
+                GFileInfo* info = g_file_query_info(
+                    file, G_FILE_ATTRIBUTE_STANDARD_SIZE,
+                    G_FILE_QUERY_INFO_NONE, nullptr, nullptr);
+                const goffset size = info ? g_file_info_get_size(info) : 0;
+                if (info)
+                    g_object_unref(info);
+
                 gsize len = 0;
                 char* raw = nullptr;
                 GError* load_err = nullptr;
-                g_file_load_contents(file, nullptr, &raw, &len, nullptr, &load_err);
+                if (size > kMaxPickedImageBytes)
+                    c->self->show_status_message_(tk::tr("That image is too large to send."));
+                else
+                    g_file_load_contents(file, nullptr, &raw, &len, nullptr, &load_err);
                 if (!load_err && raw && len > 0)
                 {
                     std::vector<uint8_t> bytes(raw, raw + len);
-                    g_free(raw);
-                    char* path = g_file_get_path(file);
-                    std::string mime = "image/jpeg";
-                    if (path)
+                    // The type comes from the content, not the extension: a
+                    // mislabelled file would otherwise go out with the wrong MIME type.
+                    const std::string_view sniffed = tk::sniff_image_mime(bytes);
+                    if (sniffed.empty())
                     {
-                        std::string p(path);
-                        if (p.ends_with(".png"))       mime = "image/png";
-                        else if (p.ends_with(".gif"))  mime = "image/gif";
-                        else if (p.ends_with(".webp")) mime = "image/webp";
-                        g_free(path);
+                        c->self->show_status_message_(
+                            tk::tr("That file isn't a PNG, JPEG, GIF or WebP image."));
                     }
-                    auto callback = std::move(c->cb);
-                    c->self->post_to_ui_(
-                        [callback = std::move(callback),
-                         bytes = std::move(bytes), mime]() mutable
-                        { callback(std::move(bytes), mime); });
+                    else
+                    {
+                        const std::string mime(sniffed);
+                        auto callback = std::move(c->cb);
+                        c->self->post_to_ui_(
+                            [callback = std::move(callback),
+                             bytes = std::move(bytes), mime]() mutable
+                            { callback(std::move(bytes), mime); });
+                    }
                 }
+                g_free(raw);
                 if (load_err) g_error_free(load_err);
                 g_object_unref(file);
             }
@@ -5089,7 +5144,10 @@ void MainWindow::handle_notification(const std::string& user_id,
 {
     bool win_focused = gtk_window_is_active(GTK_WINDOW(window_));
     auto* surface = gtk_native_get_surface(GTK_NATIVE(window_));
-    auto state = gdk_toplevel_get_state(GDK_TOPLEVEL(surface));
+    // No surface while the window is hidden: then it is not minimized either.
+    const GdkToplevelState state =
+        surface ? gdk_toplevel_get_state(GDK_TOPLEVEL(surface))
+                : static_cast<GdkToplevelState>(0);
     bool win_visible = gtk_widget_get_visible(GTK_WIDGET(window_)) &&
                        !(state & GDK_TOPLEVEL_STATE_MINIMIZED);
 
@@ -6010,7 +6068,11 @@ void MainWindow::on_login_cancelled()
     pending_login_client_.reset();
     if (!pending_login_temp_dir_.empty())
     {
-        std::filesystem::remove_all(pending_login_temp_dir_);
+        // The error_code overload: this runs in a GTK callback, where an
+        // exception would unwind through the toolkit. A failed cleanup only
+        // leaves the temp directory behind.
+        std::error_code ec;
+        std::filesystem::remove_all(pending_login_temp_dir_, ec);
         pending_login_temp_dir_.clear();
     }
 

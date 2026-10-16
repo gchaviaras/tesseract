@@ -440,9 +440,23 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
                               : NowPlaying::Kind::Audio;
                 np.room_id    = current_room_id_;
                 np.event_id   = snap.event_id;
-                np.title      = row && !row->body.empty() ? row->body
-                                                          : tk::tr("Voice message");
-                np.artist     = row ? row->sender_name : std::string{};
+                // With "hide content" on, the title and sender stay out of the
+                // MPRIS metadata, which any local D-Bus client can read.
+                const bool hide_content =
+                    tesseract::Settings::instance().notification_hide_content;
+                if (hide_content)
+                {
+                    np.title = np.kind == NowPlaying::Kind::Voice
+                                   ? tk::tr("Voice message")
+                                   : tk::tr("Audio");
+                    np.artist.clear();
+                }
+                else
+                {
+                    np.title = row && !row->body.empty() ? row->body
+                                                         : tk::tr("Voice message");
+                    np.artist = row ? row->sender_name : std::string{};
+                }
                 np.position_ms = snap.position_ms;
                 np.duration_ms = snap.duration_ms;
                 np.is_playing  = snap.is_playing;
@@ -671,7 +685,9 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
         // until login completes, well after wire_main_app_widget_() runs.
         if (auto* dr = ar->directory_view(); dr && client_)
         {
-            const std::string uid = client_->get_user_id();
+            // The shell's cached id: the client call takes the FFI lock and
+            // blocks behind any writer (login, logout, cache clear).
+            const std::string uid = my_user_id_;
             const auto colon = uid.find(':');
             dr->set_homeserver_placeholder(
                 colon == std::string::npos ? std::string{} : uid.substr(colon + 1));
@@ -957,8 +973,9 @@ void ShellBase::wire_voice_capture_(
                 // request ID lets platform shells aggregate taskbar progress.
                 auto sess = active_account_;
                 const auto request_id = account_manager_.next_upload_request_id();
+                auto alive = weak_flag();
                 run_async_mut_(
-                    [sess, request_id, rid,
+                    [this, alive, sess, request_id, rid,
                      pcm = std::move(pcm), waveform = std::move(waveform),
                      duration_ms, caption, reply_id]() mutable
                     {
@@ -967,7 +984,17 @@ void ShellBase::wire_voice_capture_(
                         const std::uint64_t limit =
                             sess->client->media_upload_limit();
                         if (limit > 0 && est > limit)
+                        {
+                            // Refused on the worker: say so, rather than dropping the
+                            // clip without a word.
+                            if (!alive.expired())
+                                post_to_ui_alive_([this]
+                                {
+                                    show_status_message_(tk::tr(
+                                        "This voice message is too long to upload."));
+                                });
                             return;
+                        }
                         sess->client->send_voice_async(
                             request_id, rid, pcm.data(), pcm.size(), duration_ms,
                             waveform, caption, reply_id);

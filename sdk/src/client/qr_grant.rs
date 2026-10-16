@@ -18,7 +18,7 @@ use matrix_sdk_base::crypto::types::qr_login::QrCodeData;
 use tokio::sync::{oneshot, watch};
 
 use super::{err, ok, ClientFfi};
-use crate::ffi::{OpResult, QrGrantAuth, QrGrantBitmap};
+use crate::ffi::{OpResult, QrGrantBitmap, QrWaitStep};
 
 // ---------------------------------------------------------------------------
 // Public handle — stored in ClientFfi
@@ -100,17 +100,19 @@ impl ClientFfi {
     // lock holders can coexist, so a blocking recv here does not prevent the UI
     // thread from taking SH_FFI for unrelated read calls.
 
-    pub fn qr_grant_await_scanned(&self) -> OpResult {
+    /// One slice of waiting for the scan. See `QR_WAIT_SLICE`.
+    pub fn qr_grant_wait_scanned(&self) -> QrWaitStep {
         let Some(h) = self.qr_grant.as_ref() else {
-            return err("no QR grant flow in progress; call qr_grant_start first");
+            return wait_err("no QR grant flow in progress; call qr_grant_start first");
         };
-        let rx = match h.scanned_rx.lock().unwrap().take() {
-            Some(rx) => rx,
-            None => return err("qr_grant_await_scanned already called"),
-        };
-        match self.rt.block_on(rx) {
-            Ok(()) => ok(""),
-            Err(_) => err("QR grant flow ended before the QR code was scanned"),
+        let mut slot = h.scanned_rx.lock().unwrap();
+        if slot.is_none() {
+            return wait_err("qr_grant_await_scanned already called");
+        }
+        match wait_slice(&self.rt, &mut slot) {
+            None => wait_pending(),
+            Some(Ok(())) => wait_from(ok("")),
+            Some(Err(_)) => wait_err("QR grant flow ended before the QR code was scanned"),
         }
     }
 
@@ -128,36 +130,41 @@ impl ClientFfi {
         }
     }
 
-    pub fn qr_grant_await_auth(&self) -> QrGrantAuth {
+    /// One slice of waiting for the flow to reach `WaitingForAuth`.
+    pub fn qr_grant_wait_auth(&self) -> QrWaitStep {
         let Some(h) = self.qr_grant.as_ref() else {
-            return auth_err("no QR grant flow in progress; call qr_grant_start first");
+            return wait_err("no QR grant flow in progress; call qr_grant_start first");
         };
-        let rx = match h.auth_rx.lock().unwrap().take() {
-            Some(rx) => rx,
-            None => return auth_err("qr_grant_await_auth already called"),
-        };
-        match self.rt.block_on(rx) {
-            Ok(uri) => QrGrantAuth {
+        let mut slot = h.auth_rx.lock().unwrap();
+        if slot.is_none() {
+            return wait_err("qr_grant_await_auth already called");
+        }
+        match wait_slice(&self.rt, &mut slot) {
+            None => wait_pending(),
+            Some(Ok(uri)) => QrWaitStep {
+                pending: false,
                 ok: true,
                 message: String::new(),
                 verification_uri: uri,
             },
-            Err(_) => auth_err("QR grant flow ended before reaching WaitingForAuth"),
+            Some(Err(_)) => wait_err("QR grant flow ended before reaching WaitingForAuth"),
         }
     }
 
-    pub fn qr_grant_await_complete(&self) -> OpResult {
+    /// One slice of waiting for the grant flow to finish.
+    pub fn qr_grant_wait_complete(&self) -> QrWaitStep {
         let Some(h) = self.qr_grant.as_ref() else {
-            return err("no QR grant flow in progress; call qr_grant_start first");
+            return wait_err("no QR grant flow in progress; call qr_grant_start first");
         };
-        let rx = match h.done_rx.lock().unwrap().take() {
-            Some(rx) => rx,
-            None => return err("qr_grant_await_complete already called"),
-        };
-        match self.rt.block_on(rx) {
-            Ok(Ok(())) => ok(""),
-            Ok(Err(msg)) => err(msg),
-            Err(_) => err("QR grant flow task panicked or was cancelled"),
+        let mut slot = h.done_rx.lock().unwrap();
+        if slot.is_none() {
+            return wait_err("qr_grant_await_complete already called");
+        }
+        match wait_slice(&self.rt, &mut slot) {
+            None => wait_pending(),
+            Some(Ok(Ok(()))) => wait_from(ok("")),
+            Some(Ok(Err(msg))) => wait_from(err(msg)),
+            Some(Err(_)) => wait_err("QR grant flow task panicked or was cancelled"),
         }
     }
 
@@ -365,12 +372,49 @@ fn bitmap_err(msg: &str) -> QrGrantBitmap {
     }
 }
 
-fn auth_err(msg: &str) -> QrGrantAuth {
-    QrGrantAuth {
+/// How long one slice of a QR wait may hold the FFI lock. The C++ side repeats
+/// the slice until the flow answers, and releases the lock between slices, so a
+/// writer queued behind a wait is not kept out for the whole flow.
+const QR_WAIT_SLICE: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// Waits up to one slice for the receiver held in `slot`. Returns `None` while it
+/// is still pending, leaving it in place. Otherwise takes it out and returns the
+/// outcome.
+fn wait_slice<T>(
+    rt: &tokio::runtime::Runtime,
+    slot: &mut Option<oneshot::Receiver<T>>,
+) -> Option<Result<T, oneshot::error::RecvError>> {
+    let rx = slot.as_mut()?;
+    // The timeout is built inside the runtime: it needs a reactor when created.
+    match rt.block_on(async { tokio::time::timeout(QR_WAIT_SLICE, rx).await }) {
+        Err(_elapsed) => None,
+        Ok(outcome) => {
+            slot.take();
+            Some(outcome)
+        }
+    }
+}
+
+fn wait_pending() -> QrWaitStep {
+    QrWaitStep {
+        pending: true,
         ok: false,
-        message: msg.into(),
+        message: String::new(),
         verification_uri: String::new(),
     }
+}
+
+fn wait_from(r: OpResult) -> QrWaitStep {
+    QrWaitStep {
+        pending: false,
+        ok: r.ok,
+        message: r.message,
+        verification_uri: String::new(),
+    }
+}
+
+fn wait_err(msg: &str) -> QrWaitStep {
+    wait_from(err(msg))
 }
 
 #[cfg(test)]
@@ -473,24 +517,19 @@ mod tests {
         assert_eq!(b.message, "nope");
         assert!(b.pixels.is_empty());
         assert_eq!(b.side, 0);
-        let a = auth_err("nope");
-        assert!(!a.ok);
-        assert_eq!(a.message, "nope");
-        assert!(a.verification_uri.is_empty());
     }
 
     #[test]
     fn methods_report_no_flow_before_start() {
         let c = ClientFfi::new();
-        for r in [
-            c.qr_grant_await_scanned(),
-            c.qr_grant_submit_check_code(1),
-            c.qr_grant_await_complete(),
-        ] {
-            assert!(!r.ok);
+        for r in [c.qr_grant_wait_scanned(), c.qr_grant_wait_complete()] {
+            assert!(!r.ok && !r.pending);
             assert!(r.message.contains("qr_grant_start"), "{}", r.message);
         }
-        let a = c.qr_grant_await_auth();
+        let s = c.qr_grant_submit_check_code(1);
+        assert!(!s.ok);
+        assert!(s.message.contains("qr_grant_start"), "{}", s.message);
+        let a = c.qr_grant_wait_auth();
         assert!(!a.ok && a.verification_uri.is_empty());
         assert!(a.message.contains("qr_grant_start"), "{}", a.message);
         c.qr_grant_cancel(); // no-op, must not panic
@@ -535,10 +574,24 @@ mod tests {
         let mut c = ClientFfi::new();
         let ends = install_handle(&mut c);
         ends.scanned_tx.send(()).unwrap();
-        assert!(c.qr_grant_await_scanned().ok);
-        let again = c.qr_grant_await_scanned();
+        assert!(c.qr_grant_wait_scanned().ok);
+        let again = c.qr_grant_wait_scanned();
         assert!(!again.ok);
         assert!(again.message.contains("already called"), "{}", again.message);
+    }
+
+    #[test]
+    fn wait_is_pending_until_the_flow_answers() {
+        let mut c = ClientFfi::new();
+        let ends = install_handle(&mut c);
+        // Nothing to report yet: the slice says so, and keeps the receiver.
+        let first = c.qr_grant_wait_scanned();
+        assert!(first.pending);
+        assert!(!first.ok && first.message.is_empty());
+        ends.scanned_tx.send(()).unwrap();
+        let done = c.qr_grant_wait_scanned();
+        assert!(!done.pending && done.ok);
+        assert!(c.qr_grant_wait_scanned().message.contains("already called"));
     }
 
     #[test]
@@ -546,7 +599,7 @@ mod tests {
         let mut c = ClientFfi::new();
         let ends = install_handle(&mut c);
         drop(ends.scanned_tx);
-        let r = c.qr_grant_await_scanned();
+        let r = c.qr_grant_wait_scanned();
         assert!(!r.ok);
         assert!(r.message.contains("before the QR code was scanned"), "{}", r.message);
     }
@@ -577,11 +630,11 @@ mod tests {
         let mut c = ClientFfi::new();
         let ends = install_handle(&mut c);
         ends.auth_tx.send("https://auth.example.org/device".to_owned()).unwrap();
-        let a = c.qr_grant_await_auth();
+        let a = c.qr_grant_wait_auth();
         assert!(a.ok);
         assert!(a.message.is_empty());
         assert_eq!(a.verification_uri, "https://auth.example.org/device");
-        let again = c.qr_grant_await_auth();
+        let again = c.qr_grant_wait_auth();
         assert!(!again.ok && again.message.contains("already called"));
     }
 
@@ -590,7 +643,7 @@ mod tests {
         let mut c = ClientFfi::new();
         let ends = install_handle(&mut c);
         drop(ends.auth_tx);
-        let a = c.qr_grant_await_auth();
+        let a = c.qr_grant_wait_auth();
         assert!(!a.ok);
         assert!(a.verification_uri.is_empty());
         assert!(a.message.contains("WaitingForAuth"), "{}", a.message);
@@ -601,18 +654,18 @@ mod tests {
         let mut c = ClientFfi::new();
         let ends = install_handle(&mut c);
         ends.done_tx.send(Ok(())).unwrap();
-        assert!(c.qr_grant_await_complete().ok);
-        assert!(c.qr_grant_await_complete().message.contains("already called"));
+        assert!(c.qr_grant_wait_complete().ok);
+        assert!(c.qr_grant_wait_complete().message.contains("already called"));
 
         let ends = install_handle(&mut c);
         ends.done_tx.send(Err("homeserver said no".to_owned())).unwrap();
-        let r = c.qr_grant_await_complete();
+        let r = c.qr_grant_wait_complete();
         assert!(!r.ok);
         assert_eq!(r.message, "homeserver said no");
 
         let ends = install_handle(&mut c);
         drop(ends.done_tx);
-        let r = c.qr_grant_await_complete();
+        let r = c.qr_grant_wait_complete();
         assert!(!r.ok);
         assert!(r.message.contains("panicked or was cancelled"), "{}", r.message);
     }

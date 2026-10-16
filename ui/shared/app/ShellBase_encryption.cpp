@@ -268,7 +268,11 @@ void ShellBase::start_qr_grant_overlay()
 
     view->set_client(client_);
     view->set_post_to_ui([this](auto fn) { post_to_ui_(std::move(fn)); });
-    view->set_run_async([this](auto fn) { run_async_mut_(std::move(fn)); });
+    // The whole QR sequence waits for minutes (the other device to scan, the
+    // check code, browser approval). On the single mutating pool that stalled
+    // every send, join and receipt until the grant ended, so it runs on the
+    // general pool. The FFI wrappers take their own locks, so the calls are safe there.
+    view->set_run_async([this](auto fn) { run_async_("qr/grant", std::move(fn)); });
     view->set_relayout([this] { request_relayout_(); });
     view->set_open_browser([](const std::string& url) {
         tesseract::Client::open_in_browser(url);

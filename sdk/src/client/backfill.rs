@@ -42,6 +42,73 @@ use std::collections::HashMap;
 #[cfg(not(test))]
 use std::sync::Arc;
 
+/// Shortest gap between two backfill progress updates. Each update rebuilds
+/// every room's summary and pushes the whole list, so a long backfill must not
+/// send one per batch.
+const BACKFILL_UPDATE_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// First wait before retrying a room whose backfill failed. Doubles per failure.
+const BACKFILL_RETRY_BASE: std::time::Duration = std::time::Duration::from_secs(30);
+/// Longest wait between two attempts on the same room.
+const BACKFILL_RETRY_CAP: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// How long a room waits before its next backfill attempt, after `attempts`
+/// failed attempts in a row: 30 s, doubling, capped at 10 minutes.
+fn backfill_retry_delay(attempts: u32) -> std::time::Duration {
+    let shift = attempts.saturating_sub(1).min(16);
+    BACKFILL_RETRY_BASE
+        .saturating_mul(1u32 << shift)
+        .min(BACKFILL_RETRY_CAP)
+}
+
+/// A room whose backfill attempt failed: how many attempts have failed, and the
+/// earliest time the next attempt may run.
+#[cfg(not(test))]
+pub(super) struct BackfillRetry {
+    pub(super) attempts: u32,
+    pub(super) next_at: std::time::Instant,
+}
+
+/// Records one more failed backfill attempt for `rid`, and when it may be tried again.
+#[cfg(not(test))]
+fn note_backfill_failure(retry: &Mutex<HashMap<String, BackfillRetry>>, rid: &str) {
+    let now = std::time::Instant::now();
+    let mut map = retry.lock();
+    let entry = map.entry(rid.to_owned()).or_insert(BackfillRetry {
+        attempts: 0,
+        next_at: now,
+    });
+    entry.attempts = entry.attempts.saturating_add(1);
+    entry.next_at = now + backfill_retry_delay(entry.attempts);
+}
+
+/// Rooms whose last backfill attempt failed and whose retry time has not come yet.
+#[cfg(not(test))]
+fn backfill_waiting_rooms(
+    retry: &Mutex<HashMap<String, BackfillRetry>>,
+) -> std::collections::HashSet<String> {
+    let now = std::time::Instant::now();
+    retry
+        .lock()
+        .iter()
+        .filter(|(_, r)| r.next_at > now)
+        .map(|(k, _)| k.clone())
+        .collect()
+}
+
+/// Whether a backfill progress update is due: `every` rooms have finished since
+/// the last one, and the minimum interval has passed since it went out
+/// (`since_last_emit` is `None` before the first).
+fn backfill_update_due(
+    completed: usize,
+    last_update_at: usize,
+    every: usize,
+    since_last_emit: Option<std::time::Duration>,
+) -> bool {
+    completed - last_update_at >= every
+        && since_last_emit.map_or(true, |d| d >= BACKFILL_UPDATE_MIN_INTERVAL)
+}
+
 #[cfg(not(test))]
 impl ClientFfi {
     // -----------------------------------------------------------------------
@@ -66,6 +133,7 @@ impl ClientFfi {
         // Shared with the unread prefetch so combined warm-up concurrency is
         // bounded, not summed.
         let semaphore = Arc::clone(&self.warm_semaphore);
+        let retry = Arc::clone(&self.backfill_retry);
 
         // Emit on_rooms_updated every UPDATE_EVERY completions so the
         // inactive-room count ticks up visibly during a long backfill run,
@@ -82,6 +150,7 @@ impl ClientFfi {
                     let client = client.clone();
                     let sem = semaphore.clone();
                     let preview_cache = preview_cache.clone();
+                    let retry = retry.clone();
                     let db_conn = Arc::clone(&db_conn);
                     let in_flight = Arc::clone(&in_flight);
                     #[cfg(debug_assertions)]
@@ -102,13 +171,17 @@ impl ClientFfi {
                             #[cfg(debug_assertions)]
                             format!("backfill/{}", rid_label),
                         );
-                        let preview = backfill_room_silent(&client, &rid, 50).await.ok().flatten();
-                        // Always record in preview_cache — even on failure — so
-                        // start_background_backfill_all_uncached skips this room
-                        // for the rest of the session and we don't re-queue it on
-                        // every on_rooms_updated tick. A zero-timestamp sentinel is
-                        // used for failed rooms; it is not written to backfill_ts
-                        // SQLite (guarded by ts != 0 below), so next session retries.
+                        let Ok(preview) = backfill_room_silent(&client, &rid, 50).await else {
+                            // Not cached as "no timestamp": a later request retries
+                            // this room once its backoff has passed.
+                            note_backfill_failure(&retry, rid.as_str());
+                            return;
+                        };
+                        retry.lock().remove(rid.as_str());
+                        // A room that resolved to no timestamp is still cached, so it
+                        // is not re-queued on every on_rooms_updated tick. The
+                        // zero-timestamp sentinel is not written to backfill_ts SQLite
+                        // (guarded by ts != 0 below).
                         let bp_to_cache = preview.clone().unwrap_or(BackfillPreview {
                             room_id: rid.to_string(),
                             kind: String::new(),
@@ -144,10 +217,13 @@ impl ClientFfi {
                 // Drive the joinset, emitting an update every UPDATE_EVERY rooms.
                 let mut completed: usize = 0;
                 let mut last_update_at: usize = 0;
+                let mut last_emit: Option<std::time::Instant> = None;
                 while joinset.join_next().await.is_some() {
                     completed += 1;
-                    if completed - last_update_at >= UPDATE_EVERY {
+                    let since_last = last_emit.map(|t| t.elapsed());
+                    if backfill_update_due(completed, last_update_at, UPDATE_EVERY, since_last) {
                         last_update_at = completed;
+                        last_emit = Some(std::time::Instant::now());
                         if let Some(ref h) = handler {
                             let mut rooms = build_room_infos(&client, &db_conn).await;
                             apply_backfill_previews(&mut rooms, &preview_cache);
@@ -206,6 +282,7 @@ impl ClientFfi {
             let guard = self.backfill_previews.lock();
             guard.keys().cloned().collect()
         };
+        let waiting = backfill_waiting_rooms(&self.backfill_retry);
 
         let mut to_backfill: Vec<OwnedRoomId> = Vec::new();
         for id_cxx in room_ids {
@@ -218,7 +295,7 @@ impl ClientFfi {
             if skip.contains(&id) {
                 continue;
             }
-            if cached.contains(id.as_str()) {
+            if cached.contains(id.as_str()) || waiting.contains(id.as_str()) {
                 continue;
             }
             if let Some(room) = client.get_room(&id) {
@@ -264,6 +341,7 @@ impl ClientFfi {
             let guard = self.backfill_previews.lock();
             guard.keys().cloned().collect()
         };
+        let waiting = backfill_waiting_rooms(&self.backfill_retry);
 
         // Skip the room currently open in the foreground timeline.
         let skip: std::collections::HashSet<OwnedRoomId> =
@@ -276,7 +354,7 @@ impl ClientFfi {
                 continue;
             }
             // Already cached — timestamp known from backfill_ts or this session.
-            if cached.contains(id.as_str()) {
+            if cached.contains(id.as_str()) || waiting.contains(id.as_str()) {
                 continue;
             }
             // SDK already has a timestamp from live sync — no backfill needed.
@@ -292,6 +370,7 @@ impl ClientFfi {
 
         let handler = self.handler.clone();
         let preview_cache = Arc::clone(&self.backfill_previews);
+        let retry = Arc::clone(&self.backfill_retry);
         let db_conn = Arc::clone(&self.app_cache_db);
         // Shared with the unread prefetch so combined warm-up concurrency is
         // bounded, not summed.
@@ -403,14 +482,19 @@ impl ClientFfi {
                         let client = client.clone();
                         let sem = semaphore.clone();
                         let preview_cache = Arc::clone(&preview_cache);
+                        let retry = Arc::clone(&retry);
                         let db_conn = Arc::clone(&db_conn);
                         joinset.spawn(async move {
                             let _permit = match sem.acquire_owned().await {
                                 Ok(p) => p,
                                 Err(_) => return,
                             };
-                            let preview =
-                                backfill_room_silent(&client, &rid, 50).await.ok().flatten();
+                            let Ok(preview) = backfill_room_silent(&client, &rid, 50).await
+                            else {
+                                note_backfill_failure(&retry, rid.as_str());
+                                return;
+                            };
+                            retry.lock().remove(rid.as_str());
                             let bp = preview.unwrap_or(BackfillPreview {
                                 room_id: rid.to_string(),
                                 kind: String::new(),
@@ -441,10 +525,14 @@ impl ClientFfi {
 
                     let mut completed: usize = 0;
                     let mut last_update_at: usize = 0;
+                    let mut last_emit: Option<std::time::Instant> = None;
                     while joinset.join_next().await.is_some() {
                         completed += 1;
-                        if completed - last_update_at >= UPDATE_EVERY {
+                        let since_last = last_emit.map(|t| t.elapsed());
+                        if backfill_update_due(completed, last_update_at, UPDATE_EVERY, since_last)
+                        {
                             last_update_at = completed;
+                            last_emit = Some(std::time::Instant::now());
                             if let Some(ref h) = handler {
                                 let mut rooms = build_room_infos(&client, &db_conn).await;
                                 apply_backfill_previews(&mut rooms, &preview_cache);
@@ -509,7 +597,10 @@ impl ClientFfi {
             return err("not logged in");
         };
 
-        // Collect room IDs that have no cache entry yet.
+        // Collect room IDs that have no current cache entry. An entry older than
+        // BRIDGE_STATUS_TTL_SECS is re-checked, so a room whose bridge changed (or
+        // whose lookup was wrong) is not stuck with the old answer.
+        let cutoff = bridge_status_cutoff_secs(unix_now_secs());
         let uncached: Vec<matrix_sdk::ruma::OwnedRoomId> = {
             let guard = self.app_cache_db.lock();
             room_ids
@@ -522,9 +613,12 @@ impl ClientFfi {
                             conn.query_row(
                                 // A bridged row cached before `cap_threads` existed has
                                 // NULL there; treat it as uncached so it's re-fetched once.
+                                // A row with no `checked_at` (written before it existed)
+                                // is uncached too.
                                 "SELECT 1 FROM bridge_status WHERE room_id = ?1 \
-                                 AND (is_bridged = 0 OR cap_threads IS NOT NULL)",
-                                rusqlite::params![id.as_str()],
+                                 AND (is_bridged = 0 OR cap_threads IS NOT NULL) \
+                                 AND checked_at IS NOT NULL AND checked_at >= ?2",
+                                rusqlite::params![id.as_str(), cutoff],
                                 |_| Ok(()),
                             )
                             .ok()
@@ -552,15 +646,22 @@ impl ClientFfi {
             // Fetch all rooms in parallel — room state is independent,
             // no ordering needed.
             #[allow(clippy::type_complexity)]
-            let mut joinset: tokio::task::JoinSet<(
-                matrix_sdk::ruma::OwnedRoomId,
-                bool,
-                Option<String>,
-                Option<String>,
-                crate::ffi::BridgeCapabilities,
-            )> = tokio::task::JoinSet::new();
+            let mut joinset: tokio::task::JoinSet<
+                Option<(
+                    matrix_sdk::ruma::OwnedRoomId,
+                    bool,
+                    Option<String>,
+                    Option<String>,
+                    crate::ffi::BridgeCapabilities,
+                )>,
+            > = tokio::task::JoinSet::new();
+            // Full room state can be tens of megabytes per room, so only a few
+            // lookups run at once.
+            const BRIDGE_CHECK_CONCURRENCY: usize = 4;
+            let permits = Arc::new(tokio::sync::Semaphore::new(BRIDGE_CHECK_CONCURRENCY));
             for room_id in uncached {
                 let client = client.clone();
+                let permits = Arc::clone(&permits);
                 let in_flight = Arc::clone(&in_flight);
                 let handler = handler.clone();
                 #[cfg(debug_assertions)]
@@ -576,12 +677,19 @@ impl ClientFfi {
                         #[cfg(debug_assertions)]
                         label,
                     );
-                    let room_state = client
-                        .send(state_api::Request::new(room_id.clone()))
-                        .await
-                        .ok()
-                        .map(|resp| resp.room_state)
-                        .unwrap_or_default();
+                    let Ok(_permit) = permits.acquire().await else {
+                        return None;
+                    };
+                    // A failed lookup is not an answer: returning None keeps it out of
+                    // the table, so the next check asks again instead of recording
+                    // "not bridged" for a room whose state was never read.
+                    let room_state = match client.send(state_api::Request::new(room_id.clone())).await {
+                        Ok(resp) => resp.room_state,
+                        Err(e) => {
+                            tracing::warn!("bridge status lookup for {room_id} failed (not recorded): {e}");
+                            return None;
+                        }
+                    };
                     let find_event = |event_type: &str| {
                         room_state.iter().find(|raw| {
                             raw.get_field::<String>("type").ok().flatten().as_deref()
@@ -603,27 +711,31 @@ impl ClientFfi {
                         })
                         .map(|c| super::parse_bridge_capabilities(&c))
                         .unwrap_or_default();
-                    (room_id, bridged, network_name, network_avatar_url, capabilities)
+                    Some((room_id, bridged, network_name, network_avatar_url, capabilities))
                 });
             }
 
             let mut any_bridged = false;
-            while let Some(Ok((room_id, bridged, network_name, network_avatar_url, capabilities))) =
-                joinset.join_next().await
-            {
+            while let Some(joined) = joinset.join_next().await {
+                let Ok(Some((room_id, bridged, network_name, network_avatar_url, capabilities))) =
+                    joined
+                else {
+                    continue;
+                };
                 {
                     let guard = db_conn.lock();
                     if let Some(conn) = guard.as_ref() {
                         let _ = conn.execute(
                             "INSERT OR REPLACE INTO bridge_status \
-                             (room_id, is_bridged, network_name, network_avatar_url, cap_threads) \
-                             VALUES (?1, ?2, ?3, ?4, ?5)",
+                             (room_id, is_bridged, network_name, network_avatar_url, cap_threads, checked_at) \
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                             rusqlite::params![
                                 room_id.as_str(),
                                 bridged as i32,
                                 network_name,
                                 network_avatar_url,
-                                capabilities.threads as i32
+                                capabilities.threads as i32,
+                                unix_now_secs()
                             ],
                         );
                     }
@@ -910,14 +1022,11 @@ pub(super) fn preview_from_timeline_content(content: &TimelineItemContent) -> La
     use matrix_sdk::ruma::events::room::MediaSource;
 
     let text_kind = |body: &str, formatted: Option<&str>| -> LatestPreview {
+        // A formatted body that sanitises to nothing (all spoiler) must not
+        // fall back to the plain body, which has the text.
         let line = match formatted {
             Some(html) if !html.trim().is_empty() => html_first_line(html),
-            _ => String::new(),
-        };
-        let line = if line.is_empty() {
-            first_line(body)
-        } else {
-            line
+            _ => first_line(body),
         };
         if line.is_empty() {
             LatestPreview::default()
@@ -1021,6 +1130,29 @@ pub(super) fn apply_backfill_previews(
 
 // ── App cache DB (per-account SQLite for persistent UI state) ─────────────
 
+/// Makes the app-cache file owner-only (0600), creating it first if needed, so
+/// it never exists wider than that. SQLite gives its WAL and SHM files the mode
+/// of the database file, so they follow.
+#[cfg(unix)]
+fn restrict_app_cache_to_owner(path: &std::path::Path) {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(path);
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    // Journal files left by an earlier run keep the mode they were created with.
+    for suffix in ["-wal", "-shm"] {
+        let mut side = path.as_os_str().to_owned();
+        side.push(suffix);
+        let side = std::path::PathBuf::from(side);
+        if side.exists() {
+            let _ = std::fs::set_permissions(&side, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+}
+
 /// Open (or create) the per-account app-cache database and ensure the schema
 /// exists. `data_dir` is already the per-account SDK store directory
 /// (`<data>/accounts/<uid>/matrix-store/`), so the file lands there directly.
@@ -1028,6 +1160,8 @@ pub(super) fn apply_backfill_previews(
 #[cfg(not(test))]
 pub(super) fn open_app_cache_db(data_dir: &std::path::Path) -> Option<rusqlite::Connection> {
     let path = data_dir.join("app_cache.db");
+    #[cfg(unix)]
+    restrict_app_cache_to_owner(&path);
     let conn = rusqlite::Connection::open(&path).ok()?;
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
@@ -1101,7 +1235,25 @@ fn ensure_bridge_status_columns(conn: &rusqlite::Connection) -> rusqlite::Result
     if !existing.contains("cap_threads") {
         conn.execute("ALTER TABLE bridge_status ADD COLUMN cap_threads INTEGER", [])?;
     }
+    if !existing.contains("checked_at") {
+        conn.execute("ALTER TABLE bridge_status ADD COLUMN checked_at INTEGER", [])?;
+    }
     Ok(())
+}
+
+/// How long a bridge-status row is trusted before the room is looked up again.
+const BRIDGE_STATUS_TTL_SECS: i64 = 7 * 24 * 60 * 60;
+
+fn unix_now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// The oldest `checked_at` still trusted, given the current time.
+fn bridge_status_cutoff_secs(now: i64) -> i64 {
+    now - BRIDGE_STATUS_TTL_SECS
 }
 
 /// Deletes rows old enough that they're almost certainly abandoned rather
@@ -1684,6 +1836,35 @@ mod bridge_status_migration_tests {
     }
 
     #[test]
+    fn bridge_status_rows_expire_after_the_ttl() {
+        let cutoff = super::bridge_status_cutoff_secs(1_000_000_000);
+        assert_eq!(cutoff, 1_000_000_000 - super::BRIDGE_STATUS_TTL_SECS);
+        // A row checked just inside the window is still trusted; one older is not.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE bridge_status (room_id TEXT PRIMARY KEY, is_bridged INTEGER NOT NULL,
+                 cap_threads INTEGER, checked_at INTEGER);
+             INSERT INTO bridge_status VALUES ('!fresh:x', 0, 0, 1000000000);
+             INSERT INTO bridge_status VALUES ('!stale:x', 0, 0, 1);
+             INSERT INTO bridge_status VALUES ('!legacy:x', 0, 0, NULL);",
+        )
+        .unwrap();
+        let trusted = |room: &str| -> bool {
+            conn.query_row(
+                "SELECT 1 FROM bridge_status WHERE room_id = ?1 \
+                 AND (is_bridged = 0 OR cap_threads IS NOT NULL) \
+                 AND checked_at IS NOT NULL AND checked_at >= ?2",
+                rusqlite::params![room, cutoff],
+                |_| Ok(()),
+            )
+            .is_ok()
+        };
+        assert!(trusted("!fresh:x"));
+        assert!(!trusted("!stale:x"));
+        assert!(!trusted("!legacy:x"));
+    }
+
+    #[test]
     fn adds_cap_threads_to_old_schema_and_is_idempotent() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -2095,5 +2276,79 @@ mod known_room_pack_tests {
         let mut rows = read_known_room_packs(&conn);
         rows.sort();
         assert_eq!(rows.len(), 2);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod app_cache_mode_tests {
+    use super::restrict_app_cache_to_owner;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+
+    fn mode_of(path: &std::path::Path) -> u32 {
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("tesseract-app-cache-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_new_app_cache_file_is_created_owner_only() {
+        let dir = scratch_dir("new");
+        let path = dir.join("app_cache.db");
+        restrict_app_cache_to_owner(&path);
+        assert!(path.exists());
+        assert_eq!(mode_of(&path), 0o600);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_existing_app_cache_file_is_tightened_to_owner_only() {
+        let dir = scratch_dir("existing");
+        let path = dir.join("app_cache.db");
+        std::fs::write(&path, b"").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        restrict_app_cache_to_owner(&path);
+        assert_eq!(mode_of(&path), 0o600);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod backfill_update_tests {
+    use super::{backfill_update_due, BACKFILL_UPDATE_MIN_INTERVAL};
+    use std::time::Duration;
+
+    #[test]
+    fn a_progress_update_waits_for_a_full_batch_and_the_interval() {
+        // The first full batch goes out at once.
+        assert!(backfill_update_due(5, 0, 5, None));
+        // A partial batch does not, whatever the time since the last update.
+        assert!(!backfill_update_due(4, 0, 5, None));
+        // A full batch inside the interval waits for the interval to pass.
+        let early = Some(Duration::from_millis(400));
+        assert!(!backfill_update_due(10, 5, 5, early));
+        let full = Some(BACKFILL_UPDATE_MIN_INTERVAL);
+        assert!(backfill_update_due(10, 5, 5, full));
+    }
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::backfill_retry_delay;
+    use std::time::Duration;
+
+    #[test]
+    fn backfill_retry_delay_doubles_then_caps() {
+        assert_eq!(backfill_retry_delay(1), Duration::from_secs(30));
+        assert_eq!(backfill_retry_delay(2), Duration::from_secs(60));
+        assert_eq!(backfill_retry_delay(5), Duration::from_secs(480));
+        assert_eq!(backfill_retry_delay(6), Duration::from_secs(600));
+        assert_eq!(backfill_retry_delay(u32::MAX), Duration::from_secs(600));
     }
 }

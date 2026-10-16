@@ -10,10 +10,24 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <string>
 
 namespace tesseract::views
 {
+
+// Member rows shown while the list is collapsed.
+constexpr std::size_t kCollapsedMemberRows = 5;
+
+// Display order: higher power level first, then display name, case-insensitive.
+static bool member_before(const tesseract::RoomMember& a, const tesseract::RoomMember& b)
+{
+    if (a.power_level != b.power_level) return a.power_level > b.power_level;
+    return std::lexicographical_compare(
+        a.display_name.begin(), a.display_name.end(),
+        b.display_name.begin(), b.display_name.end(),
+        [](unsigned char x, unsigned char y) { return std::tolower(x) < std::tolower(y); });
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 //  RoomInfoPanelBody
@@ -164,6 +178,7 @@ RoomInfoPanelBody::RoomInfoPanelBody()
         // will reconcile when the SDK echoes the state event back.
         if (topic_ != topic_edit_text_)
         {
+            topic_before_save_ = topic_; // put back if the save fails
             topic_      = topic_edit_text_;
             topic_html_ = {};
             topic_spans_ = autolink_plain_to_spans(topic_);
@@ -178,10 +193,7 @@ RoomInfoPanelBody::RoomInfoPanelBody()
         topic_edit_text_ = topic_;
         if (on_layout_changed) on_layout_changed();
     });
-    expand_btn_->set_on_click([this]() {
-        members_expanded_ = true;
-        if (on_layout_changed) on_layout_changed();
-    });
+    expand_btn_->set_on_click([this]() { expand_members_(); });
     leave_btn_->set_on_click([this]() {
         if (on_leave_room) on_leave_room(room_id_);
     });
@@ -199,6 +211,25 @@ RoomInfoPanelBody::RoomInfoPanelBody()
     save_btn_->set_visible(false);
     cancel_btn_->set_visible(false);
     expand_btn_->set_visible(false);
+}
+
+void RoomInfoPanelBody::topic_save_failed(const std::string& attempted)
+{
+    // Only undo the optimistic value: a topic the server has since sent, or
+    // one the user has typed again, is not this save's to revert.
+    if (topic_ != attempted)
+        return;
+    topic_       = topic_before_save_;
+    topic_html_  = {};
+    topic_spans_ = autolink_plain_to_spans(topic_);
+    topic_layout_.reset();
+    if (on_layout_changed) on_layout_changed();
+}
+
+void RoomInfoPanel::topic_save_failed(const std::string& attempted)
+{
+    if (body_)
+        body_->topic_save_failed(attempted);
 }
 
 void RoomInfoPanelBody::open(const tesseract::RoomInfo& info)
@@ -223,6 +254,7 @@ void RoomInfoPanelBody::open(const tesseract::RoomInfo& info)
     scroll_y_         = 0.0f;
 
     members_.clear();
+    members_ordered_ = 0;
     member_layouts_.clear();
     member_rects_.clear();
 
@@ -273,13 +305,29 @@ void RoomInfoPanelBody::refresh_info(const tesseract::RoomInfo& info)
     if (on_layout_changed) on_layout_changed();
 }
 
+// The badge names the room's visibility with the same labels as the security
+// page's option list, behind a prefix so the eye glyph has a subject. An
+// unknown wire value is shown as it arrived.
+static std::string history_visibility_label(const std::string& value)
+{
+    if (value == "world_readable")
+        return tk::trf(tk::tr("History: {0}"), {tk::tr("Anyone")});
+    if (value == "shared")
+        return tk::trf(tk::tr("History: {0}"), {tk::tr("Members")});
+    if (value == "invited")
+        return tk::trf(tk::tr("History: {0}"), {tk::tr("Members (since invited)")});
+    if (value == "joined")
+        return tk::trf(tk::tr("History: {0}"), {tk::tr("Members (since joined)")});
+    return value;
+}
+
 void RoomInfoPanelBody::update_badges_()
 {
     std::vector<tk::BadgeFlow::Badge> badges;
     if (is_encrypted_)
         badges.push_back({tk::tr("Encrypted"), kLockKeyholeSvg, {}});
     if (!history_visibility_.empty())
-        badges.push_back({history_visibility_, kEyeSvg, {}});
+        badges.push_back({history_visibility_label(history_visibility_), kEyeSvg, {}});
     if (!language_.empty())
         badges.push_back({bcp47_display_name(language_), kLanguagesSvg, {}});
     if (is_bridged_)
@@ -324,6 +372,40 @@ const std::vector<PopupMenu::Item>& RoomInfoPanelBody::member_menu_items_for_tes
     return member_menu_ ? member_menu_->items_for_test() : kEmpty;
 }
 
+std::string RoomInfoPanelBody::badge_labels_for_test() const
+{
+    return badge_flow_ ? badge_flow_->access_name() : std::string();
+}
+
+// Puts the first `count` members in display order. A roster can run to
+// tens of thousands, and a collapsed list shows five rows, so the rest stays
+// unordered until the list expands.
+void RoomInfoPanelBody::order_members_(std::size_t count)
+{
+    count = std::min(count, members_.size());
+    if (count <= members_ordered_) return;
+    std::partial_sort(members_.begin(),
+                      members_.begin() + static_cast<std::ptrdiff_t>(count),
+                      members_.end(), member_before);
+    members_ordered_ = count;
+}
+
+void RoomInfoPanelBody::expand_members_()
+{
+    order_members_(members_.size());
+    members_expanded_ = true;
+    if (on_layout_changed) on_layout_changed();
+}
+
+std::vector<std::string> RoomInfoPanelBody::shown_member_names_for_test() const
+{
+    std::vector<std::string> names;
+    const std::size_t rows = std::min(member_rects_.size(), members_.size());
+    for (std::size_t i = 0; i < rows; ++i)
+        names.push_back(members_[i].display_name);
+    return names;
+}
+
 tk::Rect RoomInfoPanelBody::member_row_rect_for_test(int i) const
 {
     if (i < 0 || i >= static_cast<int>(member_rects_.size()))
@@ -341,16 +423,9 @@ void RoomInfoPanelBody::set_presence_provider(PresenceProvider p)
 void RoomInfoPanelBody::set_members(std::vector<tesseract::RoomMember> members)
 {
     members_ = std::move(members);
-    std::sort(members_.begin(), members_.end(),
-        [](const tesseract::RoomMember& a, const tesseract::RoomMember& b) {
-            if (a.power_level != b.power_level) return a.power_level > b.power_level;
-            return std::lexicographical_compare(
-                a.display_name.begin(), a.display_name.end(),
-                b.display_name.begin(), b.display_name.end(),
-                [](unsigned char x, unsigned char y) {
-                    return std::tolower(x) < std::tolower(y);
-                });
-        });
+    members_ordered_ = 0;
+    // An already-expanded list shows every row, so every row needs ordering.
+    order_members_(members_expanded_ ? members_.size() : kCollapsedMemberRows);
     member_layouts_.clear();
     member_rects_.clear();
 
@@ -537,8 +612,8 @@ void RoomInfoPanelBody::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
 
     // Member rows
     const int total_members   = static_cast<int>(members_.size());
-    const int visible_members = (members_expanded_ || total_members <= 5)
-                                    ? total_members : 5;
+    const int visible_members = (members_expanded_ || total_members <= kCollapsedMemberRows)
+                                    ? total_members : static_cast<int>(kCollapsedMemberRows);
 
     member_rects_.clear();
     for (int i = 0; i < visible_members; ++i)
@@ -548,7 +623,7 @@ void RoomInfoPanelBody::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     }
 
     // Expand button (shown when >5 members and not expanded)
-    const bool show_expand = !members_expanded_ && total_members > 5;
+    const bool show_expand = !members_expanded_ && total_members > kCollapsedMemberRows;
     if (expand_btn_)
     {
         expand_btn_->set_visible(show_expand);
@@ -899,9 +974,9 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
     // Member rows
     // Rebuild member layouts lazily as the cache may be empty
     const int visible_count = static_cast<int>(member_rects_.size());
-    if (static_cast<int>(member_layouts_.size()) < static_cast<int>(members_.size()))
+    if (static_cast<int>(member_layouts_.size()) < visible_count)
     {
-        member_layouts_.resize(members_.size());
+        member_layouts_.resize(static_cast<std::size_t>(visible_count));
     }
 
     for (int i = 0; i < visible_count; ++i)

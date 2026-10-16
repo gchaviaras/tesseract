@@ -191,3 +191,13 @@ TEST_CASE("TextField insets the native control inside its own rect so an "
     CHECK(tiny_host.field->last_rect.w == 0.0f);
     CHECK(tiny_host.field->last_rect.h == 0.0f);
 }
+
+TEST_CASE("TextField shown or focused before it is attached does not crash")
+{
+    auto field_owner = tk::create_root_widget<TextField>(nullptr, 40.0f);
+    TextField& field = *field_owner;
+    CHECK_NOTHROW(field.set_visible(false));
+    CHECK_NOTHROW(field.set_visible(true));
+    CHECK_NOTHROW(field.set_focused(true));
+    CHECK_NOTHROW(field.set_focused(false));
+}

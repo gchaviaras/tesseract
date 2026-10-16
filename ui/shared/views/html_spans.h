@@ -58,6 +58,11 @@ std::vector<tk::TextSpan> autolink_plain_to_spans(std::string_view text);
 std::vector<tk::TextSpan> split_room_mentions(std::vector<tk::TextSpan> spans,
                                               bool dark);
 
+// Replaces a literal U+FFFC in the text of every non-image span with U+FFFD.
+// U+FFFC is the inline-image carrier, and a renderer pairs each image span
+// with the next carrier it finds, so text from a message must not supply one.
+void neutralize_literal_carriers(std::vector<tk::TextSpan>& spans);
+
 // Parse the Matrix HTML formatted_body into a list of BodyBlocks, one per
 // block-level element (paragraph, heading, list item, blockquote, table row).
 // This preserves block structure for proper indentation, bullet markers, and

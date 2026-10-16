@@ -73,6 +73,23 @@ public:
     /// Platform factory. Returns nullptr when screen capture is unavailable
     /// (e.g. missing entitlements or unsupported OS version).
     static std::unique_ptr<ScreenCapture> create();
+
+    /// Called when capture ends on its own: the user declined the portal or
+    /// picker, a platform step failed, or the captured window or device went
+    /// away. Not called after a stop() the caller asked for. Runs on the
+    /// capture thread or inside start(), so the owner must hop to its own
+    /// thread. Set before start().
+    using FailureCallback = std::function<void()>;
+    void set_failure_callback(FailureCallback cb) { on_failure_ = std::move(cb); }
+
+protected:
+    void report_failure_() const
+    {
+        if (on_failure_)
+            on_failure_();
+    }
+
+    FailureCallback on_failure_;
 };
 
 std::unique_ptr<ScreenCapture> make_screen_capture_win32();

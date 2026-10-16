@@ -417,14 +417,18 @@ void ShellBase::on_pin_requested(const std::string& event_id)
     auto sess = active_account_;
     auto rid = current_room_id_;
     auto eid = event_id;
-    run_async_mut_([sess, rid, eid]() mutable {
+    auto alive = weak_flag();
+    run_async_mut_([this, alive, sess, rid, eid]() mutable {
         if (!sess || !sess->client) return;
         auto r = sess->client->pin_event(rid, eid);
         if (!r.ok)
         {
-            // TODO: surface this via a transient status mechanism once one exists
             std::fprintf(stderr, "[pin] pin failed for %s in %s: %s\n",
                          eid.c_str(), rid.c_str(), r.message.c_str());
+            if (!alive.expired())
+                post_to_ui_alive_([this, msg = r.message]() {
+                    show_status_message_(tk::trf(tk::tr("Could not pin the message: {0}"), {msg}));
+                });
         }
     });
 }
@@ -433,14 +437,25 @@ void ShellBase::on_unpin_requested(const std::string& event_id)
 {
     if (!client_ || current_room_id_.empty() || event_id.empty())
         return;
-    auto r = client_->unpin_event(current_room_id_, event_id);
-    if (!r.ok)
-    {
-        // TODO: surface this via a transient status mechanism once one exists
-        std::fprintf(stderr, "[pin] unpin failed for %s in %s: %s\n",
-                     event_id.c_str(), current_room_id_.c_str(),
-                     r.message.c_str());
-    }
+    auto sess = active_account_;
+    auto rid = current_room_id_;
+    auto eid = event_id;
+    auto alive = weak_flag();
+    // The unpin is a state write over the network: run it on the mutating
+    // pool like pin, not on the UI thread.
+    run_async_mut_([this, alive, sess, rid, eid]() mutable {
+        if (!sess || !sess->client) return;
+        auto r = sess->client->unpin_event(rid, eid);
+        if (!r.ok)
+        {
+            std::fprintf(stderr, "[pin] unpin failed for %s in %s: %s\n",
+                         eid.c_str(), rid.c_str(), r.message.c_str());
+            if (!alive.expired())
+                post_to_ui_alive_([this, msg = r.message]() {
+                    show_status_message_(tk::trf(tk::tr("Could not unpin the message: {0}"), {msg}));
+                });
+        }
+    });
 }
 
 // Compute and apply calls-button visibility for one room header:
@@ -676,8 +691,14 @@ void ShellBase::after_active_room_changed_()
     // threads button reflects whether the room contains threads — long before
     // the user opens the panel. subscribe_room_threads is idempotent (aborts
     // any prior subscription for this room) and the RoomSwitch transition
-    // already released the outgoing room's handle.
-    client_->subscribe_room_threads(current_room_id_);
+    // already released the outgoing room's handle. Queued on the mut pool
+    // behind that release (RoomPane::apply_thread_transition_), so the release
+    // cannot run after this re-subscribe and drop the active room's handle.
+    run_async_mut_([sess = active_account_, rid = current_room_id_]
+    {
+        if (sess && sess->client)
+            sess->client->subscribe_room_threads(rid);
+    });
     // Seed the button from the local snapshot. On a first visit the service
     // hasn't paginated yet so this is empty, which correctly hides the
     // button; on_threads_updated will reveal it once roots are discovered.
@@ -1277,8 +1298,15 @@ void ShellBase::sweep_idle_timelines_()
                                        kIdleTimelineTtl))
     {
         thread_last_active_.erase({room_id, thread_root});
+        // Queued behind any thread subscribe on the mutable pool, like the panel
+        // transitions, so the release cannot overtake it.
         if (client_)
-            client_->unsubscribe_thread(room_id, thread_root);
+            run_async_mut_([sess = active_account_, rid = std::string(room_id),
+                            root = std::string(thread_root)]
+            {
+                if (sess && sess->client)
+                    sess->client->unsubscribe_thread(rid, root);
+            });
     }
 }
 } // namespace tesseract

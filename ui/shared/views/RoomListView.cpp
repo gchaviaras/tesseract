@@ -14,6 +14,7 @@
 #include <tesseract/visual.h>
 
 #include <algorithm>
+#include <iterator>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -441,6 +442,13 @@ private:
         auto& tween = hover_fade_[key];
         tween.set_target(target_on ? 1.0f : 0.0f);
         const float value = tween.step(kRoomHoverFadeMs);
+        if (!target_on && !tween.still_animating())
+        {
+            // Settled at rest: an absent entry reads the same 0, so drop it
+            // rather than keep one per room ever hovered.
+            hover_fade_.erase(key);
+            return value;
+        }
         if (tween.still_animating())
         {
             // RoomListView is always a root widget in the live app
@@ -1117,6 +1125,17 @@ public:
         room_cache_.clear();
     }
 
+    // Forget the hover fade of rooms that are no longer in `rooms`.
+    void prune_hover_fade(const std::vector<tesseract::RoomInfo>& rooms)
+    {
+        for (auto it = hover_fade_.begin(); it != hover_fade_.end();)
+        {
+            const bool present = std::any_of(rooms.begin(), rooms.end(),
+                [&](const tesseract::RoomInfo& r) { return r.id == it->first; });
+            it = present ? std::next(it) : hover_fade_.erase(it);
+        }
+    }
+
     // Width (row-local, includes the outer inset) needed to render `room`'s
     // name + last-message preview with no ellipsis. Used by
     // RoomListView::longest_visible_row_width() and the icon-only hover flyout.
@@ -1628,6 +1647,9 @@ void RoomListView::set_rooms(std::vector<tesseract::RoomInfo> rooms)
     {
         return;
     }
+    // Forget the hover fade of rooms that left the list.
+    if (adapter_)
+        adapter_->prune_hover_fade(rooms);
     // heights_dirty_ is true until the first paint pass, so visible_range()
     // returns {0,-1} and visible_room_ids() returns {} on the very first call.
     // Track the empty→non-empty transition separately so the initial load

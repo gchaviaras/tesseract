@@ -224,12 +224,47 @@ pub fn remove_record(conn: &Connection, event_id: &str) -> rusqlite::Result<()> 
 /// Drop everything from the index (privacy toggle turned off) and reset the
 /// backfill-complete marker so re-enabling re-crawls history.
 pub fn clear(conn: &Connection) -> rusqlite::Result<()> {
+    // Turning the index off must leave no message text behind. A plain DELETE
+    // keeps the old text in freed pages and in the WAL until something
+    // overwrites them, and the FTS index keeps every deleted word as a
+    // tombstone until it is merged away. So: zero freed pages on delete, empty
+    // the FTS index (it is rebuilt from the, now empty, content table), rewrite
+    // the file, then truncate the WAL.
+    conn.execute_batch("PRAGMA secure_delete = ON;")?;
     // Deleting the rows fires the AD trigger per row, keeping the FTS table in
-    // sync; an explicit `DELETE FROM message_fts` is therefore unnecessary.
+    // sync; the rebuild below then drops the tombstones that leaves behind.
     conn.execute_batch(
         "DELETE FROM message_index;
-         UPDATE search_state SET backfill_done = 0 WHERE id = 0;",
-    )
+         UPDATE search_state SET backfill_done = 0 WHERE id = 0;
+         INSERT INTO message_fts(message_fts) VALUES('rebuild');",
+    )?;
+    conn.execute_batch("VACUUM;")?;
+    // A reader on another connection can make the truncating checkpoint report
+    // busy, so it is retried until it goes through.
+    for attempt in 0..20 {
+        let busy: i64 = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?;
+        if busy == 0 {
+            return Ok(());
+        }
+        if attempt < 19 {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    }
+    Err(rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+        Some("the WAL could not be truncated".to_owned()),
+    ))
+}
+
+/// [`clear`] on a connection of its own to the index at `path`, so the shared
+/// connection (and the lock around it) is not held for the duration of a large
+/// delete.
+pub fn clear_file(path: &std::path::Path) -> rusqlite::Result<()> {
+    let conn = Connection::open(path)?;
+    conn.busy_timeout(std::time::Duration::from_secs(10))?;
+    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    ensure_schema(&conn)?;
+    clear(&conn)
 }
 
 /// Turn arbitrary user input into a safe FTS5 MATCH expression.
@@ -365,6 +400,12 @@ impl SearchIndexCtx {
         }
         let guard = self.db.lock();
         let Some(conn) = guard.as_ref() else { return };
+        // A local echo has no event id yet. Indexing it would write one
+        // `event_id = ''` row that the next echo overwrites and nothing ever
+        // removes; the real event, once it arrives, is indexed under its id.
+        if ev.event_id.is_empty() {
+            return;
+        }
         if is_indexable(&ev.msg_type) && !ev.body.trim().is_empty() {
             let _ = index_record(
                 conn,
@@ -376,7 +417,7 @@ impl SearchIndexCtx {
                 &ev.body,
                 &ev.thread_root_id,
             );
-        } else if !ev.event_id.is_empty() {
+        } else {
             let _ = remove_record(conn, &ev.event_id);
         }
     }
@@ -518,12 +559,15 @@ impl ClientFfi {
             // Clear the on-disk index off the UI thread: a large DELETE + the
             // per-row FTS 'delete' trigger cascade (and lock contention with
             // the indexing/search tasks) must not block the settings window.
-            let db = Arc::clone(&self.search_db);
-            self.rt.spawn(async move {
+            // The delete runs on a connection of its own, so indexing and
+            // searches on the shared one are not held up behind it.
+            let path = self.data_dir.join("search_index.db");
+            self.rt.spawn_blocking(move || {
                 let _job = super::activity::begin("search-index-clear", "Search", super::activity::JobKind::OneShot);
-                let guard = db.lock();
-                if let Some(conn) = guard.as_ref() {
-                    let _ = clear(conn);
+                if path.exists() {
+                    if let Err(e) = clear_file(&path) {
+                        tracing::warn!("clearing the search index failed: {e}");
+                    }
                 }
             });
         }
@@ -868,6 +912,64 @@ mod tests {
         clear(&conn).unwrap();
         assert!(search_room(&conn, "alpha", None, 10).unwrap().is_empty());
         assert!(search_room(&conn, "beta", None, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn clear_file_leaves_no_message_text_on_disk() {
+        let dir = std::env::temp_dir().join(format!("tess-clear-file-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("search_index.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+            ensure_schema(&conn).unwrap();
+            idx(&conn, "$e1", "!r:x", "@a:x", "A", 1, "zanzibarqwerty").unwrap();
+            // The reader keeps the shared connection open while the file is cleared.
+            clear_file(&path).unwrap();
+            assert!(search_room(&conn, "zanzibarqwerty", None, 10).unwrap().is_empty());
+            assert!(!is_backfill_complete(&conn));
+        }
+        for name in ["search_index.db", "search_index.db-wal"] {
+            if let Ok(bytes) = std::fs::read(dir.join(name)) {
+                assert!(
+                    !bytes.windows(14).any(|w| w == b"zanzibarqwerty"),
+                    "{name} still holds the message text"
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clear_zeroes_freed_pages() {
+        // The index must not keep deleted message text: secure_delete is on for
+        // the connection that clears it.
+        let conn = db();
+        idx(&conn, "$e1", "!r:x", "@a:x", "A", 1, "zanzibar").unwrap();
+        clear(&conn).unwrap();
+        let secure: i64 = conn
+            .query_row("PRAGMA secure_delete", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(secure, 1);
+    }
+
+    #[test]
+    fn clear_leaves_no_message_text_in_the_database_file() {
+        let path = std::env::temp_dir().join(format!(
+            "tesseract-search-clear-{}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        {
+            let conn = Connection::open(&path).unwrap();
+            ensure_schema(&conn).unwrap();
+            idx(&conn, "$e1", "!r:x", "@a:x", "A", 1, "zanzibarquux").unwrap();
+            clear(&conn).unwrap();
+        }
+        let bytes = std::fs::read(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let needle = b"zanzibarquux";
+        assert!(!bytes.windows(needle.len()).any(|w| w == needle));
     }
 
     #[test]

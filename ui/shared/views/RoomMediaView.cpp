@@ -567,10 +567,17 @@ void RoomMediaView::handle_cell_pointer_up_(std::size_t row_idx,
     const tk::Rect rrect = list_->row_world_rect(static_cast<int>(row_idx));
     if (rrect.w <= 0.0f)
         return;
-    int col = static_cast<int>(
-        (world.x - rrect.x - kPadX) / (kCellSize + kCellSpacing));
-    col = std::clamp(col, 0, static_cast<int>(row.items.size()) - 1);
-    activate_item_(row.items[static_cast<std::size_t>(col)]);
+    // Only a click on a cell activates it. The padding, the gap between
+    // cells and the blank space after a strip's last cell do nothing.
+    const float x = world.x - rrect.x - kPadX;
+    const float stride = kCellSize + kCellSpacing;
+    if (x < 0.0f)
+        return;
+    const auto col = static_cast<std::size_t>(x / stride);
+    if (col >= row.items.size() ||
+        x - static_cast<float>(col) * stride >= kCellSize)
+        return;
+    activate_item_(row.items[col]);
 }
 
 void RoomMediaView::activate_item_(const MessageRowData& item)

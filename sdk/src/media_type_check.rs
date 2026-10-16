@@ -54,6 +54,10 @@ const EXEC_EXTS: &[&str] = &[
     "xll", "iqy", "slk", "application", "appref-ms", "diagcab", "library-ms", "search-ms",
     "theme", "themepack", "wsc", "sct", "ps2", "ps2xml", "msh", "msh1", "msh2", "mshxml",
     "webloc", "inetloc", "fileloc", "tool", "ade", "adp", "mda", "mdb", "ws", "vbscript",
+    // Types the OS mounts, installs or configures when opened.
+    "rdp", "mobileconfig", "iso", "img", "vhd", "vhdx", "cab", "one", "onetoc2", "crx", "xpi",
+    "flatpakref", "flatpakrepo", "ovpn", "ics", "eml", "torrent", "website", "hlp", "pyc",
+    "kdelnk",
 ];
 
 const EXEC_MIMES: &[&str] = &[
@@ -592,11 +596,11 @@ mod tests {
     fn unknown_extension_cannot_be_vouched_for() {
         // Declared type and contents are a perfect PNG, but ".rdp" / ".iso" are
         // what the OS acts on.
-        for name in ["a.rdp", "a.reg2", "a.unknownext"] {
+        for name in ["a.reg2", "a.unknownext"] {
             assert_eq!(check(name, "image/png", PNG).verdict, Verdict::NotMedia, "{name}");
         }
         // Known-but-not-media extensions never open silently either.
-        for name in ["a.iso", "a.vhd", "a.img"] {
+        for name in ["a.rdp", "a.iso", "a.vhd", "a.img"] {
             assert_ne!(check(name, "image/png", PNG).verdict, Verdict::Ok, "{name}");
         }
     }
@@ -619,6 +623,26 @@ mod tests {
         assert_eq!(check("a.7z", "application/x-7z-compressed", b"").verdict, Verdict::NotMedia);
         assert_eq!(check("a.xlsx", "", b"").verdict, Verdict::NotMedia);
         assert_eq!(check("a.png", "image/png", PNG).effective_mime, "image/png");
+    }
+
+    #[test]
+    fn denylist_covers_types_the_os_acts_on() {
+        for name in [
+            "setup.rdp",
+            "profile.mobileconfig",
+            "disk.iso",
+            "disk.vhdx",
+            "bundle.cab",
+            "invite.ics",
+            "mail.eml",
+            "vpn.ovpn",
+            "ext.crx",
+            "addon.xpi",
+            "pkg.flatpakref",
+            "x.torrent",
+        ] {
+            assert_eq!(check(name, "", b"x").verdict, Verdict::Executable, "{name}");
+        }
     }
 
     #[test]

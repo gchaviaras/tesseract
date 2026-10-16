@@ -214,6 +214,33 @@ std::optional<std::string> slash_success_message(const std::string& body)
     return lower == "reset" ? tk::tr("Avatar reset for this room") : tk::tr("Avatar updated for this room");
 }
 
+std::string strip_command_from_html(const std::string& html, std::string_view command)
+{
+    std::string_view h = html;
+    std::string prefix;
+    if (h.substr(0, 3) == "<p>")
+    {
+        prefix = "<p>";
+        h.remove_prefix(3);
+    }
+    const std::string literal = "/" + std::string(command);
+    if (h.substr(0, literal.size()) != literal)
+        return {};
+    h.remove_prefix(literal.size());
+    if (!h.empty() && h.front() == ' ')
+        h.remove_prefix(1);
+    return prefix + std::string(h);
+}
+
+std::string append_to_html(const std::string& html, const std::string& tail)
+{
+    constexpr std::string_view kClose = "</p>";
+    if (html.size() >= kClose.size() &&
+        html.compare(html.size() - kClose.size(), kClose.size(), kClose) == 0)
+        return html.substr(0, html.size() - kClose.size()) + tail + std::string(kClose);
+    return html + tail;
+}
+
 Result dispatch_compose_send(Client& client,
                              const std::string& room_id,
                              const std::string& body,
@@ -241,7 +268,15 @@ Result dispatch_compose_send(Client& client,
             {
                 text = std::string(suffix) + " " + text;
             }
-            return client.send_message(room_id, text, "");
+            // The typed text keeps its formatting and mention pills.
+            std::string html;
+            if (*suffix != '\0' && !formatted_body.empty())
+            {
+                const std::string typed = strip_command_from_html(formatted_body, "shrug");
+                if (!typed.empty())
+                    html = append_to_html(typed, " \xC2\xAF\\_(\xE3\x83\x84)_/\xC2\xAF");
+            }
+            return client.send_message(room_id, text, html);
         }
     }
 
@@ -255,14 +290,11 @@ Result dispatch_compose_send(Client& client,
         // formatted body does NOT start with the literal `/me ` (e.g. because
         // it begins with an HTML tag introduced by markdown) we drop it
         // rather than emit a mismatched body / formatted_body pair.
+        // (The composer wraps markdown output in <p>, which strip_command_from_html
+        // looks through, so "/me *waves*" keeps its emphasis.)
         std::string emote_formatted;
         if (!formatted_body.empty())
-        {
-            if (const char* f = strip_prefix(formatted_body, "/me "))
-            {
-                emote_formatted = f;
-            }
-        }
+            emote_formatted = strip_command_from_html(formatted_body, "me");
         if (emote_body.empty())
         {
             // An empty `/me ` does nothing; report success so the composer
@@ -309,7 +341,17 @@ Result dispatch_compose_send(Client& client,
 
     // `/myroomnick <name>` — set room-specific display name.
     if (const char* name = strip_prefix(body, "/myroomnick "))
-        return client.set_user_room_display_name(room_id, name);
+    {
+        // A blank name must not reach the client: an empty display name clears it.
+        std::string nick = name;
+        while (!nick.empty() && (nick.front() == ' ' || nick.front() == '\t'))
+            nick.erase(nick.begin());
+        while (!nick.empty() && (nick.back() == ' ' || nick.back() == '\t'))
+            nick.pop_back();
+        if (nick.empty())
+            return Result{false, tk::tr("no display name given; use /myroomnick <name>")};
+        return client.set_user_room_display_name(room_id, nick);
+    }
 
     // `/myroomavatar <mxc_uri | http(s) url>` — set the room-specific avatar
     // from an mxc:// URI, or fetch + square + resize + upload a web image.
@@ -417,20 +459,37 @@ bool parse_integer_token(const std::string& t, long long& out)
     {
         return false;
     }
-    return idx == t.size();
+    if (idx != t.size()) return false;
+    // Canonical JSON only carries integers up to 2^53-1 exactly.
+    constexpr long long kMaxSafe = (1LL << 53) - 1;
+    return out >= -kMaxSafe && out <= kMaxSafe;
 }
 
+// `<sigil>localpart:server` with a non-empty localpart and server and no
+// whitespace or control characters: the shape a Matrix identifier can take.
+bool looks_like_sigil_id(const std::string& t, char sigil)
+{
+    if (t.size() < 4 || t.front() != sigil)
+        return false;
+    for (unsigned char c : t)
+    {
+        if (c <= ' ' || c == 0x7f)
+            return false;
+    }
+    const auto colon = t.find(':');
+    return colon != std::string::npos && colon > 1 && colon + 1 < t.size();
+}
 bool looks_like_user_id(const std::string& t)
 {
-    return t.size() > 1 && t.front() == '@' && t.find(':') != std::string::npos;
+    return looks_like_sigil_id(t, '@');
 }
 bool looks_like_room_id(const std::string& t)
 {
-    return t.size() > 1 && t.front() == '!' && t.find(':') != std::string::npos;
+    return looks_like_sigil_id(t, '!');
 }
 bool looks_like_room_alias(const std::string& t)
 {
-    return t.size() > 1 && t.front() == '#' && t.find(':') != std::string::npos;
+    return looks_like_sigil_id(t, '#');
 }
 bool looks_like_event_id(const std::string& t)
 {

@@ -25,6 +25,7 @@ TEST_CASE("ToggleList closes the list", "[shell][thread_transition]")
         P::List, P::Closed, "", Tr::ToggleList, "");
     CHECK(t.new_state == P::Closed);
     CHECK(t.unsubscribe_room_threads_);
+    CHECK(t.closes_list_);
 }
 
 TEST_CASE("ToggleList while Open closes everything",

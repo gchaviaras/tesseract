@@ -271,43 +271,47 @@ void ComboBox::set_expanded_(bool expanded)
 {
     if (expanded_ == expanded)
         return;
-    expanded_ = expanded;
 
+    if (!expanded)
+    {
+        // Collapsing needs no host, so it always takes effect.
+        expanded_ = false;
+        if (popup_)
+            popup_->set_visible(false);
+        return;
+    }
+
+    // Expanding needs a host and a popup surface. Without them the box stays
+    // collapsed, so it does not swallow keys with no dropdown open.
     auto* h = host();
     if (!h)
         return;
 
-    if (expanded && !tooltip_text_.empty())
+    if (!tooltip_text_.empty())
         h->hide_tooltip(this);
 
-    if (expanded)
+    if (!popup_)
     {
+        popup_ = h->make_popup_surface();
         if (!popup_)
-        {
-            popup_ = h->make_popup_surface();
-            if (!popup_)
-                return;
-            // Matches kDropRadius, which DropdownList::paint_before_children
-            // draws its own rounded background with — without this, the
-            // popup's own (square) top-level window shows opaque corners
-            // outside that rounded background on backends where the popup
-            // surface isn't otherwise clipped to its content's shape.
-            popup_->set_corner_radius(kDropRadius);
-            auto list = std::make_unique<DropdownList>();
-            dropdown_ = list.get();
-            dropdown_->on_row_activated = [this](std::size_t idx) { commit_(idx); };
-            dropdown_->on_hover_changed = [this](int row) { set_hovered_(row); };
-            popup_->set_root(std::move(list));
-        }
-        dropdown_->set_options(&options_, selected_value_);
-        dropdown_->set_hovered(hovered_option_);
-        reposition_popup_();
-        popup_->set_visible(true);
+            return;
+        // Matches kDropRadius, which DropdownList::paint_before_children
+        // draws its own rounded background with — without this, the
+        // popup's own (square) top-level window shows opaque corners
+        // outside that rounded background on backends where the popup
+        // surface isn't otherwise clipped to its content's shape.
+        popup_->set_corner_radius(kDropRadius);
+        auto list = std::make_unique<DropdownList>();
+        dropdown_ = list.get();
+        dropdown_->on_row_activated = [this](std::size_t idx) { commit_(idx); };
+        dropdown_->on_hover_changed = [this](int row) { set_hovered_(row); };
+        popup_->set_root(std::move(list));
     }
-    else if (popup_)
-    {
-        popup_->set_visible(false);
-    }
+    expanded_ = true;
+    dropdown_->set_options(&options_, selected_value_);
+    dropdown_->set_hovered(hovered_option_);
+    reposition_popup_();
+    popup_->set_visible(true);
 }
 
 void ComboBox::reposition_popup_()

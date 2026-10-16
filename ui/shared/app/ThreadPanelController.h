@@ -56,6 +56,10 @@ public:
         std::vector<std::string> threads_to_subscribe;
         bool subscribe_room_threads_   = false;
         bool unsubscribe_room_threads_ = false;
+        // Set with unsubscribe_room_threads_ when the list is closed. A main pane's
+        // active room keeps its own background subscription for the threads button,
+        // so the applier may leave the handle in place in that case.
+        bool closes_list_ = false;
     };
 
     // Pure: returns the next state + the subscription side-effects to apply.

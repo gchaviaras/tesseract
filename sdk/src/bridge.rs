@@ -257,8 +257,8 @@ pub mod ffi {
         /// Snapshot of `m.room.pinned_events` resolved against the local event
         /// cache (sender + body snippet + timestamp). Sorted newest-first so
         /// the pinned-events banner can render without a separate fetch.
-        /// `body_preview` is `(image)` / `(file)` / etc. for non-text events
-        /// and `(unavailable)` when the id cannot be resolved.
+        /// `body_preview` is a text code (image, file, …) for non-text events
+        /// and `unavailable` when the id cannot be resolved.
         pinned_events: Vec<PinnedEvent>,
         /// Canonical alias of the room (`#alias:server`), or empty when none
         /// is set.  Read from local state — no network round-trip.
@@ -282,7 +282,7 @@ pub mod ffi {
     /// One entry from `m.room.pinned_events` resolved for the banner UI.
     /// `event_id` is the canonical Matrix event id; the rest is best-effort
     /// metadata pulled from the local event cache. `body_preview` falls back
-    /// to `(unavailable)` when the id cannot be resolved without a network
+    /// to the `unavailable` text code when the id cannot be resolved without a network
     /// round-trip — in that case `sender_name` is empty and `timestamp` is 0,
     /// but click-to-jump still works for events present in loaded history.
     struct PinnedEvent {
@@ -448,6 +448,14 @@ pub mod ffi {
         reason: String,
         banned_by: String,
         can_unban: bool,
+    }
+
+    /// The banned list of a room. `complete` is false when the member sync
+    /// timed out or failed, or the list could not be read, so `members` may
+    /// be missing bans.
+    struct BannedMemberList {
+        members: Vec<BannedMember>,
+        complete: bool,
     }
 
     /// Result of a `resolve_user_profile` lookup. `exists` is true only when
@@ -663,7 +671,8 @@ pub mod ffi {
         /// as fallback). Empty when not a reply or the event isn't cached yet.
         in_reply_to_sender_name: String,
         /// Short body snippet of the replied-to message. For non-text types this is
-        /// "(image)", "(file)", "(voice)", "(sticker)", or "(deleted)" for redacted.
+        /// a language-neutral code (`client/text_code.rs`: image, file, voice,
+        /// sticker, or deleted for redacted) that the UI translates.
         /// Empty when not a reply.
         in_reply_to_body: String,
         /// Sanitized HTML `formatted_body` of the replied-to message, when it had
@@ -732,7 +741,7 @@ pub mod ffi {
         /// Display name of the latest thread reply's sender (resolved profile,
         /// bare Matrix ID fallback). Empty when not a root or summary not ready.
         thread_latest_sender_name: String,
-        /// Snippet of the latest thread reply ("(image)" etc. for non-text).
+        /// Snippet of the latest thread reply (a text code for non-text).
         /// Empty when not a root or summary not ready.
         thread_latest_body: String,
         /// Unix-ms timestamp of the latest thread reply. 0 when unavailable.
@@ -841,6 +850,23 @@ pub mod ffi {
         ok: bool,
         message: String,
         verification_uri: String,
+    }
+
+    /// Result of one slice of a QR grant wait. While `pending` is set, the flow
+    /// has not answered yet and the other fields are empty.
+    struct QrWaitStep {
+        pending: bool,
+        ok: bool,
+        message: String,
+        verification_uri: String,
+    }
+
+    /// Result of one slice of the OAuth browser wait. While `pending` is set,
+    /// the browser has not answered yet and the other fields are empty.
+    struct OAuthWaitStep {
+        pending: bool,
+        ok: bool,
+        message: String,
     }
 
     /// Features a bridge supports, parsed from the `com.beeper.room_features`
@@ -2302,14 +2328,14 @@ pub mod ffi {
         /// (authorization-server metadata is fetchable)? Blocks — worker thread.
         fn homeserver_supports_oauth(self: &ClientFfi, homeserver: &str) -> bool;
 
-        /// Blocks until the browser's loopback redirect arrives (or the flow
-        /// is cancelled). `&ClientFfi` (not `&mut`) so `oauth_cancel` can run
-        /// concurrently on the C++ side instead of deadlocking behind this —
-        /// see the comment on `ClientFfi::oauth_await_callback`.
-        fn oauth_await_callback(self: &ClientFfi) -> OpResult;
-        /// Store the `Client` a successful `oauth_await_callback` produced.
-        /// Fast/non-blocking, called right after `oauth_await_callback`
-        /// returns success.
+        /// One slice of the browser's loopback-redirect wait. Returns `pending`
+        /// until the browser answers or the flow fails. The C++ side calls it in
+        /// a loop, releasing the shared lock between calls. `&ClientFfi` (not
+        /// `&mut`) so `oauth_cancel` can run concurrently — see the comment on
+        /// `ClientFfi::oauth_await_slice`.
+        fn oauth_await_slice(self: &ClientFfi) -> OAuthWaitStep;
+        /// Store the `Client` a successful `oauth_await_slice` produced.
+        /// Fast/non-blocking, called right after a slice reports success.
         fn oauth_commit(self: &mut ClientFfi) -> OpResult;
         fn oauth_cancel(self: &ClientFfi);
 
@@ -2332,18 +2358,19 @@ pub mod ffi {
         /// Start a QR grant flow (existing device generates QR for new device to scan).
         /// Blocks until the QR bitmap is ready; returns RGBA pixel data.
         fn qr_grant_start(self: &mut ClientFfi) -> QrGrantBitmap;
-        /// Blocks until the new device scans the QR code.
-        /// Uses &self so SH_FFI (shared read lock) is held, not MUT_FFI.
-        fn qr_grant_await_scanned(self: &ClientFfi) -> OpResult;
+        /// One slice (about 50 ms) of waiting for the new device to scan the QR
+        /// code. Returns `pending` while the flow still runs, so the caller
+        /// releases its FFI lock and asks again. Uses &self, so SH_FFI is held.
+        fn qr_grant_wait_scanned(self: &ClientFfi) -> QrWaitStep;
         /// Non-blocking: sends the check code (read from new device) into the running flow.
-        /// Uses &self — see qr_grant_await_scanned.
+        /// Uses &self — see qr_grant_wait_scanned.
         fn qr_grant_submit_check_code(self: &ClientFfi, code: u8) -> OpResult;
-        /// Blocks until the flow reaches WaitingForAuth; returns the verification URI.
-        /// Uses &self — see qr_grant_await_scanned.
-        fn qr_grant_await_auth(self: &ClientFfi) -> QrGrantAuth;
-        /// Blocks until the grant flow completes (Done or error).
-        /// Uses &self — see qr_grant_await_scanned.
-        fn qr_grant_await_complete(self: &ClientFfi) -> OpResult;
+        /// One slice of waiting for the flow to reach WaitingForAuth. On success
+        /// `verification_uri` carries the URI. Uses &self — see qr_grant_wait_scanned.
+        fn qr_grant_wait_auth(self: &ClientFfi) -> QrWaitStep;
+        /// One slice of waiting for the grant flow to complete (Done or error).
+        /// Uses &self — see qr_grant_wait_scanned.
+        fn qr_grant_wait_complete(self: &ClientFfi) -> QrWaitStep;
         /// Cancel the grant flow at any phase.
         /// Uses &self so cancellation works even while an await call holds SH_FFI.
         fn qr_grant_cancel(self: &ClientFfi);
@@ -3819,10 +3846,11 @@ pub mod ffi {
         /// Banned members of a room. Syncs the member list first (bounded by
         /// a timeout, since lazy-loaded rooms may not have ban events
         /// locally), then reads the store. Blocks — worker thread.
-        fn get_banned_members(self: &ClientFfi, room_id: &str) -> Vec<BannedMember>;
+        fn get_banned_members(self: &ClientFfi, room_id: &str) -> BannedMemberList;
 
         /// Fetch the joined member list for a room. Blocks — worker thread.
         fn get_room_members(self: &ClientFfi, room_id: &str) -> Vec<RoomMember>;
+        fn room_joined_member_count(self: &ClientFfi, room_id: &str) -> u64;
 
         /// Send an m.room.topic state event. Blocks — worker thread.
         fn set_room_topic(self: &ClientFfi, room_id: &str, topic: &str) -> OpResult;
@@ -4490,15 +4518,15 @@ pub mod ffi {
 
         /// Mute or unmute the local audio track. The track stays published but
         /// delivers silence when muted. No-op when no call is active.
-        fn rtc_set_audio_muted(self: &mut ClientFfi, muted: bool);
+        fn rtc_set_audio_muted(self: &ClientFfi, muted: bool);
 
         /// Mute or unmute the local video track. No-op when no call is active.
-        fn rtc_set_video_muted(self: &mut ClientFfi, muted: bool);
+        fn rtc_set_video_muted(self: &ClientFfi, muted: bool);
 
         /// Inject a raw I420 video frame into the live session. No-op when no
         /// call is active.
         fn rtc_push_video_frame_i420(
-            self: &mut ClientFfi,
+            self: &ClientFfi,
             y: &[u8],
             u: &[u8],
             v: &[u8],
@@ -4517,7 +4545,7 @@ pub mod ffi {
 
         /// Inject a raw I420 screen frame into the live session. No-op when no call active.
         fn rtc_push_screen_frame_i420(
-            self: &mut ClientFfi,
+            self: &ClientFfi,
             y: &[u8],
             u: &[u8],
             v: &[u8],

@@ -260,11 +260,14 @@ void StickerPicker::paint_tab_content(int i, tk::PaintCtx& ctx, tk::Rect tab)
     }
     else
     {
-        std::string initial =
-            pack.display_name.empty()
-                ? std::string("?")
-                : std::string(1, std::toupper(static_cast<unsigned char>(
-                                     pack.display_name[0])));
+        // Initials, not the first byte: a name in another script starts with a
+        // multi-byte character, which one byte would cut in half.
+        std::string initial = tk::initials_of(pack.display_name);
+        if (initial.empty())
+            initial = "?";
+        for (char& ch : initial)
+            if (ch >= 'a' && ch <= 'z')
+                ch = static_cast<char>(ch - 'a' + 'A');
         tk::TextStyle st{};
         st.role = tk::FontRole::Title;
         auto layout = ctx.factory.build_text(initial, st);

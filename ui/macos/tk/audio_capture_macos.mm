@@ -234,17 +234,60 @@ private:
             // If not found, fall back to the default input device (no action needed).
         }
 
+        // A tap must use the input node's own format: a 48 kHz tap on a 44.1 kHz
+        // or 16 kHz microphone raises an uncaught NSException. The tap runs in
+        // the hardware format and an AVAudioConverter brings each buffer to the
+        // 48 kHz mono Int16 the rest of the recorder expects.
+        AVAudioFormat* hw_fmt = [input outputFormatForBus:0];
         AVAudioFormat* fmt = [[AVAudioFormat alloc]
             initWithCommonFormat:AVAudioPCMFormatInt16
                      sampleRate:48000
                        channels:1
                     interleaved:YES];
+        converter_ = [[AVAudioConverter alloc] initFromFormat:hw_fmt toFormat:fmt];
+        if (!converter_ || hw_fmt.sampleRate <= 0 || hw_fmt.channelCount == 0)
+        {
+            // No usable input (no microphone, or a format the converter cannot
+            // read): a tap on that format would raise, so report the failure.
+            converter_ = nil;
+            engine_ = nil;
+            recording_ = false;
+            fire_error_();
+            return;
+        }
+        AVAudioConverter* converter = converter_;
 
         [input installTapOnBus:0
                     bufferSize:4800
-                        format:fmt
+                        format:hw_fmt
                          block:^(AVAudioPCMBuffer* buf, AVAudioTime*) {
-                             handle_buffer_(buf);
+                             if (!converter || buf.frameLength == 0)
+                                 return;
+                             const double ratio = 48000.0 / hw_fmt.sampleRate;
+                             const AVAudioFrameCount cap =
+                                 static_cast<AVAudioFrameCount>(buf.frameLength * ratio) + 64;
+                             AVAudioPCMBuffer* out =
+                                 [[AVAudioPCMBuffer alloc] initWithPCMFormat:fmt
+                                                                frameCapacity:cap];
+                             __block bool supplied = false;
+                             NSError* conv_err = nil;
+                             AVAudioConverterOutputStatus status =
+                                 [converter convertToBuffer:out
+                                                      error:&conv_err
+                                         withInputFromBlock:^AVAudioBuffer*(
+                                             AVAudioPacketCount,
+                                             AVAudioConverterInputStatus* in_status) {
+                                             if (supplied) {
+                                                 *in_status = AVAudioConverterInputStatus_NoDataNow;
+                                                 return nil;
+                                             }
+                                             supplied = true;
+                                             *in_status = AVAudioConverterInputStatus_HaveData;
+                                             return buf;
+                                         }];
+                             if (status == AVAudioConverterOutputStatus_Error || out.frameLength == 0)
+                                 return;
+                             handle_buffer_(out);
                          }];
 
         NSError* err = nil;
@@ -266,6 +309,7 @@ private:
             [engine_ stop];
             engine_ = nil;
         }
+        converter_ = nil;
         recording_ = false;
 
         using namespace std::chrono;
@@ -299,6 +343,7 @@ private:
     PostFn post_;
     bool recording_ = false;
     AVAudioEngine* __strong engine_ = nil;
+    AVAudioConverter* __strong converter_ = nil;
     std::chrono::steady_clock::time_point start_tp_;
 
     std::mutex mu_;

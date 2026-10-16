@@ -256,10 +256,16 @@ pub async fn start_call(
     // Only enable frame encryption when the Matrix room is encrypted.
     // In unencrypted rooms, peers don't send encryption-key events and
     // have no key to decrypt our frames, so encrypting would break the call.
-    let use_e2ee = matches!(
-        room.encryption_state(),
-        matrix_sdk_base::EncryptionState::Encrypted
-    );
+    // Unknown is not "unencrypted": the state has not loaded yet (a freshly
+    // joined room, or a store that lost the event). Sending media in the clear on
+    // that guess would fail open, so the call is refused until the state is known.
+    let use_e2ee = match room.encryption_state() {
+        matrix_sdk_base::EncryptionState::Encrypted => true,
+        matrix_sdk_base::EncryptionState::NotEncrypted => false,
+        matrix_sdk_base::EncryptionState::Unknown => {
+            anyhow::bail!("this room's encryption state is not known yet; try the call again")
+        }
+    };
     info!("rtc: room encrypted={use_e2ee}");
 
     // The JWT service assigns the LiveKit participant identity in the `sub`
@@ -355,7 +361,7 @@ pub async fn start_call(
     }
 
     // ── Connect to our SFU ────────────────────────────────────────────────
-    let sink = super::global_sink();
+    let sink = super::sink_for_client(&client);
     let lk = Arc::new(
         LiveKitRoom::connect(
             &lk_transport.server_url,
@@ -531,8 +537,12 @@ fn check_key_event_fields(
     content: &crate::client::rtc::signaling::RtcEncryptionKeyEventContent,
     sender_device: Option<Option<&str>>,
 ) -> Result<(), String> {
-    let Some(device) = sender_device else {
-        return Err("sent unencrypted".to_owned());
+    // A key is trusted only when the device it came from is known and is the
+    // one the event claims: an unknown sending device has nothing to check.
+    let device = match sender_device {
+        None => return Err("sent unencrypted".to_owned()),
+        Some(None) => return Err("sender device is unknown".to_owned()),
+        Some(Some(device)) => device,
     };
     if content.room_id != expected_room {
         return Err(format!("for another room ({})", content.room_id));
@@ -540,13 +550,14 @@ fn check_key_event_fields(
     if content.session.application != "m.call" {
         return Err(format!("for application {:?}", content.session.application));
     }
-    if let Some(device) = device {
-        if device != content.member.claimed_device_id {
-            return Err(format!(
-                "claims device {} but was sent from {device}",
-                content.member.claimed_device_id
-            ));
-        }
+    if content.member.claimed_device_id.is_empty() {
+        return Err("claims no device".to_owned());
+    }
+    if device != content.member.claimed_device_id {
+        return Err(format!(
+            "claims device {} but was sent from {device}",
+            content.member.claimed_device_id
+        ));
     }
     Ok(())
 }
@@ -773,7 +784,7 @@ async fn reconcile_loop(
 
 /// Register a global m.rtc.member handler that fires `on_invitation` when
 /// another user opens a call slot. Called from sync.rs::start_sync.
-pub fn register_invitation_handler(client: &matrix_sdk::Client) {
+pub fn register_invitation_handler(client: &matrix_sdk::Client) -> matrix_sdk::event_handler::EventHandlerHandle {
     use matrix_sdk::ruma::events::SyncStateEvent;
 
     let client_clone = client.clone();
@@ -848,17 +859,17 @@ pub fn register_invitation_handler(client: &matrix_sdk::Client) {
                 } else {
                     content.slot_id.clone()
                 };
-                if let Some(sink) = super::global_sink() {
+                if let Some(sink) = super::sink_for_client(&client) {
                     sink.on_invitation(&room_id, &slot_id, &sender, "", 0, "");
                 }
             }
         },
-    );
+    )
 }
 
 /// Register a handler for MSC3401 `org.matrix.msc3401.call.member` events.
 /// Element Web uses this format. Called alongside `register_invitation_handler`.
-pub fn register_msc3401_invitation_handler(client: &matrix_sdk::Client) {
+pub fn register_msc3401_invitation_handler(client: &matrix_sdk::Client) -> matrix_sdk::event_handler::EventHandlerHandle {
     use matrix_sdk::ruma::events::{
         call::member::{Application, CallMemberEventContent},
         SyncStateEvent,
@@ -911,18 +922,18 @@ pub fn register_msc3401_invitation_handler(client: &matrix_sdk::Client) {
                     .unwrap_or_default();
 
                 let slot_id = call_id;
-                if let Some(sink) = super::global_sink() {
+                if let Some(sink) = super::sink_for_client(&client) {
                     sink.on_invitation(&room_id, &slot_id, &sender, "", 0, "");
                 }
             }
         },
-    );
+    )
 }
 
 /// Register a handler for stable `m.rtc.notification` and unstable
 /// `org.matrix.msc4075.rtc.notification` events (MSC4075).
 /// Fires `on_invitation` when a ring notification arrives from another user.
-pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) {
+pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) -> Vec<matrix_sdk::event_handler::EventHandlerHandle> {
     use matrix_sdk::ruma::events::{
         rtc::notification::{CallIntent, NotificationType, RtcNotificationEventContent},
         SyncMessageLikeEvent,
@@ -930,7 +941,7 @@ pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) {
 
     // Stable prefix: m.rtc.notification
     let client_clone = client.clone();
-    client.add_event_handler(
+    let stable = client.add_event_handler(
         move |ev: SyncMessageLikeEvent<RtcNotificationEventContent>, room: Room| {
             let client = client_clone.clone();
             async move {
@@ -974,7 +985,7 @@ pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) {
                 // TODO MSC4075: send m.call.ring.ack once caller device_id is available
                 // (the stable notification event does not carry caller device_id)
 
-                if let Some(sink) = super::global_sink() {
+                if let Some(sink) = super::sink_for_client(&client) {
                     sink.on_invitation(
                         &room_id,
                         "call#default",
@@ -990,7 +1001,7 @@ pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) {
 
     // Unstable prefix: org.matrix.msc4075.rtc.notification (Element Web compat)
     let client_clone2 = client.clone();
-    client.add_event_handler(
+    let unstable = client.add_event_handler(
         move |ev: SyncMessageLikeEvent<
             crate::client::rtc::signaling::Msc4075RtcNotificationEventContent,
         >,
@@ -1030,7 +1041,7 @@ pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) {
                 let sender = orig.sender.to_string();
                 let room_id = room.room_id().to_string();
 
-                if let Some(sink) = super::global_sink() {
+                if let Some(sink) = super::sink_for_client(&client) {
                     sink.on_invitation(
                         &room_id,
                         "call#default",
@@ -1043,6 +1054,7 @@ pub fn register_rtc_notification_handler(client: &matrix_sdk::Client) {
             }
         },
     );
+    vec![stable, unstable]
 }
 
 // ---------------------------------------------------------------------------
@@ -1142,8 +1154,21 @@ mod key_event_tests {
     fn accepts_matching_encrypted_event() {
         let c = content("!r:x.org", "m.call", "DEV");
         assert!(check_key_event_fields("!r:x.org", &c, Some(Some("DEV"))).is_ok());
-        // sending device unknown to the crypto layer: nothing to compare against
-        assert!(check_key_event_fields("!r:x.org", &c, Some(None)).is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_sender_device() {
+        let c = content("!r:x.org", "m.call", "DEV");
+        assert_eq!(
+            check_key_event_fields("!r:x.org", &c, Some(None)).unwrap_err(),
+            "sender device is unknown"
+        );
+    }
+
+    #[test]
+    fn rejects_empty_claimed_device() {
+        let c = content("!r:x.org", "m.call", "");
+        assert!(check_key_event_fields("!r:x.org", &c, Some(Some("DEV"))).is_err());
     }
 
     #[test]

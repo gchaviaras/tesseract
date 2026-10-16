@@ -494,18 +494,57 @@ void RoomSettingsView::set_security_field_permissions(
     if (on_layout_changed) on_layout_changed();
 }
 
+void RoomSettingsView::refresh_room_info(const tesseract::RoomInfo& info)
+{
+    if (!open_ || info.id != room_id_)
+        return;
+    const bool name_untouched   = staged_name_ == original_name_;
+    const bool topic_untouched  = staged_topic_ == original_topic_;
+    const bool avatar_untouched = staged_avatar_mxc_ == original_avatar_mxc_ &&
+                                  staged_avatar_pending_bytes_.empty();
+
+    original_name_       = info.name;
+    original_topic_      = info.topic;
+    original_avatar_mxc_ = info.avatar_url;
+
+    if (name_untouched && staged_name_ != info.name)
+    {
+        staged_name_ = info.name;
+        general_->set_name(staged_name_);
+        if (auto* nf = general_->name_field()) nf->set_text(staged_name_);
+    }
+    if (topic_untouched && staged_topic_ != info.topic)
+    {
+        staged_topic_ = info.topic;
+        general_->set_topic(staged_topic_);
+        if (auto* tf = general_->topic_field()) tf->set_text(staged_topic_);
+    }
+    if (avatar_untouched && staged_avatar_mxc_ != info.avatar_url)
+    {
+        staged_avatar_mxc_ = info.avatar_url;
+        general_->set_avatar_url(staged_avatar_mxc_);
+    }
+}
+
 void RoomSettingsView::set_security_state(bool is_encrypted, std::string join_rule,
                                           bool guest_access,
                                           std::string history_visibility)
 {
-    original_is_encrypted_       = is_encrypted;
-    original_join_rule_          = join_rule;
-    original_guest_access_       = guest_access;
-    original_history_visibility_ = history_visibility;
-    staged_is_encrypted_         = original_is_encrypted_;
-    staged_join_rule_            = original_join_rule_;
-    staged_guest_access_         = original_guest_access_;
-    staged_history_visibility_   = original_history_visibility_;
+    // The fetched state replaces the original. A field the user already changed
+    // while the fetch was in flight keeps the user's value; an untouched field
+    // follows the server.
+    const auto refresh = [](auto& original, auto& staged, auto fetched)
+    {
+        const bool untouched = staged == original;
+        original = fetched;
+        if (untouched)
+            staged = original;
+    };
+    refresh(original_is_encrypted_, staged_is_encrypted_, is_encrypted);
+    refresh(original_join_rule_, staged_join_rule_, std::move(join_rule));
+    refresh(original_guest_access_, staged_guest_access_, guest_access);
+    refresh(original_history_visibility_, staged_history_visibility_,
+            std::move(history_visibility));
 
     security_->set_encryption(staged_is_encrypted_);
     security_->set_join_rule(staged_join_rule_);
@@ -807,9 +846,10 @@ void RoomSettingsView::paint_before_children(tk::PaintCtx& ctx)
     }
 }
 
-void RoomSettingsView::set_banned_members(std::vector<tesseract::BannedMember> members)
+void RoomSettingsView::set_banned_members(std::vector<tesseract::BannedMember> members,
+                                          bool complete)
 {
-    moderation_->set_banned_members(std::move(members));
+    moderation_->set_banned_members(std::move(members), complete);
     if (on_layout_changed) on_layout_changed();
 }
 

@@ -4,13 +4,22 @@
 /// running version. Returns `Some((version, url))` when a strictly newer
 /// release is available; `None` on any error or when already up-to-date.
 
-fn parse_semver(s: &str) -> (u64, u64, u64) {
+/// Orders a version as (major, minor, patch, is_release). Build metadata after
+/// `+` is ignored, and a pre-release such as `0.9.3-rc1` sorts below its release
+/// `0.9.3`. Before, the suffix made the patch 0, so a pre-release was taken for
+/// an older build and told to update to its own release.
+fn parse_semver(s: &str) -> (u64, u64, u64, bool) {
     let s = s.strip_prefix('v').unwrap_or(s);
-    let mut parts = s.splitn(3, '.').map(|p| p.parse::<u64>().unwrap_or(0));
+    let s = s.split('+').next().unwrap_or(s);
+    let (core, is_release) = match s.split_once('-') {
+        Some((core, _pre)) => (core, false),
+        None => (s, true),
+    };
+    let mut parts = core.splitn(3, '.').map(|p| p.parse::<u64>().unwrap_or(0));
     let major = parts.next().unwrap_or(0);
     let minor = parts.next().unwrap_or(0);
     let patch = parts.next().unwrap_or(0);
-    (major, minor, patch)
+    (major, minor, patch, is_release)
 }
 
 pub async fn check_github_release(
@@ -135,10 +144,10 @@ mod tests {
 
     #[test]
     fn semver_parsing() {
-        assert_eq!(parse_semver("1.2.3"), (1, 2, 3));
-        assert_eq!(parse_semver("v1.2.3"), (1, 2, 3));
-        assert_eq!(parse_semver("0.8.5"), (0, 8, 5));
-        assert_eq!(parse_semver("bad"), (0, 0, 0));
+        assert_eq!(parse_semver("1.2.3"), (1, 2, 3, true));
+        assert_eq!(parse_semver("v1.2.3"), (1, 2, 3, true));
+        assert_eq!(parse_semver("0.8.5"), (0, 8, 5, true));
+        assert_eq!(parse_semver("bad"), (0, 0, 0, true));
     }
 
     #[test]
@@ -146,6 +155,11 @@ mod tests {
         assert!(parse_semver("0.9.0") > parse_semver("0.8.5"));
         assert!(parse_semver("1.0.0") > parse_semver("0.99.99"));
         assert_eq!(parse_semver("0.8.5"), parse_semver("0.8.5"));
+        // A pre-release is older than its release, and not taken for an older build.
+        assert!(parse_semver("0.9.3-rc1") < parse_semver("0.9.3"));
+        assert!(parse_semver("0.9.3") > parse_semver("0.9.3-rc1"));
+        assert!(parse_semver("0.9.3-rc1") > parse_semver("0.9.2"));
+        assert_eq!(parse_semver("0.9.3+build.7"), parse_semver("0.9.3"));
         assert!(parse_semver("0.8.4") < parse_semver("0.8.5"));
     }
 

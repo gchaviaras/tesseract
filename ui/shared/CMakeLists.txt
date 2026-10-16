@@ -208,6 +208,8 @@ set(_tk_sources
     views/PinnedBanner.cpp
     views/html_spans.h
     views/html_spans.cpp
+    views/sdk_text.h
+    views/sdk_text.cpp
     views/table_layout.h
     views/table_layout.cpp
     views/call_tile_layout.h

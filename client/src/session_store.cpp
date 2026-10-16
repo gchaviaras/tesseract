@@ -618,9 +618,19 @@ void SessionStore::queue_session_update(const std::string& user_id,
     session_persist_queue().enqueue(user_id, session_json);
 }
 
+void SessionStore::set_save_failure_handler(std::function<void(const std::string&)> handler)
+{
+    set_session_save_failed_handler(std::move(handler));
+}
+
 void SessionStore::flush_session_updates()
 {
     session_persist_queue().drain();
+}
+
+void SessionStore::allow_session_updates(const std::string& user_id)
+{
+    session_persist_queue().revive(user_id);
 }
 
 void SessionStore::clear_account(const std::string& user_id)

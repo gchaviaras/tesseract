@@ -289,6 +289,12 @@ public:
     {
         if (refresh_source_)
             g_source_remove(refresh_source_);
+        // The node widgets can outlive the bridge while AT-SPI still holds
+        // them. Clear their back-pointers, so the AT callbacks answer "none"
+        // (they already check for a null bridge) rather than reach freed memory.
+        for (const auto& entry : nodes_)
+            if (NodeData* data = node_data(GTK_ACCESSIBLE(entry.second)))
+                data->bridge = nullptr;
     }
 
     void mark_dirty()

@@ -3,10 +3,26 @@
 #include <tesseract/client.h>
 
 #include <algorithm>
+#include <chrono>
 #include <utility>
 
 namespace tesseract::views
 {
+
+namespace
+{
+
+// How long a fetched roster is trusted before '@' refetches it. An empty
+// roster is what a failed lookup leaves behind, so it expires sooner.
+constexpr auto kRosterTtl = std::chrono::seconds(60);
+constexpr auto kEmptyRosterTtl = std::chrono::seconds(5);
+
+} // namespace
+
+void MentionController::expire_member_cache_for_test()
+{
+    cached_members_at_ = {};
+}
 
 MentionController::MentionController(tk::TextArea* text_area,
                                     tesseract::Client* client,
@@ -52,8 +68,14 @@ bool MentionController::on_text_changed(const std::string& text, int cursor)
     tesseract::Client* client = hooks_.client ? hooks_.client() : client_;
 
     // Member list must be fetched off the UI thread (get_room_members blocks).
-    // When the cache is stale, fetch async and re-run when results arrive.
-    if (cached_members_room_ != rid)
+    // The list is refetched when it is stale: at once for another room, and
+    // once its TTL has passed for the same one. A stale list for the same room
+    // still answers the lookup while its refresh runs.
+    const bool same_room = cached_members_room_ == rid;
+    const auto ttl = cached_members_.empty() ? kEmptyRosterTtl : kRosterTtl;
+    const bool stale = !same_room ||
+        std::chrono::steady_clock::now() - cached_members_at_ >= ttl;
+    if (stale)
     {
         if (fetching_room_ != rid && client && hooks_.run_async &&
             hooks_.post_to_ui)
@@ -76,9 +98,20 @@ bool MentionController::on_text_changed(const std::string& text, int cursor)
             auto on_ready = guarded(
                 [this, rid](std::vector<tesseract::RoomMember> members) mutable
                 {
-                    cached_members_ = std::move(members);
-                    cached_members_room_ = rid;
                     fetching_room_.clear();
+                    // A failed refresh leaves the roster empty. Keep the
+                    // members already known for this room rather than
+                    // dropping them. The timestamp still moves, so the next
+                    // retry waits out the full TTL.
+                    const bool keep_known = members.empty() &&
+                        cached_members_room_ == rid &&
+                        !cached_members_.empty();
+                    if (!keep_known)
+                    {
+                        cached_members_ = std::move(members);
+                        cached_members_room_ = rid;
+                    }
+                    cached_members_at_ = std::chrono::steady_clock::now();
                     on_text_changed(text_area_->text(),
                                     text_area_->cursor_byte_pos());
                 });
@@ -94,7 +127,10 @@ bool MentionController::on_text_changed(const std::string& text, int cursor)
                         });
                 });
         }
-        return true; // handled (fetch pending) — popup appears on next tick
+        if (!same_room)
+        {
+            return true; // handled (fetch pending) — popup appears on next tick
+        }
     }
 
     candidates_ = engine_.lookup(m->prefix, cached_members_, 8, true);

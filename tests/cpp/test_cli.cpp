@@ -128,6 +128,27 @@ TEST_CASE("cli: missing and unexpected values")
     CHECK(r2.diagnostics()[0].kind == Diagnostic::Kind::MissingValue);
 }
 
+TEST_CASE("cli: a value option never takes an option as its value")
+{
+    // `--profile --hidden` is a missing value, not a profile named "--hidden".
+    auto r = run({"--profile", "--hidden"});
+    CHECK_FALSE(r.has("profile"));
+    CHECK(r.has("hidden"));
+    REQUIRE(r.diagnostics().size() == 1);
+    CHECK(r.diagnostics()[0].kind == Diagnostic::Kind::MissingValue);
+
+    auto r2 = run({"-p", "-v"});
+    CHECK_FALSE(r2.has("profile"));
+    CHECK(r2.has("verbose"));
+    REQUIRE(r2.diagnostics().size() == 1);
+    CHECK(r2.diagnostics()[0].kind == Diagnostic::Kind::MissingValue);
+
+    // A lone dash is still a value, the usual stdin marker.
+    auto r3 = run({"--profile", "-"});
+    CHECK(r3.value("profile") == "-");
+    CHECK(r3.diagnostics().empty());
+}
+
 TEST_CASE("cli: duplicates warn, last wins; repeatable collects")
 {
     auto r = run({"--profile=a", "-pb"});

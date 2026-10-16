@@ -41,6 +41,10 @@ public:
         std::vector<std::pair<std::string, std::function<void()>>> window_items);
 
 private:
+    // Adds the icon (or refreshes it when it is already there) with the current
+    // tooltip and overlay, then selects version 4 callbacks. Returns success.
+    bool add_icon_();
+
     static LRESULT CALLBACK wnd_proc(HWND, UINT, WPARAM, LPARAM);
     void on_tray_message(WPARAM, LPARAM);
     void show_menu();
@@ -71,12 +75,15 @@ private:
     // separately from displayed_overlay_ so set_unread() can rebuild the
     // overlay from the source without re-loading the resource.
     HICON hIcon_ = nullptr;
+    // Current tip, kept so an icon re-added after an Explorer restart shows it.
+    std::wstring tooltip_ = L"Tesseract";
     // The currently displayed overlay HICON (composited base + dot), or
     // nullptr when the plain hIcon_ is showing. set_unread() destroys this
     // before installing a new one to avoid leaks.
     HICON displayed_overlay_ = nullptr;
     std::function<void()> on_show_;
     std::function<void()> on_toggle_;
+    ULONGLONG last_toggle_tick_ = 0; // dedupes WM_LBUTTONUP + NIN_SELECT for one click
     std::function<void()> on_quit_;
     bool added_ = false;
 

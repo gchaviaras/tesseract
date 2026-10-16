@@ -103,6 +103,8 @@ class UserPackEditor;
 class UserProfilePanel;
 }
 
+struct UploadDraft;
+
 // Pure decision for how a room switch should affect an in-progress call.
 // Isolated from ShellBase's live state so it's unit-testable without a real
 // ShellBase/CallSession/CallOverlayWidget — mirrors classify_room_section's
@@ -301,7 +303,9 @@ public:
     // Room-list row context menu's "Leave room" action: prompts for
     // confirmation (via main_app_'s shared ConfirmDialog) before calling
     // leave_room_command_. room_id need not be the currently-displayed room.
-    void confirm_leave_room_(const std::string& room_id);
+    // `on_behalf_of` is the account the leave runs against (nullptr = active).
+    void confirm_leave_room_(const std::string& room_id,
+                             const std::shared_ptr<AccountSession>& on_behalf_of = nullptr);
 
     // Close the tab for room_id. No-op if room_id isn't an open tab.
     // Closing the only open tab deselects to the "no active room" empty
@@ -414,6 +418,9 @@ protected:
     // static_cast<int>(DebounceSlot); a fire is honoured only if its captured
     // generation still matches the slot's current value.
     std::unordered_map<int, std::uint64_t> debounce_gen_;
+    // A debounced settings save is scheduled and has not run yet. The destructor
+    // writes the settings in that case, since a superseded or late fire is dropped.
+    bool settings_save_pending_ = false;
     // Set at the top of ~ShellBase() so that any save_settings_debounced_()
     // calls from ~RoomWindowBase() skip the debounce (which calls the pure-
     // virtual post_to_ui_after_()) instead of crashing.
@@ -469,6 +476,20 @@ protected:
     IEventHandler* event_handler_ = nullptr; // non-owning alias
 
     std::unordered_map<std::string, std::vector<RoomInfo>> per_account_rooms_;
+    // Terminal sync errors seen per account, for the restart backoff in
+    // handle_sync_error_impl_. Cleared when the account's room list arrives, as
+    // sync is delivering again; the delay is also capped.
+    std::unordered_map<std::string, int> sync_error_restarts_;
+
+    // Attachment sends whose outcome isn't known yet, by upload request id
+    // (0 = not in flight, restored at once). On a failure the composer content
+    // goes back (see restore_failed_upload_); on success it is dropped.
+    std::unordered_map<std::uint64_t, std::shared_ptr<UploadDraft>> upload_drafts_;
+    void remember_upload_draft_(std::uint64_t request_id, std::shared_ptr<UploadDraft> draft);
+    // Put a failed attachment send back where it came from, like
+    // report_unsent_message_ does for text: the sender's pop-out or the main
+    // composer when it is free, else the room's saved draft.
+    void restore_failed_upload_(const std::shared_ptr<UploadDraft>& draft);
     // Room list of account user_id: rooms_ for the active account, else its
     // last per_account_rooms_ snapshot (empty if none yet).
     const std::vector<RoomInfo>& rooms_for_(const std::string& user_id) const
@@ -902,8 +923,12 @@ protected:
         return it != media_fetch_failed_.end() &&
                std::chrono::steady_clock::now() < it->second.retry_after;
     }
-    void note_media_fetch_failed_(const std::string& key);
-    void note_media_fetch_ok_(const std::string& key);
+    // `sess` is the account the fetch was issued for. The back-off is stored in
+    // that account's cache, not in whichever account is active when it lands.
+    void note_media_fetch_failed_(const std::string& key,
+                                  const std::shared_ptr<AccountSession>& sess);
+    void note_media_fetch_ok_(const std::string& key,
+                              const std::shared_ptr<AccountSession>& sess);
 
     // ── Async media request registry ──────────────────────────────────────────
     // Correlates an outstanding fetch_media_async / get_url_preview_async call
@@ -1222,7 +1247,7 @@ protected:
     std::int64_t  spin_last_tick_ms_ = 0;
     /// Generation counter for show_status_message_ auto-clear: a late-firing
     /// callback only calls on_restore_status_ui_() if the gen still matches.
-    std::uint32_t status_msg_gen_ = 0;
+    std::atomic<std::uint32_t> status_msg_gen_{0};
     // Last status-line text spoken (see show_status_message_) and when.
     std::string last_announced_status_;
     std::chrono::steady_clock::time_point last_announced_status_at_{};
@@ -3295,6 +3320,9 @@ protected:
     // Start/stop local screen capture and the LiveKit screen track.
     void start_screen_share_();
     void stop_screen_share_();
+    // A capture ended on its own (see tk::ScreenCapture::set_failure_callback).
+    // Ignored unless `serial` is the share that is currently running.
+    void on_screen_capture_failed_(std::uint64_t serial);
 
     // Camera capture for the active call. Started when the call starts with
     // video and whenever the user turns video back on; stopped when video is
@@ -3383,11 +3411,18 @@ protected:
 
 protected:
     std::unique_ptr<CallSession>                call_session_;
+    // The account the live call runs on. Capture threads push frames through
+    // this, not through client_, which the UI thread re-points on switch and
+    // clears on sign-out. It expires with the account, so frames stop then.
+    std::weak_ptr<AccountSession>               call_account_;
     std::unique_ptr<tk::VideoCapture>           call_video_capture_;
     // Bumped per start_call_video_capture_(); error callbacks posted by an
     // older capture compare against it and drop themselves.
     std::uint64_t                               call_video_capture_gen_ = 0;
     std::unique_ptr<tk::ScreenCapture>          screen_capture_;
+    // Bumped for each share started, so a failure from an earlier capture
+    // cannot stop the one that replaced it.
+    std::uint64_t                               screen_share_serial_ = 0;
     std::unique_ptr<tk::LocationProvider>       location_provider_;
     // Background worker that fills in screen-picker tile thumbnails (see
     // start_screen_share_()). Joined before starting a new one and in
@@ -3425,6 +3460,18 @@ protected:
         std::unordered_map<std::string, std::string> avatar_urls; // user id -> mxc
     };
     std::unordered_map<std::string, CallBannerRoster> call_banner_rosters_;
+    // Display names and avatar URLs of the active call room's members for the
+    // call overlay's per-participant providers, which run on every paint.
+    // Rebuilt at most once per kCallOverlayRosterMaxAge, or when the call's
+    // room changes; a joiner's name or avatar appears within that window.
+    struct CallOverlayRoster
+    {
+        std::string                                                    room_id;
+        std::chrono::steady_clock::time_point                          built_at{};
+        std::unordered_map<std::string, std::pair<std::string, std::string>> people; // user id -> (name, avatar mxc)
+    };
+    CallOverlayRoster call_overlay_roster_;
+    const CallOverlayRoster& call_overlay_roster_for_(const std::string& room_id);
 
     // Install the platform screen-lock probe (called once by the concrete
     // shell at startup, mirroring the per-account INotifier injection).
@@ -4051,7 +4098,9 @@ protected:
     // kCacheSizesPollMs while the Settings panel is open on the About tab.
     // Stops itself when the user leaves About; on_about_tab_shown restarts it.
     void refresh_cache_sizes_poll_();
-    static constexpr int kCacheSizesPollMs = 5000;
+    // Each tick walks the cache and the SDK store, so the About tab refreshes
+    // every 30 s rather than every 5 s; the sizes are a rough gauge anyway.
+    static constexpr int kCacheSizesPollMs = 30000;
     // Borrowed pointer to the shell's shared SettingsView (named distinctly so
     // it never shadows a shell's own `settings_view_` member). Each shell sets
     // it once.

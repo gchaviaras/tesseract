@@ -168,7 +168,7 @@ RoomHeader::RoomHeader()
     {
         hide_date_picker_();
         if (on_date_jump)
-            on_date_jump(date_to_midnight_utc_ms_(y, m, d));
+            on_date_jump(local_midnight_ms(y, m, d));
     };
     date_picker_->on_dismiss = [this] { hide_date_picker_(); };
 
@@ -1192,21 +1192,6 @@ void RoomHeader::apply_picker_max_()
 void RoomHeader::hide_date_picker_()
 {
     date_picker_visible_ = false;
-}
-
-/*static*/ std::uint64_t RoomHeader::date_to_midnight_utc_ms_(int y, int m,
-                                                               int d)
-{
-    // Julian Day Number → days since Unix epoch (1970-01-01 = JDN 2440588).
-    // Proleptic Gregorian calendar; valid for all dates we show (1970–2099+).
-    const int a  = (14 - m) / 12;
-    const int yj = y + 4800 - a;
-    const int mj = m + 12 * a - 3;
-    const int jdn =
-        d + (153 * mj + 2) / 5 + 365 * yj + yj / 4 - yj / 100 + yj / 400 -
-        32045;
-    const std::int64_t days = static_cast<std::int64_t>(jdn) - 2440588LL;
-    return static_cast<std::uint64_t>(days) * 86400ULL * 1000ULL;
 }
 
 } // namespace tesseract::views

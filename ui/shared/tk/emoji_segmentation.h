@@ -70,6 +70,13 @@ struct EmojiByteRange
 // classified as emoji runs, ascending, half-open.
 std::vector<EmojiByteRange> find_emoji_byte_ranges(const std::string& utf8);
 
+// UTF-16 index of each byte offset in `utf8`, in the order given. All offsets are
+// mapped in one walk over the text, so a caller with many runs pays for the walk
+// once. An offset past the end maps to the length of the text. An offset inside a
+// code point maps to the index just after that code point.
+std::vector<std::size_t> utf16_indices_for_byte_offsets(
+    std::string_view utf8, const std::vector<std::size_t>& byte_offsets);
+
 // Cheap pre-gate: true iff `utf8` actually contains at least one emoji run.
 // A byte scan (>= 0xE2 — where every renderable emoji's UTF-8 lead byte
 // lives) short-circuits pure-ASCII text; only then is find_emoji_byte_ranges

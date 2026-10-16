@@ -1212,7 +1212,11 @@ void RoomView::refresh_media_count_()
 {
     if (!room_info_panel_ || !room_info_panel_->is_open())
         return;
-    room_info_panel_->set_media_count(media_count_());
+    // A timeline burst (a sync batch, a backfill page) calls this once per row,
+    // and the count is a database query. Mark it dirty and take it once in paint.
+    media_count_dirty_ = true;
+    if (repaint_requester_)
+        repaint_requester_();
 }
 
 void RoomView::refresh_media_count()
@@ -1854,6 +1858,10 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
     {
         room_info_panel_->refresh_info(info);
     }
+    // A same-room update reaches an open settings form too, so an untouched
+    // field follows the server instead of being saved back over it.
+    if (!room_changed && room_settings_view_ && room_settings_view_->is_open())
+        room_settings_view_->refresh_room_info(info);
     has_room_ = true;
     current_room_info_ = info;
     if (message_list_)
@@ -2111,9 +2119,16 @@ tk::Rect RoomView::compose_bar_rect() const
 
 void RoomView::set_room_members(std::vector<tesseract::RoomMember> members)
 {
-    room_members_ = members;
+    // Copy only when the info panel also needs the list; otherwise move it.
     if (room_info_panel_)
+    {
+        room_members_ = members;
         room_info_panel_->set_members(std::move(members));
+    }
+    else
+    {
+        room_members_ = std::move(members);
+    }
 }
 
 // ── Thread panel ──────────────────────────────────────────────────────────
@@ -2507,6 +2522,12 @@ void RoomView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
 // independent of add_child() order).
 void RoomView::paint(tk::PaintCtx& ctx)
 {
+    if (media_count_dirty_)
+    {
+        media_count_dirty_ = false;
+        if (room_info_panel_ && room_info_panel_->is_open())
+            room_info_panel_->set_media_count(media_count_());
+    }
     // Scope Tab/Shift-Tab traversal to whichever overlay panel is open (if
     // any) — mirrors active_overlay_panel_()'s existing role for pointer
     // dispatch, just for keyboard focus instead. Re-synced every paint

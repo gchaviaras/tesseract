@@ -53,11 +53,14 @@ void QRGrantView::rebuild_tree_()
         this, tk::tr("Confirm"), std::function<void()>{}, tk::Button::Variant::Primary);
     confirm->set_min_size({0.0f, kButtonH});
     confirm->set_on_click([this] {
+        int v = -1;
         try {
-            int v = std::stoi(check_code_text_);
-            if (client_ && v >= 0 && v <= 255)
-                client_->submit_qr_check_code(static_cast<uint8_t>(v));
+            v = std::stoi(check_code_text_);
         } catch (...) {}
+        // A bad or empty code keeps Confirm enabled so it can be corrected.
+        if (!client_ || v < 0 || v > 255)
+            return;
+        client_->submit_qr_check_code(static_cast<uint8_t>(v));
         // Prevent double-submit while the worker is still in await_qr_auth().
         confirm_btn_->set_enabled(false);
     });

@@ -2,6 +2,8 @@
 #include "app/ShellBase.h"
 #include <tesseract/session_store.h>
 
+#include <string>
+
 namespace tesseract
 {
 
@@ -571,10 +573,10 @@ void EventHandlerBase::on_session_saved(const std::string& session_json)
         // (persist_session), never a direct write: a direct write could be
         // overtaken by an older queued one and roll the token back. The
         // queue's writer uses save_session_update, so a store-encryption key
-        // persisted at login time is kept. Flushed here because this fires
-        // on clean shutdown too, where the write must land before exit.
+        // persisted at login time is kept. Not flushed here: draining would
+        // block this SDK callback on every queued write, keyring prompts
+        // included. The shell flushes once in ~ShellBase().
         SessionStore::queue_session_update(user_id_, session_json);
-        SessionStore::flush_session_updates();
     }
 }
 
@@ -1072,31 +1074,26 @@ void EventHandlerBase::on_call_ended(std::uint64_t session_id,
         });
 }
 
-void EventHandlerBase::on_call_video_frame(std::uint64_t session_id,
-                                            const std::string& participant_id,
-                                            std::uint32_t width,
-                                            std::uint32_t height,
-                                            const std::uint8_t* rgba,
-                                            std::size_t rgba_size)
+namespace
 {
-    // Convert RGBA → premultiplied BGRA on this worker thread, then hand the
-    // shared_ptr to the UI thread — no second memcpy in push_video_frame().
+// Premultiplied BGRA of one RGBA frame, or null when the size reported with it
+// does not fit the bytes given. The conversion indexes n_px * 4 bytes, so an
+// inconsistent (width, height, size) triple must not reach it.
+std::shared_ptr<std::vector<std::uint8_t>> frame_to_bgra(
+    const std::uint8_t* rgba, std::size_t rgba_size, std::uint32_t width,
+    std::uint32_t height)
+{
+    const std::uint64_t n_px = static_cast<std::uint64_t>(width) * height;
+    if (!rgba || n_px == 0 || n_px * 4 > rgba_size)
+        return nullptr;
+    const auto n = static_cast<std::size_t>(n_px);
+    auto bgra = std::make_shared<std::vector<std::uint8_t>>(n * 4);
     // Video frames are always fully opaque (α=255 from the I420 decoder), so
     // premultiplication is an identity and we only need a channel swap.
-    struct Payload
-    {
-        std::uint64_t session_id;
-        std::string   participant_id;
-        std::uint32_t width;
-        std::uint32_t height;
-        std::shared_ptr<std::vector<std::uint8_t>> bgra; // premultiplied
-    };
-    const std::size_t n_px = static_cast<std::size_t>(width) * height;
-    auto bgra = std::make_shared<std::vector<std::uint8_t>>(rgba_size);
-    const bool opaque = (rgba_size > 0 && rgba[3] == 255);
+    const bool opaque = rgba[3] == 255;
     if (opaque)
     {
-        for (std::size_t i = 0; i < n_px; ++i)
+        for (std::size_t i = 0; i < n; ++i)
         {
             (*bgra)[i * 4 + 0] = rgba[i * 4 + 2]; // B
             (*bgra)[i * 4 + 1] = rgba[i * 4 + 1]; // G
@@ -1106,7 +1103,7 @@ void EventHandlerBase::on_call_video_frame(std::uint64_t session_id,
     }
     else
     {
-        for (std::size_t i = 0; i < n_px; ++i)
+        for (std::size_t i = 0; i < n; ++i)
         {
             const unsigned a = rgba[i * 4 + 3];
             (*bgra)[i * 4 + 0] = static_cast<std::uint8_t>((rgba[i*4+2] * a + 127u) / 255u);
@@ -1115,14 +1112,61 @@ void EventHandlerBase::on_call_video_frame(std::uint64_t session_id,
             (*bgra)[i * 4 + 3] = static_cast<std::uint8_t>(a);
         }
     }
-    auto p = std::make_shared<Payload>(
-        Payload{session_id, participant_id, width, height, std::move(bgra)});
-    shell()->post_to_ui_(
-        [shell = shell(), uid = user_id_, p]()
+    return bgra;
+}
+} // namespace
+
+bool FrameMailbox::put(const std::string& key, std::function<void()> deliver)
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    pending_[key] = std::move(deliver);
+    return queued_.insert(key).second;
+}
+
+std::function<void()> FrameMailbox::take(const std::string& key)
+{
+    std::lock_guard<std::mutex> lk(mu_);
+    queued_.erase(key);
+    auto it = pending_.find(key);
+    if (it == pending_.end())
+        return {};
+    auto deliver = std::move(it->second);
+    pending_.erase(it);
+    return deliver;
+}
+
+void EventHandlerBase::post_latest_frame_(const std::string& key,
+                                          std::function<void()> deliver)
+{
+    if (!frames_->put(key, std::move(deliver)))
+        return; // a UI task for this key is already queued; it will pick this up
+    shell()->post_to_ui_([frames = frames_, key]
+    {
+        if (auto fn = frames->take(key))
+            fn();
+    });
+}
+
+void EventHandlerBase::on_call_video_frame(std::uint64_t session_id,
+                                            const std::string& participant_id,
+                                            std::uint32_t width,
+                                            std::uint32_t height,
+                                            const std::uint8_t* rgba,
+                                            std::size_t rgba_size)
+{
+    // Convert RGBA → premultiplied BGRA on this worker thread, then hand the
+    // shared_ptr to the UI thread — no second memcpy in push_video_frame().
+    auto bgra = frame_to_bgra(rgba, rgba_size, width, height);
+    if (!bgra)
+        return;
+    post_latest_frame_(
+        "video/" + std::to_string(session_id) + "/" + participant_id,
+        [shell = shell(), uid = user_id_, session_id, participant_id, width,
+         height, bgra = std::move(bgra)]
         {
             ShellBase::EventAccountScope scope(*shell, uid);
-            shell->handle_rtc_video_frame_ui_(p->session_id, p->participant_id,
-                                              p->width, p->height, p->bgra);
+            shell->handle_rtc_video_frame_ui_(session_id, participant_id,
+                                              width, height, bgra);
         });
 }
 
@@ -1133,46 +1177,17 @@ void EventHandlerBase::on_call_screen_frame(std::uint64_t session_id,
                                              const std::uint8_t* rgba,
                                              std::size_t rgba_size)
 {
-    struct Payload
-    {
-        std::uint64_t session_id;
-        std::string   participant_id;
-        std::uint32_t width;
-        std::uint32_t height;
-        std::shared_ptr<std::vector<std::uint8_t>> bgra;
-    };
-    const std::size_t n_px = static_cast<std::size_t>(width) * height;
-    auto bgra = std::make_shared<std::vector<std::uint8_t>>(rgba_size);
-    const bool opaque = (rgba_size > 0 && rgba[3] == 255);
-    if (opaque)
-    {
-        for (std::size_t i = 0; i < n_px; ++i)
-        {
-            (*bgra)[i * 4 + 0] = rgba[i * 4 + 2]; // B
-            (*bgra)[i * 4 + 1] = rgba[i * 4 + 1]; // G
-            (*bgra)[i * 4 + 2] = rgba[i * 4 + 0]; // R
-            (*bgra)[i * 4 + 3] = 255u;
-        }
-    }
-    else
-    {
-        for (std::size_t i = 0; i < n_px; ++i)
-        {
-            const unsigned a = rgba[i * 4 + 3];
-            (*bgra)[i * 4 + 0] = static_cast<std::uint8_t>((rgba[i*4+2] * a + 127u) / 255u);
-            (*bgra)[i * 4 + 1] = static_cast<std::uint8_t>((rgba[i*4+1] * a + 127u) / 255u);
-            (*bgra)[i * 4 + 2] = static_cast<std::uint8_t>((rgba[i*4+0] * a + 127u) / 255u);
-            (*bgra)[i * 4 + 3] = static_cast<std::uint8_t>(a);
-        }
-    }
-    auto p = std::make_shared<Payload>(
-        Payload{session_id, participant_id, width, height, std::move(bgra)});
-    shell()->post_to_ui_(
-        [shell = shell(), uid = user_id_, p]()
+    auto bgra = frame_to_bgra(rgba, rgba_size, width, height);
+    if (!bgra)
+        return;
+    post_latest_frame_(
+        "screen/" + std::to_string(session_id) + "/" + participant_id,
+        [shell = shell(), uid = user_id_, session_id, participant_id, width,
+         height, bgra = std::move(bgra)]
         {
             ShellBase::EventAccountScope scope(*shell, uid);
-            shell->handle_rtc_screen_frame_ui_(p->session_id, p->participant_id,
-                                               p->width, p->height, p->bgra);
+            shell->handle_rtc_screen_frame_ui_(session_id, participant_id,
+                                               width, height, bgra);
         });
 }
 

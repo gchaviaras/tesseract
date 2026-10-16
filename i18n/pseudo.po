@@ -495,6 +495,14 @@ msgstr "[Àttàçhméñt: {0}xxx]"
 msgid "Attachment too large: {0}"
 msgstr "[Àttàçhméñt töö làrgé: {0}xxxxx]"
 
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That file isn't a PNG, JPEG, GIF or WebP image."
+msgstr "[Thàt fïlé ïsñ't à PÑG, JPÉG, GÏF ör WébP ïmàgé.xxxxxxxxx]"
+
+#: ui/linux-qt/src/MainWindow.cpp
+msgid "That image is too large to send."
+msgstr "[Thàt ïmàgé ïs töö làrgé tö séñd.xxxxxx]"
+
 #: ui/shared/app/HistoryExportController.cpp:104
 #, c++-format
 msgid "Image unavailable: {0}"
@@ -889,6 +897,10 @@ msgstr "[Ñéw méssàgéxx]"
 #: ui/shared/app/ShellBase_accounts.cpp:274
 msgid "empty session"
 msgstr "[émpty séssïöñxx]"
+
+#: ui/shared/app/ShellBase_accounts.cpp
+msgid "Could not restore the session: {0}"
+msgstr "[Çöùld ñöt réstöré thé séssïöñ: {0}xxxxxx]"
 
 #: ui/shared/app/ShellBase_accounts.cpp:315
 #, c++-format
@@ -5002,6 +5014,10 @@ msgstr "[Ùñçöñfïrmédxx]"
 msgid "Open in browser"
 msgstr "[Öpéñ ïñ bröwsérxxx]"
 
+#: ui/shared/views/settings/DevicesSection.cpp
+msgid "Open in browser ({0})"
+msgstr "[Öpéñ ïñ bröwsér ({0})xxxx]"
+
 #: ui/shared/views/settings/DevicesSection.cpp:203
 msgid "I've confirmed"
 msgstr "[Ï'vé çöñfïrmédxx]"
@@ -5554,6 +5570,10 @@ msgstr "[Ùñbàñ (yöù döñ't hàvé pérmïssïöñ tö lïft thïs bàñ)x
 msgid "Banned users"
 msgstr "[Bàññéd ùsérsxx]"
 
+#: ui/shared/views/settings/RoomModerationSection.cpp
+msgid "Some bans may be missing: the room's member list did not fully load. Reopen settings to try again."
+msgstr "[Sömé bàñs mày bé mïssïñg: thé rööm's mémbér lïst dïd ñöt fùlly löàd. Réöpéñ séttïñgs tö try àgàïñ.xxxxxxxxxxxxxxxxxxx]"
+
 #: ui/shared/views/settings/RoomModerationSection.cpp:145
 msgid "No banned users"
 msgstr "[Ñö bàññéd ùsérsxxx]"
@@ -5654,6 +5674,10 @@ msgstr "[Àllöw gùésts tö jöïñxxxx]"
 #: ui/shared/views/settings/RoomSecuritySection.cpp:61
 msgid "History Visibility"
 msgstr "[Hïstöry Vïsïbïlïtyxxx]"
+
+#: ui/shared/views/RoomInfoPanel.cpp
+msgid "History: {0}"
+msgstr "[Hïstöry: {0}xx]"
 
 #: ui/shared/views/settings/RoomSecuritySection.cpp:64
 msgid "Anyone"
@@ -6912,3 +6936,168 @@ msgstr "[Symbölsx]"
 #: client/src/emoji.cpp:191
 msgid "Flags"
 msgstr "[Flàgsx]"
+
+#: ui/shared/app/SlashCommands.cpp
+msgid "no display name given; use /myroomnick <name>"
+msgstr "[ñö ðïsplàý ñàmé gïvéñ; ùsé /myröömñïçk <ñàmé>xxxxxxx]"
+
+#: ui/shared/views/EncryptionSetupOverlay.cpp
+msgid "A recovery passphrase must be at least {0} characters."
+msgstr "[Ä rëcövëry pässphräse mýst bé ät léäst {0} chäräctérs xxxxxx]"
+
+#: ui/shared/app/ShellBase_calls.cpp
+msgid "Screen sharing stopped: the screen could not be captured."
+msgstr "[Ŝćřéèñ śĥàŕìñĝ śţőƥƥéð: ţĥé śćŕéèñ ćóûĺð ñőţ ƀé ćàƥţûŕéð.]"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not pin the message: {0}"
+msgstr "[Ćóûĺð ñőţ ƥîñ ţĥé mèšśàĝé: {0}]"
+
+#: ui/shared/app/ShellBase_navigation.cpp
+msgid "Could not unpin the message: {0}"
+msgstr "[Ćóûĺð ñőţ ũñƥîñ ţĥé mèšśàĝé: {0}]"
+
+#: ui/shared/views/MessageSearchView.cpp:29
+#: ui/shared/views/MessageSearchView.cpp:32
+msgid "now"
+msgstr "[ñöwx]"
+
+#: ui/shared/views/MessageSearchView.cpp:45
+msgid "{0}w"
+msgstr "[{0}wx]"
+
+#: ui/shared/views/MessageSearchView.cpp:46
+msgid "{0}y"
+msgstr "[{0}yx]"
+
+#: ui/shared/app/ShellBase.cpp:240
+#, c++-format
+msgid "Couldn't save the sign-in for {0}. You may have to sign in again next time."
+msgstr "[Çöùldñ't sàvé thé sïgñ-ïñ för {0}. Yöù mày hàvé tö sïgñ ïñ àgàïñ ñéxt tïmé.xxxxxxxxxxxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(image)"
+msgstr "[(ïmàgé)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(file)"
+msgstr "[(fïlé)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(voice)"
+msgstr "[(vöïçé)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(audio)"
+msgstr "[(àùdïö)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(video)"
+msgstr "[(vïdéö)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(gallery)"
+msgstr "[(gàlléry)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(message)"
+msgstr "[(méssàgé)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(sticker)"
+msgstr "[(stïçkér)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(deleted)"
+msgstr "[(délétéd)x]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(unavailable)"
+msgstr "[(ùñàvàïlàblé)xx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "(poll)"
+msgstr "[(pöll)x]"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "(poll) {0}"
+msgstr "[(pöll) {0}xx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sent before you joined this room"
+msgstr "[🔒 Séñt béföré yöù jöïñéd thïs röömxxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's identity changed since you verified them"
+msgstr "[🔒 Séñdér's ïdéñtïty çhàñgéd sïñçé yöù vérïfïéd thémxxxxxxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is not signed"
+msgstr "[🔒 Séñdér's dévïçé ïs ñöt sïgñédxxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender's device is unknown"
+msgstr "[🔒 Séñdér's dévïçé ïs ùñkñöwñxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 History unavailable (key backup is off)"
+msgstr "[🔒 Hïstöry ùñàvàïlàblé (kéy bàçkùp ïs öff)xxxxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Sender blocked this device"
+msgstr "[🔒 Séñdér blöçkéd thïs dévïçéxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Key was not shared with this device"
+msgstr "[🔒 Kéy wàs ñöt shàréd wïth thïs dévïçéxxxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Verify this device to access history"
+msgstr "[🔒 Vérïfy thïs dévïçé tö àççéss hïstöryxxxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "🔒 Unable to decrypt"
+msgstr "[🔒 Ùñàblé tö déçryptxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "cleared all pinned messages"
+msgstr "[çléàréd àll pïññéd méssàgésxxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "pinned a message"
+msgstr "[pïññéd à méssàgéxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "unpinned a message"
+msgstr "[ùñpïññéd à méssàgéxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "pinned {0} message"
+msgid_plural "pinned {0} messages"
+msgstr[0] "[pïññéd {0} méssàgéxxx]"
+msgstr[1] "[pïññéd {0} méssàgésxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+#, c++-format
+msgid "unpinned {0} message"
+msgid_plural "unpinned {0} messages"
+msgstr[0] "[ùñpïññéd {0} méssàgéxxxx]"
+msgstr[1] "[ùñpïññéd {0} méssàgésxxxx]"
+
+#: ui/shared/views/sdk_text.cpp
+msgid "changed the pinned messages"
+msgstr "[çhàñgéd thé pïññéd méssàgésxxxxx]"
+
+#: ui/shared/app/shell_helpers.cpp
+#, c++-format
+msgid "Sent {0} item"
+msgid_plural "Sent {0} items"
+msgstr[0] "[Séñt {0} ïtémxx]"
+msgstr[1] "[Séñt {0} ïtémsxx]"
+
+#: ui/shared/app/ShellBase_accounts.cpp
+#, c++-format
+msgid "Couldn't start syncing: {0}. Retrying…"
+msgstr "[Çöùldñ't stàrt syñçïñg: {0}. Rétryïñg…xxxxxxx]"

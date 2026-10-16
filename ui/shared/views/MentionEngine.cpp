@@ -8,10 +8,12 @@ namespace tesseract::views
 namespace
 {
 
+// A name character: ASCII letters, digits, '_', '-' and '.', or any byte of a
+// multi-byte UTF-8 sequence, so a name in another script keeps the token going.
 bool is_mention_char(char c)
 {
-    return std::isalnum(static_cast<unsigned char>(c)) || c == '_' ||
-           c == '-' || c == '.';
+    const auto u = static_cast<unsigned char>(c);
+    return std::isalnum(u) || c == '_' || c == '-' || c == '.' || u >= 0x80;
 }
 
 bool icontains(std::string_view hay, std::string_view needle)

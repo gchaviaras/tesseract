@@ -161,7 +161,9 @@ void MediaViewerOverlay::show_index_(std::size_t i)
     MediaViewerPage* page = page_for_(items_[i].kind);
     if (!page)
     {
-        is_open_ = false;
+        // No page for this kind: close the way a dismiss does, so the scrim
+        // and the active page stay consistent.
+        dismiss_();
         return;
     }
     active_ = page;

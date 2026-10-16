@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 
 // Forward declarations for cxx-generated types.
 namespace tesseract_ffi
@@ -54,23 +55,40 @@ public:
     {
     }
 
-    /// Sever the link to the IEventHandler. After this returns every load()
-    /// observes nullptr. Idempotent; safe to call from any thread.
+    /// Sever the link to the IEventHandler. Waits for any callback running
+    /// through with_handler() to return, so the shell can destroy the handler
+    /// as soon as this returns. After it returns, with_handler() is a no-op.
+    /// Idempotent; safe to call from any thread.
     void detach() noexcept
     {
-        std::lock_guard<std::mutex> lk(mutex_);
+        std::unique_lock<std::shared_mutex> lk(mutex_);
         handler_ = nullptr;
     }
 
-    /// Snapshot the handler under the lock. Returns nullptr once detached.
-    tesseract::IEventHandler* load() const noexcept
+    /// True while the slot still routes to `handler` (false once detached).
+    bool routes_to(const tesseract::IEventHandler* handler) const
     {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return handler_;
+        std::shared_lock<std::shared_mutex> lk(mutex_);
+        return handler_ == handler;
+    }
+
+    /// Call `fn` with the handler, holding the slot shared for the whole call,
+    /// so detach() cannot finish while `fn` is still using the handler. Returns
+    /// false without calling `fn` once detached.
+    template <class F>
+    bool with_handler(F&& fn) const
+    {
+        std::shared_lock<std::shared_mutex> lk(mutex_);
+        if (!handler_)
+        {
+            return false;
+        }
+        fn(handler_);
+        return true;
     }
 
 private:
-    mutable std::mutex mutex_;
+    mutable std::shared_mutex mutex_;
     tesseract::IEventHandler* handler_; // non-owning
 };
 

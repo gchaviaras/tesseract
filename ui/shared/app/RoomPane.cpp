@@ -1,6 +1,7 @@
 #include "app/RoomPane.h"
 #include "app/image_send.h"
 #include "app/ShellBase.h"
+#include "app/shell_helpers.h"
 #include "app/SlashCommands.h"
 #include "views/ForwardRoomPicker.h"
 #include "views/MediaViewerOverlay.h"
@@ -19,7 +20,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
+#include <system_error>
 
 namespace tesseract
 {
@@ -56,6 +59,20 @@ RoomPane::~RoomPane()
 {
     invalidate_weak_self();
     *media_extract_alive_ = false; // signal any in-flight background lambdas to abort
+    // A gallery page request still in flight would call back into this pane
+    // when it completes (H8: use-after-free after a pop-out closes). Drop this
+    // pane's entries, so that callback finds no owner and returns.
+    if (shell_)
+    {
+        auto& owners = shell_->media_view_paginate_owners_;
+        for (auto it = owners.begin(); it != owners.end();)
+        {
+            if (it->second == this)
+                it = owners.erase(it);
+            else
+                ++it;
+        }
+    }
 }
 
 void RoomPane::attach(Widgets w)
@@ -164,6 +181,56 @@ bool RoomPane::restore_unsent_text_(const std::string& text)
     }
     bar->set_current_text(text);
     return true;
+}
+
+namespace
+{
+// The attachments of an upload draft, copied (the draft may be restored from
+// more than once, and keeps what the SDK send was made from).
+std::vector<views::ComposeBar::PendingAttachment>
+copy_attachments(const std::vector<views::ComposeBar::PendingAttachment>& in)
+{
+    std::vector<views::ComposeBar::PendingAttachment> out;
+    out.reserve(in.size());
+    for (const auto& it : in)
+    {
+        views::ComposeBar::PendingAttachment c;
+        c.kind = it.kind;
+        c.bytes = it.bytes;
+        c.mime = it.mime;
+        c.filename = it.filename;
+        c.width = it.width;
+        c.height = it.height;
+        c.is_animated = it.is_animated;
+        c.thumb_bytes_raw = it.thumb_bytes_raw;
+        c.thumb_width = it.thumb_width;
+        c.thumb_height = it.thumb_height;
+        c.duration_ms = it.duration_ms;
+        out.push_back(std::move(c));
+    }
+    return out;
+}
+} // namespace
+
+bool RoomPane::restore_upload_draft_(const UploadDraft& draft)
+{
+    if (!room_view_ || room_id_ != draft.room_id)
+        return false;
+    auto* bar = room_view_->compose_bar();
+    if (!bar || bar->has_pending())
+        return false; // the user has started a new attachment
+    if (!draft.items.empty())
+        bar->restore_pending(copy_attachments(draft.items));
+    restore_unsent_text_(draft.caption); // keeps newer text if there is any
+    return true;
+}
+
+void RoomPane::stash_upload_draft_(const UploadDraft& draft)
+{
+    if (draft.room_id.empty() || room_compose_drafts_.count(draft.room_id))
+        return;
+    room_compose_drafts_[draft.room_id] = RoomComposeDraft{
+        draft.caption, static_cast<int>(draft.caption.size()), copy_attachments(draft.items), {}};
 }
 
 void RoomPane::stash_unsent_draft_(const std::string& room_id,
@@ -576,7 +643,9 @@ void RoomPane::wire_room_view_()
             auto res = sess->client->set_room_topic(room_id, topic);
             if (res.ok)
                 return;
-            ui([this, message = res.message]() mutable {
+            ui([this, topic, message = res.message]() mutable {
+                if (room_view_ && room_view_->room_info_panel())
+                    room_view_->room_info_panel()->topic_save_failed(topic);
                 shell_show_status_message_(
                     tk::trf(tk::tr("Failed to set topic: {0}"), {message}));
             });
@@ -616,21 +685,41 @@ void RoomPane::wire_room_view_()
             shell_->seed_room_media_section_(room_id);
             return;
         }
-        v->set_field_permissions(pane_client_()->can_set_room_name(room_id),
-                                 pane_client_()->can_set_room_topic(room_id),
-                                 pane_client_()->can_set_room_avatar(room_id));
-        v->set_security_field_permissions(
-            pane_client_()->can_set_room_encryption(room_id),
-            pane_client_()->can_set_room_join_rules(room_id),
-            pane_client_()->can_set_room_guest_access(room_id),
-            pane_client_()->can_set_room_history_visibility(room_id));
-        v->set_permissions_field_permissions(
-            pane_client_()->can_set_room_power_levels(room_id));
-        v->set_permissions_state(pane_client_()->room_power_levels(room_id));
-        v->set_own_power_level(pane_client_()->room_own_power_level(room_id));
-        v->set_best_other_power_level(
-            pane_client_()->room_best_other_power_level(room_id));
+        // Each permission read asks the store for the room's power levels, so
+        // they run on a worker. The view is updated on the UI thread, and only
+        // if it still shows this room.
         v->set_calls_supported(shell_->server_info_.supports_calls);
+        auto sess = session_();
+        run_async_([this, rv, sess, room_id, ui = ui_poster(shell_poster(shell_))]() {
+            if (!ui.owner_alive()) // owner gone before the job started
+                return;
+            if (!sess || !sess->client) return;
+            tesseract::Client& c = *sess->client;
+            const bool can_name = c.can_set_room_name(room_id);
+            const bool can_topic = c.can_set_room_topic(room_id);
+            const bool can_avatar = c.can_set_room_avatar(room_id);
+            const bool can_encryption = c.can_set_room_encryption(room_id);
+            const bool can_join_rule = c.can_set_room_join_rules(room_id);
+            const bool can_guest = c.can_set_room_guest_access(room_id);
+            const bool can_history = c.can_set_room_history_visibility(room_id);
+            const bool can_power = c.can_set_room_power_levels(room_id);
+            const auto levels = c.room_power_levels(room_id);
+            const auto own = c.room_own_power_level(room_id);
+            const auto best = c.room_best_other_power_level(room_id);
+            ui([rv, room_id, can_name, can_topic, can_avatar, can_encryption,
+                can_join_rule, can_guest, can_history, can_power, levels, own, best]() {
+                auto* v = rv->room_settings_view();
+                if (!v || !v->is_open() || v->room_id() != room_id)
+                    return;
+                v->set_field_permissions(can_name, can_topic, can_avatar);
+                v->set_security_field_permissions(can_encryption, can_join_rule,
+                                                  can_guest, can_history);
+                v->set_permissions_field_permissions(can_power);
+                v->set_permissions_state(levels);
+                v->set_own_power_level(own);
+                v->set_best_other_power_level(best);
+            });
+        });
         fetch_banned_members_(rv, room_id);
         shell_->seed_room_media_section_(room_id);
         shell_->fetch_room_security_state_(room_id, session_());
@@ -908,7 +997,7 @@ void RoomPane::wire_room_view_()
     rv->on_send_reply =
         [this](const std::string& reply_id, const std::string& body)
     {
-        if (body.empty())
+        if (tesseract::text::trim(body).empty())
         {
             return;
         }
@@ -923,7 +1012,8 @@ void RoomPane::wire_room_view_()
         [this](const std::string& event_id, const std::string& new_body,
                bool is_caption)
     {
-        if (new_body.empty() && !is_caption)
+        // A caption may be cleared; a message body may not be blanked.
+        if (!is_caption && tesseract::text::trim(new_body).empty())
         {
             return;
         }
@@ -1206,17 +1296,48 @@ void RoomPane::wire_room_view_()
             room_view_->set_current_text({});
         }
     };
-    rv->on_send_image =
-        [this, clear_composer](std::vector<std::uint8_t> bytes, std::string mime,
-                               std::string filename, std::string caption, int w,
-                               int h, bool is_animated,
-                               std::string reply_event_id)
+    // An attachment send starts with the composer emptied, so what it held is
+    // kept (UploadDraft) until the upload's outcome is known: a failure, here
+    // or later, puts it back instead of losing the attachment and caption.
+    using PendingAttachment = tesseract::views::ComposeBar::PendingAttachment;
+    auto new_draft = [this](std::string caption)
     {
-        if (room_id_.empty() || !pane_client_())
-            return;
-
+        auto d = std::make_shared<UploadDraft>();
+        d->user_id = session_() ? session_()->user_id : std::string{};
+        d->room_id = room_id_;
+        d->caption = std::move(caption);
+        return d;
+    };
+    // The send was refused before it started. The compose bar clears its
+    // attachments once the handler returns, so restore after that.
+    auto refuse = [this](std::shared_ptr<UploadDraft> d)
+    {
+        shell_->post_to_ui_alive_([this, d] { shell_->restore_failed_upload_(d); });
+    };
+    rv->on_send_image =
+        [this, clear_composer, new_draft, refuse](
+            std::vector<std::uint8_t> bytes, std::string mime, std::string filename,
+            std::string caption, int w, int h, bool is_animated, std::string reply_event_id)
+    {
         if (bytes.empty())
             return;
+        auto draft = new_draft(caption);
+        {
+            PendingAttachment pa;
+            pa.kind = PendingAttachment::Kind::Image;
+            pa.bytes = bytes;
+            pa.mime = mime;
+            pa.filename = filename;
+            pa.width = static_cast<std::uint32_t>(w < 0 ? 0 : w);
+            pa.height = static_cast<std::uint32_t>(h < 0 ? 0 : h);
+            pa.is_animated = is_animated;
+            draft->items.push_back(std::move(pa));
+        }
+        if (room_id_.empty() || !pane_client_())
+        {
+            refuse(draft);
+            return;
+        }
         // Animated images go out untouched (and flagged); stills are
         // recompressed only when enabled and only if that is smaller.
         auto prepared = tesseract::prepare_image_for_send(
@@ -1231,70 +1352,114 @@ void RoomPane::wire_room_view_()
         {
             shell_show_status_message_(
                 tk::tr("This image can't be sent because its metadata can't be removed."));
+            refuse(draft);
             return;
         }
 
         clear_composer();
         const auto request_id = shell_->account_manager_.next_upload_request_id();
+        shell_->remember_upload_draft_(request_id, draft);
         pane_client_()->send_image_async(request_id, room_id_, prepared.bytes, prepared.mime,
                                           prepared.filename, caption, prepared.width,
                                           prepared.height, prepared.is_animated, reply_event_id,
                                           active_thread_root_for_send_());
     };
     rv->on_send_video =
-        [this, clear_composer](std::vector<std::uint8_t> bytes, std::string mime,
-                               std::string filename, std::string caption, int w,
-                               int h, std::vector<std::uint8_t> thumb_bytes,
-                               int thumb_w, int thumb_h,
-                               std::uint64_t duration_ms,
-                               std::string reply_event_id)
+        [this, clear_composer, new_draft, refuse](
+            std::vector<std::uint8_t> bytes, std::string mime, std::string filename,
+            std::string caption, int w, int h, std::vector<std::uint8_t> thumb_bytes,
+            int thumb_w, int thumb_h, std::uint64_t duration_ms, std::string reply_event_id)
     {
+        auto draft = new_draft(caption);
+        PendingAttachment pa;
+        pa.kind = PendingAttachment::Kind::Video;
+        pa.bytes = std::move(bytes);
+        pa.mime = std::move(mime);
+        pa.filename = std::move(filename);
+        pa.width = static_cast<std::uint32_t>(w < 0 ? 0 : w);
+        pa.height = static_cast<std::uint32_t>(h < 0 ? 0 : h);
+        pa.thumb_bytes_raw = std::move(thumb_bytes);
+        pa.thumb_width = static_cast<std::uint32_t>(thumb_w < 0 ? 0 : thumb_w);
+        pa.thumb_height = static_cast<std::uint32_t>(thumb_h < 0 ? 0 : thumb_h);
+        pa.duration_ms = duration_ms;
+        draft->items.push_back(std::move(pa));
         if (room_id_.empty() || !pane_client_())
+        {
+            refuse(draft);
             return;
+        }
         clear_composer();
         const auto request_id = shell_->account_manager_.next_upload_request_id();
-        pane_client_()->send_video_async(
-            request_id, room_id_, bytes, mime, filename, caption,
-            static_cast<std::uint32_t>(w < 0 ? 0 : w),
-            static_cast<std::uint32_t>(h < 0 ? 0 : h), thumb_bytes,
-            static_cast<std::uint32_t>(thumb_w < 0 ? 0 : thumb_w),
-            static_cast<std::uint32_t>(thumb_h < 0 ? 0 : thumb_h), duration_ms,
-            reply_event_id, active_thread_root_for_send_());
+        shell_->remember_upload_draft_(request_id, draft);
+        // Sent from the draft's own bytes: no second copy of a large video.
+        const auto& it = draft->items.front();
+        pane_client_()->send_video_async(request_id, room_id_, it.bytes, it.mime, it.filename,
+                                          caption, it.width, it.height, it.thumb_bytes_raw,
+                                          it.thumb_width, it.thumb_height, it.duration_ms,
+                                          reply_event_id, active_thread_root_for_send_());
     };
     rv->on_send_audio =
-        [this, clear_composer](std::vector<std::uint8_t> bytes, std::string mime,
-                               std::string filename, std::string caption,
-                               std::uint64_t duration_ms,
-                               std::string reply_event_id)
+        [this, clear_composer, new_draft, refuse](
+            std::vector<std::uint8_t> bytes, std::string mime, std::string filename,
+            std::string caption, std::uint64_t duration_ms, std::string reply_event_id)
     {
+        auto draft = new_draft(caption);
+        PendingAttachment pa;
+        pa.kind = PendingAttachment::Kind::Audio;
+        pa.bytes = std::move(bytes);
+        pa.mime = std::move(mime);
+        pa.filename = std::move(filename);
+        pa.duration_ms = duration_ms;
+        draft->items.push_back(std::move(pa));
         if (room_id_.empty() || !pane_client_())
+        {
+            refuse(draft);
             return;
+        }
         clear_composer();
         const auto request_id = shell_->account_manager_.next_upload_request_id();
-        pane_client_()->send_audio_async(request_id, room_id_, bytes, mime, filename,
-                                          caption, duration_ms, reply_event_id,
+        shell_->remember_upload_draft_(request_id, draft);
+        const auto& it = draft->items.front();
+        pane_client_()->send_audio_async(request_id, room_id_, it.bytes, it.mime, it.filename,
+                                          caption, it.duration_ms, reply_event_id,
                                           active_thread_root_for_send_());
     };
     rv->on_send_file =
-        [this, clear_composer](std::vector<std::uint8_t> bytes, std::string mime,
-                               std::string filename, std::string caption,
-                               std::string reply_event_id)
-    {
-        if (room_id_.empty() || !pane_client_())
-            return;
-        clear_composer();
-        const auto request_id = shell_->account_manager_.next_upload_request_id();
-        pane_client_()->send_file_async(request_id, room_id_, bytes, mime, filename,
-                                         caption, reply_event_id,
-                                         active_thread_root_for_send_());
-    };
-    rv->on_send_gallery =
-        [this, clear_composer](
-            std::vector<tesseract::views::ComposeBar::PendingAttachment> items,
+        [this, clear_composer, new_draft, refuse](
+            std::vector<std::uint8_t> bytes, std::string mime, std::string filename,
             std::string caption, std::string reply_event_id)
     {
+        auto draft = new_draft(caption);
+        PendingAttachment pa;
+        pa.kind = PendingAttachment::Kind::File;
+        pa.bytes = std::move(bytes);
+        pa.mime = std::move(mime);
+        pa.filename = std::move(filename);
+        draft->items.push_back(std::move(pa));
         if (room_id_.empty() || !pane_client_())
+        {
+            refuse(draft);
             return;
+        }
+        clear_composer();
+        const auto request_id = shell_->account_manager_.next_upload_request_id();
+        shell_->remember_upload_draft_(request_id, draft);
+        const auto& it = draft->items.front();
+        pane_client_()->send_file_async(request_id, room_id_, it.bytes, it.mime, it.filename,
+                                         caption, reply_event_id, active_thread_root_for_send_());
+    };
+    rv->on_send_gallery =
+        [this, clear_composer, new_draft, refuse](
+            std::vector<PendingAttachment> items, std::string caption,
+            std::string reply_event_id)
+    {
+        auto draft = new_draft(caption);
+        if (room_id_.empty() || !pane_client_())
+        {
+            draft->items = std::move(items);
+            refuse(draft);
+            return;
+        }
 
         const bool recompress = tesseract::Settings::instance().recompress_images_on_send;
 
@@ -1307,20 +1472,20 @@ void RoomPane::wire_room_view_()
             item.width = pa.width;
             item.height = pa.height;
             item.is_animated = pa.is_animated;
-            item.thumbnail_bytes = std::move(pa.thumb_bytes_raw);
+            item.thumbnail_bytes = pa.thumb_bytes_raw; // small; the original stays in the draft
             item.thumb_width = pa.thumb_width;
             item.thumb_height = pa.thumb_height;
             item.duration_ms = pa.duration_ms;
 
-            using Kind = tesseract::views::ComposeBar::PendingAttachment::Kind;
+            using Kind = PendingAttachment::Kind;
             if (pa.kind == Kind::Image)
             {
                 // Same policy as the single-image path: animated images are
                 // untouched and flagged, stills recompressed only when that
                 // is enabled and smaller.
                 auto prepared = tesseract::prepare_image_for_send(
-                    std::move(pa.bytes), std::move(pa.mime), std::move(pa.filename), pa.width,
-                    pa.height, pa.is_animated, recompress,
+                    std::vector<std::uint8_t>(pa.bytes), std::string(pa.mime),
+                    std::string(pa.filename), pa.width, pa.height, pa.is_animated, recompress,
                     [this](const std::uint8_t* d, std::size_t n, bool compress)
                     { return deps_.host->encode_for_send(d, n, compress); },
                     [](std::span<const std::uint8_t> b, std::string_view m)
@@ -1341,9 +1506,9 @@ void RoomPane::wire_room_view_()
             }
             else
             {
-                item.bytes = std::move(pa.bytes);
-                item.mime_type = std::move(pa.mime);
-                item.filename = std::move(pa.filename);
+                item.bytes = pa.bytes;
+                item.mime_type = pa.mime;
+                item.filename = pa.filename;
             }
 
             switch (pa.kind)
@@ -1355,9 +1520,10 @@ void RoomPane::wire_room_view_()
             }
             out_items.push_back(std::move(item));
         }
+        draft->items = std::move(items);
 
-        // One refused image aborts the whole send and leaves the composer as it
-        // was, so nothing is silently dropped and the user can remove it.
+        // One refused image aborts the whole send; the attachments go back to
+        // the composer so nothing is silently dropped and the user can remove it.
         if (refused_count > 0)
         {
             shell_show_status_message_(tk::trf(
@@ -1367,15 +1533,21 @@ void RoomPane::wire_room_view_()
                         "Remove them to send the rest.",
                         static_cast<long>(refused_count)),
                 {std::to_string(refused_count)}));
+            refuse(draft);
             return;
         }
         if (out_items.empty())
+        {
+            refuse(draft);
             return;
+        }
         clear_composer();
         const auto request_id = shell_->account_manager_.next_upload_request_id();
-        pane_client_()->send_gallery_async(request_id, room_id_, out_items, caption,
-                                           reply_event_id,
-                                           active_thread_root_for_send_());
+        shell_->remember_upload_draft_(request_id, draft);
+        pane_client_()->send_gallery_async(
+            request_id, room_id_, out_items,
+            shell_helpers::gallery_caption_or_fallback(caption, out_items.size()),
+            reply_event_id, active_thread_root_for_send_());
     };
 
     // ── Local media viewer ───────────────────────────────────────────────
@@ -1682,14 +1854,33 @@ void RoomPane::apply_thread_transition_(
 {
     if (pane_client_())
     {
-        for (const auto& root : t.threads_to_unsubscribe)
-            pane_client_()->unsubscribe_thread(room_id_, root);
-        if (t.unsubscribe_room_threads_)
-            pane_client_()->unsubscribe_room_threads(room_id_);
-        if (t.subscribe_room_threads_)
-            pane_client_()->subscribe_room_threads(room_id_);
-        for (const auto& root : t.threads_to_subscribe)
-            pane_client_()->subscribe_thread(room_id_, root);
+        // The main pane's active room keeps a background thread-list subscription
+        // for the threads button (ShellBase_navigation). Closing the list must not
+        // release it, or the button stops tracking threads until the room changes.
+        const bool background_room =
+            !has_owner_ && shell_ && room_id_ == shell_->current_room_id_;
+        const bool unsubscribe_list =
+            t.unsubscribe_room_threads_ && !(t.closes_list_ && background_room);
+        // subscribe_thread and subscribe_room_threads build a timeline with a
+        // blocking call, so the transition runs on the mutable pool. That pool
+        // has one thread, so the calls still run in this order.
+        run_async_mut_([sess = session_(), rid = room_id_,
+                        unsubscribe_roots = t.threads_to_unsubscribe,
+                        unsubscribe_list,
+                        subscribe_list = t.subscribe_room_threads_,
+                        subscribe_roots = t.threads_to_subscribe]
+        {
+            if (!sess || !sess->client)
+                return;
+            for (const auto& root : unsubscribe_roots)
+                sess->client->unsubscribe_thread(rid, root);
+            if (unsubscribe_list)
+                sess->client->unsubscribe_room_threads(rid);
+            if (subscribe_list)
+                sess->client->subscribe_room_threads(rid);
+            for (const auto& root : subscribe_roots)
+                sess->client->subscribe_thread(rid, root);
+        });
     }
 
     // Drop any in-progress find-in-thread search before the root changes
@@ -1934,11 +2125,15 @@ void RoomPane::request_forward_history_(const std::string& room_id)
         return;
     if (!state.is_focused)
         return;
+    // Logged out: there is no client to page with, so nothing is in flight.
+    auto* client = pane_client_();
+    if (!client)
+        return;
     state.fwd_in_flight = true;
 
     auto req_id = shell_->next_paginate_id_++;
     shell_->pending_paginates_[req_id] = {room_id, false};
-    pane_client_()->paginate_forward_async(req_id, room_id, ShellBase::kPaginationBatch);
+    client->paginate_forward_async(req_id, room_id, ShellBase::kPaginationBatch);
 }
 
 void RoomPane::return_to_live_(const std::string& room_id)
@@ -1975,12 +2170,23 @@ void RoomPane::return_to_live_(const std::string& room_id)
             if (!sess || !sess->client) return;
             sess->client->subscribe_room(room_id);
             ui(
-                [this, room_id]()
+                [this, room_id, sess]()
                 {
+                    // The session can change while subscribe_room runs (sign-out,
+                    // or an account switch on the main pane). Paginating then would
+                    // use another account's client and file its result against
+                    // this one, so give up and clear the return instead.
+                    if (!sess->client || sess != session_())
+                    {
+                        auto& st = shell_->pagination_for_(pane_user_id_(), room_id);
+                        st.in_flight = false;
+                        st.returning_to_live = false;
+                        return;
+                    }
                     auto req_id = shell_->next_paginate_id_++;
                     shell_->pending_paginates_[req_id] = {room_id, true};
-                    pane_client_()->paginate_back_async(req_id, room_id,
-                                                         ShellBase::kPaginationBatch);
+                    sess->client->paginate_back_async(req_id, room_id,
+                                                       ShellBase::kPaginationBatch);
                 });
         });
 }
@@ -3748,7 +3954,7 @@ void RoomPane::fetch_banned_members_(views::RoomView* rv, const std::string& roo
             auto* v = rv->room_settings_view();
             if (!v || !v->is_open() || v->room_id() != room_id)
                 return;
-            v->set_banned_members(std::move(banned));
+            v->set_banned_members(std::move(banned.members), banned.complete);
         });
     });
 }
@@ -3948,7 +4154,20 @@ void RoomPane::request_pagination_back_()
         [this, shell = shell_, sess = session_(), uid = pane_user_id_(),
          room_id = room_id_, alive = weak_flag()]
         {
-            if (!sess || !sess->client) return;
+            if (!sess || !sess->client)
+            {
+                // The session went away after the request was armed. Nothing
+                // will come back to clear the in-flight latch, so clear it
+                // here or back-pagination for this room stays stuck.
+                shell->post_to_ui_([this, shell, room_id, uid, alive]()
+                {
+                    shell->pagination_for_(uid, room_id).in_flight = false;
+                    if (!alive.lock() || !room_view_)
+                        return;
+                    room_view_->set_paginating(false);
+                });
+                return;
+            }
             auto pr = sess->client->paginate_back_with_status(
                 room_id, ShellBase::kPaginationBatch);
             shell->post_to_ui_(
@@ -3995,20 +4214,71 @@ void RoomPane::post_to_ui_(std::function<void()> fn)
     }
 }
 
+namespace
+{
+// Writes `bytes` to `dest` through a sibling temp file, renamed over `dest` only
+// once complete, so a failed write never leaves a truncated file under the chosen
+// name. The path is UTF-8 and is converted as such, which matters on Windows.
+bool save_bytes_atomically_(const std::string& dest,
+                            const std::vector<std::uint8_t>& bytes)
+{
+    namespace fs = std::filesystem;
+    const fs::path target(reinterpret_cast<const char8_t*>(dest.c_str()));
+    fs::path temp = target;
+    temp += ".part";
+    {
+        std::ofstream f(temp, std::ios::binary | std::ios::trunc);
+        if (f)
+            f.write(reinterpret_cast<const char*>(bytes.data()),
+                    static_cast<std::streamsize>(bytes.size()));
+        if (f)
+            f.close();
+        if (!f)
+        {
+            std::error_code ec;
+            fs::remove(temp, ec);
+            return false;
+        }
+    }
+    std::error_code ec;
+    fs::rename(temp, target, ec);
+    if (ec)
+    {
+        std::error_code ignored;
+        fs::remove(temp, ignored);
+        return false;
+    }
+    return true;
+}
+} // namespace
+
 void RoomPane::save_source_to_file_(std::string source_json,
                                      std::string dest_path)
 {
     if (!pane_client_()) return;
+    // The write runs on a worker and the outcome is shown on the UI thread. The
+    // completion touches only the shell, which outlives the pane, so a pane closed
+    // mid-download still saves and reports.
+    ShellBase* shell = shell_;
     auto req_id = shell_->begin_media_req_(0,
-        guarded([dest = std::move(dest_path)](std::vector<std::uint8_t> bytes) mutable
+        [shell, dest = std::move(dest_path)](std::vector<std::uint8_t> bytes) mutable
         {
-            if (!bytes.empty())
-            {
-                std::ofstream f(dest, std::ios::binary);
-                f.write(reinterpret_cast<const char*>(bytes.data()),
-                        static_cast<std::streamsize>(bytes.size()));
-            }
-        }));
+            shell->run_async_(
+                [shell, dest = std::move(dest), bytes = std::move(bytes)]() mutable
+                {
+                    const bool ok = !bytes.empty() && save_bytes_atomically_(dest, bytes);
+                    shell->post_to_ui_(
+                        [shell, dest, ok]
+                        {
+                            if (ok)
+                                shell->show_status_message_(tk::trf(
+                                    tk::tr("Saved to {0}"), {dest}));
+                            else
+                                shell->show_status_message_(
+                                    tk::tr("Couldn't save the file."));
+                        });
+                });
+        });
     pane_client_()->fetch_source_bytes_async(req_id, source_json);
 }
 

@@ -263,6 +263,9 @@ TEST_CASE("global search results: room names resolve from the cached list",
     s.search_request_id_ = 2;
     s.handle_search_failed_ui_(2, "boom");
     CHECK(s.search_pending_queries_.empty());
+    // The reason is shown, not reduced to "No matches".
+    REQUIRE_FALSE(s.statuses.empty());
+    CHECK(s.statuses.back() == "Search failed: boom");
     s.handle_search_failed_ui_(2, "boom"); // unknown now: no-op
 }
 

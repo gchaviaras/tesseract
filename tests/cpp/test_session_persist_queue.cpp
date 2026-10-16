@@ -8,8 +8,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -220,4 +222,78 @@ TEST_CASE("SessionPersistQueue discard drops pending jobs and waits for the "
     REQUIRE(sink().latest["@a:hs"] == "a1");
     REQUIRE(sink().latest["@b:hs"] == "b1");
     REQUIRE(sink().total == 2);
+}
+
+TEST_CASE("save_with_retries retries until an attempt succeeds",
+          "[session_persist_queue]")
+{
+    int calls = 0;
+    CHECK(tesseract::save_with_retries([&] { return ++calls == 3; }, 4,
+                                       std::chrono::milliseconds(0)));
+    CHECK(calls == 3);
+}
+
+TEST_CASE("save_with_retries gives up after its attempts, counting throws",
+          "[session_persist_queue]")
+{
+    int calls = 0;
+    CHECK_FALSE(tesseract::save_with_retries(
+        [&]() -> bool
+        {
+            ++calls;
+            throw std::runtime_error("disk full");
+        },
+        3, std::chrono::milliseconds(0)));
+    CHECK(calls == 3);
+}
+
+TEST_CASE("save_with_retries stops once cancelled, mid-backoff included",
+          "[session_persist_queue]")
+{
+    int calls = 0;
+    bool cancel = false;
+    const auto start = std::chrono::steady_clock::now();
+    CHECK_FALSE(tesseract::save_with_retries(
+        [&]
+        {
+            ++calls;
+            cancel = true; // the account signs out after the first failure
+            return false;
+        },
+        4, std::chrono::seconds(30), [&] { return cancel; }));
+    CHECK(calls == 1);
+    CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(5));
+}
+
+TEST_CASE("SessionPersistQueue refuses writes for a discarded user until revive",
+          "[session_persist_queue]")
+{
+    sink().reset();
+    SessionPersistQueue q(&recording_writer);
+    q.discard("@a:hs");
+    q.enqueue("@a:hs", "a1"); // logged out: refused
+    q.enqueue("@b:hs", "b1"); // another account: unaffected
+    q.drain();
+    {
+        std::lock_guard<std::mutex> lk(sink().m);
+        REQUIRE(sink().latest.count("@a:hs") == 0);
+        REQUIRE(sink().latest["@b:hs"] == "b1");
+    }
+
+    q.revive("@a:hs");
+    q.enqueue("@a:hs", "a2"); // logged in again
+    q.drain();
+    std::lock_guard<std::mutex> lk(sink().m);
+    REQUIRE(sink().latest["@a:hs"] == "a2");
+}
+
+TEST_CASE("session save failure reports reach the registered handler until it is cleared",
+          "[session_persist_queue]")
+{
+    std::vector<std::string> seen;
+    tesseract::set_session_save_failed_handler([&](const std::string& u) { seen.push_back(u); });
+    tesseract::report_session_save_failed("@a:hs");
+    tesseract::set_session_save_failed_handler({});
+    tesseract::report_session_save_failed("@b:hs"); // no handler: ignored
+    REQUIRE(seen == std::vector<std::string>{"@a:hs"});
 }

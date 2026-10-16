@@ -5,6 +5,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include "app/ShellBase.h"
 #include "settings_guard.h"
 #include "shell_test_double.h"
@@ -98,6 +100,7 @@ struct TabShell : tesseract::test::TestShellBase
     using ShellBase::pending_preview_overrides_;
     using ShellBase::pending_restore_popouts_;
     using ShellBase::pending_restore_rooms_;
+    using ShellBase::handle_account_prefs_updated_ui_;
     using ShellBase::persist_room_layout_pref_;
     using ShellBase::recent_room_ids_;
     using ShellBase::refresh_window_title_;
@@ -463,6 +466,25 @@ TEST_CASE("an unrestored saved layout is not overwritten by the empty tab strip"
     s.persist_room_layout_pref_(false);
     CHECK(s.active_account_->prefs_json.find("!saved1") != std::string::npos);
     CHECK(s.active_account_->prefs_json.find("!saved2") != std::string::npos);
+}
+
+TEST_CASE("a synced open-room list is capped before the restore", "[shell][tabs][persist]")
+{
+    tesseract::Client client;
+    TabShell s;
+    s.client_ = &client;
+    s.active_account_ = std::make_shared<tesseract::AccountSession>();
+    s.active_account_->user_id = "@me:x";
+    // Another device saved far more rooms than a window can restore.
+    nlohmann::json open = nlohmann::json::array();
+    for (int i = 0; i < 500; ++i)
+        open.push_back("!room" + std::to_string(i) + ":x");
+    const std::string json =
+        nlohmann::json{{"last_room", "!room0:x"}, {"open_rooms", open}}.dump();
+    s.handle_account_prefs_updated_ui_("@me:x", json);
+    CHECK(s.pending_restore_rooms_.size() == 32);
+    REQUIRE_FALSE(s.pending_restore_rooms_.empty());
+    CHECK(s.pending_restore_rooms_[0] == "!room0:x");
 }
 
 TEST_CASE("room_by_id_ falls back to hidden rooms and tracks index changes",

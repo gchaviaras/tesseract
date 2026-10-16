@@ -864,3 +864,26 @@ TEST_CASE("Settings: an empty or non-object file is treated as corrupt")
         fs::remove_all(dir);
     }
 }
+
+TEST_CASE("split_proxy_credentials separates the userinfo", "[settings][proxy]")
+{
+    using namespace tesseract;
+    auto p = split_proxy_credentials("http://bob:s3cret@proxy.example:3128");
+    CHECK(p.url == "http://proxy.example:3128");
+    CHECK(p.userinfo == "bob:s3cret");
+    CHECK(join_proxy_credentials(p.url, p.userinfo) == "http://bob:s3cret@proxy.example:3128");
+
+    // An @ after the authority belongs to the path, not to the credentials.
+    p = split_proxy_credentials("http://proxy.example:3128/a@b");
+    CHECK(p.url == "http://proxy.example:3128/a@b");
+    CHECK(p.userinfo.empty());
+
+    // A password containing @ (last @ wins).
+    p = split_proxy_credentials("https://u:p@ss@host:1");
+    CHECK(p.url == "https://host:1");
+    CHECK(p.userinfo == "u:p@ss");
+
+    CHECK(split_proxy_credentials("garbage").userinfo.empty());
+    CHECK(join_proxy_credentials("http://h:1", "").empty() == false);
+    CHECK(join_proxy_credentials("garbage", "u:p") == "garbage");
+}

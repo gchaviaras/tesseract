@@ -82,9 +82,11 @@ void RoomModerationSection::set_loading(bool loading)
     rebuild_();
 }
 
-void RoomModerationSection::set_banned_members(std::vector<tesseract::BannedMember> members)
+void RoomModerationSection::set_banned_members(std::vector<tesseract::BannedMember> members,
+                                               bool complete)
 {
     loading_ = false;
+    incomplete_ = !complete;
     members_ = std::move(members);
     pending_.clear();
     rebuild_();
@@ -132,12 +134,22 @@ void RoomModerationSection::rebuild_()
     rows_.clear();
     loading_label_ = nullptr;
     empty_label_   = nullptr;
+    incomplete_note_ = nullptr;
 
     if (loading_)
     {
         loading_label_ = group_->add_widget(
             tk::create_widget<tk::Label>(this, tk::tr("Loading\xe2\x80\xa6")));
         return;
+    }
+    if (incomplete_)
+    {
+        incomplete_note_ = group_->add_widget(tk::create_widget<tk::Label>(
+            this,
+            tk::tr("Some bans may be missing: the room's member list did not fully load. "
+                   "Reopen settings to try again."),
+            tk::FontRole::Small));
+        incomplete_note_->set_wrap(true);
     }
     if (members_.empty())
     {

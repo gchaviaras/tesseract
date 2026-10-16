@@ -1,5 +1,6 @@
 #pragma once
 #include "app/ThreadPanelController.h"
+#include "app/UploadDraft.h"
 #include "views/GifController.h"
 #include "views/MentionController.h"
 #include "views/MediaViewerItem.h"
@@ -200,6 +201,13 @@ public:
     // queue back into this pane's composer. Returns false (and changes
     // nothing) if the composer already holds new text or isn't available.
     bool restore_unsent_text_(const std::string& text);
+    // Put a failed attachment send (attachments and caption) back in this
+    // pane's composer. Returns false, changing nothing, when the pane isn't
+    // showing that room or the composer already holds attachments.
+    bool restore_upload_draft_(const UploadDraft& draft);
+    // Same, for a room this pane isn't showing: saves it as that room's draft
+    // unless one already exists.
+    void stash_upload_draft_(const UploadDraft& draft);
     // Same, for a room this pane isn't showing: saves `text` as that room's
     // draft unless one already exists, so apply_compose_draft_ brings it
     // back when the user returns.

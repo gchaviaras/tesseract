@@ -858,6 +858,8 @@ private:
     // rooms nobody is looking at don't pay the O(n) rescan.
     void refresh_media_count_();
     int  media_count_() const;
+    // Set by refresh_media_count_(); paint() takes the count once for a burst.
+    bool media_count_dirty_ = false;
     void show_room_settings();
     // Confirms leaving room_id (via confirm_provider_, falling back to
     // firing directly if unset) then forwards to on_leave_room. Shared by

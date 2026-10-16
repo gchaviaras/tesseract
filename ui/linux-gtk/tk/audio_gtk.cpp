@@ -29,16 +29,16 @@ public:
     ~GtkAudioPlayer() override
     {
         stop_timer();
-        if (bus_watch_id_)
-        {
-            g_source_remove(bus_watch_id_);
-        }
+        teardown_pipeline_();
     }
 
     void play(const std::uint8_t* data, std::size_t size,
               std::string_view /*mime*/) override
     {
         reached_end_ = false;
+        // The old pipeline reads bytes_ through its memory stream, so it must
+        // be gone before the buffer is replaced.
+        teardown_pipeline_();
         bytes_.assign(data, data + size);
         // mem:// URIs aren't a standard GStreamer scheme; build a giostream
         // source on the fly instead. playbin can consume a `giostreamsrc`
@@ -50,17 +50,6 @@ public:
         // simplest cross-distro path: use appsrc.
         // For simplicity here, we use a `giostreamsrc` element manually
         // composed with `decodebin` + `autoaudiosink` instead of playbin.
-        if (current_pipeline_)
-        {
-            gst_element_set_state(current_pipeline_, GST_STATE_NULL);
-            gst_object_unref(current_pipeline_);
-            current_pipeline_ = nullptr;
-        }
-        if (bus_watch_id_)
-        {
-            g_source_remove(bus_watch_id_);
-            bus_watch_id_ = 0;
-        }
 
         // Build: giostreamsrc ! decodebin ! audioconvert ! autoaudiosink
         GstElement* pipe = gst_pipeline_new("tk_voice_pipeline");
@@ -330,6 +319,23 @@ private:
     }
 
     GstElement* current_pipeline_ = nullptr;
+
+    // Stops and releases the current pipeline and its bus watch, if any. The
+    // watch goes first so no bus callback runs against a half-torn-down player.
+    void teardown_pipeline_()
+    {
+        if (bus_watch_id_)
+        {
+            g_source_remove(bus_watch_id_);
+            bus_watch_id_ = 0;
+        }
+        if (current_pipeline_)
+        {
+            gst_element_set_state(current_pipeline_, GST_STATE_NULL);
+            gst_object_unref(current_pipeline_);
+            current_pipeline_ = nullptr;
+        }
+    }
     std::vector<std::uint8_t> bytes_;
     bool playing_ = false;
     bool reached_end_ = false;

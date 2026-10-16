@@ -1,12 +1,14 @@
 #include "app/shell_helpers.h"
 
 #include "tk/i18n.h"
+#include "views/map_tiles.h"
 
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <string_view>
 #ifndef _WIN32
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -15,6 +17,14 @@
 
 namespace tesseract::shell_helpers
 {
+
+std::string gallery_caption_or_fallback(const std::string& caption, std::size_t item_count)
+{
+    if (!caption.empty())
+        return caption;
+    return tk::trf(tk::trn("Sent {0} item", "Sent {0} items", static_cast<long>(item_count)),
+                   {std::to_string(item_count)});
+}
 
 Settings::WindowGeometry clamp_to_screens(
     const Settings::WindowGeometry& saved,
@@ -185,6 +195,35 @@ tk::AccentTheme to_tk_accent(tesseract::Settings::ThemeAccent accent)
     return tk::AccentTheme::Blue;
 }
 
+std::wstring quote_command_line_arg(std::wstring_view arg)
+{
+    std::wstring out = L"\"";
+    std::size_t backslashes = 0;
+    for (const wchar_t c : arg)
+    {
+        if (c == L'\\')
+        {
+            ++backslashes;
+            continue;
+        }
+        if (c == L'"')
+        {
+            // Backslashes before a quote are doubled, and the quote is escaped.
+            out.append(backslashes * 2 + 1, L'\\');
+        }
+        else
+        {
+            out.append(backslashes, L'\\');
+        }
+        out.push_back(c);
+        backslashes = 0;
+    }
+    // Backslashes before the closing quote are doubled too.
+    out.append(backslashes * 2, L'\\');
+    out.push_back(L'"');
+    return out;
+}
+
 // Write `text` (a secret — the recovery key) to the UTF-8 `path`. On POSIX
 // the file is owner-only (0600) from the moment it exists — including when
 // overwriting an existing file — and failing to make it so is an error, not
@@ -240,6 +279,55 @@ bool write_private_text_file(const std::string& path, const std::string& text,
     }
     return true;
 #endif
+}
+
+std::vector<std::uint8_t> read_tile_disk(const std::filesystem::path& path)
+{
+    std::vector<std::uint8_t> bytes;
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec))
+        return bytes;
+    {
+        std::ifstream f(path, std::ios::binary);
+        bytes.assign(std::istreambuf_iterator<char>(f), {});
+    }
+    if (!views::is_png_bytes(bytes))
+    {
+        std::filesystem::remove(path, ec);
+        bytes.clear();
+    }
+    return bytes;
+}
+
+bool write_tile_disk(const std::filesystem::path& path,
+                     const std::vector<std::uint8_t>& png)
+{
+    if (!views::is_png_bytes(png))
+        return false;
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec)
+        return false;
+    auto part = path;
+    part += ".part";
+    {
+        std::ofstream f(part, std::ios::binary | std::ios::trunc);
+        f.write(reinterpret_cast<const char*>(png.data()),
+                static_cast<std::streamsize>(png.size()));
+        f.close();
+        if (!f)
+        {
+            std::filesystem::remove(part, ec);
+            return false;
+        }
+    }
+    std::filesystem::rename(part, path, ec);
+    if (ec)
+    {
+        std::filesystem::remove(part, ec);
+        return false;
+    }
+    return true;
 }
 
 } // namespace tesseract::shell_helpers

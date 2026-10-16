@@ -193,6 +193,28 @@ TEST_CASE("Plural-Forms evaluator: French-style rule (plural=(n>1))", "[i18n]")
     CHECK(tk::trn("form", "forms", 5L) == "formes");
 }
 
+TEST_CASE("Plural-Forms evaluator: a dangling operator does not read past the expression",
+          "[i18n]")
+{
+    // "n>" ends in an operator with no right-hand side: the parser reaches the
+    // end of the expression where it expects a value.
+    std::string meta = "Content-Type: text/plain; charset=UTF-8\n"
+                       "Plural-Forms: nplurals=2; plural=n>;\n";
+    std::string plural_msgid  = std::string("item")  + '\0' + "items";
+    std::string plural_msgstr = std::string("élément") + '\0' + "éléments";
+    auto mo = build_mo({
+        {"", meta},
+        {plural_msgid, plural_msgstr},
+    });
+    write_tmp_mo(mo, "tesseract.test_dangling.mo");
+    tk::set_locale(tmp_dir(), "test_dangling");
+
+    const auto one = tk::trn("item", "items", 1L);
+    const auto many = tk::trn("item", "items", 2L);
+    CHECK((one == "élément" || one == "éléments"));
+    CHECK((many == "élément" || many == "éléments"));
+}
+
 TEST_CASE("set_locale fallback: lang-REGION tries lang prefix", "[i18n]")
 {
     std::string meta = "Content-Type: text/plain; charset=UTF-8\n"

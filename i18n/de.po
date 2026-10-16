@@ -2941,6 +2941,18 @@ msgstr "In Datei speichern …"
 msgid "Saved."
 msgstr "Gespeichert."
 
+#: ui/shared/app/RoomPane.cpp:4072
+msgid "Saved to {0}"
+msgstr "Gespeichert unter {0}"
+
+#: ui/shared/app/ShellBase_search.cpp:165
+msgid "Search failed: {0}"
+msgstr "Suche fehlgeschlagen: {0}"
+
+#: ui/shared/app/ShellBase_wiring.cpp:976
+msgid "This voice message is too long to upload."
+msgstr "Diese Sprachnachricht ist zu lang zum Hochladen."
+
 #: ui/shared/views/EncryptionSetupOverlay.cpp:264
 msgid "Couldn't save the file."
 msgstr "Die Datei konnte nicht gespeichert werden."

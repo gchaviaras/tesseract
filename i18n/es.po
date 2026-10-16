@@ -3040,6 +3040,18 @@ msgstr "Guardar en archivo…"
 msgid "Saved."
 msgstr "Guardado."
 
+#: ui/shared/app/RoomPane.cpp:4072
+msgid "Saved to {0}"
+msgstr "Guardado en {0}"
+
+#: ui/shared/app/ShellBase_search.cpp:165
+msgid "Search failed: {0}"
+msgstr "La búsqueda falló: {0}"
+
+#: ui/shared/app/ShellBase_wiring.cpp:976
+msgid "This voice message is too long to upload."
+msgstr "Este mensaje de voz es demasiado largo para subirlo."
+
 #: ui/shared/views/EncryptionSetupOverlay.cpp:264
 msgid "Couldn't save the file."
 msgstr "No se pudo guardar el archivo."

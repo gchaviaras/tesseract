@@ -1410,6 +1410,18 @@ msgstr "Gjenopprettingsnøkkel eller gjenopprettingsfrase"
 msgid "Saved."
 msgstr "Lagret."
 
+#: ui/shared/app/RoomPane.cpp:4072
+msgid "Saved to {0}"
+msgstr "Lagret til {0}"
+
+#: ui/shared/app/ShellBase_search.cpp:165
+msgid "Search failed: {0}"
+msgstr "Søket mislyktes: {0}"
+
+#: ui/shared/app/ShellBase_wiring.cpp:976
+msgid "This voice message is too long to upload."
+msgstr "Denne talemeldingen er for lang til å lastes opp."
+
 msgid "Couldn't save the file."
 msgstr "Kunne ikke lagre filen."
 

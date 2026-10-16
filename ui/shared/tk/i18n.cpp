@@ -2,8 +2,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <fstream>
+#include <functional>
 #include <sstream>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -113,9 +117,9 @@ struct PluralExpr
             ++pos_;
             got_digit = true;
         }
-        if (!got_digit)
+        if (!got_digit && *pos_ != '\0')
         {
-            ++pos_; // skip unknown character
+            ++pos_; // skip an unknown character, but never step past the end
         }
         return val;
     }
@@ -321,16 +325,27 @@ long eval_plural(const std::string& expr, long n)
 // Catalog
 // ---------------------------------------------------------------------------
 
+// Transparent hash, so the catalogs can be searched by string_view: a lookup
+// from tr()/trn() then builds no std::string key, which matters on paint paths.
+struct MsgidHash
+{
+    using is_transparent = void;
+    std::size_t operator()(std::string_view s) const noexcept
+    {
+        return std::hash<std::string_view>{}(s);
+    }
+};
+
 struct Catalog
 {
     bool identity_mode_ = true; // true = no MO file loaded, pass through
     std::string locale_;
 
     // Singular lookup: msgid -> msgstr (first form for singular-only entries)
-    std::unordered_map<std::string, std::string> singular_;
+    std::unordered_map<std::string, std::string, MsgidHash, std::equal_to<>> singular_;
 
     // Plural lookup: sing msgid -> all plural forms
-    std::unordered_map<std::string, std::vector<std::string>> plural_;
+    std::unordered_map<std::string, std::vector<std::string>, MsgidHash, std::equal_to<>> plural_;
 
     long nplurals_ = 2;
     std::string plural_expr_ = "(n != 1)"; // default English rule
@@ -588,7 +603,7 @@ std::string tr(const char* source)
     {
         return source;
     }
-    auto it = g_catalog.singular_.find(source);
+    auto it = g_catalog.singular_.find(std::string_view(source));
     if (it != g_catalog.singular_.end())
     {
         return it->second;
@@ -603,7 +618,7 @@ std::string trn(const char* sing, const char* plur, long n)
         return (n == 1) ? sing : plur;
     }
 
-    auto it = g_catalog.plural_.find(sing);
+    auto it = g_catalog.plural_.find(std::string_view(sing));
     if (it != g_catalog.plural_.end())
     {
         const auto& forms = it->second;
@@ -746,7 +761,16 @@ std::string trf(const std::string& fmt, std::initializer_list<std::string> args)
                 }
                 if (all_digits)
                 {
-                    std::size_t idx = static_cast<std::size_t>(std::stoul(idx_str));
+                    // A catalog placeholder with a huge index throws out_of_range; treat
+                    // it as out of range, which drops the placeholder like any other.
+                    std::size_t idx = argv.size();
+                    try
+                    {
+                        idx = static_cast<std::size_t>(std::stoul(idx_str));
+                    }
+                    catch (const std::exception&)
+                    {
+                    }
                     if (idx < argv.size())
                     {
                         result += argv[idx];

@@ -2293,6 +2293,18 @@ msgstr "[Réçövéry kéy ör réçövéry pàssphràséxxxxxxx]"
 msgid "Saved."
 msgstr "[Sàvéd.x]"
 
+#: ui/shared/app/RoomPane.cpp:4072
+msgid "Saved to {0}"
+msgstr "[Sàvéd tö {0}xx]"
+
+#: ui/shared/app/ShellBase_search.cpp:165
+msgid "Search failed: {0}"
+msgstr "[Séàrçh fàïléd: {0}xxx]"
+
+#: ui/shared/app/ShellBase_wiring.cpp:976
+msgid "This voice message is too long to upload."
+msgstr "[Thïs vöïçé méssàgé ïs töö löñg tö ùplöàd.xxxxxxxx]"
+
 #: ui/shared/views/EncryptionSetupOverlay.cpp:264
 msgid "Couldn't save the file."
 msgstr "[Çöùldñ't sàvé thé fïlé.xxxx]"

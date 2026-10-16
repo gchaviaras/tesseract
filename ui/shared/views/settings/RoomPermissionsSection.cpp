@@ -6,6 +6,7 @@
 #include "tk/i18n.h"
 
 #include <memory>
+#include <exception>
 #include <string>
 #include <utility>
 
@@ -69,7 +70,16 @@ RoomPermissionsSection::RoomPermissionsSection()
     {
         combo->on_changed = [this, field](std::string value)
         {
-            current_.*field = std::stoll(value);
+            int64_t parsed = 0;
+            try
+            {
+                parsed = std::stoll(value);
+            }
+            catch (const std::exception&)
+            {
+                return; // not a number: keep the current value
+            }
+            current_.*field = parsed;
             if (on_permissions_changed) on_permissions_changed(current_);
         };
     };

@@ -923,6 +923,25 @@ protected:
         return it != media_fetch_failed_.end() &&
                std::chrono::steady_clock::now() < it->second.retry_after;
     }
+    // True when nothing will resolve `key` soon, so the room-switch gate must
+    // not wait on it: a media key in failure backoff or permanently
+    // undecodable, a URL whose preview already failed (cached, so never
+    // re-requested), or any preview while the server has previews disabled
+    // (never requested). A failure *event* only fires when a fetch actually
+    // runs; this covers revisits where the guards skip the fetch entirely.
+    bool media_dep_known_failed_(const std::string& key) const
+    {
+        if (media_decode_failed_.count(key) || media_fetch_backed_off_(key))
+            return true;
+        if (key.starts_with("http://") || key.starts_with("https://"))
+        {
+            if (!server_info_.preview_url_enabled)
+                return true;
+            auto it = url_previews_.find(key);
+            return it != url_previews_.end() && it->second.failed;
+        }
+        return false;
+    }
     // `sess` is the account the fetch was issued for. The back-off is stored in
     // that account's cache, not in whichever account is active when it lands.
     void note_media_fetch_failed_(const std::string& key,

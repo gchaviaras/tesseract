@@ -3,8 +3,8 @@
 // RoomSwitchGateKeeper — the room-switch "display gate" state machine,
 // extracted from MessageListView. On a room switch the message list is held
 // invisible until the visible rows' content — height-affecting media
-// (images, stickers, video thumbnails, URL-preview cards), sender/membership
-// avatars, custom-emoji glyphs, and quoted-reply resolution — has loaded, OR
+// (images, stickers, video thumbnails, URL-preview cards), custom-emoji
+// glyphs, and quoted-reply resolution — has loaded or failed, OR
 // a bounded timeout elapses — so the user never sees the list reflow or pop
 // in as async content arrives. A "focused" mode jumps to a specific event on
 // reveal instead of scrolling to the bottom.
@@ -42,7 +42,7 @@ class RoomSwitchGateKeeper
 {
 public:
     // Fallback timeout so a slow / offline network can never hold the list
-    // invisible forever. Blocks on URL previews, avatars, custom-emoji
+    // invisible forever. Blocks on URL previews, custom-emoji
     // glyphs, and quoted-reply resolution — all homeserver round-trips that
     // routinely exceed ~150ms, and all resolve concurrently (not
     // multiplicatively) since dep_satisfied checks are independent per row.
@@ -71,6 +71,15 @@ public:
     void set_avatar_provider(ImageProvider avatar)
     {
         avatar_provider_ = std::move(avatar);
+    }
+    // "Will this key never resolve soon?" (media in failure backoff, failed
+    // preview, ...). Keys it reports true for are never waited on: a failure
+    // *event* only fires when a fetch runs, and a revisit skips known-failed
+    // fetches, so without this the gate would wait out the timeout each time.
+    using FailedProvider = std::function<bool(const std::string& key)>;
+    void set_failed_provider(FailedProvider failed)
+    {
+        failed_provider_ = std::move(failed);
     }
     // Re-pin scroll on reveal: focus-mode jumps to the event, else scrolls
     // to the bottom. Heights are already final by the time these run.
@@ -123,7 +132,9 @@ public:
     void evaluate(const std::function<void(
                       const std::function<void(const MessageRowData&)>&)>& scan);
 
-    // Drop a resolved key (image token or preview URL); request a repaint to
+    // Drop a resolved key (image token or preview URL) — resolved either by
+    // loading or by definitively failing (a failed fetch must release the gate
+    // too, or the list stays hidden until the timeout). Request a repaint to
     // reveal once the pending set empties. No-op when no gate.
     void notify_loaded(const std::string& key);
 
@@ -155,6 +166,7 @@ private:
 
     ImageProvider   image_provider_;
     ImageProvider   avatar_provider_;
+    FailedProvider  failed_provider_;
     PreviewProvider preview_provider_;
     std::function<void(const std::string&)> scroll_to_event_;
     std::function<void()>                    scroll_to_bottom_;

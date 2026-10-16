@@ -155,25 +155,11 @@ RoomSwitchGateKeeper::pending_keys_for(const MessageRowData& m) const
     }
 
     // ---- avatar ----
-    // Only kinds whose paint path actually draws a sender/membership-target
-    // avatar are checked. DaySeparator/ReadMarker/TimelineStart/PinnedEvent/
-    // CallNotification never draw one. Membership rows show
-    // membership_target_avatar_url, never sender_avatar_url.
-    std::string avatar_key;
-    if (m.kind == K::Membership)
-    {
-        avatar_key = m.membership_target_avatar_url;
-    }
-    else if (m.kind != K::DaySeparator && m.kind != K::ReadMarker &&
-             m.kind != K::TimelineStart && m.kind != K::PinnedEvent &&
-             m.kind != K::CallNotification)
-    {
-        avatar_key = m.sender_avatar_url;
-    }
-    if (!avatar_key.empty() && avatar_provider_ && !avatar_provider_(avatar_key))
-    {
-        pending.push_back(avatar_key);
-    }
+    // Deliberately NOT gated: sender/membership avatars are drawn in a
+    // fixed-size slot, so a late-arriving avatar decodes in place without
+    // changing any row height or reflowing the list. Gating on them held the
+    // whole list invisible for the full timeout whenever an avatar never
+    // resolved (bridged avatars on unreachable remote servers, deleted media).
 
     // ---- quoted/reply ----
     if (!m.in_reply_to_id.empty() && m.in_reply_to_sender_name.empty())
@@ -212,6 +198,12 @@ RoomSwitchGateKeeper::pending_keys_for(const MessageRowData& m) const
         }
     }
 
+    // Drop keys that are known to never resolve soon (see FailedProvider).
+    if (failed_provider_)
+    {
+        std::erase_if(pending, [this](const std::string& k)
+                      { return failed_provider_(k); });
+    }
     return pending;
 }
 

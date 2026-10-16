@@ -503,6 +503,11 @@ public:
     // Inline image / sticker bytes come from the same kind of cache.
     void set_image_provider(MediaImageProvider p);
 
+    // Lets the room-switch gate skip dependencies that will never resolve soon
+    // (media in failure backoff, failed URL previews). See
+    // RoomSwitchGateKeeper::set_failed_provider.
+    void set_media_failed_provider(std::function<bool(const std::string&)> p);
+
     // Sticker-specific lookup, used instead of image_provider_ wherever the
     // row is known to be a sticker: unlike image_provider_'s fetch-on-miss
     // fallback (sized for generic inline images), this one fetches at the
@@ -552,6 +557,11 @@ public:
     // Kind::Image rows that were measured against a zero-dimension placeholder
     // are remeasured with the actual pixel dimensions.
     void notify_image_ready(const std::string& url);
+
+    // Called by the host shell when a media fetch/decode for `url` definitively
+    // failed. Releases the room-switch gate's dependency on it (nothing will
+    // ever resolve it) so the list is revealed without waiting for the timeout.
+    void notify_media_failed(const std::string& url);
 
     // Called by ShellBase after a reply's referenced-message details resolve
     // (ShellBase::ensure_reply_details_ -> fetch_reply_details -> this row's

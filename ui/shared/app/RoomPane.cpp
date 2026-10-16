@@ -490,6 +490,9 @@ void RoomPane::wire_room_view_()
         shell_->ensure_user_avatar_(
             m.avatar_url, shell_->media_group_for_room_(room_id_));
     };
+    rv->set_media_failed_provider(
+        [this](const std::string& key)
+        { return shell_->media_dep_known_failed_(key); });
     rv->set_image_provider(
         [this](const std::string& mxc, bool hovered) -> const tk::Image*
         {

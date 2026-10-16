@@ -351,6 +351,8 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
         for (const auto& url : urls)
             ensure_user_avatar_(url, active_media_group_);
     };
+    app->room_view()->set_media_failed_provider(
+        [this](const std::string& key) { return media_dep_known_failed_(key); });
     app->room_view()->set_image_provider(
         [this](const std::string& mxc, bool hovered) -> const tk::Image*
         {

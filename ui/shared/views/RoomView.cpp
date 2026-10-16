@@ -1534,6 +1534,15 @@ void RoomView::set_image_provider(MessageListView::MediaImageProvider p)
     }
 }
 
+void RoomView::set_media_failed_provider(std::function<bool(const std::string&)> p)
+{
+    stored_media_failed_provider_ = p;
+    if (thread_view_ && thread_view_->message_list())
+        thread_view_->message_list()->set_media_failed_provider(p);
+    if (message_list_)
+        message_list_->set_media_failed_provider(std::move(p));
+}
+
 void RoomView::set_shortcode_provider(MessageListView::ShortcodeProvider p)
 {
     if (message_list_)
@@ -2029,6 +2038,17 @@ void RoomView::notify_image_ready(const std::string& url)
     }
 }
 
+void RoomView::notify_media_failed(const std::string& url)
+{
+    if (message_list_)
+        message_list_->notify_media_failed(url);
+    if (thread_view_ && thread_view_->visible())
+    {
+        if (auto* ml = thread_view_->message_list())
+            ml->notify_media_failed(url);
+    }
+}
+
 void RoomView::notify_url_preview_ready(const std::string& url)
 {
     if (message_list_)
@@ -2206,6 +2226,8 @@ void RoomView::set_thread_panel(ThreadPanelState state,
                 ml->set_avatar_provider(stored_avatar_provider_);
             if (stored_image_provider_)
                 ml->set_image_provider(stored_image_provider_);
+            if (stored_media_failed_provider_)
+                ml->set_media_failed_provider(stored_media_failed_provider_);
             // Without this the room-switch gate armed by each thread reset
             // has no timeout fallback, so one unresolved dependency holds
             // the thread list invisible forever.

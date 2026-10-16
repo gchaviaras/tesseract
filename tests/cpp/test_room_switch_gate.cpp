@@ -155,9 +155,12 @@ TEST_CASE("reset_within_switch's fresh gate ignores the superseded gate's timeou
     CHECK_FALSE(g.blocking());
 }
 
-TEST_CASE("gate waits on an avatar that hasn't loaded yet",
+TEST_CASE("gate does not wait on avatars, even ones that never load",
           "[room_switch_gate]")
 {
+    // Avatars are drawn in a fixed-size slot, so a late one decodes in place
+    // without reflow; gating on them held the list hidden for the whole
+    // timeout whenever an avatar never resolved (bridged / deleted media).
     RoomSwitchGateKeeper g = make_undecoded_gate();
     g.set_avatar_provider([](const std::string&) -> const tk::Image*
                           { return nullptr; });
@@ -166,44 +169,64 @@ TEST_CASE("gate waits on an avatar that hasn't loaded yet",
     m.kind = MessageRowData::Kind::Text;
     m.event_id = "$msg";
     m.sender_avatar_url = "mxc://example.org/avatar";
-    CHECK_FALSE(g.dep_satisfied(m));
-}
-
-TEST_CASE("gate does not wait on avatars for kinds that never draw one",
-          "[room_switch_gate]")
-{
-    RoomSwitchGateKeeper g = make_undecoded_gate();
-    g.set_avatar_provider([](const std::string&) -> const tk::Image*
-                          { return nullptr; });
-
-    MessageRowData m;
-    m.kind = MessageRowData::Kind::DaySeparator;
-    m.event_id = "$sep";
-    m.sender_avatar_url = "mxc://example.org/avatar";
     CHECK(g.dep_satisfied(m));
 
-    MessageRowData pinned;
-    pinned.kind = MessageRowData::Kind::PinnedEvent;
-    pinned.event_id = "$pin";
-    pinned.sender_avatar_url = "mxc://example.org/avatar";
-    CHECK(g.dep_satisfied(pinned));
+    MessageRowData mem;
+    mem.kind = MessageRowData::Kind::Membership;
+    mem.event_id = "$mem";
+    mem.membership_target_avatar_url = "mxc://example.org/target";
+    CHECK(g.dep_satisfied(mem));
 }
 
-TEST_CASE("membership rows check membership_target_avatar_url, not sender_avatar_url",
+TEST_CASE("a failed media key released via notify_loaded reveals the list",
           "[room_switch_gate]")
 {
+    // A fetch/decode failure calls notify_loaded for the key (via
+    // notify_media_failed) so the gate doesn't run to its timeout.
     RoomSwitchGateKeeper g = make_undecoded_gate();
-    g.set_avatar_provider([](const std::string&) -> const tk::Image*
-                          { return nullptr; });
-
     MessageRowData m;
-    m.kind = MessageRowData::Kind::Membership;
-    m.event_id = "$mem";
-    m.sender_avatar_url = "mxc://example.org/sender"; // must be ignored
-    CHECK(g.dep_satisfied(m)); // membership_target_avatar_url is empty
+    m.kind = MessageRowData::Kind::Image; // no media_w/media_h → height unknown
+    m.event_id = "$img";
+    m.source = tesseract::MediaSource::plain("mxc://example.org/broken");
 
-    m.membership_target_avatar_url = "mxc://example.org/target";
-    CHECK_FALSE(g.dep_satisfied(m));
+    bool repainted = false;
+    g.set_repaint([&] { repainted = true; });
+    g.begin_room_switch();
+    g.evaluate([&](const std::function<void(const MessageRowData&)>& visit)
+              { visit(m); });
+    REQUIRE(g.blocking());
+
+    g.notify_loaded("mxc://example.org/broken");
+    CHECK_FALSE(g.blocking());
+    CHECK(repainted);
+}
+
+TEST_CASE("gate does not wait on keys the failed provider reports as failed",
+          "[room_switch_gate]")
+{
+    // A key in failure backoff (or a failed preview) is never re-requested on
+    // a revisit, so no failure event would ever release the gate for it.
+    RoomSwitchGateKeeper g = make_undecoded_gate();
+    g.set_failed_provider([](const std::string& k)
+                          { return k == "mxc://example.org/backoff" ||
+                                   k == "https://dead.example/"; });
+
+    MessageRowData img;
+    img.kind = MessageRowData::Kind::Image; // unknown height
+    img.event_id = "$img";
+    img.source = tesseract::MediaSource::plain("mxc://example.org/backoff");
+    CHECK(g.dep_satisfied(img));
+
+    MessageRowData link;
+    link.kind = MessageRowData::Kind::Text;
+    link.event_id = "$link";
+    link.first_url = "https://dead.example/";
+    CHECK(g.dep_satisfied(link));
+
+    // A key the provider does not flag still blocks.
+    MessageRowData other = img;
+    other.source = tesseract::MediaSource::plain("mxc://example.org/slow");
+    CHECK_FALSE(g.dep_satisfied(other));
 }
 
 TEST_CASE("gate waits on an unresolved reply, keyed by the reply row's own event_id",
@@ -308,12 +331,10 @@ TEST_CASE("a row can be waiting on multiple dependencies simultaneously",
     CHECK_FALSE(g.blocking());
 }
 
-TEST_CASE("timeout still force-reveals when an avatar dependency never resolves",
+TEST_CASE("timeout still force-reveals when a dependency never resolves",
           "[room_switch_gate]")
 {
     RoomSwitchGateKeeper g = make_undecoded_gate();
-    g.set_avatar_provider([](const std::string&) -> const tk::Image*
-                          { return nullptr; });
     std::vector<std::function<void()>> timeouts;
     g.set_post_delayed([&](int, std::function<void()> cb)
                         { timeouts.push_back(std::move(cb)); });
@@ -324,7 +345,8 @@ TEST_CASE("timeout still force-reveals when an avatar dependency never resolves"
     MessageRowData m;
     m.kind = MessageRowData::Kind::Text;
     m.event_id = "$msg";
-    m.sender_avatar_url = "mxc://example.org/avatar";
+    m.in_reply_to_id = "$original";
+    m.in_reply_to_sender_name = ""; // unresolved reply that never arrives
 
     g.begin_room_switch();
     g.evaluate([&](const std::function<void(const MessageRowData&)>& visit)

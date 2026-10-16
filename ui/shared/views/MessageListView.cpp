@@ -8785,6 +8785,12 @@ void MessageListView::set_image_provider(MediaImageProvider p)
     image_provider_ = std::move(p);
 }
 
+void MessageListView::set_media_failed_provider(
+    std::function<bool(const std::string&)> p)
+{
+    room_switch_gate_.set_failed_provider(std::move(p));
+}
+
 void MessageListView::set_sticker_image_provider(MediaImageProvider p)
 {
     sticker_image_provider_ = std::move(p);
@@ -8940,6 +8946,11 @@ void MessageListView::notify_url_preview_ready(const std::string& url)
         }
     }
     invalidate_data();
+}
+
+void MessageListView::notify_media_failed(const std::string& url)
+{
+    room_switch_gate_.notify_loaded(url);
 }
 
 void MessageListView::notify_image_ready(const std::string& url)

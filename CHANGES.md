@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(ui): switching to a room no longer leaves the message list blank for ~600 ms: the room-switch gate stops waiting on avatars (fixed-size slot, no reflow), a failed media fetch/decode releases it, and keys already in failure backoff or with a failed preview (never re-requested on a revisit) are skipped instead of running to the timeout. Linux release build, ctest 3401/3401
 - feat(emoji): the emoji picker always opens on the Frequents tab instead of the last-used one (when there are frequents), and stays open after an emoji is inserted into the composer (focusing the composer no longer dismisses it). Qt6 + GTK4 build, ctest 3402/3402
 - feat(emoji): emoji picks are also written to Element's `io.element.recent_emoji`, so Element's recent emojis follow Tesseract; the SDK's typed content replaces our hand-written parser. cargo tests 1155, Qt6 + GTK4 build
 - fix(bridge): a recorded bridge status is no longer re-fetched after a week (that made every room's full state load again); a failed lookup still writes nothing. cargo bridge tests

@@ -518,6 +518,8 @@ void ShellBase::run_media_prefetch_impl_(
                                 // a fresh decode for this key isn't itself
                                 // blocked by it.
                                 media_decode_pending_until_ms_.erase(k2.id);
+                                if (!would_defer_animated && room_view_)
+                                    room_view_->notify_media_failed(k2.id);
                                 if (would_defer_animated)
                                 {
                                     // Directly hand off to the lazy path
@@ -708,6 +710,10 @@ void ShellBase::fetch_media_pipeline_(
         // for up to kDecodePendingWindowMs. No-op for kinds that never set
         // it (avatars/tiles).
         media_decode_pending_until_ms_.erase(cache_key);
+        // A failed fetch will never resolve this key: release any room-switch
+        // gate waiting on it instead of letting it run to its timeout.
+        if (room_view_)
+            room_view_->notify_media_failed(cache_key);
         on_media_bytes_ready_(deliver_key, out_kind, {});
     };
     spec.deliver_ =

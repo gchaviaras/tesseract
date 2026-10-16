@@ -81,6 +81,7 @@ public:
 
     void set_avatar_provider(MessageListView::ImageProvider p);
     void set_image_provider(MessageListView::MediaImageProvider p);
+    void set_media_failed_provider(std::function<bool(const std::string&)> p);
     void set_shortcode_provider(MessageListView::ShortcodeProvider p);
     void set_preview_provider(MessageListView::PreviewProvider p);
     void set_audio_player(std::unique_ptr<tk::AudioPlayer> player);
@@ -137,6 +138,7 @@ public:
     void append_messages(std::vector<MessageRowData> rows);
 
     void notify_image_ready(const std::string& url);
+    void notify_media_failed(const std::string& url);
     void notify_url_preview_ready(const std::string& url);
     void notify_reply_ready(const std::string& event_id);
 
@@ -987,6 +989,7 @@ private:
     // Stored so they can be forwarded to the lazily-created thread view.
     MessageListView::ImageProvider stored_avatar_provider_;
     MessageListView::MediaImageProvider stored_image_provider_;
+    std::function<bool(const std::string&)> stored_media_failed_provider_;
     // Lazily created when the thread panel first opens. Owned by the tk
     // child list (add_child); we keep a borrowed pointer for access.
     ThreadView*     thread_view_      = nullptr;

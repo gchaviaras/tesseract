@@ -115,11 +115,8 @@ public:
     TextLayout& operator*() const { return *get(); }
     explicit operator bool() const { return get() != nullptr; }
 
-    CachedTextLayout& operator=(std::unique_ptr<TextLayout> layout)
-    {
-        reset(std::move(layout));
-        return *this;
-    }
+    // Out of line: the by-value parameter's destructor needs TextLayout complete.
+    CachedTextLayout& operator=(std::unique_ptr<TextLayout> layout);
 
     void reset();
     void reset(std::unique_ptr<TextLayout> layout);

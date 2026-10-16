@@ -5,6 +5,7 @@
 #include <tesseract/version.h>
 #include "app/shell_helpers.h"
 #include "views/MainAppWidget.h"
+#include "views/SettingsView.h"
 #include "views/image_pack_order.h"
 #include <algorithm>
 

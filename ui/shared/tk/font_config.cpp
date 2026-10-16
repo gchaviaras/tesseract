@@ -154,6 +154,12 @@ TextLayout* CachedTextLayout::get() const
     return generation_ == g_generation ? layout_.get() : nullptr;
 }
 
+CachedTextLayout& CachedTextLayout::operator=(std::unique_ptr<TextLayout> layout)
+{
+    reset(std::move(layout));
+    return *this;
+}
+
 void CachedTextLayout::reset()
 {
     layout_.reset();

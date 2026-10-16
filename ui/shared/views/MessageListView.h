@@ -1018,6 +1018,12 @@ public:
     // No-op when has_selection() is false or on_set_clipboard is unset.
     void copy_selection();
 
+    // A right-click with no selection on an inline link remembers its URL so
+    // the shell's Copy menu can offer "Copy link". Cleared by the next
+    // right-click, a left press, or once copied.
+    bool has_context_link() const { return !context_link_url_.empty(); }
+    bool copy_context_link();
+
     // Drop the current selection, if any, without firing
     // on_selection_cleared — for an owner that's moving the selection to a
     // sibling list (which keeps keyboard focus off the composer).
@@ -1765,6 +1771,7 @@ private:
     mutable LinkLayoutCache link_cache_;
     std::string press_link_url_;
     std::string hover_link_url_;
+    std::string context_link_url_; // right-clicked link, see has_context_link()
 
     // MSC2010 spoiler reveal state. The revealed set lives in SpoilerRevealer;
     // the press-FSM fields stay here (part of the pointer state machine).

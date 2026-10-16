@@ -1516,8 +1516,14 @@ MainWindow::MainWindow(tesseract::AccountManager& account_manager,
             [this](std::string rid) { confirm_leave_room_(rid); };
         room_view_->on_show_copy_menu = [this]()
         {
-            if (!copy_ctx_menu_)
-                build_copy_context_menu_();
+            // Rebuilt per show: the label is "Copy" or "Copy link" depending
+            // on what was right-clicked, and a GMenu label is fixed at build.
+            if (copy_ctx_menu_)
+            {
+                gtk_widget_unparent(copy_ctx_menu_);
+                copy_ctx_menu_ = nullptr;
+            }
+            build_copy_context_menu_();
             if (!copy_ctx_menu_)
                 return;
             GtkWidget* w = main_app_surface_->widget();
@@ -5577,7 +5583,10 @@ void MainWindow::build_sticker_context_menu()
 void MainWindow::build_copy_context_menu_()
 {
     GMenu* menu = g_menu_new();
-    g_menu_append(menu, tk::tr("Copy").c_str(), "copy-sel.copy");
+    g_menu_append(menu,
+                  (room_view_ ? room_view_->copy_menu_label()
+                              : tk::tr("Copy")).c_str(),
+                  "copy-sel.copy");
 
     copy_ctx_menu_ = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
     gtk_popover_set_has_arrow(GTK_POPOVER(copy_ctx_menu_), FALSE);
@@ -5600,7 +5609,7 @@ void MainWindow::on_copy_action_(GSimpleAction* /*action*/,
 {
     auto* self = static_cast<MainWindow*>(user_data);
     if (self->room_view_)
-        self->room_view_->copy_active_selection();
+        self->room_view_->copy_context_menu_target();
 }
 
 void MainWindow::on_msg_right_click_(GtkGestureClick* gesture, int /*n_press*/,

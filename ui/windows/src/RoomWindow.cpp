@@ -271,7 +271,7 @@ RoomWindow::RoomWindow(MainWindow* parent, const std::string& room_id)
         if (!room_view_)
             return;
         HMENU menu = CreatePopupMenu();
-        AppendMenuW(menu, MF_STRING, 1, tk::win32::utf8_to_wide(tk::tr("Copy")).c_str());
+        AppendMenuW(menu, MF_STRING, 1, tk::win32::utf8_to_wide(room_view_->copy_menu_label()).c_str());
         POINT pt{};
         GetCursorPos(&pt);
         int cmd = static_cast<int>(TrackPopupMenuEx(
@@ -279,7 +279,7 @@ RoomWindow::RoomWindow(MainWindow* parent, const std::string& room_id)
             pt.x, pt.y, hwnd_, nullptr));
         DestroyMenu(menu);
         if (cmd == 1)
-            room_view_->copy_active_selection();
+            room_view_->copy_context_menu_target();
     };
 
     // ── Compose text area (self-owned) + composer popups ──────────────────

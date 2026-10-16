@@ -295,7 +295,8 @@ MacRoomWindow::MacRoomWindow(tesseract::ShellBase* shell,
         if (!surface_) return;
         NSMenu* menu = [[NSMenu alloc] initWithTitle:@""];
         NSMenuItem* item = [[NSMenuItem alloc]
-            initWithTitle:TkTr("Copy")
+            initWithTitle:[NSString stringWithUTF8String:
+                              room_view_->copy_menu_label().c_str()]
                    action:@selector(copy:)
             keyEquivalent:@""];
         // Explicit target: with nil, copy: walks the responder chain and a
@@ -638,7 +639,7 @@ void MacRoomWindow::surface_repaint_()
     if (item.action == @selector(copy:))
     {
         auto* rv = _cppWindow ? _cppWindow->room_view() : nullptr;
-        return rv && rv->has_active_selection();
+        return rv && (rv->has_active_selection() || rv->has_context_link());
     }
     return YES;
 }
@@ -647,7 +648,7 @@ void MacRoomWindow::surface_repaint_()
 {
     auto* rv = _cppWindow ? _cppWindow->room_view() : nullptr;
     if (rv)
-        rv->copy_active_selection();
+        rv->copy_context_menu_target();
 }
 
 @end

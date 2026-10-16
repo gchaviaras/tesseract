@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "tk/canvas.h"
+#include "tk/i18n.h"
 #include "tk/theme.h"
 #include "views/RoomView.h"
 #include "views/ThreadView.h"
@@ -222,6 +223,28 @@ TEST_CASE("Right-click on a selection uses the shell's copy menu if set",
     REQUIRE(view.message_list()->on_right_click({}));
     CHECK(menu_shown);
     CHECK(clip.empty()); // copying is now the menu item's job
+}
+
+TEST_CASE("Right-click with no selection and no link under the pointer does nothing",
+          "[tk][view][room][clipboard]")
+{
+    TkRoomViewCopyShortcutStage st;
+    auto view_owner = tk::create_root_widget<RoomView>(nullptr);
+    RoomView& view = *view_owner;
+    std::string clip;
+    bool menu_shown = false;
+    view.on_set_clipboard = [&](std::string_view s) { clip = std::string(s); };
+    view.on_show_copy_menu = [&] { menu_shown = true; };
+    open_room(view);
+    view.set_messages({make_text("$a:example.org", "hello world")});
+    st.run(view);
+
+    CHECK_FALSE(view.message_list()->on_right_click({}));
+    CHECK_FALSE(menu_shown);
+    CHECK(clip.empty());
+    CHECK_FALSE(view.has_context_link());
+    CHECK(view.copy_menu_label() == tk::tr("Copy"));
+    CHECK_FALSE(view.copy_context_menu_target());
 }
 
 TEST_CASE("A selection covered by a modal overlay is not copied",

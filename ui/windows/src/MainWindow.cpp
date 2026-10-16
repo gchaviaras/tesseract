@@ -2143,7 +2143,7 @@ void MainWindow::on_create(HWND hwnd)
             if (!room_view_)
                 return;
             HMENU menu = CreatePopupMenu();
-            AppendMenuW(menu, MF_STRING, 1, utf8_to_wstr(tk::tr("Copy")).c_str());
+            AppendMenuW(menu, MF_STRING, 1, utf8_to_wstr(room_view_->copy_menu_label()).c_str());
             POINT pt{};
             GetCursorPos(&pt);
             int cmd = static_cast<int>(TrackPopupMenuEx(
@@ -2151,7 +2151,7 @@ void MainWindow::on_create(HWND hwnd)
                 pt.x, pt.y, hwnd_, nullptr));
             DestroyMenu(menu);
             if (cmd == 1)
-                room_view_->copy_active_selection();
+                room_view_->copy_context_menu_target();
         };
         // Switch the surface cursor to the link/pointer shape while the
         // mouse is over a URL / map tile / file card. Empty URL clears.

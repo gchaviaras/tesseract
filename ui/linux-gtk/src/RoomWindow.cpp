@@ -224,10 +224,17 @@ RoomWindow::RoomWindow(MainWindow* parent_shell, const std::string& room_id)
     };
     room_view_->on_show_copy_menu = [this]()
     {
-        if (!copy_ctx_menu_)
+        // Rebuilt per show: the label is "Copy" or "Copy link" depending on
+        // what was right-clicked, and a GMenu label is fixed at build.
+        if (copy_ctx_menu_)
+        {
+            gtk_widget_unparent(copy_ctx_menu_);
+            copy_ctx_menu_ = nullptr;
+        }
         {
             GMenu* menu = g_menu_new();
-            g_menu_append(menu, tk::tr("Copy").c_str(), "copy-sel.copy");
+            g_menu_append(menu, room_view_->copy_menu_label().c_str(),
+                          "copy-sel.copy");
             copy_ctx_menu_ = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
             gtk_popover_set_has_arrow(GTK_POPOVER(copy_ctx_menu_), FALSE);
             gtk_widget_set_parent(copy_ctx_menu_, surface_->widget());
@@ -424,7 +431,7 @@ void RoomWindow::on_copy_action_(GSimpleAction* /*action*/,
 {
     auto* w = static_cast<RoomWindow*>(self);
     if (w->room_view_)
-        w->room_view_->copy_active_selection();
+        w->room_view_->copy_context_menu_target();
 }
 
 // static

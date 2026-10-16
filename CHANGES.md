@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(bridge): a recorded bridge status is no longer re-fetched after a week (that made every room's full state load again); a failed lookup still writes nothing. cargo bridge tests
 - fix(review): whole-app code review fixes. Security: frame keys accepted only from a known sending device and wiped on rotation, fetches and GIF URLs go through the guarded client, no sender/body leaked to MPRIS, proxy credential kept in the OS keyring, notification images and caches owner-only, HTML export links `noopener noreferrer`, SDK text can't spoof a UI image carrier, search index purged on clear
 - fix(calls): call lifecycle (hang up before sign-out, account switch and quit; screen share stops when the call or capture ends), per-participant frame bounds and stride checks, per-account call sinks, only DMs ring, encryption-unknown rooms refused
 - fix(send): blank replies/edits, Send held until dropped AV metadata is stripped, attachments and caption restored on upload failure, `/me` and `/shrug` keep formatting, non-ASCII mentions match

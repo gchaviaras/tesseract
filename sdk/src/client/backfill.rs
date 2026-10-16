@@ -597,10 +597,9 @@ impl ClientFfi {
             return err("not logged in");
         };
 
-        // Collect room IDs that have no current cache entry. An entry older than
-        // BRIDGE_STATUS_TTL_SECS is re-checked, so a room whose bridge changed (or
-        // whose lookup was wrong) is not stuck with the old answer.
-        let cutoff = bridge_status_cutoff_secs(unix_now_secs());
+        // Collect room IDs that have no cache entry. A recorded answer is kept:
+        // only a successful lookup writes a row, so there is no stale "not bridged"
+        // from a failed fetch to expire.
         let uncached: Vec<matrix_sdk::ruma::OwnedRoomId> = {
             let guard = self.app_cache_db.lock();
             room_ids
@@ -613,12 +612,9 @@ impl ClientFfi {
                             conn.query_row(
                                 // A bridged row cached before `cap_threads` existed has
                                 // NULL there; treat it as uncached so it's re-fetched once.
-                                // A row with no `checked_at` (written before it existed)
-                                // is uncached too.
                                 "SELECT 1 FROM bridge_status WHERE room_id = ?1 \
-                                 AND (is_bridged = 0 OR cap_threads IS NOT NULL) \
-                                 AND checked_at IS NOT NULL AND checked_at >= ?2",
-                                rusqlite::params![id.as_str(), cutoff],
+                                 AND (is_bridged = 0 OR cap_threads IS NOT NULL)",
+                                rusqlite::params![id.as_str()],
                                 |_| Ok(()),
                             )
                             .ok()
@@ -1241,19 +1237,11 @@ fn ensure_bridge_status_columns(conn: &rusqlite::Connection) -> rusqlite::Result
     Ok(())
 }
 
-/// How long a bridge-status row is trusted before the room is looked up again.
-const BRIDGE_STATUS_TTL_SECS: i64 = 7 * 24 * 60 * 60;
-
 fn unix_now_secs() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
-}
-
-/// The oldest `checked_at` still trusted, given the current time.
-fn bridge_status_cutoff_secs(now: i64) -> i64 {
-    now - BRIDGE_STATUS_TTL_SECS
 }
 
 /// Deletes rows old enough that they're almost certainly abandoned rather
@@ -1833,35 +1821,6 @@ mod bridge_status_migration_tests {
             .unwrap()
             .filter_map(Result::ok)
             .collect()
-    }
-
-    #[test]
-    fn bridge_status_rows_expire_after_the_ttl() {
-        let cutoff = super::bridge_status_cutoff_secs(1_000_000_000);
-        assert_eq!(cutoff, 1_000_000_000 - super::BRIDGE_STATUS_TTL_SECS);
-        // A row checked just inside the window is still trusted; one older is not.
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE bridge_status (room_id TEXT PRIMARY KEY, is_bridged INTEGER NOT NULL,
-                 cap_threads INTEGER, checked_at INTEGER);
-             INSERT INTO bridge_status VALUES ('!fresh:x', 0, 0, 1000000000);
-             INSERT INTO bridge_status VALUES ('!stale:x', 0, 0, 1);
-             INSERT INTO bridge_status VALUES ('!legacy:x', 0, 0, NULL);",
-        )
-        .unwrap();
-        let trusted = |room: &str| -> bool {
-            conn.query_row(
-                "SELECT 1 FROM bridge_status WHERE room_id = ?1 \
-                 AND (is_bridged = 0 OR cap_threads IS NOT NULL) \
-                 AND checked_at IS NOT NULL AND checked_at >= ?2",
-                rusqlite::params![room, cutoff],
-                |_| Ok(()),
-            )
-            .is_ok()
-        };
-        assert!(trusted("!fresh:x"));
-        assert!(!trusted("!stale:x"));
-        assert!(!trusted("!legacy:x"));
     }
 
     #[test]

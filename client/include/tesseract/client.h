@@ -1078,11 +1078,11 @@ public:
                                             bool has_override,
                                             MediaPreviewConfig::Mode media_previews);
 
-    // Recent emoji ("io.element.recent_emoji" global account-data)
+    // Recent emoji (MSC4356 + Element's "io.element.recent_emoji" account-data)
     // ------------------------------------------------------------------
 
-    /// Top-N glyphs from the user's `io.element.recent_emoji` account-data,
-    /// most-used first. Reads the SDK's local sync cache; cheap, no
+    /// Top-N glyphs from the user's recent-emoji account-data (MSC4356, else
+    /// Element's `io.element.recent_emoji`), most-used first. Reads the SDK's local sync cache; cheap, no
     /// network roundtrip. Returns an empty vector when not logged in or
     /// when the user has never picked an emoji on any device.
     ///
@@ -1090,9 +1090,10 @@ public:
     /// `block_on`, mirroring `send_reaction` and `redact_event`.
     std::vector<std::string> recent_emoji_top(std::uint32_t n);
 
-    /// Record one use of `glyph`. Fire-and-forget — the SDK's
-    /// `add_recent_emoji` does a GET-modify-PUT against the homeserver,
-    /// so we run it on the background runtime and return immediately.
+    /// Record one use of `glyph` in the MSC4356 types and in Element's
+    /// `io.element.recent_emoji`. Fire-and-forget — each is a GET-modify-PUT
+    /// against the homeserver, so we run it on the background runtime and
+    /// return immediately.
     void recent_emoji_bump(const std::string& glyph);
 
     // ------------------------------------------------------------------

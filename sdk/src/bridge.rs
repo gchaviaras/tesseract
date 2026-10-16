@@ -3490,16 +3490,17 @@ pub mod ffi {
             media_previews: u8,
         ) -> OpResult;
 
-        // ----- Recent emoji (io.element.recent_emoji global account-data) -----
+        // ----- Recent emoji (MSC4356 + io.element.recent_emoji account-data) -----
 
-        /// Top-N glyphs from the user's `io.element.recent_emoji`
-        /// account-data, most-used first. Reads the SDK's local sync cache;
+        /// Top-N glyphs from the user's recent-emoji account-data (MSC4356,
+        /// else Element's `io.element.recent_emoji`), most-used first. Reads the SDK's local sync cache;
         /// no network roundtrip. Returns an empty vector when not logged in
         /// or before the first sync has populated the cache.
         fn recent_emoji_top(self: &ClientFfi, n: u32) -> Vec<String>;
 
-        /// Record one use of `glyph`. Fire-and-forget against the homeserver
-        /// (the SDK call is GET-modify-PUT and would otherwise stall the UI).
+        /// Record one use of `glyph` in the MSC4356 types and Element's
+        /// `io.element.recent_emoji`. Fire-and-forget against the homeserver
+        /// (each is a GET-modify-PUT and would otherwise stall the UI).
         fn recent_emoji_bump(self: &ClientFfi, glyph: &str);
 
         // ----- Identity -----

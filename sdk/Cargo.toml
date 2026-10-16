@@ -30,7 +30,7 @@ jemalloc = ["dep:tikv-jemallocator"]
 cxx        = "1.0"
 zeroize    = "1.9"
 tokio      = { version = "1", features = ["full"] }
-matrix-sdk    = { version = "0.19", features = ["unstable-msc4426", "unstable-msc4274", "e2e-encryption", "bundled-sqlite", "local-server", "markdown", "qrcode", "experimental-send-custom-to-device"] }
+matrix-sdk    = { version = "0.19", features = ["unstable-msc4426", "unstable-msc4274", "e2e-encryption", "bundled-sqlite", "local-server", "markdown", "qrcode", "experimental-send-custom-to-device", "experimental-element-recent-emojis"] }
 qrcode        = "0.14"
 # Needed for `UtdCause` in the timeline converter — matrix-sdk doesn't
 # re-export the crypto types module.

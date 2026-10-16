@@ -237,7 +237,7 @@ Change proposals where the homeserver advertises support for them:
 - [MSC2312](https://github.com/matrix-org/matrix-spec-proposals/pull/2312) — `matrix:` / `matrix.to` link navigation
 - [MSC2545](https://github.com/matrix-org/matrix-spec-proposals/pull/2545) — custom emoji & sticker image packs
 - [MSC4027](https://github.com/matrix-org/matrix-spec-proposals/pull/4027) — custom-image (emoticon) reactions
-- [MSC4356](https://github.com/matrix-org/matrix-spec-proposals/pull/4356) — recently-used emoji history
+- [MSC4356](https://github.com/matrix-org/matrix-spec-proposals/pull/4356) — recently-used emoji history (also shared with Element's `io.element.recent_emoji`)
 - [MSC3765](https://github.com/matrix-org/matrix-spec-proposals/pull/3765) — rich (HTML) room topics
 - [MSC3952](https://github.com/matrix-org/matrix-spec-proposals/pull/3952) — intentional mentions
 - [MSC2530](https://github.com/matrix-org/matrix-spec-proposals/pull/2530) — media captions

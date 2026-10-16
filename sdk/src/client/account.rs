@@ -15,6 +15,9 @@ use super::{build_uia_fallback_url, require_room, try_op};
 use matrix_sdk::Client;
 
 #[cfg(not(test))]
+use matrix_sdk_base::recent_emojis::RecentEmojisContent;
+
+#[cfg(not(test))]
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
@@ -33,7 +36,7 @@ enum ValidateOutcome {
 }
 
 /// Read the user's MSC4356 recent-emoji blob with stable → unstable →
-/// legacy precedence. Returns an empty Vec if no blob exists, the client
+/// Element (`io.element.recent_emoji`) precedence. Returns an empty Vec if no blob exists, the client
 /// is in a fresh-login state, or every parse path errors out.
 #[cfg(not(test))]
 pub(super) async fn read_recent_emoji_entries(client: &Client) -> Vec<crate::recent_emoji::Entry> {
@@ -58,10 +61,18 @@ pub(super) async fn read_recent_emoji_entries(client: &Client) -> Vec<crate::rec
             return entries;
         }
     }
-    if let Some(v) = fetch(client, crate::recent_emoji::TYPE_LEGACY).await {
-        return crate::recent_emoji::parse_legacy_element(&v);
-    }
-    Vec::new()
+    // Element's own blob, through the SDK's typed content. Unreadable reads as
+    // empty so a broken blob never stalls the picker.
+    let legacy = client
+        .account()
+        .account_data::<RecentEmojisContent>()
+        .await
+        .ok()
+        .flatten()
+        .and_then(|raw| raw.deserialize().ok());
+    legacy
+        .map(|c| crate::recent_emoji::entries_from_element(&c))
+        .unwrap_or_default()
 }
 
 /// The recent-emoji list as the server holds it, for a write that replaces the
@@ -98,10 +109,26 @@ async fn fetch_recent_emoji_entries(
             return Ok(entries);
         }
     }
-    if let Some(v) = fetch(client, crate::recent_emoji::TYPE_LEGACY).await? {
-        return Ok(crate::recent_emoji::parse_legacy_element(&v));
+    match client
+        .account()
+        .fetch_account_data_static::<RecentEmojisContent>()
+        .await
+    {
+        Ok(None) => Ok(Vec::new()),
+        Ok(Some(raw)) => raw
+            .deserialize()
+            .map(|c| crate::recent_emoji::entries_from_element(&c))
+            .map_err(|_| ()),
+        Err(_) => Err(()),
     }
-    Ok(Vec::new())
+}
+
+/// Whether a request failed because the homeserver has no such resource (an
+/// account-data type that was never written).
+#[cfg(not(test))]
+fn is_not_found(e: &matrix_sdk::Error) -> bool {
+    e.as_client_api_error()
+        .is_some_and(|err| err.status_code == matrix_sdk::reqwest::StatusCode::NOT_FOUND)
 }
 
 /// Raw media upload — bytes → mxc:// URI. Does not mutate any user profile.
@@ -398,6 +425,17 @@ impl ClientFfi {
                     .account()
                     .set_account_data_raw(ev_type, raw.clone())
                     .await;
+            }
+            // Element's own type, so its clients see the pick. add_recent_emoji
+            // does its own GET-modify-PUT and fails on a 404 when the blob does
+            // not exist yet, so seed it with the full history in that case.
+            if let Err(e) = client.account().add_recent_emoji(&glyph).await {
+                if is_not_found(&e) {
+                    let _ = client
+                        .account()
+                        .set_account_data(crate::recent_emoji::element_content_from(&bumped))
+                        .await;
+                }
             }
         });
     }

@@ -193,6 +193,14 @@ void EmojiPicker::refresh_frequents()
     }
 }
 
+void EmojiPicker::show_frequents_page()
+{
+    if (has_frequents_tab())
+    {
+        switch_to_frequents();
+    }
+}
+
 void EmojiPicker::refresh_emoticon_packs()
 {
     custom_packs_.clear();

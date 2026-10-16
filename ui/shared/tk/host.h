@@ -1077,6 +1077,18 @@ public:
         return p->bounds();
     }
 
+    // Runs `fn` with the request_focus() popup-outside dismiss rule switched
+    // off, so a popup that stays open on purpose (the emoji picker while
+    // emoji are inserted into the composer) can hand focus to the widget it
+    // edits. Pointer-down dismissal is unaffected.
+    template <typename Fn>
+    void with_popup_kept_open(Fn&& fn)
+    {
+        ++popup_keep_open_depth_;
+        fn();
+        --popup_keep_open_depth_;
+    }
+
     // Closes the currently registered popup (if any) immediately, the same
     // way an outside click would via dispatch_pointer_down()'s implicit
     // dismiss rule — for callers that detect "dismiss now" through some
@@ -1376,6 +1388,7 @@ protected:
     // here is always safe to detect via .lock() regardless of when the
     // underlying widget is actually destroyed — whether synchronously or
     // via queue_for_deletion() above.
+    int popup_keep_open_depth_ = 0;       // with_popup_kept_open() nesting
     std::weak_ptr<Widget> popup_;         // active popup (set after each paint)
     std::weak_ptr<Widget> pending_popup_; // populated during the current paint
     // register_popup()'s optional trigger widget, promoted alongside

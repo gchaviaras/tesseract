@@ -15,19 +15,21 @@
 //! Tesseract dual-writes the same content under both the stable
 //! [`TYPE_STABLE`] and the unstable [`TYPE_UNSTABLE`] account-data types and
 //! reads through the same precedence with a final fallback to Element's
-//! historical [`TYPE_LEGACY`] blob (so existing users don't lose their picker
-//! rank on the first MSC4356 run).
+//! historical `io.element.recent_emoji` blob (so existing users don't lose
+//! their picker rank on the first MSC4356 run). That blob is read and written
+//! through matrix-sdk's typed [`RecentEmojisContent`]; [`entries_from_element`]
+//! and [`element_content_from`] convert to and from [`Entry`].
 //!
 //! [MSC4356]: https://github.com/matrix-org/matrix-spec-proposals/pull/4356
 //!
-//! This module is self-contained: it only depends on `serde_json::Value`, so
-//! parse/bump/serialize can be unit-tested without a matrix-sdk client.
+//! This module needs no matrix-sdk client, so parse/bump/serialize and the
+//! Element conversions can be unit-tested directly.
 
+use matrix_sdk_base::recent_emojis::RecentEmojisContent;
 use serde_json::{json, Map, Value};
 
 pub const TYPE_STABLE: &str = "m.recent_emoji";
 pub const TYPE_UNSTABLE: &str = "io.github.johennes.msc4356.recent_emoji";
-pub const TYPE_LEGACY: &str = "io.element.recent_emoji";
 
 /// MSC4356 RECOMMENDS clients trim to 100 entries. The picker only ever
 /// reads the top-N (N << 100) so the cap exists purely to keep the
@@ -73,73 +75,6 @@ pub fn parse_msc4356(raw: &Value) -> Vec<Entry> {
         });
     }
     out
-}
-
-/// Parse Element's legacy `io.element.recent_emoji` blob. Element has
-/// shipped this in two shapes over time:
-///
-/// 1. Documented nested-array: `{ "recent_emoji": [["😀", 5], ["🎉", 3], ...] }`
-/// 2. Object map (used by some forks): `{ "recent_emoji": { "😀": 5, "🎉": 3 } }`
-///
-/// Both yield an `Entry` list. For the array form we preserve input order
-/// (Element stores most-recent first); for the object form we count-sort
-/// desc (no ordering signal). Returns empty for any structural error.
-pub fn parse_legacy_element(raw: &Value) -> Vec<Entry> {
-    let inner = match raw.get("recent_emoji") {
-        Some(v) => v,
-        None => return Vec::new(),
-    };
-
-    // Nested-array form.
-    if let Some(arr) = inner.as_array() {
-        let mut out: Vec<Entry> = Vec::with_capacity(arr.len());
-        let mut seen = std::collections::HashSet::<String>::new();
-        for item in arr {
-            let Some(pair) = item.as_array() else {
-                continue;
-            };
-            if pair.len() < 2 {
-                continue;
-            }
-            let Some(emoji) = pair[0].as_str() else {
-                continue;
-            };
-            if emoji.is_empty() {
-                continue;
-            }
-            let total = pair[1].as_u64().unwrap_or(0);
-            if !seen.insert(emoji.to_owned()) {
-                continue;
-            }
-            out.push(Entry {
-                emoji: emoji.to_owned(),
-                total,
-            });
-        }
-        return out;
-    }
-
-    // Object-map form.
-    if let Some(obj) = inner.as_object() {
-        let mut out: Vec<Entry> = obj
-            .iter()
-            .filter_map(|(k, v)| {
-                if k.is_empty() {
-                    return None;
-                }
-                Some(Entry {
-                    emoji: k.clone(),
-                    total: v.as_u64().unwrap_or(0),
-                })
-            })
-            .collect();
-        // Object iteration order is unspecified; sort by count desc for a
-        // sensible "most used first" approximation.
-        out.sort_by(|a, b| b.total.cmp(&a.total));
-        return out;
-    }
-
-    Vec::new()
 }
 
 /// Apply one MSC4356 bump: move `glyph` to the front and increment `total`,
@@ -205,6 +140,36 @@ pub fn serialize_msc4356(entries: &[Entry]) -> Value {
     let mut content = Map::new();
     content.insert("recent_emoji".into(), Value::Array(arr));
     Value::Object(content)
+}
+
+/// Convert Element's typed `io.element.recent_emoji` content (most recent
+/// first) into entries, dropping empty glyphs and duplicates.
+pub fn entries_from_element(content: &RecentEmojisContent) -> Vec<Entry> {
+    let mut seen = std::collections::HashSet::<&str>::new();
+    content
+        .recent_emoji
+        .iter()
+        .filter(|(emoji, _)| !emoji.is_empty() && seen.insert(emoji.as_str()))
+        .map(|(emoji, total)| Entry {
+            emoji: emoji.clone(),
+            total: u64::from(*total),
+        })
+        .collect()
+}
+
+/// Build Element's `io.element.recent_emoji` content from entries, keeping
+/// their order. Totals above the wire format's integer range are clamped.
+pub fn element_content_from(entries: &[Entry]) -> RecentEmojisContent {
+    RecentEmojisContent::new(
+        entries
+            .iter()
+            .take(MAX_ENTRIES)
+            .map(|e| {
+                let total = ruma::UInt::try_from(e.total).unwrap_or(ruma::UInt::MAX);
+                (e.emoji.clone(), total)
+            })
+            .collect(),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -291,87 +256,6 @@ mod tests {
         assert!(parse_msc4356(&json!({})).is_empty());
         assert!(parse_msc4356(&json!({ "recent_emoji": "nope" })).is_empty());
         assert!(parse_msc4356(&json!({ "recent_emoji": 42 })).is_empty());
-    }
-
-    #[test]
-    fn parse_legacy_nested_array_preserves_order() {
-        let raw = json!({
-            "recent_emoji": [["😀", 5], ["🎉", 3], ["🔥", 1]]
-        });
-        let entries = parse_legacy_element(&raw);
-        assert_eq!(entries.len(), 3);
-        assert_eq!(entries[0].emoji, "😀");
-        assert_eq!(entries[0].total, 5);
-        assert_eq!(entries[1].emoji, "🎉");
-        assert_eq!(entries[2].emoji, "🔥");
-    }
-
-    #[test]
-    fn parse_legacy_nested_array_tolerates_garbage() {
-        let raw = json!({
-            "recent_emoji": [
-                ["😀", 5],
-                "not a pair",
-                ["🎉"],                  // wrong arity
-                ["", 4],                 // empty glyph
-                ["🚀", 7],
-                ["😀", 999],             // duplicate
-            ]
-        });
-        let entries = parse_legacy_element(&raw);
-        assert_eq!(
-            entries,
-            vec![
-                Entry {
-                    emoji: "😀".into(),
-                    total: 5
-                },
-                Entry {
-                    emoji: "🚀".into(),
-                    total: 7
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn parse_legacy_object_map_sorts_by_count_desc() {
-        let raw = json!({
-            "recent_emoji": { "🎉": 3, "😀": 10, "🔥": 7 }
-        });
-        let entries = parse_legacy_element(&raw);
-        assert_eq!(entries.len(), 3);
-        // Object iteration order is undefined in JSON; the parser sorts
-        // count desc so we can rely on this even though the input map
-        // could come in any order.
-        assert_eq!(
-            entries[0],
-            Entry {
-                emoji: "😀".into(),
-                total: 10
-            }
-        );
-        assert_eq!(
-            entries[1],
-            Entry {
-                emoji: "🔥".into(),
-                total: 7
-            }
-        );
-        assert_eq!(
-            entries[2],
-            Entry {
-                emoji: "🎉".into(),
-                total: 3
-            }
-        );
-    }
-
-    #[test]
-    fn parse_legacy_rejects_unrelated_shapes() {
-        assert!(parse_legacy_element(&Value::Null).is_empty());
-        assert!(parse_legacy_element(&json!({})).is_empty());
-        assert!(parse_legacy_element(&json!({ "recent_emoji": 7 })).is_empty());
     }
 
     #[test]
@@ -531,5 +415,65 @@ mod tests {
                 ]
             })
         );
+    }
+
+    #[test]
+    fn element_content_round_trips_through_entries() {
+        let entries = vec![
+            Entry {
+                emoji: "😀".into(),
+                total: 5,
+            },
+            Entry {
+                emoji: "🎉".into(),
+                total: 2,
+            },
+        ];
+        let content = element_content_from(&entries);
+        assert_eq!(entries_from_element(&content), entries);
+    }
+
+    #[test]
+    fn element_content_serializes_as_pairs() {
+        let content = element_content_from(&[Entry {
+            emoji: "😀".into(),
+            total: 5,
+        }]);
+        assert_eq!(
+            serde_json::to_value(&content).unwrap(),
+            json!({ "recent_emoji": [["😀", 5]] })
+        );
+    }
+
+    #[test]
+    fn entries_from_element_skips_empty_and_duplicates() {
+        let content: RecentEmojisContent = serde_json::from_value(json!({
+            "recent_emoji": [["😀", 5], ["", 4], ["🚀", 7], ["😀", 99]]
+        }))
+        .unwrap();
+        assert_eq!(
+            entries_from_element(&content),
+            vec![
+                Entry {
+                    emoji: "😀".into(),
+                    total: 5
+                },
+                Entry {
+                    emoji: "🚀".into(),
+                    total: 7
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn element_content_clamps_to_max_entries() {
+        let entries: Vec<Entry> = (0..MAX_ENTRIES + 5)
+            .map(|i| Entry {
+                emoji: format!("e{i}"),
+                total: 1,
+            })
+            .collect();
+        assert_eq!(element_content_from(&entries).recent_emoji.len(), MAX_ENTRIES);
     }
 }

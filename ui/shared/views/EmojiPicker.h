@@ -104,6 +104,10 @@ public:
     /// presentation so re-shows reflect new picks.
     void refresh_frequents();
 
+    /// Show the Frequents tab instead of the page last used. A no-op while
+    /// there are no frequents, so the picker keeps its current page.
+    void show_frequents_page();
+
     /// Refresh the MSC2545 emoticon packs (extra tabs after the Unicode
     /// categories). Hosts call this from
     /// `IEventHandler::on_image_packs_updated`.

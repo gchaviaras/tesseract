@@ -464,7 +464,7 @@ void Host::request_focus(Widget* w)
     // directly, since a hit inside the popup is usually one of its real
     // children (e.g. TabbedGridPicker's search field), not the popup widget
     // itself.
-    if (auto p = popup_.lock())
+    if (auto p = popup_.lock(); p && popup_keep_open_depth_ == 0)
     {
         bool inside_popup = false;
         for (Widget* a = w; a; a = a->parent())

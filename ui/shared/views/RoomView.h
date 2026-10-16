@@ -903,6 +903,9 @@ private:
     void show_receipt_popup_(MessageListView* ml, tk::Rect anchor,
                              std::vector<tesseract::ReadReceipt> hidden);
     void hide_pickers_();
+    /// Focus the composer without the open picker treating it as an outside
+    /// focus change and closing.
+    void focus_compose_keeping_popup_();
     // Clamp+flip-above helper shared by both show_*_picker_ methods —
     // prefers opening above `anchor` (both anchors sit low in the view),
     // falling back to below if that would clip the top of RoomView's own

@@ -7,6 +7,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- feat(emoji): the emoji picker always opens on the Frequents tab instead of the last-used one (when there are frequents), and stays open after an emoji is inserted into the composer (focusing the composer no longer dismisses it). Qt6 + GTK4 build, ctest 3402/3402
+- feat(emoji): emoji picks are also written to Element's `io.element.recent_emoji`, so Element's recent emojis follow Tesseract; the SDK's typed content replaces our hand-written parser. cargo tests 1155, Qt6 + GTK4 build
 - fix(bridge): a recorded bridge status is no longer re-fetched after a week (that made every room's full state load again); a failed lookup still writes nothing. cargo bridge tests
 - fix(review): whole-app code review fixes. Security: frame keys accepted only from a known sending device and wiped on rotation, fetches and GIF URLs go through the guarded client, no sender/body leaked to MPRIS, proxy credential kept in the OS keyring, notification images and caches owner-only, HTML export links `noopener noreferrer`, SDK text can't spoof a UI image carrier, search index purged on clear
 - fix(calls): call lifecycle (hang up before sign-out, account switch and quit; screen share stops when the call or capture ends), per-participant frame bounds and stride checks, per-account call sinks, only DMs ring, encryption-unknown rooms refused

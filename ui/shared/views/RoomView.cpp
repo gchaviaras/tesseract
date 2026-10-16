@@ -142,7 +142,7 @@ RoomView::RoomView()
         {
             compose_bar_->text_area()->insert_at_cursor(glyph);
             set_current_text(compose_bar_->text_area()->text());
-            compose_bar_->focus();
+            focus_compose_keeping_popup_();
         }
     };
     emoji_picker_->on_skin_tone_changed = [this](tesseract::emoji::SkinTone tone)
@@ -169,7 +169,7 @@ RoomView::RoomView()
                 emoji_picker_ ? emoji_picker_->resolve_image(img.url) : nullptr;
             ta->insert_emoticon(pos, pos, img.shortcode, img.url, image);
             set_current_text(ta->text());
-            compose_bar_->focus();
+            focus_compose_keeping_popup_();
         }
     };
 
@@ -1327,6 +1327,7 @@ void RoomView::show_emoji_picker_(tk::Rect anchor, bool for_reaction,
     emoji_picker_->set_search_query("");
     if (auto* sf = emoji_picker_->search_field())
         sf->set_text("");
+    emoji_picker_->show_frequents_page();
 
     emoji_picker_->open_at(
         clamp_picker_rect_(anchor, EmojiPicker::kWidth, EmojiPicker::kHeight));
@@ -1392,6 +1393,18 @@ void RoomView::show_receipt_popup_(MessageListView* ml, tk::Rect anchor,
 
     if (repaint_requester_)
         repaint_requester_();
+}
+
+void RoomView::focus_compose_keeping_popup_()
+{
+    if (!compose_bar_)
+        return;
+    // Focusing the composer would otherwise dismiss the open picker as an
+    // "outside" focus change; the picker stays up while emoji are inserted.
+    if (host())
+        host()->with_popup_kept_open([this] { compose_bar_->focus(); });
+    else
+        compose_bar_->focus();
 }
 
 void RoomView::close_pickers()

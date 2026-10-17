@@ -71,6 +71,11 @@ struct AccountSession
     /// live copy for the active account.
     std::vector<std::string> recent_rooms;
 
+    /// Room-directory servers the user has browsed, most recent first (at
+    /// most `kMaxDirectoryServers`), restored from the `im.gnomos.tesseract`
+    /// account-data event. The room browser's server picker lists these.
+    std::vector<std::string> directory_servers;
+
     /// Room IDs the user has locally marked "not actually bridged", restored
     /// from the `im.gnomos.tesseract` account-data event. Overrides
     /// `RoomInfo::is_bridged` for that room — see

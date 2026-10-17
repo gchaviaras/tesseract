@@ -337,6 +337,8 @@ set(_tk_sources
     views/CreateRoomView.cpp
     views/RoomDirectoryView.h
     views/RoomDirectoryView.cpp
+    views/ServerPicker.h
+    views/ServerPicker.cpp
     views/AddRoomView.h
     views/AddRoomView.cpp
     views/UserProfilePanel.h

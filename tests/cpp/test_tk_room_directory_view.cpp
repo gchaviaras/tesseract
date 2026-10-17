@@ -1,6 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "tk/widget.h"
+#include "tk_test_host.h"
+#include "tk_test_surface.h"
+#include "tk/theme.h"
 #include "views/RoomDirectoryView.h"
 
 #include <tesseract/types.h>
@@ -127,4 +130,59 @@ TEST_CASE("RoomDirectoryView: search_failed on the active request surfaces "
 
     v->set_search_failed(id, "boom");
     CHECK(v->row_count_for_test() == 0);
+}
+
+TEST_CASE("RoomDirectoryView: a typed server is kept only once its directory "
+          "answers",
+          "[roomdirectory]")
+{
+    PopupCapableStubHost host;
+    auto surface = TestSurface::create(800, 600);
+    auto v = tk::create_root_widget<RoomDirectoryView>(&host);
+    {
+        tk::LayoutCtx lc{surface->factory(), tk::Theme::light()};
+        v->arrange(lc, {0, 0, 800, 600});
+    }
+    v->set_server_choices({"home.org", "matrixrooms.info"}, "home.org");
+
+    std::uint64_t id = 0;
+    std::string searched;
+    std::vector<std::string> validated;
+    v->on_search_requested = [&](std::uint64_t rid, const std::string&,
+                                 const std::string& server)
+    {
+        id = rid;
+        searched = server;
+    };
+    v->on_server_validated = [&](const std::string& s) { validated.push_back(s); };
+    v->open();
+    CHECK(searched.empty()); // own homeserver: no server argument
+
+    auto& field = *host.fields_created.at(0);
+    field.set_text("  new.example.org ");
+    field.on_submit();
+    CHECK(searched == "new.example.org");
+    CHECK(validated.empty());
+
+    // A failing directory is not remembered.
+    v->set_search_failed(id, "no such server");
+    CHECK(validated.empty());
+    CHECK(v->server_picker_for_test()->servers().size() == 2);
+
+    // A working one is added to the picker and reported once.
+    field.set_text("new.example.org");
+    field.on_submit();
+    v->set_results(id, {make_entry("!a:s")}, true);
+    REQUIRE(validated.size() == 1);
+    CHECK(validated[0] == "new.example.org");
+    CHECK(v->server_picker_for_test()->servers().front() == "new.example.org");
+    CHECK(v->server_picker_for_test()->value() == "new.example.org");
+
+    // Typing a known server (any case) just selects it.
+    field.set_text("MatrixRooms.info");
+    field.on_submit();
+    CHECK(searched == "matrixrooms.info");
+    CHECK(v->server_picker_for_test()->value() == "matrixrooms.info");
+    v->set_results(id, {}, true);
+    CHECK(validated.size() == 1);
 }

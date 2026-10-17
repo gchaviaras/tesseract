@@ -1063,6 +1063,14 @@ void ShellBase::handle_account_prefs_updated_ui_(std::string user_id,
             refresh_bridge_dependent_ui_(current_room_id_);
     }
 
+    // The browsed-servers list is small and rarely edited concurrently: the
+    // newest save wins, so another device's additions show up here too.
+    if (active_account_->directory_servers != prefs.directory_servers)
+    {
+        active_account_->directory_servers = prefs.directory_servers;
+        refresh_directory_server_choices_();
+    }
+
     // Adopt the synced MRU only while ours is still empty (fresh login, before
     // the first visit): once the user has visited a room the local order wins,
     // so another device's save can't reorder the list mid Ctrl+Tab cycle.

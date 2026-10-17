@@ -159,3 +159,48 @@ TEST_CASE("Prefs layout save carries recent_rooms alongside the tab layout")
     CHECK(back.last_room == "!b:x");
     CHECK(back.recent_rooms == std::vector<std::string>{"!b:x", "!z:x"});
 }
+
+TEST_CASE("Prefs directory_servers round-trips and is capped on parse")
+{
+    PrefsData p;
+    p.directory_servers = {"a.org", "b.org"};
+    auto p2 = parse(serialize(p));
+    CHECK(p2.directory_servers == p.directory_servers);
+
+    auto many = parse(R"({"directory_servers":["1","2","3","4","5","6","7","8","9","10"]})");
+    CHECK(many.directory_servers.size() == tesseract::kMaxDirectoryServers);
+
+    // Empty list drops the key but keeps unrelated base keys.
+    auto json = serialize(PrefsData{}, R"({"directory_servers":["x"],"keep":1})");
+    CHECK(json.find("directory_servers") == std::string::npos);
+    CHECK(json.find("keep") != std::string::npos);
+}
+
+TEST_CASE("Prefs add_directory_server moves to front, dedupes, caps at 8")
+{
+    using tesseract::Prefs::add_directory_server;
+    std::vector<std::string> l;
+    l = add_directory_server(l, "a.org");
+    l = add_directory_server(l, "b.org");
+    l = add_directory_server(l, "A.ORG");
+    CHECK(l == std::vector<std::string>{"A.ORG", "b.org"});
+    CHECK(add_directory_server(l, "") == l);
+    for (int i = 0; i < 10; ++i)
+        l = add_directory_server(l, "s" + std::to_string(i) + ".org");
+    CHECK(l.size() == tesseract::kMaxDirectoryServers);
+    CHECK(l.front() == "s9.org");
+}
+
+TEST_CASE("Prefs directory_server_choices lists defaults until pushed out")
+{
+    using tesseract::Prefs::directory_server_choices;
+    CHECK(directory_server_choices({}, "home.org") ==
+          std::vector<std::string>{"home.org", "activematrixrooms.com", "matrixrooms.info"});
+    CHECK(directory_server_choices({"x.org", "MatrixRooms.info"}, "home.org") ==
+          std::vector<std::string>{"x.org", "MatrixRooms.info", "home.org",
+                                   "activematrixrooms.com"});
+    CHECK(directory_server_choices({}, "") ==
+          std::vector<std::string>{"activematrixrooms.com", "matrixrooms.info"});
+    std::vector<std::string> full{"1", "2", "3", "4", "5", "6", "7", "8"};
+    CHECK(directory_server_choices(full, "home.org") == full);
+}

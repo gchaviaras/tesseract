@@ -465,6 +465,12 @@ protected:
     // logged-in account.
     void persist_room_layout_pref_(bool blocking = false);
 
+    // Room browser's server picker: pushes the active account's saved servers
+    // (plus its homeserver and the built-in defaults) into the Browse view,
+    // and remembers a typed server once its directory answered.
+    void refresh_directory_server_choices_();
+    void on_directory_server_validated_(const std::string& server);
+
     // Drive the SDK subscription for a room switch.
     void start_room_subscription_(const std::string&        room_id,
                                   std::vector<std::string>  visible_ids);

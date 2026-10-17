@@ -188,6 +188,40 @@ TEST_CASE("SearchablePicker Enter with no hover commits the first row; with "
     CHECK(s.picker->value() == "k-pineapple");
 }
 
+TEST_CASE("SearchablePicker Enter on unmatched text fires on_submit_text unless "
+          "a row was chosen",
+          "[tk][searchable_picker]")
+{
+    SpStage s;
+    s.layout();
+    int changes = 0;
+    std::string submitted;
+    s.picker->on_changed = [&](std::string) { ++changes; };
+    s.picker->on_submit_text = [&](std::string t) { submitted = std::move(t); };
+
+    // "pine" is not an exact key ("k-pineapple" is): free text wins.
+    s.field().set_text("pine");
+    s.type("pine");
+    s.field().on_submit();
+    CHECK(submitted == "pine");
+    CHECK(changes == 0);
+
+    // Arrowing onto a row makes Enter commit it instead.
+    submitted.clear();
+    s.field().set_text("pine");
+    s.type("pine");
+    s.field().on_popup_nav(NavKey::Down);
+    s.field().on_submit();
+    CHECK(submitted.empty());
+    CHECK(changes == 1);
+
+    // Exact key text commits the entry rather than submitting text.
+    s.field().set_text("k-apple");
+    s.type("k-apple");
+    s.field().on_submit();
+    CHECK(submitted.empty());
+}
+
 TEST_CASE("SearchablePicker dropdown rows commit via pointer and a11y",
           "[tk][searchable_picker][accessibility]")
 {

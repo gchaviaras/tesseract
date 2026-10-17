@@ -77,6 +77,14 @@ public:
     // entry. Never fired for a blur/Escape revert.
     std::function<void(std::string value)> on_changed;
 
+    // Optional: fired when the field is submitted (Enter) with non-empty text
+    // that is not an entry's exact key, and the user has not arrowed or
+    // hovered onto a dropdown row. Lets a picker accept free text (e.g. a
+    // server address to validate). The dropdown closes but the typed text
+    // stays in the field; the owner calls set_value() once it accepts it.
+    // Unset: Enter behaves as before (commit the top/hovered match).
+    std::function<void(std::string text)> on_submit_text;
+
     // Forwards the internal field's native focus transitions. Fires
     // alongside (never instead of) this widget's own collapse-on-blur
     // handling, so a consumer can observe "the user left this field" (e.g.
@@ -169,6 +177,7 @@ private:
 
     bool expanded_    = false;
     int  hovered_row_ = -1;
+    bool row_chosen_  = false; // arrow key or mouse picked a row since the last refilter
 
     Rect field_rect_{};   // the text field (bounds minus the chevron cell)
     Rect chevron_rect_{}; // the ▾ cell

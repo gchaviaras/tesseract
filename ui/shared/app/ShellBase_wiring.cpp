@@ -685,15 +685,8 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
         auto* ar = main_app_->add_room_view();
         // Refreshed here rather than once at wire-up time: client_ is null
         // until login completes, well after wire_main_app_widget_() runs.
-        if (auto* dr = ar->directory_view(); dr && client_)
-        {
-            // The shell's cached id: the client call takes the FFI lock and
-            // blocks behind any writer (login, logout, cache clear).
-            const std::string uid = my_user_id_;
-            const auto colon = uid.find(':');
-            dr->set_homeserver_placeholder(
-                colon == std::string::npos ? std::string{} : uid.substr(colon + 1));
-        }
+        if (ar->directory_view() && client_)
+            refresh_directory_server_choices_();
         ar->open();
     };
     if (auto* ar = app->add_room_view())
@@ -744,6 +737,8 @@ void ShellBase::wire_main_app_widget_(views::MainAppWidget* app)
                     if (client_)
                         client_->search_room_directory(request_id, filter, server);
                 };
+            dr->on_server_validated = [this](const std::string& server)
+            { on_directory_server_validated_(server); };
             dr->on_next_page_requested =
                 [this](std::uint64_t request_id)
                 {

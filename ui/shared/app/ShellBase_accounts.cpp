@@ -184,6 +184,8 @@ ShellBase::finish_restore_accounts_ui_(RestoreIOResult&& io)
         session->bridge_not_bridged_overrides = std::move(acc.bridge_not_bridged_overrides);
         session->emoji_skin_tone = acc.emoji_skin_tone;
         session->prefs_json = std::move(acc.prefs_json);
+        session->directory_servers =
+            tesseract::Prefs::parse(session->prefs_json).directory_servers;
 
         // Bridge already built + sync already started on the worker thread
         // in restore_all_accounts_blocking_(), which also already applied the
@@ -390,6 +392,7 @@ ShellBase::FinalizeLoginIO ShellBase::finalize_login_blocking_(
         session->last_room  = prefs.last_room;
         session->open_rooms = prefs.open_rooms;
         session->recent_rooms = prefs.recent_rooms;
+        session->directory_servers = prefs.directory_servers;
         session->bridge_not_bridged_overrides = prefs.bridge_not_bridged_overrides;
         session->emoji_skin_tone = tesseract::emoji::skin_tone_from_key(prefs.emoji_skin_tone);
     }

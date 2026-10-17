@@ -5,6 +5,7 @@
 #include "tk/theme.h"
 
 #include <algorithm>
+#include <cctype>
 #include <optional>
 #include <string>
 
@@ -221,23 +222,38 @@ RoomDirectoryView::RoomDirectoryView() : adapter_(std::make_unique<Adapter>(*thi
 {
     if (host())
     {
-        auto server = tk::create_widget<tk::TextField>(this, kDirInputH);
-        server->set_on_changed(
-            [this](const std::string&)
+        auto server = tk::create_widget<ServerPicker>(this);
+        // A row picked from the list: a known server, searched straight away.
+        server->on_changed = [this](std::string)
+        {
+            pending_server_.clear();
+            search_now();
+        };
+        // Enter on text that is not in the list: search it, and keep it only
+        // if its directory answers.
+        server->on_submit_text = [this](std::string text)
+        {
+            const auto b = text.find_first_not_of(" \t");
+            if (b == std::string::npos) return;
+            text = text.substr(b, text.find_last_not_of(" \t") - b + 1);
+            for (const auto& known : server_picker_->servers())
             {
-                fields_dirty_ = true;
-                if (on_field_edited) on_field_edited();
-            });
-        server->set_on_submit([this] { search_now(); });
-        // Losing focus commits immediately — the debounce (on_field_edited,
-        // wired by the host) is for the "still typing" case; tabbing/
-        // clicking away means the user is done editing. Gated on
-        // fields_dirty_ so clicking a result row (which blurs whichever
-        // field was focused) doesn't restart an unedited search and reset
-        // the list's scroll position.
-        server->set_on_focus_changed(
-            [this](bool focused) { if (!focused && fields_dirty_) search_now(); });
-        server_field_ = add_child(std::move(server));
+                if (known.size() == text.size() &&
+                    std::equal(known.begin(), known.end(), text.begin(),
+                               [](char a, char c)
+                               { return std::tolower((unsigned char)a) ==
+                                        std::tolower((unsigned char)c); }))
+                {
+                    server_picker_->set_value(known);
+                    pending_server_.clear();
+                    search_now();
+                    return;
+                }
+            }
+            pending_server_ = std::move(text);
+            search_now();
+        };
+        server_picker_ = add_child(std::move(server));
 
         auto search = tk::create_widget<tk::TextField>(this, kDirInputH);
         search->set_placeholder(tk::tr("Search rooms\xe2\x80\xa6"));
@@ -365,7 +381,7 @@ void RoomDirectoryView::set_visible(bool v)
     tk::Widget::set_visible(v);
     if (!v)
     {
-        if (server_field_) server_field_->set_visible(false);
+        if (server_picker_) server_picker_->set_visible(false);
         if (search_field_) search_field_->set_visible(false);
     }
 }
@@ -382,15 +398,20 @@ void RoomDirectoryView::set_is_room_joined(
     update_join_button_label_();
 }
 
-void RoomDirectoryView::set_homeserver_placeholder(std::string domain)
+void RoomDirectoryView::set_server_choices(std::vector<std::string> servers,
+                                           std::string homeserver)
 {
-    homeserver_placeholder_ = std::move(domain);
-    if (server_field_)
-    {
-        server_field_->set_placeholder(homeserver_placeholder_.empty()
-                                           ? std::string(tk::tr("Homeserver"))
-                                           : homeserver_placeholder_);
-    }
+    homeserver_ = std::move(homeserver);
+    if (!server_picker_) return;
+    const std::string current = server_picker_->value();
+    server_picker_->set_servers(std::move(servers));
+    const auto& list = server_picker_->servers();
+    const bool kept = !current.empty() &&
+                      std::find(list.begin(), list.end(), current) != list.end();
+    if (kept)
+        server_picker_->set_value(current);
+    else
+        server_picker_->set_value(homeserver_);
 }
 
 void RoomDirectoryView::search_now()
@@ -416,7 +437,14 @@ void RoomDirectoryView::search_now()
         status_lbl_->set_visible(true);
     }
     active_request_id_ = ++next_request_id_;
-    active_server_ = server_field_ ? server_field_->text() : std::string{};
+    {
+        const std::string server =
+            !pending_server_.empty() ? pending_server_
+            : server_picker_         ? server_picker_->value()
+                                     : std::string{};
+        // The account's own homeserver is browsed without a `server` argument.
+        active_server_ = server == homeserver_ ? std::string{} : server;
+    }
     if (on_search_requested)
     {
         const std::string filter = search_field_ ? search_field_->text() : std::string{};
@@ -493,6 +521,23 @@ void RoomDirectoryView::set_results(std::uint64_t request_id,
     loading_ = false;
     reached_end_ = reached_end;
     error_msg_.clear();
+    if (!pending_server_.empty())
+    {
+        // The typed server answered: offer it from now on.
+        std::string accepted = std::move(pending_server_);
+        pending_server_.clear();
+        if (server_picker_)
+        {
+            auto list = server_picker_->servers();
+            if (std::find(list.begin(), list.end(), accepted) == list.end())
+            {
+                list.insert(list.begin(), accepted);
+                server_picker_->set_servers(std::move(list));
+            }
+            server_picker_->set_value(accepted);
+        }
+        if (on_server_validated) on_server_validated(accepted);
+    }
     items_.insert(items_.end(), std::make_move_iterator(entries.begin()),
                  std::make_move_iterator(entries.end()));
     if (list_view_) list_view_->invalidate_data();
@@ -518,6 +563,7 @@ void RoomDirectoryView::set_search_failed(std::uint64_t request_id,
         return;
     }
     loading_ = false;
+    pending_server_.clear(); // not a working directory: not remembered
     error_msg_ = std::move(message);
     if (status_lbl_)
     {
@@ -538,7 +584,7 @@ void RoomDirectoryView::trigger_join_for_test()
 
 void RoomDirectoryView::on_theme_changed(const tk::Theme& t)
 {
-    if (server_field_) server_field_->set_text_color(t.palette.text_primary);
+    if (server_picker_) server_picker_->on_theme_changed(t);
     if (search_field_) search_field_->set_text_color(t.palette.text_primary);
 }
 
@@ -557,10 +603,10 @@ void RoomDirectoryView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
     const float field_w = (fields_w - kGap) * 0.5f;
     const float y0 = bounds.y + kPadY;
 
-    if (server_field_)
+    if (server_picker_)
     {
-        server_field_->set_visible(is_open_);
-        server_field_->arrange(ctx, {x, y0, field_w, kDirInputH});
+        server_picker_->set_visible(is_open_);
+        server_picker_->arrange(ctx, {x, y0, field_w, kDirInputH});
     }
     if (search_field_)
     {
@@ -607,12 +653,11 @@ void RoomDirectoryView::paint(tk::PaintCtx& ctx)
     }
     const auto& pal = ctx.theme.palette;
 
-    if (server_field_ && server_field_->visible() && !server_field_->bounds().empty())
+    if (server_picker_ && server_picker_->visible() && !server_picker_->bounds().empty())
     {
-        ctx.canvas.fill_rounded_rect(server_field_->bounds(), kRadius, pal.bg);
-        ctx.canvas.stroke_rounded_rect(server_field_->bounds(), kRadius,
-                                       pal.border, kBorderW);
-        server_field_->paint(ctx);
+        // The picker strokes its own border (and chevron).
+        ctx.canvas.fill_rounded_rect(server_picker_->bounds(), kRadius, pal.bg);
+        server_picker_->paint(ctx);
     }
     if (search_field_ && search_field_->visible() && !search_field_->bounds().empty())
     {

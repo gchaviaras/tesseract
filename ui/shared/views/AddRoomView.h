@@ -93,6 +93,9 @@ public:
     bool on_wheel(tk::Point local, float dx, float dy, bool is_touchpad = false) override;
 
     static constexpr float kCardW = 440.0f;
+    // The Browse tab's card is 50% wider: room names, topics and the server
+    // picker need the room.
+    static constexpr float kDirectoryCardW = kCardW * 1.5f;
     // +26 over the Join tab's fit for the Create tab's status/error row,
     // which CreateRoomView::arrange() now always reserves space for
     // (kCRStatusH + kCRSmallGap) whether or not it's actually showing an

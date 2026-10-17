@@ -4,6 +4,7 @@
 #include "app/UnreadPrefetch.h"
 #include "views/MainAppWidget.h"
 #include "views/text_util.h"
+#include <tesseract/prefs.h>
 #include <algorithm>
 #ifndef _WIN32
 #include <fcntl.h>
@@ -1709,4 +1710,30 @@ void ShellBase::send_notification_reply_(std::string user_id,
         }));
     });
 }
+
+void ShellBase::refresh_directory_server_choices_()
+{
+    if (!main_app_ || !active_account_)
+        return;
+    auto* dr = main_app_->add_room_view() ? main_app_->add_room_view()->directory_view() : nullptr;
+    if (!dr)
+        return;
+    const auto colon = my_user_id_.find(':');
+    const std::string home =
+        colon == std::string::npos ? std::string{} : my_user_id_.substr(colon + 1);
+    dr->set_server_choices(
+        tesseract::Prefs::directory_server_choices(active_account_->directory_servers, home),
+        home);
+}
+
+void ShellBase::on_directory_server_validated_(const std::string& server)
+{
+    if (!active_account_)
+        return;
+    active_account_->directory_servers =
+        tesseract::Prefs::add_directory_server(active_account_->directory_servers, server);
+    schedule_account_data_save_();
+    refresh_directory_server_choices_();
+}
+
 } // namespace tesseract

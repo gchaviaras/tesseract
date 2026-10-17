@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -23,7 +24,13 @@ struct PrefsData
     /// Most-recently-visited room IDs (front = most recent), feeding the
     /// Ctrl+Tab MRU switcher and the quick switcher's "Recent" strip.
     std::vector<std::string> recent_rooms;
+    /// Room-directory servers the user has browsed, most recent first, at
+    /// most `kMaxDirectoryServers`. Only servers whose directory answered.
+    std::vector<std::string> directory_servers;
 };
+
+/// Cap on the saved `directory_servers` list.
+inline constexpr std::size_t kMaxDirectoryServers = 8;
 
 /// Parse / serialize helpers for the `im.gnomos.tesseract` JSON content object.
 namespace Prefs
@@ -46,6 +53,20 @@ std::string serialize(const PrefsData& p, const std::string& base_json = {});
 /// so this fully reconstructs what to persist — no prior load is needed.
 PrefsData room_layout(const std::string&              last_room,
                       const std::vector<std::string>& open_room_ids);
+
+/// Returns `saved` with `server` moved (or added) to the front, matched
+/// case-insensitively, trimmed to `kMaxDirectoryServers`. An empty `server`
+/// leaves the list unchanged.
+std::vector<std::string> add_directory_server(std::vector<std::string> saved,
+                                              const std::string&       server);
+
+/// The servers the room browser offers: `saved` first, then `homeserver` and
+/// the built-in defaults (activematrixrooms.com, matrixrooms.info) that are
+/// not already listed, with the whole list trimmed to `kMaxDirectoryServers`.
+/// Defaults drop off the end once enough servers have been saved. An empty
+/// `homeserver` is skipped.
+std::vector<std::string> directory_server_choices(const std::vector<std::string>& saved,
+                                                  const std::string&              homeserver);
 
 } // namespace Prefs
 

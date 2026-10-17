@@ -3,6 +3,7 @@
 #include "tk/i18n.h"
 #include "tk/theme.h"
 
+#include <algorithm>
 #include <string>
 
 namespace tesseract::views
@@ -190,7 +191,9 @@ void AddRoomView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
 {
     bounds_ = bounds;
 
-    const float cw = kCardW;
+    const float cw = active_tab_ == Tab::Directory
+                         ? std::min(kDirectoryCardW, bounds.w)
+                         : kCardW;
     // The Browse tab's list benefits from more vertical room than the
     // fixed-height Join/Create card; recomputed every arrange() (i.e. on
     // every window resize) so the ratio holds rather than being fixed once.

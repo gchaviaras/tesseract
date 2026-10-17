@@ -7,14 +7,16 @@
 //
 // Workflow:
 //   1. open() issues an initial search (empty filter, own homeserver).
-//   2. User edits the server/search fields. Every keystroke fires
-//      on_field_edited (the host debounces this into search_now()); losing
-//      focus or pressing Enter or clicking "Search" triggers immediately
-//      instead of waiting for the debounce. Either way, search_now() reads
-//      the fields' current text and fires on_search_requested with a fresh
-//      request_id; the host calls Client::search_room_directory() on a
-//      worker and later delivers the first page via set_results() (or an
-//      error — e.g. an unparseable server name — via set_search_failed()).
+//   2. The user picks a server from the picker, or types a new address and
+//      presses Enter. Editing the search field fires on_field_edited (the
+//      host debounces this into search_now()); losing focus, pressing Enter
+//      or clicking "Search" triggers immediately instead. Either way,
+//      search_now() fires on_search_requested with a fresh request_id; the
+//      host calls Client::search_room_directory() on a worker and later
+//      delivers the first page via set_results() (or an error — e.g. an
+//      unreachable server — via set_search_failed()). A typed server is only
+//      accepted once its first page arrives: it is then added to the picker
+//      and reported via on_server_validated.
 //   3. Scrolling near the list's bottom (while more pages remain) fires
 //      on_next_page_requested; the host calls Client::room_directory_next_page()
 //      and delivers the appended rows via set_results().
@@ -27,6 +29,8 @@
 #include "tk/list_view.h"
 #include "tk/text_field.h"
 #include "tk/widget.h"
+
+#include "ServerPicker.h"
 
 #include <tesseract/types.h>
 
@@ -96,10 +100,12 @@ public:
     // Enter/"Search"-click/focus-lost triggers, which bypass the debounce.
     void search_now();
 
-    // Placeholder text for the server field — the logged-in account's own
-    // homeserver domain, so users see what "default" means without typing
-    // anything. Set once by the host after login.
-    void set_homeserver_placeholder(std::string domain);
+    // The servers the picker offers, in display order, and the logged-in
+    // account's own homeserver domain (searched without a `server` argument,
+    // and selected until the user picks another). The host calls this each
+    // time the dialog opens and after on_server_validated. A server the user
+    // has selected that is still in `servers` stays selected.
+    void set_server_choices(std::vector<std::string> servers, std::string homeserver);
 
     // ── Results delivery (called by the host from ShellBase) ──────────────
     // Appends `entries` to the currently displayed list if `request_id`
@@ -129,6 +135,9 @@ public:
     std::function<void(std::uint64_t request_id, const std::string& filter,
                        const std::string& server)>
         on_search_requested;
+    // Fired once a typed server's directory answered (first page arrived), so
+    // the host can remember it. Not fired for servers picked from the list.
+    std::function<void(const std::string& server)> on_server_validated;
     // Fired when the list nears its bottom and more pages remain.
     std::function<void(std::uint64_t request_id)> on_next_page_requested;
     // Fired when the user clicks "Join" (or "Go" — see set_is_room_joined).
@@ -152,6 +161,10 @@ public:
     // Test accessors.
     bool join_button_enabled() const;
     void trigger_join_for_test();
+    ServerPicker* server_picker_for_test() const
+    {
+        return server_picker_;
+    }
     std::size_t row_count_for_test() const
     {
         return items_.size();
@@ -185,7 +198,9 @@ private:
     bool loading_ = false;
     bool reached_end_ = true;
     std::string error_msg_;
-    std::string homeserver_placeholder_;
+    std::string homeserver_;
+    // A typed server awaiting its first page; empty once validated or failed.
+    std::string pending_server_;
     // Server the current/last search browsed via — passed back on
     // on_join_requested as a federation route hint. Empty = own homeserver.
     std::string active_server_;
@@ -207,7 +222,7 @@ private:
     std::function<bool(const std::string& room_id)> is_room_joined_;
     std::unique_ptr<Adapter> adapter_;
 
-    tk::TextField* server_field_ = nullptr;
+    ServerPicker* server_picker_ = nullptr;
     tk::TextField* search_field_ = nullptr;
     tk::Button* search_btn_ = nullptr;
     tk::ListView* list_view_ = nullptr;

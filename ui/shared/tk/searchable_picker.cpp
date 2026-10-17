@@ -349,6 +349,21 @@ void SearchablePicker::init_(float field_h, float row_h, float width,
     field_->set_on_submit(
         [this]
         {
+            if (on_submit_text && !row_chosen_)
+            {
+                const std::string text = field_->text();
+                bool exact = false;
+                const std::size_t n = entry_count_();
+                for (std::size_t i = 0; i < n && !exact; ++i)
+                    exact = entry_key_(i) == text;
+                if (!text.empty() && !exact)
+                {
+                    set_expanded_(false);
+                    set_hovered_(-1);
+                    on_submit_text(text);
+                    return;
+                }
+            }
             if (hovered_row_ >= 0 &&
                 hovered_row_ < static_cast<int>(filtered_.size()))
             {
@@ -450,6 +465,7 @@ void SearchablePicker::refilter_(const std::string& query)
         filtered_.push_back(i); // every match; the popup scrolls
     }
     set_hovered_(filtered_.empty() ? -1 : 0);
+    row_chosen_ = false;
     if (dropdown_)
     {
         dropdown_->set_entries(filtered_);
@@ -498,12 +514,14 @@ bool SearchablePicker::handle_nav_(NavKey key)
     switch (key)
     {
     case NavKey::Up:
+        row_chosen_ = true;
         set_hovered_(hovered_row_ <= 0 ? static_cast<int>(filtered_.size()) - 1
                                        : hovered_row_ - 1);
         if (dropdown_)
             dropdown_->scroll_to_row(hovered_row_);
         return true;
     case NavKey::Down:
+        row_chosen_ = true;
         set_hovered_((hovered_row_ + 1) % static_cast<int>(filtered_.size()));
         if (dropdown_)
             dropdown_->scroll_to_row(hovered_row_);
@@ -540,7 +558,11 @@ void SearchablePicker::set_expanded_(bool expanded)
             auto list = std::make_unique<DropdownList>(row_h_, width_);
             dropdown_ = list.get();
             dropdown_->on_row_activated = [this](std::size_t idx) { commit_row_(idx); };
-            dropdown_->on_hover_changed = [this](int row) { set_hovered_(row); };
+            dropdown_->on_hover_changed = [this](int row)
+            {
+                row_chosen_ = row >= 0;
+                set_hovered_(row);
+            };
             dropdown_->on_scrolled = [this]
             {
                 if (popup_)

@@ -1925,17 +1925,16 @@ void RoomView::set_room(const tesseract::RoomInfo& info)
         // client, so a genuine room switch (not a same-room metadata
         // refresh — see the else-if above) should land the user in the
         // compose box, ready to type, without them needing to click first.
-        // Deferred to paint() rather than called synchronously here: at
-        // this point text_area()'s own visible_ flag may still reflect an
-        // earlier "no room active" relayout (MainAppWidget::arrange()'s
-        // tail force-hides it whenever compose_text_area_rect() is empty)
-        // — the *next* relayout is what actually reveals it, and that
-        // happens asynchronously, after set_room() has already returned.
-        // Calling focus() synchronously here raced that and silently
-        // no-op'd via Host::request_focus's visible_in_tree() guard, with
-        // nothing ever retrying once the widget became visible.
+        // The text area may still be hidden from the earlier "no room
+        // active" layout (MainAppWidget::arrange() force-hides it), and
+        // Host::request_focus() requires visible_in_tree() — show it first;
+        // the next arrange() re-shows/repositions it.
         if (room_changed && !replaced)
-            pending_default_focus_ = true;
+        {
+            if (auto* ta = compose_bar_->text_area())
+                ta->set_visible(true);
+            compose_bar_->focus();
+        }
     }
 }
 
@@ -2596,18 +2595,6 @@ void RoomView::paint(tk::PaintCtx& ctx)
     {
         room_settings_view_->paint(ctx);
         return;
-    }
-
-    // Consume the deferred default-focus request from set_room() — by now
-    // this frame's full arrange() pass (including MainAppWidget's tail
-    // visibility gating) has already settled compose_bar_'s text_area()
-    // visibility, so this either succeeds or safely no-ops (e.g. a modal
-    // opened in the meantime) via Host::request_focus's own guards.
-    if (pending_default_focus_)
-    {
-        pending_default_focus_ = false;
-        if (compose_bar_)
-            compose_bar_->focus();
     }
 
     // Each child paints its own background; the typing indicator now lives

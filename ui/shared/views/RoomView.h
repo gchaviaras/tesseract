@@ -934,12 +934,6 @@ private:
     tesseract::Client* client_ = nullptr; // borrowed; see set_client()
     bool native_drag_hover_ = false; // true while claiming on_native_drag_hover
 
-    // Set by set_room() on a genuine room switch; consumed by the next
-    // paint() once the widget tree's visibility for this frame has fully
-    // settled — see set_room()'s own comment for why this can't just call
-    // compose_bar_->focus() synchronously.
-    bool pending_default_focus_ = false;
-
     std::function<void()> repaint_requester_;
     std::function<void(int, std::function<void()>)> post_delayed_;
     bool anim_repaint_pending_ = false;

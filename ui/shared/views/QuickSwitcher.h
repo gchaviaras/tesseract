@@ -198,7 +198,6 @@ private:
     // focusing synchronously inside open() because arrange() — which
     // positions search_field_'s native overlay via set_rect() — hasn't run
     // yet at that point (open() precedes the shell's own relayout() call).
-    // Mirrors RoomView::pending_default_focus_'s identical rationale.
     bool pending_focus_ = false;
 
     bool is_open_ = false;

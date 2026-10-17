@@ -4040,6 +4040,14 @@ protected:
     // entry point for every SettingsView-bound preference.
     void handle_setting_changed_(views::SettingKey key);
 
+    // The per-window half of handle_setting_changed_: applies `key` to this
+    // window's widgets / client / policy. Each main window is its own
+    // ShellBase, so handle_setting_changed_ calls this on every registered
+    // window. Process-global effects (disk, proxy, font config, ...) stay in
+    // handle_setting_changed_ so they run once. New per-window effects go
+    // here, not in the once-only switch.
+    void apply_setting_to_window_(views::SettingKey key);
+
     // "Send and receive presence status": enables/disables the Rust polling
     // loop and starts or stops the PresenceTracker.
     void apply_send_presence_();

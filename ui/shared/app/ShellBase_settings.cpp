@@ -505,10 +505,9 @@ void ShellBase::apply_fonts_()
         return; // clamped to the config already in force
     // Every RootWidget (windows, popups) drops its font-dependent state and
     // schedules a relayout; message lists / room lists flush their own row
-    // caches from their on_fonts_changed() overrides.
+    // caches from their on_fonts_changed() overrides. The per-shell native
+    // part (apply_fonts_ui_) runs per window from apply_setting_to_window_.
     tk::RootWidget::apply_fonts_to_all_roots();
-    apply_fonts_ui_();
-    request_relayout_();
 }
 
 void ShellBase::apply_room_list_density_()
@@ -542,15 +541,14 @@ void ShellBase::handle_setting_changed_(views::SettingKey key)
     // need nothing beyond persisting it (they are read when next used).
     s.save_to_disk(tesseract::config_dir());
 
+    // Process-global effects run once, here; everything that touches a
+    // window's own widgets / client / policy runs per window below.
     switch (key)
     {
     case K::LaunchAtLogin:
         apply_launch_at_login_();
         // The failure path may have corrected the cached bool.
         s.save_to_disk(tesseract::config_dir());
-        break;
-    case K::LowPower:
-        apply_low_power_preference_();
         break;
     case K::Proxy:
         // Signed in: existing clients keep the launch proxy, so the settings
@@ -566,6 +564,47 @@ void ShellBase::handle_setting_changed_(views::SettingKey key)
             rebind_login_client_ui_();
             login_recheck_pending_ = true;
         }
+        break;
+    case K::Fonts:
+        apply_fonts_();
+        break;
+    case K::BundledUrlPreviews:
+        apply_bundled_url_previews_();
+        break;
+    case K::IndexMessages:
+        apply_index_messages_();
+        break;
+#ifdef TESSERACT_CRASH_HANDLER_ENABLED
+    case K::CrashReporting:
+        tesseract::set_crash_reporting_enabled(s.crash_reporting_enabled);
+        break;
+#endif
+    default:
+        break;
+    }
+
+    // Every main window is its own ShellBase; a preference is app-wide, so each
+    // one applies it (the originating window may be unregistered, e.g. in
+    // tests or mid-teardown, so make sure it is covered exactly once).
+    bool self_seen = false;
+    for (ShellBase* w : account_manager_.all_windows())
+    {
+        self_seen = self_seen || w == this;
+        w->apply_setting_to_window_(key);
+    }
+    if (!self_seen)
+        apply_setting_to_window_(key);
+}
+
+void ShellBase::apply_setting_to_window_(views::SettingKey key)
+{
+    using K = views::SettingKey;
+    auto& s = tesseract::Settings::instance();
+
+    switch (key)
+    {
+    case K::LowPower:
+        apply_low_power_preference_();
         break;
     case K::Theme:
     case K::Accent:
@@ -592,9 +631,11 @@ void ShellBase::handle_setting_changed_(views::SettingKey key)
         apply_room_list_density_();
         break;
     case K::Fonts:
-        apply_fonts_();
+        apply_fonts_ui_();
+        request_relayout_();
         break;
     case K::Notifications:
+        // Each window's active account owns its own UnifiedPush connector.
         if (settings_controller_)
             settings_controller_->set_notifications_enabled(s.notifications_enabled);
         break;
@@ -605,22 +646,11 @@ void ShellBase::handle_setting_changed_(views::SettingKey key)
     case K::SendPresence:
         apply_send_presence_();
         break;
-    case K::BundledUrlPreviews:
-        apply_bundled_url_previews_();
-        break;
-    case K::IndexMessages:
-        apply_index_messages_();
-        break;
     case K::Msc2545Compat:
         apply_msc2545_legacy_compat_();
         break;
-#ifdef TESSERACT_CRASH_HANDLER_ENABLED
-    case K::CrashReporting:
-        tesseract::set_crash_reporting_enabled(s.crash_reporting_enabled);
-        break;
-#endif
     default:
-        break; // persist-only (or compiled out)
+        break; // persist-only, or handled once in handle_setting_changed_
     }
 }
 

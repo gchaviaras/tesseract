@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(ui): app-wide settings (compact room list, theme, fonts, layout, avatar animation, low power, presence, media previews, …) now apply to every open main window, not just the one Settings was opened in; per-window effects moved to `apply_setting_to_window_`. Linux debug build, ctest 3402/3402
 - fix(qt): Ctrl+Z works in the compose box again; inline-emoji sizing now uses a `QSyntaxHighlighter` instead of `mergeCharFormat`, whose undo commands were re-pushed on every undo. Qt6 build, user-verified Qt6
 - fix(ui): switching to a room no longer leaves the message list blank for ~600 ms: the room-switch gate stops waiting on avatars (fixed-size slot, no reflow), a failed media fetch/decode releases it, and keys already in failure backoff or with a failed preview (never re-requested on a revisit) are skipped instead of running to the timeout. Linux release build, ctest 3401/3401
 - feat(emoji): the emoji picker always opens on the Frequents tab instead of the last-used one (when there are frequents), and stays open after an emoji is inserted into the composer (focusing the composer no longer dismisses it). Qt6 + GTK4 build, ctest 3402/3402

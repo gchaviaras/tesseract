@@ -7213,3 +7213,99 @@ msgstr[1] ""
 #, c++-format
 msgid "Couldn't start syncing: {0}. Retrying…"
 msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Features"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Capabilities"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Software"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Matrix versions"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Maximum upload size"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Login methods"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Single sign-on"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Token"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not supported"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Stable"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Experimental"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Jump to date"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Profile fields"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "QR code login"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Invite reasons"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Voice and video calls"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "URL previews"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Enabled"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Disabled by server"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Allowed"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not allowed"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change password"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change display name"
+msgstr ""
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Default room version"
+msgstr ""

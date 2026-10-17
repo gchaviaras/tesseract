@@ -7101,3 +7101,99 @@ msgstr[1] "[Séñt {0} ïtémsxx]"
 #, c++-format
 msgid "Couldn't start syncing: {0}. Retrying…"
 msgstr "[Çöùldñ't stàrt syñçïñg: {0}. Rétryïñg…xxxxxxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Features"
+msgstr "[Féàtùrésx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Capabilities"
+msgstr "[Çàpàbïlïtïésxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Software"
+msgstr "[Söftwàréx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Matrix versions"
+msgstr "[Màtrïx vérsïöñsxxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Maximum upload size"
+msgstr "[Màxïmùm ùplöàd sïzéxxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Login methods"
+msgstr "[Lögïñ méthödsxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Single sign-on"
+msgstr "[Sïñglé sïgñ-öñxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Token"
+msgstr "[Tökéñx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not supported"
+msgstr "[Ñöt sùppörtédxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Stable"
+msgstr "[Stàbléx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Experimental"
+msgstr "[Éxpérïméñtàlxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Jump to date"
+msgstr "[Jùmp tö dàtéxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Profile fields"
+msgstr "[Pröfïlé fïéldsxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "QR code login"
+msgstr "[QR çödé lögïñxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Invite reasons"
+msgstr "[Ïñvïté réàsöñsxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Voice and video calls"
+msgstr "[Vöïçé àñd vïdéö çàllsxxxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "URL previews"
+msgstr "[ÙRL prévïéwsxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Enabled"
+msgstr "[Éñàblédx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Disabled by server"
+msgstr "[Dïsàbléd by sérvérxxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Allowed"
+msgstr "[Àllöwédx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not allowed"
+msgstr "[Ñöt àllöwédxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change password"
+msgstr "[Çhàñgé pàsswördxxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change display name"
+msgstr "[Çhàñgé dïsplày ñàméxxx]"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Default room version"
+msgstr "[Défàùlt rööm vérsïöñxxxx]"

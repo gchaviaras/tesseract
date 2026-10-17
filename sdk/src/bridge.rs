@@ -1427,6 +1427,20 @@ pub mod ffi {
         supports_qr_grant: bool,
         supports_calls: bool,
         default_room_version: String,
+        /// True when MSC4133 is advertised under its stable key
+        /// (`uk.tcpip.msc4133.stable`) rather than only the unstable one.
+        profile_fields_stable: bool,
+        /// Server advertises MSC4491 invite reasons.
+        supports_invite_reason: bool,
+        /// Server software from `/_matrix/federation/v1/version`; both empty
+        /// when the endpoint is unreachable.
+        server_name: String,
+        server_version: String,
+        /// Max upload size in bytes from the media config; 0 when unknown.
+        upload_size_limit: u64,
+        /// `m.login.*` flow types from `GET /login`, prefix stripped
+        /// (`password`, `sso`, `token`, ...); empty when unknown.
+        login_flows: Vec<String>,
     }
 
     /// Result of `parse_matrix_link`.  `kind` values:

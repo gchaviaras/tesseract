@@ -5050,3 +5050,99 @@ msgstr[1] "Sendte {0} elementer"
 #, c++-format
 msgid "Couldn't start syncing: {0}. Retrying…"
 msgstr "Kunne ikke starte synkronisering: {0}. Prøver igjen …"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Features"
+msgstr "Funksjoner"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Capabilities"
+msgstr "Muligheter"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Software"
+msgstr "Programvare"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Matrix versions"
+msgstr "Matrix-versjoner"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Maximum upload size"
+msgstr "Maks. opplastingsstørrelse"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Login methods"
+msgstr "Påloggingsmetoder"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Single sign-on"
+msgstr "Enkel pålogging"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Token"
+msgstr "Token"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not supported"
+msgstr "Støttes ikke"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Stable"
+msgstr "Stabil"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Experimental"
+msgstr "Eksperimentell"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Jump to date"
+msgstr "Hopp til dato"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Profile fields"
+msgstr "Profilfelt"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "QR code login"
+msgstr "Pålogging med QR-kode"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Invite reasons"
+msgstr "Invitasjonsgrunner"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Voice and video calls"
+msgstr "Tale- og videosamtaler"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "URL previews"
+msgstr "URL-forhåndsvisninger"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Enabled"
+msgstr "Aktivert"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Disabled by server"
+msgstr "Deaktivert av tjeneren"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Allowed"
+msgstr "Tillatt"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not allowed"
+msgstr "Ikke tillatt"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change password"
+msgstr "Endre passord"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change display name"
+msgstr "Endre visningsnavn"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Default room version"
+msgstr "Standard romversjon"

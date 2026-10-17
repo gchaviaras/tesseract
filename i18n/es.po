@@ -6790,3 +6790,99 @@ msgstr[1] "Se enviaron {0} elementos"
 #, c++-format
 msgid "Couldn't start syncing: {0}. Retrying…"
 msgstr "No se pudo iniciar la sincronización: {0}. Reintentando…"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Features"
+msgstr "Funciones"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Capabilities"
+msgstr "Capacidades"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Software"
+msgstr "Software"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Matrix versions"
+msgstr "Versiones de Matrix"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Maximum upload size"
+msgstr "Tamaño máximo de subida"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Login methods"
+msgstr "Métodos de inicio de sesión"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Single sign-on"
+msgstr "Inicio de sesión único"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Token"
+msgstr "Token"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not supported"
+msgstr "No compatible"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Stable"
+msgstr "Estable"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Experimental"
+msgstr "Experimental"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Jump to date"
+msgstr "Saltar a la fecha"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Profile fields"
+msgstr "Campos de perfil"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "QR code login"
+msgstr "Inicio de sesión con código QR"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Invite reasons"
+msgstr "Motivos de invitación"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Voice and video calls"
+msgstr "Llamadas de voz y vídeo"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "URL previews"
+msgstr "Vistas previas de URL"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Enabled"
+msgstr "Activado"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Disabled by server"
+msgstr "Desactivado por el servidor"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Allowed"
+msgstr "Permitido"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not allowed"
+msgstr "No permitido"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change password"
+msgstr "Cambiar contraseña"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change display name"
+msgstr "Cambiar nombre visible"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Default room version"
+msgstr "Versión de sala predeterminada"

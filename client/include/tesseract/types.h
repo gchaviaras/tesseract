@@ -1028,6 +1028,12 @@ struct ServerInfo
     bool supports_qr_grant         = false;  ///< server advertises org.matrix.msc4108 (QR grant login)
     bool supports_calls            = false;  ///< server has a livekit RTC transport (MSC4195/MSC4143/well-known)
     std::string default_room_version;        ///< e.g. "10"; empty when absent
+    bool profile_fields_stable     = false;  ///< MSC4133 advertised under its stable key
+    bool supports_invite_reason    = false;  ///< server advertises MSC4491 invite reasons
+    std::string server_name;                 ///< e.g. "Synapse"; empty when the federation version endpoint is unreachable
+    std::string server_version;              ///< e.g. "1.120.0"; empty when unknown
+    uint64_t upload_size_limit     = 0;      ///< max upload bytes from the media config; 0 when unknown
+    std::vector<std::string> login_flows;    ///< `m.login.*` types without the prefix ("password", "sso", "token"); empty when unknown
 };
 
 /// A direct GET /state read of the four Security & Privacy tab fields,

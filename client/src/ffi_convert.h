@@ -444,6 +444,13 @@ inline ServerInfo from_ffi(const tesseract_ffi::ServerInfoFfi& s)
     out.supports_qr_grant       = s.supports_qr_grant;
     out.supports_calls          = s.supports_calls;
     out.default_room_version    = std::string(s.default_room_version);
+    out.profile_fields_stable   = s.profile_fields_stable;
+    out.supports_invite_reason  = s.supports_invite_reason;
+    out.server_name             = std::string(s.server_name);
+    out.server_version          = std::string(s.server_version);
+    out.upload_size_limit       = s.upload_size_limit;
+    for (const auto& f : s.login_flows)
+        out.login_flows.emplace_back(std::string(f));
     return out;
 }
 

@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- feat(ui): the Settings Server tab shows the server's software and version, Matrix spec range, upload limit and login methods, which Tesseract-used features are Stable/Experimental/Not supported, and what the account may change. Windows build, cargo tests 6 new, ctest 5 new + i18n pass
 - feat(ui): the room browser's server field is a searchable picker: type an address and press Enter to search it, and it is remembered (8 most recent, `im.gnomos.tesseract` `directory_servers`) once its directory answers; defaults are your homeserver, activematrixrooms.com and matrixrooms.info; the Browse tab's card is 50% wider. Windows build, new ctest cases pass, user-verified Windows
 - fix(ui): `ComboButton` (e.g. create-room) draws its chevron as a vector shape like the other dropdowns instead of the `▾` glyph, which fell back to an emoji font. Windows build, user-verified
 - fix(review): follow-up review fixes: pasted images named with a UTC timestamp, sender name colours use a fixed hash, GTK `post_to_ui` bundles freed and exceptions contained, create-room invitees split on whitespace/semicolons too, table-summary a11y cache keyed by a keyed 128-bit SipHash (`tk/siphash.h`) so crafted bodies can't collide, message-search row and accessibility separators translated, device signed out when restoring a finished login fails. Qt6 build, ctest 3406/3406

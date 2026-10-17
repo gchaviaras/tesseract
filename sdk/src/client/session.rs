@@ -161,6 +161,60 @@ fn server_info_unavailable() -> ServerInfoFfi {
         supports_qr_grant: false,
         supports_calls: false,
         default_room_version: String::new(),
+        profile_fields_stable: false,
+        supports_invite_reason: false,
+        server_name: String::new(),
+        server_version: String::new(),
+        upload_size_limit: 0,
+        login_flows: Vec::new(),
+    }
+}
+
+/// `(name, version)` from a `/_matrix/federation/v1/version` response; empty
+/// strings when the body doesn't carry them.
+fn parse_federation_version(body: &serde_json::Value) -> (String, String) {
+    let field = |key: &str| {
+        body.pointer(&format!("/server/{key}"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned()
+    };
+    (field("name"), field("version"))
+}
+
+/// `m.upload.size` from a media `/config` response; 0 when absent.
+fn parse_upload_limit(body: &serde_json::Value) -> u64 {
+    body.get("m.upload.size").and_then(|v| v.as_u64()).unwrap_or(0)
+}
+
+/// Flow types from a `GET /login` response with the `m.login.` prefix
+/// stripped, in server order and without duplicates.
+fn parse_login_flows(body: &serde_json::Value) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for flow in body.get("flows").and_then(|v| v.as_array()).into_iter().flatten() {
+        let Some(ty) = flow.get("type").and_then(|v| v.as_str()) else { continue };
+        let ty = ty.strip_prefix("m.login.").unwrap_or(ty).to_owned();
+        if !out.contains(&ty) {
+            out.push(ty);
+        }
+    }
+    out
+}
+
+/// GET `url` and parse the body as JSON; `Null` on any transport, status or
+/// parse failure (these probes are best-effort and never fail server info).
+async fn get_json_lenient(
+    http: &reqwest::Client,
+    url: String,
+    bearer: Option<&str>,
+) -> serde_json::Value {
+    let mut req = http.get(url).timeout(std::time::Duration::from_secs(10));
+    if let Some(token) = bearer {
+        req = req.bearer_auth(token);
+    }
+    match req.send().await.and_then(|r| r.error_for_status()) {
+        Ok(r) => r.json().await.unwrap_or(serde_json::Value::Null),
+        Err(_) => serde_json::Value::Null,
     }
 }
 
@@ -185,7 +239,7 @@ async fn build_server_info(
     // SDK keeps it for 24h and picks endpoint paths (stable vs unstable)
     // from it, so a stale entry after a server upgrade sent requests down
     // the wrong path.
-    let (caps_resp, supported) = tokio::join!(
+    let (caps_resp, supported, fed_body, media_body, login_body) = tokio::join!(
         http.get(format!("{base}/_matrix/client/v3/capabilities"))
             .bearer_auth(&access_token)
             .send(),
@@ -203,8 +257,32 @@ async fn build_server_info(
                     )
                 }
             }
-        }
+        },
+        get_json_lenient(&http, format!("{base}/_matrix/federation/v1/version"), None),
+        async {
+            // Authenticated media config (spec v1.11) first, then the legacy path.
+            let v1 = get_json_lenient(
+                &http,
+                format!("{base}/_matrix/client/v1/media/config"),
+                Some(access_token.as_str()),
+            )
+            .await;
+            if v1.is_object() {
+                v1
+            } else {
+                get_json_lenient(
+                    &http,
+                    format!("{base}/_matrix/media/v3/config"),
+                    Some(access_token.as_str()),
+                )
+                .await
+            }
+        },
+        get_json_lenient(&http, format!("{base}/_matrix/client/v3/login"), None),
     );
+    let (server_name, server_version) = parse_federation_version(&fed_body);
+    let upload_size_limit = parse_upload_limit(&media_body);
+    let login_flows = parse_login_flows(&login_body);
     let spec_versions: Vec<SpecVersionFfi> = supported
         .versions
         .iter()
@@ -279,6 +357,12 @@ async fn build_server_info(
         supports_qr_grant,
         supports_calls,
         default_room_version: default_room_ver,
+        profile_fields_stable: supports_msc4133_stable,
+        supports_invite_reason,
+        server_name,
+        server_version,
+        upload_size_limit,
+        login_flows,
     }
 }
 
@@ -1305,8 +1389,40 @@ mod ffi_state_tests {
 
 #[cfg(test)]
 mod capability_tests {
-    use super::preview_url_enabled;
+    use super::{parse_federation_version, parse_login_flows, parse_upload_limit, preview_url_enabled};
     use serde_json::json;
+
+    #[test]
+    fn federation_version_reads_name_and_version() {
+        let body = json!({ "server": { "name": "Synapse", "version": "1.120.0" } });
+        assert_eq!(
+            parse_federation_version(&body),
+            ("Synapse".to_owned(), "1.120.0".to_owned())
+        );
+        assert_eq!(
+            parse_federation_version(&serde_json::Value::Null),
+            (String::new(), String::new())
+        );
+    }
+
+    #[test]
+    fn upload_limit_defaults_to_zero() {
+        assert_eq!(parse_upload_limit(&json!({ "m.upload.size": 52428800 })), 52_428_800);
+        assert_eq!(parse_upload_limit(&json!({})), 0);
+        assert_eq!(parse_upload_limit(&serde_json::Value::Null), 0);
+    }
+
+    #[test]
+    fn login_flows_strip_prefix_and_dedupe() {
+        let body = json!({ "flows": [
+            { "type": "m.login.sso" },
+            { "type": "m.login.password" },
+            { "type": "m.login.sso" },
+            { "bogus": 1 }
+        ] });
+        assert_eq!(parse_login_flows(&body), vec!["sso", "password"]);
+        assert!(parse_login_flows(&serde_json::Value::Null).is_empty());
+    }
 
     #[test]
     fn preview_url_capability_defaults_to_enabled() {

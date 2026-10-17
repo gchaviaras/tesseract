@@ -6690,3 +6690,99 @@ msgstr[1] "{0} Elemente gesendet"
 #, c++-format
 msgid "Couldn't start syncing: {0}. Retrying…"
 msgstr "Synchronisierung konnte nicht gestartet werden: {0}. Neuer Versuch …"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Features"
+msgstr "Funktionen"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Capabilities"
+msgstr "Möglichkeiten"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Software"
+msgstr "Software"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Matrix versions"
+msgstr "Matrix-Versionen"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Maximum upload size"
+msgstr "Maximale Upload-Größe"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Login methods"
+msgstr "Anmeldemethoden"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Single sign-on"
+msgstr "Single Sign-on"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Token"
+msgstr "Token"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not supported"
+msgstr "Nicht unterstützt"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Stable"
+msgstr "Stabil"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Experimental"
+msgstr "Experimentell"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Jump to date"
+msgstr "Zum Datum springen"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Profile fields"
+msgstr "Profilfelder"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "QR code login"
+msgstr "Anmeldung per QR-Code"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Invite reasons"
+msgstr "Einladungsgründe"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Voice and video calls"
+msgstr "Sprach- und Videoanrufe"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "URL previews"
+msgstr "URL-Vorschauen"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Enabled"
+msgstr "Aktiviert"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Disabled by server"
+msgstr "Vom Server deaktiviert"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Allowed"
+msgstr "Erlaubt"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not allowed"
+msgstr "Nicht erlaubt"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change password"
+msgstr "Passwort ändern"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change display name"
+msgstr "Anzeigenamen ändern"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Default room version"
+msgstr "Standard-Raumversion"

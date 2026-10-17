@@ -134,6 +134,120 @@ TEST_CASE("from_ffi(ServerInfoFfi): profile field flags pass through", "[server]
     CHECK(info.profile_fields_enabled == false);
 }
 
+TEST_CASE("from_ffi(ServerInfoFfi): software, upload limit, login flows, feature flags", "[server][info]")
+{
+    auto f = ok_info();
+    f.server_name = "Synapse";
+    f.server_version = "1.120.0";
+    f.upload_size_limit = 52428800;
+    f.login_flows.push_back("password");
+    f.login_flows.push_back("sso");
+    f.profile_fields_stable = true;
+    f.supports_invite_reason = true;
+
+    ServerInfo info = tesseract::from_ffi(f);
+    CHECK(info.server_name == "Synapse");
+    CHECK(info.server_version == "1.120.0");
+    CHECK(info.upload_size_limit == 52428800);
+    REQUIRE(info.login_flows.size() == 2);
+    CHECK(info.login_flows[1] == "sso");
+    CHECK(info.profile_fields_stable == true);
+    CHECK(info.supports_invite_reason == true);
+}
+
+namespace
+{
+const tesseract::views::ServerInfoRow* find_row(const std::vector<tesseract::views::ServerInfoRow>& rows,
+                                                const std::string& label)
+{
+    for (const auto& r : rows)
+        if (r.label == label)
+            return &r;
+    return nullptr;
+}
+} // namespace
+
+TEST_CASE("build_server_info_rows: server group omits unknown data", "[server][ui]")
+{
+    ServerInfo info;
+    info.homeserver_url = "https://matrix.org";
+    auto rows = tesseract::views::build_server_info_rows(info);
+    REQUIRE(rows.server.size() == 1);
+    CHECK(rows.server[0].value == "https://matrix.org");
+    CHECK(find_row(rows.server, "Software") == nullptr);
+    CHECK(find_row(rows.server, "Matrix versions") == nullptr);
+    CHECK(find_row(rows.server, "Maximum upload size") == nullptr);
+    CHECK(find_row(rows.server, "Login methods") == nullptr);
+}
+
+TEST_CASE("build_server_info_rows: server group fills from info", "[server][ui]")
+{
+    ServerInfo info;
+    info.homeserver_url = "https://matrix.org";
+    info.server_name = "Synapse";
+    info.server_version = "1.120.0";
+    info.spec_versions = {{1, 12}, {1, 1}, {1, 5}};
+    info.upload_size_limit = 1024;
+    info.login_flows = {"sso", "password", "m.login.unknown"};
+
+    auto rows = tesseract::views::build_server_info_rows(info);
+    REQUIRE(find_row(rows.server, "Software"));
+    CHECK(find_row(rows.server, "Software")->value == "Synapse 1.120.0");
+    REQUIRE(find_row(rows.server, "Matrix versions"));
+    CHECK(find_row(rows.server, "Matrix versions")->value == "v1.1 – v1.12");
+    CHECK(find_row(rows.server, "Maximum upload size") != nullptr);
+    REQUIRE(find_row(rows.server, "Login methods"));
+    // Unknown flows are dropped; known ones keep the server's order.
+    CHECK(find_row(rows.server, "Login methods")->value == "Single sign-on, Password");
+}
+
+TEST_CASE("build_server_info_rows: feature stability", "[server][ui]")
+{
+    ServerInfo info;
+    info.homeserver_url = "https://example.org";
+    info.spec_versions = {{1, 6}};
+    info.supports_msc3030 = true;
+    info.supports_profile_fields = true;
+    info.profile_fields_stable = false;
+    info.supports_qr_grant = true;
+    info.supports_invite_reason = false;
+    info.supports_calls = true;
+
+    auto rows = tesseract::views::build_server_info_rows(info);
+    CHECK(find_row(rows.features, "Jump to date")->value == "Stable");
+    CHECK(find_row(rows.features, "Profile fields")->value == "Experimental");
+    CHECK(find_row(rows.features, "QR code login")->value == "Experimental");
+    CHECK(find_row(rows.features, "Invite reasons")->value == "Not supported");
+    CHECK(find_row(rows.features, "Invite reasons")->dim);
+    CHECK(find_row(rows.features, "Voice and video calls")->value == "Experimental");
+
+    info.profile_fields_stable = true;
+    rows = tesseract::views::build_server_info_rows(info);
+    CHECK(find_row(rows.features, "Profile fields")->value == "Stable");
+
+    info.profile_fields_enabled = false;
+    rows = tesseract::views::build_server_info_rows(info);
+    CHECK(find_row(rows.features, "Profile fields")->value == "Disabled by server");
+
+    // MSC3030 advertised on a pre-1.6 server is experimental.
+    info.spec_versions = {{1, 5}};
+    rows = tesseract::views::build_server_info_rows(info);
+    CHECK(find_row(rows.features, "Jump to date")->value == "Experimental");
+}
+
+TEST_CASE("build_server_info_rows: capabilities", "[server][ui]")
+{
+    ServerInfo info;
+    info.homeserver_url = "https://example.org";
+    info.can_change_password = false;
+    info.default_room_version = "11";
+
+    auto rows = tesseract::views::build_server_info_rows(info);
+    CHECK(find_row(rows.capabilities, "Change password")->value == "Not allowed");
+    CHECK(find_row(rows.capabilities, "Change display name")->value == "Allowed");
+    CHECK(find_row(rows.capabilities, "Default room version")->value == "11");
+}
+
 TEST_CASE("ServerSection: empty before set_server_info", "[server][ui]")
 {
     ServerInfoStage st;

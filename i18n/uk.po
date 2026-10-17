@@ -7267,3 +7267,99 @@ msgstr[2] "Надіслано {0} елементів"
 #, c++-format
 msgid "Couldn't start syncing: {0}. Retrying…"
 msgstr "Не вдалося запустити синхронізацію: {0}. Повторна спроба…"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Features"
+msgstr "Функції"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Capabilities"
+msgstr "Дозволи"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Software"
+msgstr "Програмне забезпечення"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Matrix versions"
+msgstr "Версії Matrix"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Maximum upload size"
+msgstr "Максимальний розмір вивантаження"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Login methods"
+msgstr "Способи входу"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Single sign-on"
+msgstr "Єдиний вхід"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Token"
+msgstr "Токен"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not supported"
+msgstr "Не підтримується"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Stable"
+msgstr "Стабільна"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Experimental"
+msgstr "Експериментальна"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Jump to date"
+msgstr "Перейти до дати"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Profile fields"
+msgstr "Поля профілю"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "QR code login"
+msgstr "Вхід за QR-кодом"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Invite reasons"
+msgstr "Причини запрошення"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Voice and video calls"
+msgstr "Голосові та відеодзвінки"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "URL previews"
+msgstr "Попередній перегляд URL"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Enabled"
+msgstr "Увімкнено"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Disabled by server"
+msgstr "Вимкнено сервером"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Allowed"
+msgstr "Дозволено"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Not allowed"
+msgstr "Не дозволено"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change password"
+msgstr "Змінити пароль"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Change display name"
+msgstr "Змінити відображуване ім'я"
+
+#: ui/shared/views/settings/ServerSection.cpp
+msgid "Default room version"
+msgstr "Типова версія кімнати"

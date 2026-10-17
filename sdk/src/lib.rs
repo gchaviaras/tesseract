@@ -588,6 +588,12 @@ pub mod ffi {
         pub supports_qr_grant: bool,
         pub supports_calls: bool,
         pub default_room_version: String,
+        pub profile_fields_stable: bool,
+        pub supports_invite_reason: bool,
+        pub server_name: String,
+        pub server_version: String,
+        pub upload_size_limit: u64,
+        pub login_flows: Vec<String>,
     }
 
     #[derive(Debug, PartialEq, Default)]

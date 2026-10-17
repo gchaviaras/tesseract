@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(ui): text symbols like ✿ are no longer treated as emoji, so they stop rendering at emoji size and sitting too high; only codepoints with the Unicode `Emoji` property match. Linux Qt6 user-verified; 1 new ctest case, not run
 - fix(sdk): clicking your own custom-image reaction now removes it instead of sending a duplicate; `send_reaction_custom` toggles when you already reacted with that image. cargo check, user-verified
 - feat(ui): the Settings Server tab shows the server's software and version, Matrix spec range, upload limit and login methods, which Tesseract-used features are Stable/Experimental/Not supported, and what the account may change. Windows build, cargo tests 6 new, ctest 5 new + i18n pass
 - feat(ui): the room browser's server field is a searchable picker: type an address and press Enter to search it, and it is remembered (8 most recent, `im.gnomos.tesseract` `directory_servers`) once its directory answers; defaults are your homeserver, activematrixrooms.com and matrixrooms.info; the Browse tab's card is 50% wider. Windows build, new ctest cases pass, user-verified Windows

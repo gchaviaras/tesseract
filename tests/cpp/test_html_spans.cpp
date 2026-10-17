@@ -1459,6 +1459,15 @@ TEST_CASE("is_emoji_only: mixed text and emoji is not emoji-only",
     CHECK_FALSE(is_emoji_only("hi \xF0\x9F\x98\x80"));
 }
 
+TEST_CASE("is_emoji_only: text dingbats are not emoji, emoji dingbats are",
+          "[html_spans][emoji]")
+{
+    CHECK_FALSE(is_emoji_only("\xE2\x9C\xBF")); // ✿ U+273F
+    CHECK_FALSE(is_emoji_only("\xE2\x97\x86")); // ◆ U+25C6
+    CHECK(is_emoji_only("\xE2\x9D\xA4"));       // ❤ U+2764
+    CHECK(is_emoji_only("\xE2\xAD\x90"));       // ⭐ U+2B50
+}
+
 TEST_CASE("is_emoji_only: bare digit is not emoji-only", "[html_spans][emoji]")
 {
     CHECK_FALSE(is_emoji_only("1"));

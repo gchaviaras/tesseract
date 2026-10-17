@@ -1,6 +1,7 @@
 #include "combo_button.h"
 
 #include "access_tree.h"
+#include "chevron.h"
 #include "host.h"
 #include "status_icons.h"
 #include "svg.h"
@@ -462,20 +463,7 @@ void ComboButton::paint_before_children(PaintCtx& ctx)
         ctx.canvas.draw_text(*main_label_layout_, {tx, ty}, cb_zone_text(variant_, ctx.theme, enabled_));
     }
 
-    // Chevron ▾
-    {
-        TextStyle st{};
-        st.role      = FontRole::Small;
-        st.max_width = kCBChevronW;
-        auto cv = ctx.factory.build_text("\xE2\x96\xBE", st); // U+25BE ▾
-        if (cv)
-        {
-            const Size  sz  = cv->measure();
-            const float cvx = chevron_rect_.x + (chevron_rect_.w - sz.w) * 0.5f;
-            const float cvy = chevron_rect_.y + (chevron_rect_.h - sz.h) * 0.5f;
-            ctx.canvas.draw_text(*cv, {cvx, cvy}, cb_zone_text(variant_, ctx.theme, enabled_));
-        }
-    }
+    draw_chevron_down(ctx.canvas, chevron_rect_, cb_zone_text(variant_, ctx.theme, enabled_));
 
     if (expanded_ && ctx.host)
         ctx.host->register_popup(this);

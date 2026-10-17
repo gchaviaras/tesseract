@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(ui): `ComboButton` (e.g. create-room) draws its chevron as a vector shape like the other dropdowns instead of the `▾` glyph, which fell back to an emoji font. Windows build, user-verified
 - fix(review): follow-up review fixes: pasted images named with a UTC timestamp, sender name colours use a fixed hash, GTK `post_to_ui` bundles freed and exceptions contained, create-room invitees split on whitespace/semicolons too, table-summary a11y cache keyed by a keyed 128-bit SipHash (`tk/siphash.h`) so crafted bodies can't collide, message-search row and accessibility separators translated, device signed out when restoring a finished login fails. Qt6 build, ctest 3406/3406
 - fix(ui): expanding the room info member list only requests avatars for rows on screen instead of every member at once; the rest load as they scroll into view. Linux build, user-verified
 - fix(sdk): switching to a previously visited room paints its full recent history at once instead of one event first: older chunks are loaded from disk before the first reset, only when the cache holds events before its first gap (never the network). cargo tests 1159, user-verified

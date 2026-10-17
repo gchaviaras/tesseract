@@ -2561,6 +2561,37 @@ impl ClientFfi {
             return err("not logged in");
         };
         let (_, room) = try_op!(require_room(&client, room_id));
+
+        // Already reacted with this image: toggle (redact) like a Unicode
+        // chip instead of sending a duplicate annotation.
+        if let (Ok(rid), Ok(eid), Some(me)) = (
+            room_id.parse::<matrix_sdk::ruma::OwnedRoomId>(),
+            event_id.parse::<matrix_sdk::ruma::OwnedEventId>(),
+            client.user_id(),
+        ) {
+            let existing = self.rt.block_on(async {
+                let tl = self.timeline_for_event(&rid, &eid).await?;
+                let item = tl.item_by_event_id(&eid).await?;
+                let mine = item
+                    .content()
+                    .reactions()
+                    .and_then(|t| t.get(key))
+                    .is_some_and(|by_sender| by_sender.contains_key(me));
+                mine.then_some(tl)
+            });
+            if let Some(tl) = existing {
+                let item_id = TimelineEventItemId::EventId(eid);
+                let key = key.to_owned();
+                return match self
+                    .block_on_cancellable(async move { tl.toggle_reaction(&item_id, &key).await })
+                {
+                    Some(Ok(_)) => ok(""),
+                    Some(Err(e)) => err(e.to_string()),
+                    None => err("cancelled"),
+                };
+            }
+        }
+
         let event_id = event_id.to_owned();
         let key = key.to_owned();
         let shortcode = shortcode.to_owned();

@@ -7,6 +7,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(ui): expanding the room info member list only requests avatars for rows on screen instead of every member at once; the rest load as they scroll into view. Linux build, user-verified
 - fix(sdk): switching to a previously visited room paints its full recent history at once instead of one event first: older chunks are loaded from disk before the first reset, only when the cache holds events before its first gap (never the network). cargo tests 1159, user-verified
 - fix(ui): clicking a system notification with several main windows open now raises the window showing that account instead of switching whichever window installed the notifier to it (Qt6/GTK4/Win32 share `ShellBase::on_notification_clicked_`). Qt6 build, ctest 3 new
 - fix(ui): app-wide settings (compact room list, theme, fonts, layout, avatar animation, low power, presence, media previews, …) now apply to every open main window, not just the one Settings was opened in; per-window effects moved to `apply_setting_to_window_`. Linux debug build, ctest 3402/3402

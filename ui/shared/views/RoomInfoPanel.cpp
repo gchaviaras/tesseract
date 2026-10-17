@@ -979,10 +979,20 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
         member_layouts_.resize(static_cast<std::size_t>(visible_count));
     }
 
+    // Only rows inside the viewport (and the repainted region) are drawn, so
+    // an expanded list doesn't request every member's avatar at once. The
+    // canvas clip is intersected with bounds_ because backends that don't
+    // track clip state report a full-coverage sentinel.
+    const tk::Rect clip     = cv.clip_rect();
+    const float visible_top = std::max(bounds_.y, clip.y);
+    const float visible_bot = std::min(bounds_.y + bounds_.h, clip.y + clip.h);
+
     for (int i = 0; i < visible_count; ++i)
     {
         const tk::Rect row = to_world(member_rects_[static_cast<std::size_t>(i)]);
-        const auto& mem    = members_[static_cast<std::size_t>(i)];
+        if (row.y + row.h <= visible_top || row.y >= visible_bot)
+            continue;
+        const auto& mem = members_[static_cast<std::size_t>(i)];
 
         // Hover highlight
         if (i == hover_member_)

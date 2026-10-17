@@ -267,6 +267,7 @@ add_executable(tesseract_tests
     cpp/test_tk_tab_bar.cpp
     cpp/test_tk_row_cursor.cpp
     cpp/test_tk_blurhash.cpp
+    cpp/test_tk_siphash.cpp
     cpp/test_tk_tooltip_paint.cpp
     cpp/test_tk_searchable_picker.cpp
     cpp/test_tk_create_room_view.cpp

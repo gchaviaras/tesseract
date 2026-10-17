@@ -15,6 +15,7 @@
 #include "tk/i18n.h"
 #include "tk/loading_spinner.h"
 #include "tk/pill.h"
+#include "tk/siphash.h"
 #include "tk/svg.h"
 #include "tk/theme.h"
 #include <tesseract/client.h>
@@ -1617,11 +1618,13 @@ std::string message_access_body(const MessageRowData& m)
     {
         // Parsed once per distinct body: the access tree is rebuilt often
         // while a screen reader is attached, and every row is named on each
-        // rebuild. UI-thread only; keyed by the body's hash so the cache never
-        // retains the (arbitrarily large) bodies themselves, and bounded by a
-        // crude clear-when-full.
-        static std::unordered_map<std::size_t, std::string> table_text_cache;
-        const std::size_t body_key = std::hash<std::string>{}(m.formatted_body);
+        // rebuild. UI-thread only; keyed by a 128-bit SipHash (random
+        // per-process key, so a sender can't craft a colliding body) so the
+        // cache never retains the (arbitrarily large) bodies themselves, and
+        // bounded by a crude clear-when-full.
+        static std::unordered_map<tk::SipDigest, std::string, tk::SipDigestHash> table_text_cache;
+        static const tk::SipKey sip_key = tk::random_sip_key();
+        const tk::SipDigest body_key = tk::siphash128(sip_key, m.formatted_body);
         if (auto it = table_text_cache.find(body_key); it != table_text_cache.end())
             return it->second.empty() ? m.body : it->second;
         if (table_text_cache.size() > 256)

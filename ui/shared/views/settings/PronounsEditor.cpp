@@ -4,8 +4,6 @@
 #include "tk/i18n.h"
 #include "tk/theme.h"
 
-#include <tesseract/visual.h>
-
 #include <algorithm>
 #include <cctype>
 #include <utility>
@@ -333,23 +331,16 @@ void PronounsEditor::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
 
 void PronounsEditor::paint_before_children(tk::PaintCtx& ctx)
 {
-    // Card background per visible row, grouping its language field, summary
-    // field, and remove button into one visible unit — drawn before
-    // paint_children() so those controls paint on top of it, not underneath.
     // A thin divider between the language field and summary field keeps the
-    // two independently-editable fields from reading as one long field.
+    // two independently-editable fields from reading as one long field. No
+    // card behind the row: the fields sit on the page background like every
+    // other settings field.
     for (const auto& row : rows_)
     {
         if (!row.remove->visible())
             continue;
         const tk::Rect lang_b    = row.lang->bounds();
         const tk::Rect summary_b = row.summary->bounds();
-        const tk::Rect remove_b  = row.remove->bounds();
-        const tk::Rect card{lang_b.x - kCardPadX, lang_b.y - kCardPadY,
-                            (remove_b.x + remove_b.w) - lang_b.x + 2 * kCardPadX,
-                            lang_b.h + 2 * kCardPadY};
-        ctx.canvas.fill_rounded_rect(card, tesseract::visual::kRadiusSM,
-                                     ctx.theme.palette.compose_card_bg);
 
         const float divider_x = (lang_b.x + lang_b.w + summary_b.x) * 0.5f;
         ctx.canvas.fill_rect({divider_x, lang_b.y, 1.0f, lang_b.h},

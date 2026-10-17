@@ -99,6 +99,7 @@ impl ClientFfi {
             None,
             Arc::clone(&self.show_membership_events),
             Arc::clone(&self.thread_chip_overrides),
+            false,
         );
         // Kick an initial backwards pagination so the thread view is populated
         // immediately from the server. Results arrive as VectorDiff events in

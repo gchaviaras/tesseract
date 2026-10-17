@@ -274,6 +274,58 @@ pub(crate) fn visible_len(visible: &[bool]) -> u64 {
     visible.iter().filter(|b| **b).count() as u64
 }
 
+/// Events held in the persisted chunks between the newest chunk and the first
+/// gap (walking towards older history). Chunks are indexed by identifier, the
+/// walk starts at the one with no `next` and follows `previous`; a gap chunk
+/// (`num_items == 0`) ends it, as does the oldest chunk. The input order is
+/// arbitrary, and the walk is bounded by `chunks.len()` so a corrupt cyclic
+/// store cannot spin.
+pub(crate) fn events_before_first_gap(
+    chunks: &[matrix_sdk::linked_chunk::ChunkMetadata],
+) -> usize {
+    let by_id: std::collections::HashMap<_, _> =
+        chunks.iter().map(|c| (c.identifier, c)).collect();
+    let Some(mut cur) = chunks.iter().find(|c| c.next.is_none()) else {
+        return 0;
+    };
+    let mut total = 0usize;
+    for _ in 0..chunks.len() {
+        if cur.num_items == 0 {
+            break;
+        }
+        total += cur.num_items;
+        match cur.previous.and_then(|p| by_id.get(&p)) {
+            Some(prev) => cur = prev,
+            None => break,
+        }
+    }
+    total
+}
+
+/// How many cached events sit before the room's first gap, read straight from
+/// the persisted event-cache store (no network). `None` on any store error:
+/// callers treat that as "don't pre-warm".
+#[cfg(not(test))]
+async fn cached_events_before_gap(client: &Client, room_id: &str) -> Option<usize> {
+    use matrix_sdk::linked_chunk::LinkedChunkId;
+    use matrix_sdk_base::event_cache::store::EventCacheStoreLockState;
+
+    let rid: OwnedRoomId = room_id.parse().ok()?;
+    let chunks = match client.event_cache_store().lock().await {
+        Ok(EventCacheStoreLockState::Clean(guard))
+        | Ok(EventCacheStoreLockState::Dirty(guard)) => guard
+            .load_all_chunks_metadata(LinkedChunkId::Room(&rid))
+            .await
+            .ok()?,
+        Err(_) => return None,
+    };
+    Some(events_before_first_gap(&chunks))
+}
+
+/// Events the pre-warm tries to have loaded before the first reset.
+#[cfg(not(test))]
+const PREWARM_TARGET: usize = 30;
+
 // `hide_threaded_events: true` prevents most thread replies from entering the
 // room timeline stream, but edge cases in matrix-sdk (initial snapshots, state
 // transitions) can still let some through. This filter is the safety net that
@@ -795,6 +847,7 @@ impl ClientFfi {
         room_media: Option<super::room_media_store::MediaCtx>,
         show_membership_events: Arc<AtomicBool>,
         chip_overrides: super::thread::ThreadChipOverrides,
+        prewarm_cached: bool,
     ) -> (tokio::task::AbortHandle, tokio::task::AbortHandle) {
         let tl = Arc::clone(timeline);
         let h = Arc::clone(handler);
@@ -803,6 +856,7 @@ impl ClientFfi {
         let me = client.user_id().map(|u| u.to_owned());
         let ch = channel;
         let cancelled_stream = cancelled;
+        let client_for_prewarm = client.clone();
 
         // One-shot signal from the fetch_members task to the streaming task
         // saying "member sync is done, run the receipt-refresh pass". Routing
@@ -815,6 +869,39 @@ impl ClientFfi {
 
         let abort = rt
             .spawn(async move {
+                // Load already-persisted older chunks from disk before the
+                // first reset so the first paint is full rather than the one
+                // event the event cache kept in memory. Only when the cache
+                // holds events before its first gap, so this never hits the
+                // network; the timeout is a guard, on expiry the SDK finishes
+                // the pagination and the rest streams in as diffs.
+                if prewarm_cached {
+                    let _ = tokio::time::timeout(std::time::Duration::from_millis(500), async {
+                        let avail = cached_events_before_gap(&client_for_prewarm, &rid)
+                            .await
+                            .unwrap_or(0);
+                        let target = avail.min(PREWARM_TARGET);
+                        for _ in 0..4 {
+                            if target == 0 || cancelled_stream.load(Ordering::Acquire) {
+                                break;
+                            }
+                            let have = tl
+                                .items()
+                                .await
+                                .iter()
+                                .filter(|i| i.as_event().is_some())
+                                .count();
+                            if have >= target {
+                                break;
+                            }
+                            match tl.paginate_backwards(50).await {
+                                Ok(false) => {}
+                                Ok(true) | Err(_) => break,
+                            }
+                        }
+                    })
+                    .await;
+                }
                 let (initial_items, mut stream) = tl.subscribe().await;
 
                 // Build the visibility mirror + initial snapshot in one pass.
@@ -1027,6 +1114,7 @@ impl ClientFfi {
                         self.media_ctx(),
                         Arc::clone(&self.show_membership_events),
                         Arc::clone(&self.thread_chip_overrides),
+                        false,
                     );
                     existing.abort_tasks = vec![abort, fetch_abort];
                     existing.abort_tasks.push(super::identity::spawn_identity_watcher(
@@ -1110,6 +1198,7 @@ impl ClientFfi {
             self.media_ctx(),
             Arc::clone(&self.show_membership_events),
             Arc::clone(&self.thread_chip_overrides),
+            true,
         );
 
         // A freshly-built timeline renders from whatever's already in the
@@ -1819,6 +1908,7 @@ impl ClientFfi {
             self.media_ctx(),
             Arc::clone(&self.show_membership_events),
             Arc::clone(&self.thread_chip_overrides),
+            false,
         );
 
         let mut abort_tasks = vec![abort, fetch_abort];
@@ -1887,5 +1977,70 @@ mod visibility_mirror_tests {
         assert_eq!(visible_index_of(&mirror, 2), 1);
         assert_eq!(visible_index_of(&mirror, 3), 2);
         assert_eq!(visible_len(&mirror), 3);
+    }
+}
+
+#[cfg(test)]
+mod prewarm_chunk_tests {
+    use super::events_before_first_gap;
+    use matrix_sdk::linked_chunk::{ChunkIdentifier, ChunkMetadata};
+
+    fn chunk(id: u64, prev: Option<u64>, next: Option<u64>, n: usize) -> ChunkMetadata {
+        ChunkMetadata {
+            num_items: n,
+            previous: prev.map(ChunkIdentifier::new),
+            identifier: ChunkIdentifier::new(id),
+            next: next.map(ChunkIdentifier::new),
+        }
+    }
+
+    #[test]
+    fn empty_store_has_no_events() {
+        assert_eq!(events_before_first_gap(&[]), 0);
+    }
+
+    #[test]
+    fn single_chunk_counts_its_items() {
+        assert_eq!(events_before_first_gap(&[chunk(0, None, None, 7)]), 7);
+    }
+
+    #[test]
+    fn items_chunks_are_summed_to_the_oldest() {
+        let c = [chunk(0, None, Some(1), 20), chunk(1, Some(0), None, 1)];
+        assert_eq!(events_before_first_gap(&c), 21);
+    }
+
+    #[test]
+    fn gap_at_the_tail_yields_zero() {
+        let c = [chunk(0, None, Some(1), 20), chunk(1, Some(0), None, 0)];
+        assert_eq!(events_before_first_gap(&c), 0);
+    }
+
+    #[test]
+    fn walk_stops_at_a_gap_in_the_middle() {
+        let c = [
+            chunk(0, None, Some(1), 50),
+            chunk(1, Some(0), Some(2), 0),
+            chunk(2, Some(1), Some(3), 4),
+            chunk(3, Some(2), None, 3),
+        ];
+        assert_eq!(events_before_first_gap(&c), 7);
+    }
+
+    #[test]
+    fn input_order_does_not_matter() {
+        let c = [
+            chunk(2, Some(1), Some(3), 4),
+            chunk(0, None, Some(1), 50),
+            chunk(3, Some(2), None, 3),
+            chunk(1, Some(0), Some(2), 0),
+        ];
+        assert_eq!(events_before_first_gap(&c), 7);
+    }
+
+    #[test]
+    fn cyclic_links_terminate() {
+        let c = [chunk(0, Some(1), None, 2), chunk(1, Some(0), Some(0), 3)];
+        assert_eq!(events_before_first_gap(&c), 5);
     }
 }

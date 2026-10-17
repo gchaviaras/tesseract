@@ -3636,6 +3636,24 @@ protected:
     void send_notification_reply_(std::string user_id, std::string room_id,
                                   std::string event_id, std::string text);
 
+    // The window an OS-notification click for `user_id` belongs to: the window
+    // that owns the account (dedicated), else any window already showing it,
+    // else `this`. The notifier lives on the shared AccountSession, so the
+    // window that installed it is not necessarily the one to act.
+    ShellBase* notification_target_window_(const std::string& user_id);
+
+    // Notifier click handler shared by every shell: routes to
+    // notification_target_window_, switches that window to the account only if
+    // needed, hands it the platform activation token, and navigates it to the
+    // room.
+    void on_notification_clicked_(const std::string& user_id,
+                                  std::string room_id, std::string token);
+
+    // Platform hook run on the click's target window before navigation:
+    // stash the focus token (Wayland xdg-activation) or restore/raise the
+    // window. Default does nothing.
+    virtual void activate_for_notification_(const std::string& /*token*/) {}
+
     // Builds a synthetic failure Notification (reusing the account's
     // existing INotifier::notify(), same as any other notification) to tell
     // the user a quick reply didn't go out. `reason` is the already-

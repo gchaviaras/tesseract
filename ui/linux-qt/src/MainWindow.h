@@ -394,6 +394,7 @@ private:
     tesseract::RoomWindowBase*
     create_secondary_room_window_(const std::string& room_id) override;
     void raise_and_activate_() override;
+    void activate_for_notification_(const std::string& token) override;
     void set_window_fullscreen_(bool on) override;
     void rebuild_tray_() override;
     bool spawn_relaunch_(const std::vector<std::string>& args) override;

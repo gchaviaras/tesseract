@@ -2293,9 +2293,8 @@ void MainWindow::install_account_notifier_(tesseract::AccountSession& session)
     session.notifier = std::make_unique<LinuxNotifierQt>(
         [this, uid](std::string room_id, std::string token)
         {
-            switchActiveAccount(uid);
-            pending_wayland_token_ = QString::fromStdString(token);
-            navigate_to_room(std::move(room_id));
+            on_notification_clicked_(uid, std::move(room_id),
+                                     std::move(token));
         },
         [this, uid](std::string room_id, std::string event_id,
                     std::string reply_text)
@@ -2306,6 +2305,11 @@ void MainWindow::install_account_notifier_(tesseract::AccountSession& session)
                                      std::move(event_id),
                                      std::move(reply_text));
         });
+}
+
+void MainWindow::activate_for_notification_(const std::string& token)
+{
+    pending_wayland_token_ = QString::fromStdString(token);
 }
 
 void MainWindow::install_account_up_connector_(tesseract::AccountSession& session)

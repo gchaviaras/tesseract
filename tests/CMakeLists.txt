@@ -156,6 +156,7 @@ add_executable(tesseract_tests
     cpp/test_shell_clear_cache.cpp
     cpp/test_shell_nav_history.cpp
     cpp/test_shell_window_title.cpp
+    cpp/test_shell_notification_click.cpp
     cpp/test_shell_relayout_coalesce.cpp
     cpp/test_shell_alive_guard.cpp
     cpp/test_shell_restore_async.cpp

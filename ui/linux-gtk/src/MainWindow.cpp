@@ -2973,6 +2973,16 @@ MainWindow::make_account_bridge_(const std::string& uid)
     return bridge;
 }
 
+void MainWindow::activate_for_notification_(const std::string& token)
+{
+    // Set xdg_activation_v1 token (non-empty on modern Wayland)
+    // before gtk_window_present so the compositor grants focus.
+    if (!token.empty())
+    {
+        gtk_window_set_startup_id(GTK_WINDOW(window_), token.c_str());
+    }
+}
+
 void MainWindow::install_account_notifier_(tesseract::AccountSession& session)
 {
     // Per-account notifier: click switches to this account then navigates.
@@ -2980,14 +2990,8 @@ void MainWindow::install_account_notifier_(tesseract::AccountSession& session)
     session.notifier = std::make_unique<LinuxNotifierGtk>(
         [this, notif_uid](std::string room_id, std::string token)
         {
-            switch_active_account(notif_uid);
-            // Set xdg_activation_v1 token (non-empty on modern Wayland)
-            // before gtk_window_present so the compositor grants focus.
-            if (!token.empty())
-            {
-                gtk_window_set_startup_id(GTK_WINDOW(window_), token.c_str());
-            }
-            navigate_to_room(std::move(room_id));
+            on_notification_clicked_(notif_uid, std::move(room_id),
+                                     std::move(token));
         },
         [this, notif_uid](std::string room_id, std::string event_id,
                           std::string reply_text)

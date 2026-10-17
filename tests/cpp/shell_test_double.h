@@ -30,6 +30,9 @@ struct AccountManagerHolder
 struct TestShellBase : AccountManagerHolder, tesseract::ShellBase
 {
     TestShellBase() : ShellBase(am_) {}
+    // Several windows sharing one AccountManager (multi-window tests); `shared`
+    // must outlive this shell.
+    explicit TestShellBase(tesseract::AccountManager& shared) : ShellBase(shared) {}
 
     // Workers post back into derived state; let them finish before it goes away.
     ~TestShellBase() override { drain_workers(); }

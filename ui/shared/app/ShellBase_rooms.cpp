@@ -1654,6 +1654,28 @@ void ShellBase::send_current_location_(std::string room_id,
         });
 }
 
+ShellBase* ShellBase::notification_target_window_(const std::string& user_id)
+{
+    if (auto* w = account_manager_.dedicated_window(user_id))
+        return w;
+    for (ShellBase* w : account_manager_.all_windows())
+    {
+        if (w->active_account_ && w->active_account_->user_id == user_id)
+            return w;
+    }
+    return this;
+}
+
+void ShellBase::on_notification_clicked_(const std::string& user_id,
+                                         std::string room_id,
+                                         std::string token)
+{
+    ShellBase* target = notification_target_window_(user_id);
+    target->switch_active_account_(user_id);
+    target->activate_for_notification_(token);
+    target->navigate_to_room_(room_id);
+}
+
 void ShellBase::send_notification_reply_(std::string user_id,
                                          std::string room_id,
                                          std::string event_id,

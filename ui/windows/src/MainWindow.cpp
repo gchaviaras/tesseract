@@ -1438,14 +1438,9 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
                                            payload->event_id,
                                            payload->reply_text);
         }
-        if (IsIconic(hwnd) || !IsWindowVisible(hwnd))
-        {
-            ShowWindow(hwnd, SW_RESTORE);
-        }
-        SetForegroundWindow(hwnd);
-        // Switch to the account that owns this notification before navigating.
-        self->switch_active_account(payload->user_id);
-        self->navigate_to_room(payload->room_id);
+        // Routes to the window that owns the account (may not be `self`),
+        // which restores/raises itself via activate_for_notification_.
+        self->on_notification_clicked_(payload->user_id, payload->room_id, {});
         delete payload;
         return 0;
     }
@@ -6567,6 +6562,15 @@ void MainWindow::raise_and_activate_()
 {
     if (hwnd_)
         SetForegroundWindow(hwnd_);
+}
+
+void MainWindow::activate_for_notification_(const std::string&)
+{
+    if (!hwnd_)
+        return;
+    if (IsIconic(hwnd_) || !IsWindowVisible(hwnd_))
+        ShowWindow(hwnd_, SW_RESTORE);
+    SetForegroundWindow(hwnd_);
 }
 
 void MainWindow::set_window_fullscreen_(bool on)

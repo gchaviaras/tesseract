@@ -1617,13 +1617,16 @@ std::string message_access_body(const MessageRowData& m)
     {
         // Parsed once per distinct body: the access tree is rebuilt often
         // while a screen reader is attached, and every row is named on each
-        // rebuild. UI-thread only; bounded by a crude clear-when-full.
-        static std::unordered_map<std::string, std::string> table_text_cache;
-        if (auto it = table_text_cache.find(m.formatted_body); it != table_text_cache.end())
+        // rebuild. UI-thread only; keyed by the body's hash so the cache never
+        // retains the (arbitrarily large) bodies themselves, and bounded by a
+        // crude clear-when-full.
+        static std::unordered_map<std::size_t, std::string> table_text_cache;
+        const std::size_t body_key = std::hash<std::string>{}(m.formatted_body);
+        if (auto it = table_text_cache.find(body_key); it != table_text_cache.end())
             return it->second.empty() ? m.body : it->second;
         if (table_text_cache.size() > 256)
             table_text_cache.clear();
-        std::string& cached = table_text_cache[m.formatted_body];
+        std::string& cached = table_text_cache[body_key];
         auto spans_text = [](const std::vector<tk::TextSpan>& spans)
         {
             std::string t;
@@ -2008,7 +2011,14 @@ public:
             tk::Color::rgb(0x4DD0E1), tk::Color::rgb(0x82B1FF),
             tk::Color::rgb(0xCE93D8), tk::Color::rgb(0xF48FB1),
         };
-        const std::size_t h = std::hash<std::string>{}(name);
+        // FNV-1a: std::hash<std::string> differs between standard libraries,
+        // which would give one sender a different colour on each platform.
+        std::uint32_t h = 2166136261u;
+        for (const unsigned char c : name)
+        {
+            h ^= c;
+            h *= 16777619u;
+        }
         if (mode == tk::ThemeMode::Dark)
             return kDark[h % std::size(kDark)];
         return kLight[h % std::size(kLight)];

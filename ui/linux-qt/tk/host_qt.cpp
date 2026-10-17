@@ -51,6 +51,7 @@
 #include <QtGui/QImage>
 #include <QtGui/QImageReader>
 #include <QtGui/QKeySequence>
+#include <QtGui/QSyntaxHighlighter>
 #include <QtGui/QImageWriter>
 #include <QtCore/QBuffer>
 #include <QtCore/QByteArray>
@@ -1125,6 +1126,58 @@ protected:
     }
 };
 
+// Sizes inline emoji runs through QSyntaxHighlighter layout formats rather
+// than QTextCursor::mergeCharFormat: those are real document edits that land
+// on the undo stack, and re-applying them from the textChanged handler made
+// every Ctrl+Z pop (and immediately re-push) a font-size command, so undo
+// never reached the typed text. Highlighter formats never touch the undo
+// stack, and run on contentsChange — before textChanged — so natural_height()
+// still sees the corrected sizes.
+class EmojiSizeHighlighter : public QSyntaxHighlighter
+{
+public:
+    using QSyntaxHighlighter::QSyntaxHighlighter;
+
+protected:
+    void highlightBlock(const QString& text) override
+    {
+        if (text.isEmpty())
+        {
+            return;
+        }
+        const std::string utf8 = text.toStdString();
+        const auto runs = tk::find_emoji_byte_ranges(utf8);
+        if (runs.empty())
+        {
+            return;
+        }
+        const int base_pt = std::max(QApplication::font().pointSize(), 8);
+        // Match the canvas's emoji-run size (canvas_qpainter build_rich_text)
+        // so a composed emoji is the same size in the input as in a message
+        // row — shared tweak knob + Qt CBDT stock compensation.
+        const qreal emoji_pt =
+            tk::font_role_pt(tk::FontRole::InlineEmoji, base_pt) *
+            tk::kEmojiSizeAdjust * tk::qt6::kQtEmojiStockComp;
+        // Map every run edge in one walk of the text (per-edge mapping copies
+        // the whole block each call, quadratic in the number of emoji).
+        std::vector<std::size_t> edges;
+        edges.reserve(runs.size() * 2);
+        for (const auto& r : runs)
+        {
+            edges.push_back(r.start_byte);
+            edges.push_back(r.end_byte);
+        }
+        const auto qt_pos = tk::utf16_indices_for_byte_offsets(utf8, edges);
+        QTextCharFormat fmt;
+        fmt.setFontPointSize(emoji_pt);
+        for (std::size_t i = 0; i < runs.size(); ++i)
+        {
+            const int from = static_cast<int>(qt_pos[2 * i]);
+            setFormat(from, static_cast<int>(qt_pos[2 * i + 1]) - from, fmt);
+        }
+    }
+};
+
 class QtNativeTextArea : public NativeTextArea, public QtOcclusionClient
 {
 public:
@@ -1153,6 +1206,7 @@ public:
         // can toggle canvas-side visibility without ever needing to
         // recapture the whole control.
         edit_->setCursorWidth(0);
+        new EmojiSizeHighlighter(edit_->document());
 
         edit_->on_return_ = [this]
         {
@@ -1169,11 +1223,6 @@ public:
                              {
                                  return;
                              }
-                             // Resize emoji runs BEFORE measuring height —
-                             // natural_height() must see the corrected font
-                             // sizes, or the reported height lags one edit
-                             // behind and the composer visibly jumps.
-                             reformat_emoji_runs();
                              prune_stale_pill_pins();
                              request_capture();
                              if (on_changed_)
@@ -1546,11 +1595,6 @@ public:
         cursor.setPosition(qt_start);
         cursor.setPosition(qt_end, QTextCursor::KeepAnchor);
         cursor.insertText(QString::fromStdString(text));
-        // The insert above runs under the QSignalBlocker, so textChanged
-        // never fires and never gets a chance to resize any emoji this
-        // inserted (e.g. the shortcode popup replacing ":wave:" with 👋) —
-        // do it explicitly here instead of waiting for the next keystroke.
-        reformat_emoji_runs();
         if (on_changed_)
         {
             on_changed_(edit_->toPlainText().toStdString());
@@ -2165,60 +2209,6 @@ private:
         QByteArray full = qs.toUtf8();
         byte_offset = std::clamp(byte_offset, 0, (int)full.size());
         return QString::fromUtf8(full.left(byte_offset)).size();
-    }
-
-    // Re-scan the document and reapply the InlineEmoji point size to exactly
-    // the current emoji runs, resetting the whole document to the base size
-    // first — full reset-and-reapply on every change avoids tracking stale
-    // ranges across undo/paste/IME edits. mergeCharFormat fires textChanged
-    // even for format-only edits, so the whole pass runs under QSignalBlocker
-    // (the same idiom insert_mention/insert_emoticon already use) to avoid
-    // recursing back into the textChanged lambda that calls this.
-    void reformat_emoji_runs()
-    {
-        if (!edit_)
-        {
-            return;
-        }
-        const QSignalBlocker block(edit_);
-        QString full = edit_->toPlainText();
-        std::string utf8 = full.toStdString();
-
-        QTextCursor whole(edit_->document());
-        whole.select(QTextCursor::Document);
-        QTextCharFormat base;
-        base.setFontPointSize(edit_->font().pointSizeF());
-        whole.mergeCharFormat(base);
-
-        const int base_pt = std::max(QApplication::font().pointSize(), 8);
-        // Match the canvas's emoji-run size (canvas_qpainter build_rich_text)
-        // so a composed emoji is the same size in the input as in a message
-        // row — shared tweak knob + Qt CBDT stock compensation.
-        const qreal emoji_pt =
-            tk::font_role_pt(tk::FontRole::InlineEmoji, base_pt) *
-            tk::kEmojiSizeAdjust * tk::qt6::kQtEmojiStockComp;
-        // Map every run edge in one walk of the text. Mapping each edge with
-        // utf8_byte_to_qt_cursor copies the whole document per call, which is
-        // quadratic in the number of emoji.
-        const auto runs = tk::find_emoji_byte_ranges(utf8);
-        std::vector<std::size_t> edges;
-        edges.reserve(runs.size() * 2);
-        for (const auto& r : runs)
-        {
-            edges.push_back(r.start_byte);
-            edges.push_back(r.end_byte);
-        }
-        const auto qt_pos = tk::utf16_indices_for_byte_offsets(utf8, edges);
-        for (std::size_t i = 0; i < runs.size(); ++i)
-        {
-            QTextCursor cur(edit_->document());
-            cur.setPosition(static_cast<int>(qt_pos[2 * i]));
-            cur.setPosition(static_cast<int>(qt_pos[2 * i + 1]),
-                            QTextCursor::KeepAnchor);
-            QTextCharFormat fmt;
-            fmt.setFontPointSize(emoji_pt);
-            cur.mergeCharFormat(fmt);
-        }
     }
 
     QPointer<ComposeTextEdit> edit_;

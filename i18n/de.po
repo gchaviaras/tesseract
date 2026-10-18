@@ -6786,3 +6786,23 @@ msgstr "Anzeigenamen ändern"
 #: ui/shared/views/settings/ServerSection.cpp
 msgid "Default room version"
 msgstr "Standard-Raumversion"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid " (following)"
+msgstr " (folgst du)"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Follow thread"
+msgstr "Thread folgen"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Unfollow thread"
+msgstr "Thread nicht mehr folgen"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show only followed threads"
+msgstr "Nur gefolgte Threads anzeigen"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show all threads"
+msgstr "Alle Threads anzeigen"

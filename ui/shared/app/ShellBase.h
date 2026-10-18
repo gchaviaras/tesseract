@@ -3651,9 +3651,21 @@ protected:
     // Notifier click handler shared by every shell: routes to
     // notification_target_window_, switches that window to the account only if
     // needed, hands it the platform activation token, and navigates it to the
-    // room.
+    // room. When `event_id` (the message the notification was for) is a thread
+    // reply, the thread is then opened in whichever pane shows the room.
     void on_notification_clicked_(const std::string& user_id,
-                                  std::string room_id, std::string token);
+                                  std::string room_id, std::string event_id,
+                                  std::string token);
+
+    // Resolve `event_id`'s thread root off the UI thread (event cache, then the
+    // homeserver) and, if it is a thread reply, open that thread in the
+    // room's pane.
+    void open_notification_thread_(const std::string& room_id,
+                                   const std::string& event_id);
+    // UI-thread step: open `thread_root` in the pop-out showing `room_id`, else
+    // in the main pane if it is the current room. No-op if neither shows it.
+    void open_thread_in_visible_pane_(const std::string& room_id,
+                                      const std::string& thread_root);
 
     // Platform hook run on the click's target window before navigation:
     // stash the focus token (Wayland xdg-activation) or restore/raise the
@@ -5348,6 +5360,13 @@ protected:
     // Client::mark_all_threads_read FFI on the worker pool.
     void mark_all_threads_read_(const std::string& room_id,
     const std::shared_ptr<AccountSession>& on_behalf_of = nullptr);
+
+    // Follow / unfollow a thread (MSC4306) via Client::set_thread_followed on
+    // the worker pool. The Rust side fires on_threads_updated on success, so
+    // the list re-queries without local bookkeeping.
+    void set_thread_followed_(const std::string& room_id,
+                              const std::string& thread_root_id, bool follow,
+                              const std::shared_ptr<AccountSession>& on_behalf_of = nullptr);
 
     // Optimistically zero the unread count for room_id in the local room list
     // and dispatch mark_room_as_read asynchronously. Call on room open so the

@@ -7363,3 +7363,23 @@ msgstr "Змінити відображуване ім'я"
 #: ui/shared/views/settings/ServerSection.cpp
 msgid "Default room version"
 msgstr "Типова версія кімнати"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid " (following)"
+msgstr " (стежите)"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Follow thread"
+msgstr "Стежити за гілкою"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Unfollow thread"
+msgstr "Не стежити за гілкою"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show only followed threads"
+msgstr "Показувати лише відстежувані гілки"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show all threads"
+msgstr "Показувати всі гілки"

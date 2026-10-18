@@ -2291,10 +2291,11 @@ void MainWindow::install_account_notifier_(tesseract::AccountSession& session)
     // Per-account notifier: click switches to this account then navigates.
     const std::string uid = session.user_id;
     session.notifier = std::make_unique<LinuxNotifierQt>(
-        [this, uid](std::string room_id, std::string token)
+        [this, uid](std::string room_id, std::string event_id,
+                    std::string token)
         {
             on_notification_clicked_(uid, std::move(room_id),
-                                     std::move(token));
+                                     std::move(event_id), std::move(token));
         },
         [this, uid](std::string room_id, std::string event_id,
                     std::string reply_text)

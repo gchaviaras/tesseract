@@ -50,6 +50,7 @@
 #include <tesseract/types.h>
 
 #include <array>
+#include <unordered_set>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -357,8 +358,21 @@ public:
     // Driven by ShellBase::apply_threads_list_ from the per-thread flags.
     void set_threads_unread(bool any_unread, bool any_mention);
 
+    // MSC4306 thread subscriptions. `supported` gates the follow toggle in the
+    // thread panel and the followed-only filter / row bells in the thread
+    // list; `threads` is the latest snapshot (each `subscribed` flag seeds the
+    // followed set). Driven by the shell alongside set_threads_unread().
+    void set_thread_subscriptions(bool supported,
+                                  const std::vector<tesseract::ThreadInfo>& threads);
+    // Record a single thread's follow state (e.g. a direct lookup for a thread
+    // not yet in the list snapshot) and refresh the open thread panel.
+    void set_thread_followed(const std::string& root_event_id, bool followed);
+
     // Forwarded by RoomView → shell.
     std::function<void()> on_threads_button_clicked;
+    // The thread panel's follow toggle: (root_event_id, follow).
+    std::function<void(const std::string& root_event_id, bool follow)>
+        on_thread_follow_toggled;
     std::function<void(const std::string& root_event_id)>
         on_thread_open_requested;
     std::function<void()> on_thread_close_requested;
@@ -1018,6 +1032,9 @@ private:
     RoomSearchBar*   room_search_bar_   = nullptr;
     ThreadPanelState thread_panel_state_ = ThreadPanelState::Closed;
     std::string thread_panel_root_;
+    bool thread_subscriptions_supported_ = false;
+    std::unordered_set<std::string> followed_threads_;
+    void refresh_thread_follow_state_();
     // Current room's members (mirrors what was last passed to
     // set_room_members) — used to resolve a clicked mention's display name
     // and avatar for the profile panel.

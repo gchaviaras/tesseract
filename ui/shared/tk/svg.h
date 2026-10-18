@@ -1,5 +1,6 @@
 #pragma once
 #include "canvas.h"
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -45,6 +46,10 @@ public:
 
 private:
     std::unique_ptr<Image> img_;
+    // Which SVG `img_` was rasterised from, so swapping the glyph (e.g. a
+    // bell / bell-off toggle) at the same size and tint re-rasterises.
+    const std::uint8_t* svg_data_ = nullptr;
+    std::size_t svg_size_ = 0;
     float scale_ = -1.0f;
     float px_    = -1.0f;
     Color tint_{0, 0, 0, 0};

@@ -1440,7 +1440,8 @@ LRESULT CALLBACK MainWindow::wnd_proc(HWND hwnd, UINT msg, WPARAM wParam,
         }
         // Routes to the window that owns the account (may not be `self`),
         // which restores/raises itself via activate_for_notification_.
-        self->on_notification_clicked_(payload->user_id, payload->room_id, {});
+        self->on_notification_clicked_(payload->user_id, payload->room_id,
+                                       payload->event_id, {});
         delete payload;
         return 0;
     }

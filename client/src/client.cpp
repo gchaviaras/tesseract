@@ -1256,6 +1256,33 @@ Result Client::send_thread_read_receipt(const std::string& room_id,
         impl_->ffi->send_thread_read_receipt(room_id, thread_root_id, event_id));
 }
 
+std::string Client::thread_root_for_event(const std::string& room_id,
+                                          const std::string& event_id)
+{
+    SH_FFI;
+    return std::string(impl_->ffi->thread_root_for_event(room_id, event_id));
+}
+
+bool Client::thread_subscriptions_enabled()
+{
+    SH_FFI;
+    return impl_->ffi->thread_subscriptions_enabled();
+}
+
+bool Client::is_thread_followed(const std::string& room_id,
+                                const std::string& thread_root_id)
+{
+    SH_FFI;
+    return impl_->ffi->is_thread_followed(room_id, thread_root_id);
+}
+
+Result Client::set_thread_followed(const std::string& room_id,
+                                   const std::string& thread_root_id, bool follow)
+{
+    SH_FFI;
+    return from_ffi(impl_->ffi->set_thread_followed(room_id, thread_root_id, follow));
+}
+
 Result Client::mark_all_threads_read(const std::string& room_id)
 {
     SH_FFI;

@@ -589,6 +589,23 @@ public:
     /// Snapshot of the current thread list for `room_id`.
     std::vector<ThreadInfo> list_room_threads(const std::string& room_id);
     PaginateResult paginate_room_threads(const std::string& room_id);
+    /// Thread root of `event_id` when it is an in-thread reply; empty
+    /// otherwise. Checks the event cache, then fetches the event from the
+    /// homeserver. Blocks on the runtime (and possibly the network), so call it
+    /// off the UI thread.
+    std::string thread_root_for_event(const std::string& room_id,
+                                      const std::string& event_id);
+    /// MSC4306: true when the homeserver supports thread subscriptions and
+    /// the client opted in. Every call below is inert (false / failing
+    /// Result) otherwise.
+    bool thread_subscriptions_enabled();
+    /// Whether the user follows the thread rooted at `thread_root_id`.
+    bool is_thread_followed(const std::string& room_id,
+                            const std::string& thread_root_id);
+    /// Follow (manual subscription) or unfollow a thread. Fires
+    /// IEventHandler::on_threads_updated on success.
+    Result set_thread_followed(const std::string& room_id,
+                               const std::string& thread_root_id, bool follow);
 
     /// Kick off a background pass that paginates the given rooms (those
     /// currently visible in the room list), up to ~50 events each, with

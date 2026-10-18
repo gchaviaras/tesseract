@@ -9,7 +9,7 @@
 class LinuxNotifierGtk final : public tesseract::INotifier
 {
 public:
-    // on_activate: (room_id, activation_token). Token is empty when
+    // on_activate: (room_id, event_id, activation_token). Token is empty when
     // unavailable; non-empty on Wayland via the XDG Desktop Portal
     // ActionInvoked signal.
     // on_reply: (room_id, event_id, reply_text), fired from either the
@@ -19,7 +19,7 @@ public:
     // neither is supported. Deliberately separate from on_activate — a
     // reply must not switch account or navigate, unlike a click.
     explicit LinuxNotifierGtk(
-        std::function<void(std::string, std::string)> on_activate,
+        std::function<void(std::string, std::string, std::string)> on_activate,
         std::function<void(std::string, std::string, std::string)> on_reply);
     ~LinuxNotifierGtk() override;
     void notify(const tesseract::Notification& n) override;
@@ -54,7 +54,7 @@ private:
     guint portal_action_sub_ = 0;
     guint replied_sub_ = 0;
     guint activation_token_sub_ = 0;
-    std::function<void(std::string, std::string)> on_activate_;
+    std::function<void(std::string, std::string, std::string)> on_activate_;
     std::function<void(std::string, std::string, std::string)> on_reply_;
     // Both probed ONCE, synchronously, in the constructor — deliberately NOT
     // a lazily-computed function-local static. The Qt6 notifier's original

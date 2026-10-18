@@ -280,6 +280,7 @@ inline tesseract::ThreadInfo from_ffi(const tesseract_ffi::ThreadInfo& t)
     out.num_replies = t.num_replies;
     out.unread = t.unread;
     out.mentions_me = t.mentions_me;
+    out.subscribed = t.subscribed;
     return out;
 }
 

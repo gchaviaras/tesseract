@@ -7309,3 +7309,23 @@ msgstr ""
 #: ui/shared/views/settings/ServerSection.cpp
 msgid "Default room version"
 msgstr ""
+
+#: ui/shared/views/ThreadListView.cpp
+msgid " (following)"
+msgstr ""
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Follow thread"
+msgstr ""
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Unfollow thread"
+msgstr ""
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show only followed threads"
+msgstr ""
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show all threads"
+msgstr ""

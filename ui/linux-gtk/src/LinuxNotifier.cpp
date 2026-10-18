@@ -14,7 +14,7 @@ constexpr int kNotifyBusTimeoutMs = 3000;
 } // namespace
 
 LinuxNotifierGtk::LinuxNotifierGtk(
-    std::function<void(std::string, std::string)> on_activate,
+    std::function<void(std::string, std::string, std::string)> on_activate,
     std::function<void(std::string, std::string, std::string)> on_reply)
     : on_activate_(std::move(on_activate)), on_reply_(std::move(on_reply))
 {
@@ -414,7 +414,8 @@ void LinuxNotifierGtk::on_action_invoked_cb(GDBusConnection*, const char*,
         // ActivationToken (if the daemon supports it) always arrives before
         // ActionInvoked for the same id — take_token() returns empty if the
         // daemon never sent one.
-        self->on_activate_(found->room_id, self->correlation_.take_token(id));
+        self->on_activate_(found->room_id, found->event_id,
+                           self->correlation_.take_token(id));
     }
 }
 
@@ -547,5 +548,5 @@ void LinuxNotifierGtk::on_portal_action_invoked_cb(GDBusConnection*,
         g_variant_unref(param_av);
     }
 
-    self->on_activate_(found->room_id, std::move(token));
+    self->on_activate_(found->room_id, found->event_id, std::move(token));
 }

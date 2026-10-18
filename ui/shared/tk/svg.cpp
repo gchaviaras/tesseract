@@ -103,8 +103,11 @@ void IconCache::draw(Canvas& canvas, CanvasFactory& factory,
     const float scale = canvas.scale_factor();
     const bool same_tint = tint.r == tint_.r && tint.g == tint_.g &&
                            tint.b == tint_.b && tint.a == tint_.a;
-    if (!img_ || scale != scale_ || logical_px != px_ || !same_tint)
+    const bool same_svg = svg.data() == svg_data_ && svg.size() == svg_size_;
+    if (!img_ || scale != scale_ || logical_px != px_ || !same_tint || !same_svg)
     {
+        svg_data_ = svg.data();
+        svg_size_ = svg.size();
         scale_ = scale;
         px_    = logical_px;
         tint_  = tint;

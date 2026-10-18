@@ -58,6 +58,15 @@ public:
     // Fires when the user clicks the floating close button.
     std::function<void()> on_close;
 
+    // MSC4306 follow toggle, left of the close button. Hidden unless the
+    // homeserver supports thread subscriptions (`supported`). `following`
+    // picks the bell glyph + accessible name; set silently (no callback).
+    void set_follow_state(bool supported, bool following);
+    bool follow_supported() const { return follow_supported_; }
+    bool following() const { return following_; }
+    // Fires on click with the desired new state (true = follow).
+    std::function<void(bool follow)> on_follow_toggled;
+
     // tk::Widget overrides.
     tk::Size measure(tk::LayoutCtx&, tk::Size constraints) override;
     void     arrange(tk::LayoutCtx&, tk::Rect bounds) override;
@@ -79,6 +88,9 @@ private:
     // Borrowed pointers — ownership is in the tk::Widget child list.
     MessageListView* message_list_ = nullptr;
     tk::Button*      close_btn_    = nullptr;
+    tk::ToggleButton* follow_btn_  = nullptr;
+    bool             follow_supported_ = false;
+    bool             following_        = false;
     RoomSearchBar*   search_bar_   = nullptr;
     // Cached Lucide close icon (kCloseSvg), tint-aware — see paint().
     tk::IconCache close_icon_;

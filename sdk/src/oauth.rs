@@ -319,8 +319,10 @@ pub(crate) async fn build_configured_client(
         // per-thread linked chunks (which our focused thread Timeline
         // subscribes to) when threading support is enabled. Without this,
         // the open thread panel never sees new replies arriving via sync.
+        // `with_subscriptions` opts in to MSC4306 thread subscriptions (a
+        // no-op unless the homeserver advertises `org.matrix.msc4306`).
         .with_threading_support(ThreadingSupport::Enabled {
-            with_subscriptions: false,
+            with_subscriptions: true,
         })
         .build()
         .await

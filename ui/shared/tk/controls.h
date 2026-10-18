@@ -373,6 +373,68 @@ private:
     std::chrono::steady_clock::time_point busy_start_{};
 };
 
+// A Button with a persistent on/off state, for icon toolbars (e.g. a filter or
+// follow toggle). While checked it keeps a "selected" background under the
+// usual hover/press fills and tints its icon with the accent colour. A user
+// click (pointer, Enter/Space, or an AT default action) flips the state and
+// fires on_toggled with the new value; set_checked() is the silent,
+// programmatic setter. Use set_on_toggled(), not set_on_click().
+class ToggleButton : public Button
+{
+protected:
+    explicit ToggleButton(std::string label,
+                          Variant variant = Variant::Icon)
+        : Button(std::move(label), {}, variant)
+    {
+        Widget::set_on_click([this] { toggle_(); });
+    }
+    TK_WIDGET_FACTORY_FRIEND(ToggleButton)
+
+public:
+    ToggleButton& set_checked(bool checked);
+    bool checked() const
+    {
+        return checked_;
+    }
+    // Fires with the new state on every user toggle (never from set_checked).
+    ToggleButton& set_on_toggled(std::function<void(bool)> f)
+    {
+        on_toggled_ = std::move(f);
+        return *this;
+    }
+    // Icon tints for each state. Unchecked defaults to the Button's ordinary
+    // tint (unset); checked defaults to the theme accent (unset).
+    ToggleButton& set_unchecked_icon_color(std::optional<Color> c)
+    {
+        unchecked_tint_ = c;
+        return *this;
+    }
+    ToggleButton& set_checked_icon_color(std::optional<Color> c)
+    {
+        checked_tint_ = c;
+        return *this;
+    }
+    // The click handler is owned by the toggle logic.
+    Button& set_on_click(std::function<void()>) = delete;
+
+    void paint(PaintCtx&) override;
+
+    AccessState access_state() const override
+    {
+        AccessState s;
+        s.checked = checked_;
+        return s;
+    }
+
+private:
+    void toggle_();
+
+    bool checked_ = false;
+    std::function<void(bool)> on_toggled_;
+    std::optional<Color> unchecked_tint_;
+    std::optional<Color> checked_tint_;
+};
+
 // A labelled two-state checkbox. Hover and press are tracked internally;
 // on_change fires with the new boolean state on every user toggle.
 class CheckButton : public Widget

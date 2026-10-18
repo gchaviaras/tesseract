@@ -43,6 +43,15 @@ public:
     void set_search_text(std::string q);
     const std::string& search_text() const { return search_text_; }
 
+    // MSC4306: whether the homeserver supports thread subscriptions. Shows
+    // the "followed only" filter button and the per-row bell; both stay
+    // hidden when unsupported (and the filter is dropped).
+    void set_subscriptions_supported(bool supported);
+    bool subscriptions_supported() const { return subscriptions_supported_; }
+    // Restrict the list to followed threads. Ignored while unsupported.
+    void set_only_followed(bool only);
+    bool only_followed() const { return only_followed_; }
+
     // Shell callbacks.
     std::function<void()> on_close;
     std::function<void(const std::string& root_event_id)> on_thread_clicked;
@@ -109,6 +118,13 @@ private:
     tk::Button* close_btn_ = nullptr;
     // "Mark all threads as read" button, immediately left of close_btn_.
     tk::Button* mark_all_btn_ = nullptr;
+    // "Followed threads only" toggle (bell), immediately left of mark_all_btn_.
+    // Hidden unless subscriptions are supported.
+    tk::ToggleButton* follow_filter_btn_ = nullptr;
+    bool subscriptions_supported_ = false;
+    bool only_followed_ = false;
+    tk::IconCache followed_icon_;
+    void refresh_follow_filter_();
     // Cached from on_theme_changed so refresh_mark_all_enabled_() can pick a
     // tint without a Theme& in hand.
     tk::Color mark_all_tint_active_{};

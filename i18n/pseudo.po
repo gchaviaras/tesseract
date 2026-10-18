@@ -7197,3 +7197,23 @@ msgstr "[Çhàñgé dïsplày ñàméxxx]"
 #: ui/shared/views/settings/ServerSection.cpp
 msgid "Default room version"
 msgstr "[Défàùlt rööm vérsïöñxxxx]"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid " (following)"
+msgstr "[ (föllöwïñg)xx]"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Follow thread"
+msgstr "[Föllöw thréàdxx]"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Unfollow thread"
+msgstr "[Ùñföllöw thréàdxxx]"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show only followed threads"
+msgstr "[Shöw öñly föllöwéd thréàdsxxxxx]"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show all threads"
+msgstr "[Shöw àll thréàdsxxx]"

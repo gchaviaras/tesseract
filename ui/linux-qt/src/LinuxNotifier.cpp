@@ -85,7 +85,7 @@ QString write_image_path(const std::vector<uint8_t>& pic)
 } // namespace
 
 LinuxNotifierQt::LinuxNotifierQt(
-    std::function<void(std::string, std::string)> on_activate,
+    std::function<void(std::string, std::string, std::string)> on_activate,
     std::function<void(std::string, std::string, std::string)> on_reply,
     QObject* parent)
     : QObject(parent),
@@ -301,7 +301,8 @@ void LinuxNotifierQt::onActionInvoked(uint id, const QString& /*action*/)
         // ActivationToken (if the daemon supports it) always arrives before
         // ActionInvoked for the same id — take_token() returns empty if the
         // daemon never sent one.
-        on_activate_(found->room_id, correlation_.take_token(id));
+        on_activate_(found->room_id, found->event_id,
+                     correlation_.take_token(id));
     }
 }
 
@@ -364,5 +365,5 @@ void LinuxNotifierQt::onPortalActionInvoked(const QString& notification_id,
         }
     }
 
-    on_activate_(found->room_id, std::move(token));
+    on_activate_(found->room_id, found->event_id, std::move(token));
 }

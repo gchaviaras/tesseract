@@ -141,6 +141,13 @@ ThreadListView::ThreadListView()
     });
     refresh_mark_all_enabled_(); // starts disabled (threads_ empty)
 
+    auto filter = tk::create_widget<tk::ToggleButton>(this, std::string{});
+    filter->set_icon(kBellSvg, 18.0f);
+    filter->set_visible(false);
+    follow_filter_btn_ = add_child(std::move(filter));
+    follow_filter_btn_->set_on_toggled([this](bool on) { set_only_followed(on); });
+    refresh_follow_filter_();
+
     if (host())
     {
         auto search = tk::create_widget<tk::TextField>(
@@ -160,9 +167,46 @@ void ThreadListView::on_theme_changed(const tk::Theme& t)
     if (close_btn_)
         close_btn_->set_icon_color_override(t.palette.text_secondary);
 
+    if (follow_filter_btn_)
+        follow_filter_btn_->set_unchecked_icon_color(t.palette.text_secondary);
     mark_all_tint_active_ = t.palette.text_secondary;
     mark_all_tint_muted_  = t.palette.text_muted;
     refresh_mark_all_enabled_();
+    refresh_follow_filter_();
+}
+
+void ThreadListView::refresh_follow_filter_()
+{
+    if (!follow_filter_btn_)
+        return;
+    follow_filter_btn_->set_visible(subscriptions_supported_);
+    follow_filter_btn_->set_accessible_name(
+        only_followed_ ? tk::tr("Show all threads")
+                       : tk::tr("Show only followed threads"));
+    follow_filter_btn_->set_checked(only_followed_);
+}
+
+void ThreadListView::set_subscriptions_supported(bool supported)
+{
+    if (supported == subscriptions_supported_)
+        return;
+    subscriptions_supported_ = supported;
+    if (!supported)
+        only_followed_ = false;
+    refresh_follow_filter_();
+    rebuild_filtered_();
+    invalidate_data();
+}
+
+void ThreadListView::set_only_followed(bool only)
+{
+    only = only && subscriptions_supported_;
+    if (only == only_followed_)
+        return;
+    only_followed_ = only;
+    refresh_follow_filter_();
+    rebuild_filtered_();
+    invalidate_data();
 }
 
 void ThreadListView::refresh_mark_all_enabled_()
@@ -221,6 +265,8 @@ void ThreadListView::rebuild_filtered_()
     filtered_indices_.reserve(threads_.size());
     for (std::size_t i = 0; i < threads_.size(); ++i)
     {
+        if (only_followed_ && !threads_[i].subscribed)
+            continue;
         if (search_text_.empty())
         {
             filtered_indices_.push_back(i);
@@ -269,11 +315,18 @@ void ThreadListView::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     if (mark_all_btn_)
         mark_all_btn_->arrange(lc, {mark_all_x, cy, kCloseSz, kCloseSz});
 
-    // Search field fills the header strip to the left of the button pair.
+    float buttons_left = mark_all_x;
+    if (follow_filter_btn_ && follow_filter_btn_->visible())
+    {
+        buttons_left = mark_all_x - kCloseSz - kHeaderBtnGap;
+        follow_filter_btn_->arrange(lc, {buttons_left, cy, kCloseSz, kCloseSz});
+    }
+
+    // Search field fills the header strip to the left of the button group.
     if (search_field_)
     {
         const float fx = bounds.x + kPadX;
-        const float fw = std::max(0.0f, mark_all_x - kSearchGap - fx);
+        const float fw = std::max(0.0f, buttons_left - kSearchGap - fx);
         const float fh = kHeaderH - 2.0f * kSearchInsetY;
         const float fy = bounds.y + kSearchInsetY;
         search_field_->arrange(lc, {fx, fy, fw, fh});
@@ -387,6 +440,18 @@ void ThreadListView::paint_row(std::size_t index, tk::PaintCtx& ctx,
                      pal.text_muted);
     }
 
+    // Followed-thread bell (MSC4306), just left of the date.
+    constexpr float kBellPx = 14.0f;
+    const bool show_bell = subscriptions_supported_ && t.subscribed;
+    if (show_bell)
+    {
+        const float bx = r.x + r.w - kPadX - date_w - kBellPx - 4.0f;
+        followed_icon_.draw(cv, ctx.factory, kBellSvg,
+                            {bx, r.y + kPadY, kBellPx, kBellPx}, kBellPx,
+                            pal.text_muted);
+        date_w += kBellPx + 4.0f;
+    }
+
     // Reply count — bottom right.
     const std::string count_buf = tk::trf(
         tk::trn("{0} reply", "{0} replies", static_cast<long>(t.num_replies)),
@@ -498,6 +563,8 @@ std::string ThreadListView::access_name_for_row(std::size_t index) const
            ")";
     if (t.unread)
         name += tk::tr(" (unread)");
+    if (subscriptions_supported_ && t.subscribed)
+        name += tk::tr(" (following)");
     return name;
 }
 

@@ -1176,6 +1176,11 @@ pub mod ffi {
         /// every unread reply — and does no push-rule / display-name /
         /// keyword evaluation.
         mentions_me: bool,
+        /// The user follows this thread (MSC4306). Always `false` when the
+        /// homeserver doesn't support thread subscriptions — check
+        /// `thread_subscriptions_enabled`. While enabled, an unfollowed
+        /// thread never reports `unread` / `mentions_me`.
+        subscribed: bool,
     }
 
     /// Result of `begin_delete_device`. On a clean success `needs_uia` is
@@ -2731,6 +2736,29 @@ pub mod ffi {
         /// Snapshot of the current thread list for `room_id` (most-recent
         /// first). Empty when not subscribed or none known yet.
         fn list_room_threads(self: &ClientFfi, room_id: &str) -> Vec<ThreadInfo>;
+
+        /// Thread root of `event_id` when it is an in-thread reply; empty
+        /// otherwise. Checks the event cache, then fetches the event from the
+        /// homeserver. Blocks on the runtime (and possibly the network), so
+        /// call it off the UI thread.
+        fn thread_root_for_event(self: &ClientFfi, room_id: &str, event_id: &str) -> String;
+
+        /// Whether MSC4306 thread subscriptions are active: the homeserver
+        /// advertises `org.matrix.msc4306` and the client opted in.
+        fn thread_subscriptions_enabled(self: &ClientFfi) -> bool;
+
+        /// Whether the user follows the thread rooted at `thread_root_id`.
+        /// `false` when subscriptions aren't enabled or the lookup fails.
+        fn is_thread_followed(self: &ClientFfi, room_id: &str, thread_root_id: &str) -> bool;
+
+        /// Follow (`follow == true`, a manual subscription) or unfollow a
+        /// thread. Fires `on_threads_updated` on success.
+        fn set_thread_followed(
+            self: &ClientFfi,
+            room_id: &str,
+            thread_root_id: &str,
+            follow: bool,
+        ) -> OpResult;
 
         /// Paginate older threads. reached_start == true means list exhausted.
         fn paginate_room_threads(self: &ClientFfi, room_id: &str) -> PaginateResult;

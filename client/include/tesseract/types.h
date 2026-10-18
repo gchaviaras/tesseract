@@ -660,6 +660,10 @@ struct ThreadInfo
     /// Best-effort: the latest reply carries an `m.mentions` naming the user
     /// (or a room ping). Checks the latest reply only — see the FFI doc.
     bool mentions_me = false;
+    /// The user follows this thread (MSC4306). False when the homeserver
+    /// doesn't support thread subscriptions; while supported, an unfollowed
+    /// thread never reports `unread` / `mentions_me`.
+    bool subscribed = false;
 };
 
 /// One entry from `m.room.pinned_events` resolved against the local event

@@ -5146,3 +5146,23 @@ msgstr "Endre visningsnavn"
 #: ui/shared/views/settings/ServerSection.cpp
 msgid "Default room version"
 msgstr "Standard romversjon"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid " (following)"
+msgstr " (følger)"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Follow thread"
+msgstr "Følg tråd"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Unfollow thread"
+msgstr "Slutt å følge tråd"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show only followed threads"
+msgstr "Vis bare fulgte tråder"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show all threads"
+msgstr "Vis alle tråder"

@@ -249,6 +249,39 @@ TEST_CASE("ThreadListView::set_search_text filters rows and remaps clicks",
     CHECK(clicked == "$apple");
 }
 
+TEST_CASE("ThreadListView followed-only filter needs subscription support",
+          "[thread_list]")
+{
+    TkThreadListViewStage st;
+    ThreadListView v;
+    st.arrange(v, {0, 0, 300, 400});
+    auto followed = make_thread("$followed", 1, /*root_ts=*/1000);
+    followed.subscribed = true;
+    v.set_threads({followed, make_thread("$other", 2, /*root_ts=*/2000)});
+    st.arrange(v, {0, 0, 300, 400});
+
+    std::string clicked;
+    v.on_thread_clicked = [&](const std::string& id) { clicked = id; };
+    const tk::Point first_row{100.0f, ThreadListView::kHeaderH +
+                                          ThreadListView::kRowH * 0.5f};
+
+    // Unsupported: the filter request is ignored and every row stays.
+    v.set_only_followed(true);
+    CHECK_FALSE(v.only_followed());
+
+    v.set_subscriptions_supported(true);
+    v.set_only_followed(true);
+    CHECK(v.only_followed());
+    st.arrange(v, {0, 0, 300, 400});
+    REQUIRE(v.on_pointer_down(first_row));
+    v.on_pointer_up(first_row, true);
+    CHECK(clicked == "$followed");
+
+    // Losing support drops the filter again.
+    v.set_subscriptions_supported(false);
+    CHECK_FALSE(v.only_followed());
+}
+
 TEST_CASE("ThreadListView::paint re-masks the header strip over scrolled row content",
           "[thread_list]")
 {

@@ -86,6 +86,46 @@ TEST_CASE("ThreadView::on_close fires when floating close button clicked",
     CHECK(closed);
 }
 
+TEST_CASE("ThreadView follow toggle is hidden until supported and reports the wanted state",
+          "[thread_view]")
+{
+    TkThreadViewStage st;
+    ThreadView v;
+    st.arrange(v, {0, 0, 400, 600});
+
+    std::vector<bool> toggles;
+    v.on_follow_toggled = [&](bool follow) { toggles.push_back(follow); };
+
+    // Left of the close button, same vertical centre.
+    const float fx = 400.0f - 2.0f * ThreadView::kCloseSz - ThreadView::kCloseInset
+                     - ThreadView::kHeaderGap + ThreadView::kCloseSz * 0.5f;
+    const tk::Point p{fx, ThreadView::kHeaderH * 0.5f};
+
+    auto click = [&]
+    {
+        tk::Widget* claimer = v.dispatch_pointer_down(p);
+        if (!claimer)
+            return;
+        const tk::Rect cb = claimer->bounds();
+        claimer->on_pointer_up({p.x - cb.x, p.y - cb.y}, /*inside_self=*/true);
+    };
+
+    // Unsupported: the button is hidden, so a click reaches nothing that toggles.
+    click();
+    CHECK(toggles.empty());
+
+    v.set_follow_state(/*supported=*/true, /*following=*/false);
+    st.arrange(v, {0, 0, 400, 600});
+    click();
+    REQUIRE(toggles.size() == 1);
+    CHECK(toggles[0] == true);
+
+    v.set_follow_state(true, /*following=*/true);
+    click();
+    REQUIRE(toggles.size() == 2);
+    CHECK(toggles[1] == false);
+}
+
 TEST_CASE("ThreadView's find-in-thread bar is open from construction, no toggle needed",
           "[thread_view]")
 {

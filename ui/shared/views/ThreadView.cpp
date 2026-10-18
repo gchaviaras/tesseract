@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <span>
 #include <utility>
 
 namespace tesseract::views
@@ -55,6 +56,32 @@ ThreadView::ThreadView()
     close_btn_->set_on_click([this] {
         if (on_close) on_close();
     });
+
+    // Follow toggle (MSC4306): hidden until set_follow_state() reports the
+    // server supports thread subscriptions. Draws its own icon like the
+    // ThreadListView header buttons.
+    auto follow = tk::create_widget<tk::ToggleButton>(this, std::string{});
+    follow_btn_ = add_child(std::move(follow));
+    follow_btn_->set_visible(false);
+    follow_btn_->set_on_toggled([this](bool follow_now) {
+        if (on_follow_toggled) on_follow_toggled(follow_now);
+    });
+    set_follow_state(false, false);
+}
+
+void ThreadView::set_follow_state(bool supported, bool following)
+{
+    follow_supported_ = supported;
+    following_        = following;
+    if (!follow_btn_)
+        return;
+    follow_btn_->set_visible(supported);
+    follow_btn_->set_checked(following);
+    follow_btn_->set_icon(following ? std::span<const std::uint8_t>(kBellSvg)
+                                    : std::span<const std::uint8_t>(kBellOffSvg),
+                          18.0f);
+    follow_btn_->set_accessible_name(following ? tk::tr("Unfollow thread")
+                                               : tk::tr("Follow thread"));
 }
 
 void ThreadView::reset_search()
@@ -151,6 +178,14 @@ void ThreadView::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
         const float cy = bounds.y + (kHeaderH - kCloseSz) * 0.5f;
         close_btn_->arrange(lc, {cx, cy, kCloseSz, kCloseSz});
     }
+    float follow_w = 0.0f;
+    if (follow_btn_ && follow_btn_->visible())
+    {
+        const float fx = bounds.x + bounds.w - 2.0f * kCloseSz - kCloseInset - kHeaderGap;
+        const float fy = bounds.y + (kHeaderH - kCloseSz) * 0.5f;
+        follow_btn_->arrange(lc, {fx, fy, kCloseSz, kCloseSz});
+        follow_w = kCloseSz + kHeaderGap;
+    }
     if (search_bar_)
     {
         // The find bar IS the header — it fills the header row up to (but
@@ -159,7 +194,7 @@ void ThreadView::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
         // right-aligned content (count/up-down) already flushes right
         // against this narrowed width instead of leaving a gap.
         const float bar_w = std::max(
-            0.0f, bounds.w - kCloseSz - kCloseInset - kHeaderGap);
+            0.0f, bounds.w - kCloseSz - kCloseInset - kHeaderGap - follow_w);
         search_bar_->arrange(lc, {bounds.x, bounds.y, bar_w, kHeaderH});
     }
     if (message_list_)

@@ -609,6 +609,7 @@ pub mod ffi {
         pub num_replies: u64,
         pub unread: bool,
         pub mentions_me: bool,
+        pub subscribed: bool,
     }
 
     #[derive(Debug, PartialEq, Default)]

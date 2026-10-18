@@ -1755,6 +1755,10 @@ void RoomPane::wire_room_view_()
     {
         shell_->mark_all_threads_read_(room_id_, session_());
     };
+    rv->on_thread_follow_toggled = [this](const std::string& root, bool follow)
+    {
+        shell_->set_thread_followed_(room_id_, root, follow, session_());
+    };
     rv->on_thread_send = [this, rv](const std::string& body,
                                     const std::string& /*formatted*/)
     {
@@ -1943,6 +1947,25 @@ void RoomPane::apply_thread_transition_(
         }
 
         deps_.relayout();
+    }
+
+    // MSC4306: a freshly opened thread may not be in the list snapshot yet, so
+    // look its follow state up directly (cheap store read) for the header toggle.
+    if (t.new_state == ThreadPanel::Open && !t.new_root.empty() &&
+        panel_display_changed && pane_client_())
+    {
+        auto sess = session_();
+        run_async_mut_([this, sess, rid = room_id_, root = t.new_root,
+                        ui = ui_poster(shell_poster(shell_))]
+        {
+            if (!ui.owner_alive() || !sess || !sess->client) return;
+            const bool followed = sess->client->is_thread_followed(rid, root);
+            ui([this, rid, root, followed]
+            {
+                if (rid != room_id_ || !room_view_) return;
+                room_view_->set_thread_followed(root, followed);
+            });
+        });
     }
 
     // If the thread root event isn't in the loaded timeline, subscribe_room_at

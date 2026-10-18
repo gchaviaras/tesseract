@@ -420,6 +420,23 @@ void ShellBase::mark_all_threads_read_(const std::string& room_id,
         });
 }
 
+void ShellBase::set_thread_followed_(const std::string& room_id,
+    const std::string& thread_root_id, bool follow,
+    const std::shared_ptr<AccountSession>& on_behalf_of)
+{
+    const auto acting = acting_session_(on_behalf_of);
+    EventAccountScope acting_scope(*this, acting ? acting->user_id : std::string{});
+    if (room_id.empty() || thread_root_id.empty())
+        return;
+    auto sess = acting;
+    run_async_mut_(
+        [sess, room_id, thread_root_id, follow]()
+        {
+            if (sess && sess->client)
+                sess->client->set_thread_followed(room_id, thread_root_id, follow);
+        });
+}
+
 void ShellBase::mark_room_read_(const std::string& room_id)
 {
     if (room_id.empty())
@@ -1345,6 +1362,8 @@ void ShellBase::handle_threads_updated_ui_(std::string room_id)
             sw->room_view()->set_show_threads_button(!threads.empty());
             sw->room_view()->set_threads_unread(agg.any_unread,
                                                         agg.any_mention);
+            sw->room_view()->set_thread_subscriptions(
+                owner->client->thread_subscriptions_enabled(), threads);
         }
     }
 
@@ -1481,6 +1500,9 @@ void ShellBase::apply_threads_list_(std::vector<ThreadInfo> threads)
     // Unread-thread indicator: fold the per-thread flags into the header dot.
     const auto agg = views::aggregate_threads(threads);
     room_view_->set_threads_unread(agg.any_unread, agg.any_mention);
+    // MSC4306: follow toggle / followed-only filter / row bells.
+    const bool subs_supported = client_ && client_->thread_subscriptions_enabled();
+    room_view_->set_thread_subscriptions(subs_supported, threads);
 
     // Fan out to any popout window currently showing the same room.
     for (auto& [rid, w] : active_account_popouts_())
@@ -1489,6 +1511,7 @@ void ShellBase::apply_threads_list_(std::vector<ThreadInfo> threads)
         {
             w->room_view()->set_show_threads_button(show_threads);
             w->room_view()->set_threads_unread(agg.any_unread, agg.any_mention);
+            w->room_view()->set_thread_subscriptions(subs_supported, threads);
         }
     }
 

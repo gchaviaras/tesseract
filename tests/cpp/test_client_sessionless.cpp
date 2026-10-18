@@ -34,6 +34,10 @@ TEST_CASE("sessionless Client: operations that return a Result fail", "[client][
     CHECK_FALSE(c.retry_send(kRoom, "txn").ok);
     CHECK_FALSE(c.abort_send(kRoom, "txn").ok);
     CHECK_FALSE(c.mark_all_threads_read(kRoom).ok);
+    CHECK_FALSE(c.set_thread_followed(kRoom, kEvent, true).ok);
+    CHECK_FALSE(c.thread_subscriptions_enabled());
+    CHECK(c.thread_root_for_event(kRoom, kEvent).empty());
+    CHECK_FALSE(c.is_thread_followed(kRoom, kEvent));
     CHECK_FALSE(c.end_poll(kRoom, kEvent).ok);
     CHECK_FALSE(c.set_display_name("x").ok);
     CHECK_FALSE(c.remove_avatar().ok);

@@ -2171,6 +2171,44 @@ void RoomView::set_show_threads_button(bool show)
         header_->set_show_threads_btn(show);
 }
 
+void RoomView::set_thread_subscriptions(
+    bool supported, const std::vector<tesseract::ThreadInfo>& threads)
+{
+    thread_subscriptions_supported_ = supported;
+    // The snapshot is authoritative for the threads it lists; a thread absent
+    // from it keeps whatever direct lookup recorded.
+    for (const auto& t : threads)
+    {
+        if (t.subscribed)
+            followed_threads_.insert(t.root_event_id);
+        else
+            followed_threads_.erase(t.root_event_id);
+    }
+    if (thread_list_view_)
+        thread_list_view_->set_subscriptions_supported(supported);
+    refresh_thread_follow_state_();
+}
+
+void RoomView::set_thread_followed(const std::string& root_event_id, bool followed)
+{
+    if (followed)
+        followed_threads_.insert(root_event_id);
+    else
+        followed_threads_.erase(root_event_id);
+    refresh_thread_follow_state_();
+}
+
+void RoomView::refresh_thread_follow_state_()
+{
+    if (!thread_view_)
+        return;
+    thread_view_->set_follow_state(
+        thread_subscriptions_supported_,
+        followed_threads_.count(thread_panel_root_) != 0);
+    if (repaint_requester_)
+        repaint_requester_();
+}
+
 void RoomView::set_threads_unread(bool any_unread, bool any_mention)
 {
     if (!header_)
@@ -2209,6 +2247,8 @@ void RoomView::set_thread_panel(ThreadPanelState state,
         {
             if (on_mark_all_read) on_mark_all_read();
         };
+        thread_list_view_->set_subscriptions_supported(
+            thread_subscriptions_supported_);
     }
     if (state == ThreadPanelState::Open && !thread_view_)
     {
@@ -2255,6 +2295,14 @@ void RoomView::set_thread_panel(ThreadPanelState state,
         {
             if (on_thread_close_requested) on_thread_close_requested();
         };
+        thread_view_->on_follow_toggled = [this](bool follow)
+        {
+            // Optimistic: flip locally; the shell's set_thread_followed call
+            // re-queries and on_threads_updated reconciles with the server.
+            set_thread_followed(thread_panel_root_, follow);
+            if (on_thread_follow_toggled)
+                on_thread_follow_toggled(thread_panel_root_, follow);
+        };
         if (auto* bar = thread_view_->search_bar())
         {
             bar->on_query_changed = [this](const std::string& q)
@@ -2272,6 +2320,8 @@ void RoomView::set_thread_panel(ThreadPanelState state,
     // honours the active mode automatically.
     if (thread_view_)
         thread_view_->set_visible(state == ThreadPanelState::Open);
+        if (state == ThreadPanelState::Open)
+            refresh_thread_follow_state_();
     if (thread_list_view_)
         thread_list_view_->set_visible(state == ThreadPanelState::List);
 

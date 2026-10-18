@@ -387,6 +387,135 @@ impl ClientFfi {
     #[cfg(test)]
     pub fn unsubscribe_room_threads(&self, _room_id: &str) {}
 
+    /// Thread root of `event_id` in `room_id` when it is an in-thread reply;
+    /// empty otherwise (not a thread reply, or the event could not be loaded).
+    /// Reads the event cache first and falls back to fetching the event from
+    /// the homeserver, so it may block on the network. Used to open the
+    /// thread when an OS notification for a threaded message is clicked.
+    #[cfg(not(test))]
+    pub fn thread_root_for_event(&self, room_id: &str, event_id: &str) -> String {
+        let (Some(client), Ok(rid), Ok(eid)) = (
+            self.client.clone(),
+            room_id.parse::<OwnedRoomId>(),
+            event_id.parse::<matrix_sdk::ruma::OwnedEventId>(),
+        ) else {
+            return String::new();
+        };
+        let Some(room) = client.get_room(&rid) else {
+            return String::new();
+        };
+        self.block_on_cancellable(async move {
+            let ev = room.load_or_fetch_event(&eid, None).await.ok()?;
+            matrix_sdk::serde_helpers::extract_thread_root(ev.raw()).map(String::from)
+        })
+        .flatten()
+        .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub fn thread_root_for_event(&self, _room_id: &str, _event_id: &str) -> String {
+        String::new()
+    }
+
+    /// Whether MSC4306 thread subscriptions are active (client opted in and
+    /// the server advertises support). Cached by the SDK after first lookup.
+    #[cfg(not(test))]
+    pub fn thread_subscriptions_enabled(&self) -> bool {
+        let Some(client) = self.client.clone() else {
+            return false;
+        };
+        self.block_on_cancellable(async move {
+            client.enabled_thread_subscriptions().await.unwrap_or(false)
+        })
+        .unwrap_or(false)
+    }
+
+    #[cfg(test)]
+    pub fn thread_subscriptions_enabled(&self) -> bool {
+        false
+    }
+
+    /// Whether the user follows the thread rooted at `thread_root_id`.
+    #[cfg(not(test))]
+    pub fn is_thread_followed(&self, room_id: &str, thread_root_id: &str) -> bool {
+        let (Some(client), Ok(rid), Ok(root)) = (
+            self.client.clone(),
+            room_id.parse::<OwnedRoomId>(),
+            thread_root_id.parse::<matrix_sdk::ruma::OwnedEventId>(),
+        ) else {
+            return false;
+        };
+        let Some(room) = client.get_room(&rid) else {
+            return false;
+        };
+        if !self.thread_subscriptions_enabled() {
+            return false;
+        }
+        self.block_on_cancellable(async move {
+            room.load_or_fetch_thread_subscription(&root)
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        })
+        .unwrap_or(false)
+    }
+
+    #[cfg(test)]
+    pub fn is_thread_followed(&self, _room_id: &str, _thread_root_id: &str) -> bool {
+        false
+    }
+
+    /// Follow (manual subscription) or unfollow a thread, then ping
+    /// `on_threads_updated` so the list re-queries.
+    #[cfg(not(test))]
+    pub fn set_thread_followed(
+        &self,
+        room_id: &str,
+        thread_root_id: &str,
+        follow: bool,
+    ) -> OpResult {
+        let _enter = self.rt.enter();
+        let Some(client) = self.client.as_ref() else {
+            return err("not logged in");
+        };
+        let (rid, room) = match super::require_room(client, room_id) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let root: matrix_sdk::ruma::OwnedEventId = match thread_root_id.parse() {
+            Ok(id) => id,
+            Err(e) => return err(format!("invalid thread root id: {e}")),
+        };
+        let result = self.block_on_cancellable(async move {
+            if follow {
+                room.subscribe_thread(root, None).await
+            } else {
+                room.unsubscribe_thread(root).await
+            }
+        });
+        match result {
+            Some(Ok(())) => {
+                if let Some(h) = self.handler.clone() {
+                    h.lock().on_threads_updated(rid.as_str());
+                }
+                ok("")
+            }
+            Some(Err(e)) => err(e.to_string()),
+            None => err("cancelled"),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn set_thread_followed(
+        &self,
+        _room_id: &str,
+        _thread_root_id: &str,
+        _follow: bool,
+    ) -> OpResult {
+        super::err("not logged in")
+    }
+
     /// Snapshot of the current thread list for `room_id` (order as returned
     /// by the SDK). Empty when not subscribed or no threads known yet.
     ///
@@ -584,6 +713,37 @@ impl ClientFfi {
             cache_w.retain(|(r, root), _| *r != rid || live.contains(root));
         }
         drop(cache_w);
+
+        // MSC4306: with subscriptions active, only followed threads can be
+        // unread / mention you (matches Element). A failed lookup fails open
+        // (treated as followed) so a flaky network never hides activity.
+        if self.thread_subscriptions_enabled() {
+            let roots: Vec<OwnedEventId> =
+                items.iter().map(|it| it.root_event.event_id.clone()).collect();
+            let room_task = room.clone();
+            let followed: Vec<bool> = self
+                .rt
+                .block_on(self.rt.spawn(async move {
+                    let mut v = Vec::with_capacity(roots.len());
+                    for root in &roots {
+                        v.push(
+                            match room_task.load_or_fetch_thread_subscription(root).await {
+                                Ok(sub) => sub.is_some(),
+                                Err(_) => true,
+                            },
+                        );
+                    }
+                    v
+                }))
+                .unwrap_or_default();
+            for (info, f) in out.iter_mut().zip(followed) {
+                info.subscribed = f;
+                if !f {
+                    info.unread = false;
+                    info.mentions_me = false;
+                }
+            }
+        }
 
         if !stale_markers.is_empty() {
             {
@@ -1052,6 +1212,8 @@ pub(super) fn thread_info_from_item(
         // Room handle + own user id, which this free fn does not have).
         unread: false,
         mentions_me: false,
+        // Enriched by `list_room_threads` alongside `unread`.
+        subscribed: false,
     }
 }
 

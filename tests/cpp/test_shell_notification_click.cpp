@@ -78,7 +78,7 @@ TEST_CASE("notification click acts on the window owning the account",
     am.set_dedicated(y->user_id, &b);
 
     // Notifier was installed by window A, but the click is for account Y.
-    a.on_notification_clicked_(y->user_id, "!room:example.org", "tok");
+    a.on_notification_clicked_(y->user_id, "!room:example.org", "", "tok");
 
     CHECK(a.switched_to.empty());
     CHECK(a.navigated.empty());
@@ -107,9 +107,24 @@ TEST_CASE("notification click with no owner switches the calling window",
     auto y = session("@y:example.org");
     am.add_account(y);
 
-    a.on_notification_clicked_(y->user_id, "!r:example.org", "");
+    a.on_notification_clicked_(y->user_id, "!r:example.org", "", "");
 
     CHECK(a.switched_to == std::vector<std::string>{y->user_id});
     CHECK(a.navigated == std::vector<std::string>{"!r:example.org"});
     CHECK(b.navigated.empty());
+}
+
+TEST_CASE("notification click with an event id still navigates when the thread "
+          "cannot be resolved",
+          "[shell][notification]")
+{
+    AccountManager am;
+    ClickShell a(am);
+    auto y = session("@y:example.org"); // no client: the thread lookup is skipped
+    am.add_account(y);
+
+    a.on_notification_clicked_(y->user_id, "!r:example.org", "$evt:example.org", "tok");
+
+    CHECK(a.navigated == std::vector<std::string>{"!r:example.org"});
+    CHECK(a.tokens == std::vector<std::string>{"tok"});
 }

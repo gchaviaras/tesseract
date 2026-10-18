@@ -251,6 +251,7 @@ add_executable(tesseract_tests
     cpp/test_shell_encryption_setup.cpp
     cpp/test_tk_host_pointer.cpp
     cpp/test_tk_button_hover.cpp
+    cpp/test_tk_toggle_button.cpp
     cpp/test_tk_hoverable.cpp
     cpp/test_tk_host_file_drop.cpp
     cpp/test_tk_drag_drop.cpp

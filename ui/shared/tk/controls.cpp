@@ -356,6 +356,42 @@ void BusyButton::set_busy(bool busy)
     }
 }
 
+ToggleButton& ToggleButton::set_checked(bool checked)
+{
+    if (checked != checked_)
+    {
+        checked_ = checked;
+        if (auto* h = host())
+            h->request_repaint();
+    }
+    return *this;
+}
+
+void ToggleButton::toggle_()
+{
+    checked_ = !checked_;
+    if (auto* h = host())
+        h->request_repaint();
+    if (auto cb = on_toggled_)
+        cb(checked_);
+}
+
+void ToggleButton::paint(PaintCtx& ctx)
+{
+    // Selected background first: Button::paint then layers its own
+    // (transparent-at-rest) fill and the hover/press tint over it.
+    if (checked_)
+    {
+        ctx.canvas.fill_rounded_rect(bounds_, kControlsBtnRadius,
+                                     ctx.theme.palette.sidebar_selected);
+    }
+    set_icon_color_override(checked_
+                                ? std::optional<Color>(checked_tint_.value_or(
+                                      ctx.theme.palette.accent))
+                                : unchecked_tint_);
+    Button::paint(ctx);
+}
+
 void BusyButton::paint(PaintCtx& ctx)
 {
     Button::paint(ctx);

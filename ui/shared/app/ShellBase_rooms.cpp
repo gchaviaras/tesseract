@@ -1669,12 +1669,54 @@ ShellBase* ShellBase::notification_target_window_(const std::string& user_id)
 
 void ShellBase::on_notification_clicked_(const std::string& user_id,
                                          std::string room_id,
+                                         std::string event_id,
                                          std::string token)
 {
     ShellBase* target = notification_target_window_(user_id);
     target->switch_active_account_(user_id);
     target->activate_for_notification_(token);
     target->navigate_to_room_(room_id);
+    if (!event_id.empty())
+        target->open_notification_thread_(room_id, event_id);
+}
+
+void ShellBase::open_notification_thread_(const std::string& room_id,
+                                          const std::string& event_id)
+{
+    auto sess = active_account_;
+    if (!sess || !sess->client)
+        return;
+    run_async_mut_(
+        [this, sess, room_id, event_id]()
+        {
+            const std::string root =
+                sess->client->thread_root_for_event(room_id, event_id);
+            if (root.empty())
+                return; // not a thread reply, or the event could not be loaded
+            post_to_ui_([this, room_id, root]()
+                        { open_thread_in_visible_pane_(room_id, root); });
+        });
+}
+
+void ShellBase::open_thread_in_visible_pane_(const std::string& room_id,
+                                             const std::string& thread_root)
+{
+    RoomPane* pane = nullptr;
+    if (active_account_)
+    {
+        // navigate_to_room_ focuses a pop-out already showing the room, so
+        // prefer it over the main pane.
+        if (auto* w = find_secondary_(room_id, active_account_->user_id))
+            pane = w->pane();
+    }
+    if (!pane && main_room_pane_ && current_room_id_ == room_id)
+        pane = main_room_pane_.get();
+    if (!pane)
+        return;
+    const auto t = compute_thread_transition_(
+        pane->thread_panel(), pane->thread_panel_prev(), pane->thread_root(),
+        ThreadTrigger::OpenFromMain, thread_root);
+    pane->apply_thread_transition_(t);
 }
 
 void ShellBase::send_notification_reply_(std::string user_id,

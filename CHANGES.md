@@ -7,6 +7,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- feat(ui): clicking a system notification for a thread reply also opens that thread (main window or pop-out); the click now carries the event id and the thread root is resolved from the event cache, falling back to the homeserver. cargo check, Windows build not yet run, Linux/macOS unverified
+- feat(sdk): MSC4306 thread subscriptions: replying or being mentioned follows a thread, unfollowed threads no longer show unread, and the thread panel and list get a follow bell and a followed-only filter (new `tk::ToggleButton`; `IconCache` now re-rasterises when the SVG changes). Windows build, user-verified
 - fix(ui): text symbols like ✿ are no longer treated as emoji, so they stop rendering at emoji size and sitting too high; only codepoints with the Unicode `Emoji` property match. Linux Qt6 user-verified; 1 new ctest case, not run
 - fix(sdk): clicking your own custom-image reaction now removes it instead of sending a duplicate; `send_reaction_custom` toggles when you already reacted with that image. cargo check, user-verified
 - feat(ui): the Settings Server tab shows the server's software and version, Matrix spec range, upload limit and login methods, which Tesseract-used features are Stable/Experimental/Not supported, and what the account may change. Windows build, cargo tests 6 new, ctest 5 new + i18n pass

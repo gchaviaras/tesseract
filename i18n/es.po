@@ -6886,3 +6886,23 @@ msgstr "Cambiar nombre visible"
 #: ui/shared/views/settings/ServerSection.cpp
 msgid "Default room version"
 msgstr "Versión de sala predeterminada"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid " (following)"
+msgstr " (siguiendo)"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Follow thread"
+msgstr "Seguir hilo"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Unfollow thread"
+msgstr "Dejar de seguir el hilo"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show only followed threads"
+msgstr "Mostrar solo hilos seguidos"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show all threads"
+msgstr "Mostrar todos los hilos"

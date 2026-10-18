@@ -6788,3 +6788,23 @@ msgstr "Changer le nom d'affichage"
 #: ui/shared/views/settings/ServerSection.cpp
 msgid "Default room version"
 msgstr "Version de salon par défaut"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid " (following)"
+msgstr " (suivi)"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Follow thread"
+msgstr "Suivre le fil"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Unfollow thread"
+msgstr "Ne plus suivre le fil"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show only followed threads"
+msgstr "Afficher uniquement les fils suivis"
+
+#: ui/shared/views/ThreadListView.cpp
+msgid "Show all threads"
+msgstr "Afficher tous les fils"

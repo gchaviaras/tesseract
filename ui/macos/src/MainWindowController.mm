@@ -596,6 +596,13 @@ public:
                                  std::move(event_id), std::move(text));
     }
 
+    // Public method to call the protected open_notification_thread_ method.
+    void open_notification_thread(const std::string& room_id,
+                                  const std::string& event_id)
+    {
+        open_notification_thread_(room_id, event_id);
+    }
+
     // Command-line launch actions (thin wrappers over the protected
     // ShellBase members).
     void dispatch_launch_action(tesseract::LaunchAction action,
@@ -7807,6 +7814,12 @@ private:
     if (rid)
     {
         [self _navigateToRoom:std::string(rid.UTF8String ?: "")];
+        // A threaded message's notification also opens its thread.
+        if (eid.length > 0)
+        {
+            _shell->open_notification_thread(std::string(rid.UTF8String ?: ""),
+                                             std::string(eid.UTF8String ?: ""));
+        }
     }
     completionHandler();
 }

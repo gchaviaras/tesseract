@@ -188,8 +188,13 @@ jobs:
         run: |
           sudo xcode-select -s "/Applications/Xcode_26.4.1.app"
           echo "DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer" >> "$GITHUB_ENV"
+          # A runner-level SDKROOT would make xcrun (and CMake, cc, rustc)
+          # keep using the Command Line Tools SDK; point it at Xcode's.
+          unset SDKROOT
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=$sdk" >> "$GITHUB_ENV"
           xcodebuild -version
-          xcrun --show-sdk-path
+          echo "SDKROOT=$sdk"
 
       - name: Install build dependencies
         run: brew install go resvg autoconf automake libtool
@@ -202,6 +207,7 @@ jobs:
           cmake -S opus-src -B opus-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_SYSROOT="$SDKROOT" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
             -DOPUS_BUILD_SHARED_LIBRARY=ON \
             -DOPUS_BUILD_PROGRAMS=OFF \
@@ -292,7 +298,7 @@ jobs:
                        "-DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary"
                        "-DTESSERACT_MAC_NOTARIZE_KEYCHAIN=$KEYCHAIN_PATH")
           fi
-          cmake --preset macos-appkit-arm64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
+          cmake --preset macos-appkit-arm64-release "-DCMAKE_OSX_SYSROOT=$SDKROOT" "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
 
       - name: Build
         run: cmake --build build/macos-appkit-arm64-release
@@ -357,8 +363,13 @@ jobs:
         run: |
           sudo xcode-select -s "/Applications/Xcode_26.4.1.app"
           echo "DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer" >> "$GITHUB_ENV"
+          # A runner-level SDKROOT would make xcrun (and CMake, cc, rustc)
+          # keep using the Command Line Tools SDK; point it at Xcode's.
+          unset SDKROOT
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=$sdk" >> "$GITHUB_ENV"
           xcodebuild -version
-          xcrun --show-sdk-path
+          echo "SDKROOT=$sdk"
 
       - name: Install build dependencies
         run: brew install go resvg autoconf automake libtool
@@ -372,6 +383,7 @@ jobs:
           cmake -S opus-src -B opus-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_OSX_SYSROOT="$SDKROOT" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
             -DOPUS_BUILD_SHARED_LIBRARY=ON \
             -DOPUS_BUILD_PROGRAMS=OFF \
@@ -460,7 +472,7 @@ jobs:
                        "-DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary"
                        "-DTESSERACT_MAC_NOTARIZE_KEYCHAIN=$KEYCHAIN_PATH")
           fi
-          cmake --preset macos-appkit-x86_64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
+          cmake --preset macos-appkit-x86_64-release "-DCMAKE_OSX_SYSROOT=$SDKROOT" "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
 
       - name: Build
         run: cmake --build build/macos-appkit-x86_64-release
@@ -531,8 +543,13 @@ jobs:
         run: |
           sudo xcode-select -s "/Applications/Xcode_26.4.1.app"
           echo "DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer" >> "$GITHUB_ENV"
+          # A runner-level SDKROOT would make xcrun (and CMake, cc, rustc)
+          # keep using the Command Line Tools SDK; point it at Xcode's.
+          unset SDKROOT
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=$sdk" >> "$GITHUB_ENV"
           xcodebuild -version
-          xcrun --show-sdk-path
+          echo "SDKROOT=$sdk"
 
       # The `secrets` context can't be read in an `if:`; check presence here
       # and gate the remaining steps on this step's output (see the Windows
@@ -564,6 +581,7 @@ jobs:
           cmake -S opus-src -B opus-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_SYSROOT="$SDKROOT" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
             -DOPUS_BUILD_SHARED_LIBRARY=ON \
             -DOPUS_BUILD_PROGRAMS=OFF \
@@ -622,6 +640,7 @@ jobs:
         if: steps.as_check.outputs.present == 'true'
         run: |
           cmake --preset macos-appkit-arm64-appstore \
+            "-DCMAKE_OSX_SYSROOT=$SDKROOT" \
             "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" \
             "-DTESSERACT_MAC_APPSTORE_APP_IDENTITY=${{ vars.TESSERACT_MAC_APPSTORE_APP_IDENTITY }}" \
             "-DTESSERACT_MAC_APPSTORE_INSTALLER_IDENTITY=${{ vars.TESSERACT_MAC_APPSTORE_INSTALLER_IDENTITY }}" \

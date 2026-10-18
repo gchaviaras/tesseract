@@ -221,6 +221,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The runner image's default Xcode / Command Line Tools move with every
+      # image update, and a linker older than its SDK fails on the new .tbd
+      # stubs ("unknown architecture arm64e.x1-macos"). Pin one Xcode so the
+      # compiler, linker and SDK always match. DEVELOPER_DIR also reaches
+      # rustc and the cc-built C dependencies.
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_26.4.1.app"
+          echo "DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --show-sdk-path
+
       - name: Install build dependencies
         run: brew install go resvg autoconf automake libtool
 
@@ -546,6 +558,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # The runner image's default Xcode / Command Line Tools move with every
+      # image update, and a linker older than its SDK fails on the new .tbd
+      # stubs ("unknown architecture arm64e.x1-macos"). Pin one Xcode so the
+      # compiler, linker and SDK always match. DEVELOPER_DIR also reaches
+      # rustc and the cc-built C dependencies.
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_26.4.1.app"
+          echo "DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --show-sdk-path
 
       - name: Install build dependencies
         run: brew install go resvg autoconf automake libtool

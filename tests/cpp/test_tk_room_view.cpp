@@ -271,7 +271,8 @@ TEST_CASE("RoomView scopes Tab traversal to the open room media gallery, "
     view.paint(pc);
     REQUIRE(view.compose_bar() != nullptr);
     REQUIRE(view.compose_bar()->text_area() != nullptr);
-    CHECK(host.focused_widget() == view.compose_bar()->text_area());
+    // Default focus on room switch has its own test below; this one only
+    // needs the compose bar to exist so it can check Tab never lands on it.
 
     REQUIRE(view.room_media_view() != nullptr);
     view.room_media_view()->open(info.id, info.name);
@@ -393,8 +394,7 @@ TEST_CASE("RoomView::set_room() closes the room media gallery on a genuine "
     CHECK_FALSE(view.room_media_view()->is_open());
 }
 
-TEST_CASE("RoomView::set_room() focuses the composer on a genuine room "
-          "switch, once the next paint settles visibility",
+TEST_CASE("RoomView::set_room() focuses the composer on a genuine room switch",
           "[tk][view][room][focus]")
 {
     // Default-focus policy: composing is the primary activity in a chat
@@ -402,40 +402,41 @@ TEST_CASE("RoomView::set_room() focuses the composer on a genuine room "
     // every shell's tab-restore reuses the same set_room() call) should
     // land the user in the compose box ready to type.
     //
-    // Deliberately deferred to the next paint() rather than fired
-    // synchronously inside set_room(): at that point text_area()'s own
-    // visible_ flag may still reflect an earlier "no room active" layout
-    // pass (MainAppWidget::arrange() force-hides it whenever
-    // compose_text_area_rect() is empty) — the *next* relayout is what
-    // actually reveals it, asynchronously, after set_room() has already
-    // returned. Calling focus() synchronously inside set_room() raced that
-    // and silently no-op'd via Host::request_focus's visible_in_tree()
-    // guard, with nothing ever retrying once the widget became visible —
-    // a real bug reproduced against the live app, not a hypothetical.
+    // set_room() focuses the composer directly: it shows the text area first
+    // (an earlier "no room active" layout may have force-hidden it, and
+    // Host::request_focus() needs it visible_in_tree()), so no later paint is
+    // needed. A TextArea only takes focus once its native control exists, which
+    // is created the first time it is laid out - so the first room is selected
+    // and laid out first, as in the shell, and the switch to the second room
+    // is what is checked.
     //
     // TkRoomViewStage must be declared (and so destroyed last) before the
-    // widget tree below — see the identical comment further up this file.
+    // widget tree below - see the identical comment further up this file.
     TkRoomViewStage st;
     StubHost host;
     auto view_owner = tk::create_root_widget<RoomView>(&host);
     RoomView& view = *view_owner;
     host.set_root(&view);
 
-    tesseract::RoomInfo info;
-    info.id   = "!room:example.org";
-    info.name = "Test Room";
-    view.set_room(info);
+    tesseract::RoomInfo room_a;
+    room_a.id   = "!a:example.org";
+    room_a.name = "Room A";
+    view.set_room(room_a);
+
+    auto lc = st.layout_ctx();
+    PaintCtx pc{st.surface->canvas(), st.surface->factory(), Theme::light()};
+    pc.host = &host;
+    view.measure(lc, {800.0f, 600.0f});
+    view.arrange(lc, {0.0f, 0.0f, 800.0f, 600.0f});
+    view.paint(pc);
 
     REQUIRE(view.compose_bar() != nullptr);
     REQUIRE(view.compose_bar()->text_area() != nullptr);
-    CHECK(host.focused_widget() == nullptr); // not yet — deferred to paint()
 
-    auto lc = st.layout_ctx();
-    view.measure(lc, {800.0f, 600.0f});
-    view.arrange(lc, {0.0f, 0.0f, 800.0f, 600.0f});
-    PaintCtx pc{st.surface->canvas(), st.surface->factory(), Theme::light()};
-    pc.host = &host;
-    view.paint(pc);
+    tesseract::RoomInfo room_b;
+    room_b.id   = "!b:example.org";
+    room_b.name = "Room B";
+    view.set_room(room_b); // genuine switch - different id
 
     CHECK(host.focused_widget() == view.compose_bar()->text_area());
 }

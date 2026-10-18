@@ -135,7 +135,7 @@ TEST_CASE("parse_slash_args keeps a quoted span as a single argument",
 }
 
 
-TEST_CASE("/myroomavatar routes by argument scheme", "[slash][myroomavatar]")
+TEST_CASE("the myroomavatar command routes by argument scheme", "[slash][myroomavatar]")
 {
     tesseract::Client client; // not logged in: SDK calls fail with "not logged in"
 
@@ -169,7 +169,7 @@ TEST_CASE("/myroomavatar routes by argument scheme", "[slash][myroomavatar]")
     }
 }
 
-TEST_CASE("/myroomavatar reset reaches the client; other args keep their routes", "[slash][myroomavatar]")
+TEST_CASE("the myroomavatar command reset reaches the client; other args keep their routes", "[slash][myroomavatar]")
 {
     tesseract::Client client; // not logged in: SDK calls fail with "not logged in"
     for (const char* body : {"/myroomavatar reset", "/myroomavatar RESET  ", "/myroomavatar Reset"})

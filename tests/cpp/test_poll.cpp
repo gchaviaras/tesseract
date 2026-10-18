@@ -209,7 +209,7 @@ TEST_CASE("poll card paints exactly its measured height and records hits only wh
     CHECK(card.hit_test({-5.0f, -5.0f}) == nullptr);
 }
 
-TEST_CASE("/poll is a registered slash command", "[poll][slash]")
+TEST_CASE("the poll command is a registered slash command", "[poll][slash]")
 {
     bool found = false;
     for (const auto& c : tesseract::available_commands())

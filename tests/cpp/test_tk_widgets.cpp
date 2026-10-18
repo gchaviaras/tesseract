@@ -1089,7 +1089,10 @@ TEST_CASE("MainAppWidget Tab order from the composer reaches the room list, "
     rooms.push_back({.id = "!a:example.org", .name = "Room A"});
     rooms.push_back({.id = "!b:example.org", .name = "Room B"});
     app.room_list_view()->set_rooms(rooms);
-    app.room_view()->set_room({.id = "!a:example.org", .name = "Room A"});
+    // set_room() focuses the composer directly, which needs the room view
+    // shown and the composer laid out at least once (its native text area is
+    // created on first arrange) - as in the shell. So lay out first, then
+    // select the room.
     app.show_room();
 
     // A realistic window width — a too-narrow canvas leaves no room for the
@@ -1100,6 +1103,10 @@ TEST_CASE("MainAppWidget Tab order from the composer reaches the room list, "
     app.arrange(lc, {0, 0, 1100, 768});
     PaintCtx pc{surface->canvas(), surface->factory(), Theme::light()};
     pc.host = &host;
+    app.paint(pc);
+    app.room_view()->set_room({.id = "!a:example.org", .name = "Room A"});
+    app.measure(lc, {1100.0f, 768.0f});
+    app.arrange(lc, {0, 0, 1100, 768});
     app.paint(pc);
 
     REQUIRE(host.focused_widget() == app.room_view()->compose_bar()->text_area());
@@ -1140,7 +1147,10 @@ TEST_CASE("MainAppWidget::show_quick_switch(true) focuses the search field "
     std::vector<tesseract::RoomInfo> rooms;
     rooms.push_back({.id = "!a:example.org", .name = "Room A"});
     app.room_list_view()->set_rooms(rooms);
-    app.room_view()->set_room({.id = "!a:example.org", .name = "Room A"});
+    // set_room() focuses the composer directly, which needs the room view
+    // shown and the composer laid out at least once (its native text area is
+    // created on first arrange) - as in the shell. So lay out first, then
+    // select the room.
     app.show_room();
 
     LayoutCtx lc{surface->factory(), Theme::light()};
@@ -1149,13 +1159,17 @@ TEST_CASE("MainAppWidget::show_quick_switch(true) focuses the search field "
     PaintCtx pc{surface->canvas(), surface->factory(), Theme::light()};
     pc.host = &host;
     app.paint(pc);
+    app.room_view()->set_room({.id = "!a:example.org", .name = "Room A"});
+    app.measure(lc, {1100.0f, 768.0f});
+    app.arrange(lc, {0, 0, 1100, 768});
+    app.paint(pc);
     REQUIRE(host.focused_widget() == app.room_view()->compose_bar()->text_area());
 
     app.show_quick_switch(true);
     REQUIRE(app.quick_switcher() != nullptr);
     REQUIRE(app.quick_switcher()->search_field() != nullptr);
-    // Not yet — QuickSwitcher::open() defers to the next paint(), same as
-    // RoomView::set_room()'s default-focus policy.
+    // Not yet — QuickSwitcher::open() defers to the next paint(), once
+    // arrange() has positioned the search field's native overlay.
     CHECK(host.focused_widget() != app.quick_switcher()->search_field());
 
     app.measure(lc, {1100.0f, 768.0f});

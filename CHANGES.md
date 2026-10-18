@@ -7,6 +7,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ### Summary
 
+- fix(media): opening a file with a very long name on Windows shortens the name to fit the 260-character path limit (including the Zone.Identifier stream) instead of failing to write it. Windows build, ctest 3393/3393
+- fix(tests): the 9 Windows-only ctest failures: slash-command tests no longer start with `/` (Catch2 reads it as an option on Windows), the emoji backend probe skips its negative check on Win32, and the focus tests lay the view out before selecting a room. Windows release ctest 3393/3393
 - feat(ui): clicking a system notification for a thread reply also opens that thread (main window or pop-out); the click now carries the event id and the thread root is resolved from the event cache, falling back to the homeserver. cargo check, Windows build not yet run, Linux/macOS unverified
 - feat(sdk): MSC4306 thread subscriptions: replying or being mentioned follows a thread, unfollowed threads no longer show unread, and the thread panel and list get a follow bell and a followed-only filter (new `tk::ToggleButton`; `IconCache` now re-rasterises when the SVG changes). Windows build, user-verified
 - fix(ui): text symbols like ✿ are no longer treated as emoji, so they stop rendering at emoji size and sitting too high; only codepoints with the Unicode `Emoji` property match. Linux Qt6 user-verified; 1 new ctest case, not run

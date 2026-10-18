@@ -91,8 +91,15 @@ TEST_CASE("open_media shortens an over-long name and keeps its extension",
     REQUIRE(written);
     const std::string got = written->filename().string();
     CHECK(got.size() <= 255);
-    CHECK(got.size() > 200 - 1); // cut to the cap, not dropped
     CHECK(got.ends_with(".png"));
+#if defined(_WIN32)
+    // Windows' whole-path limit shortens it further; it must still fit,
+    // including the Zone.Identifier stream written beside the file.
+    CHECK(written->native().size() + 16 < 260);
+    CHECK(got.size() > 32); // cut to fit, not dropped
+#else
+    CHECK(got.size() > 200 - 1); // cut to the cap, not dropped
+#endif
     CHECK(fs::file_size(*written) == 3);
     tesseract::purge_open_media_dir();
 }

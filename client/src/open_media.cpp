@@ -4,6 +4,7 @@
 #include "tesseract/paths.h"
 #include "detached_launch.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <exception>
@@ -72,17 +73,37 @@ bool make_private_dir(const fs::path& p)
 // longer one would fail the whole write.
 constexpr std::size_t kMaxNameBytes = 200;
 
-// The name, cut to kMaxNameBytes. A short extension is kept, and the cut never
-// splits a UTF-8 sequence.
-std::string fit_name(const std::string& name)
+// The longest name that fits in `dir`: kMaxNameBytes, less whatever the
+// platform's whole-path limit leaves. Windows rejects a path of MAX_PATH (260)
+// characters or more, and the Zone.Identifier stream written beside the file
+// adds ":Zone.Identifier" to its path, so both count against the budget.
+// Name bytes are UTF-8, which is never shorter than the UTF-16 path units, so
+// the bound is conservative. 0 means `dir` leaves no room at all.
+std::size_t name_budget(const fs::path& dir)
 {
-    if (name.size() <= kMaxNameBytes)
+#if defined(_WIN32)
+    constexpr std::size_t kMaxPath = 260;
+    constexpr std::size_t kZoneSuffix = 16; // ":Zone.Identifier"
+    const std::size_t used = dir.native().size() + 1 /* separator */ + kZoneSuffix +
+                             1 /* terminating NUL */;
+    return used >= kMaxPath ? 0 : std::min(kMaxNameBytes, kMaxPath - used);
+#else
+    (void)dir;
+    return kMaxNameBytes;
+#endif
+}
+
+// The name, cut to `max_bytes`. A short extension is kept, and the cut never
+// splits a UTF-8 sequence.
+std::string fit_name(const std::string& name, std::size_t max_bytes)
+{
+    if (name.size() <= max_bytes)
         return name;
     std::string ext;
     const auto dot = name.find_last_of('.');
-    if (dot != std::string::npos && name.size() - dot <= 16)
+    if (dot != std::string::npos && name.size() - dot <= 16 && name.size() - dot < max_bytes)
         ext = name.substr(dot);
-    std::string stem = name.substr(0, kMaxNameBytes - ext.size());
+    std::string stem = name.substr(0, max_bytes - ext.size());
     // Drop a sequence the cut split: find the last lead byte and keep it only if
     // all of its continuation bytes made it in.
     std::size_t lead = stem.size();
@@ -137,7 +158,12 @@ std::optional<fs::path> write_open_media_file(const std::string& filename,
     const fs::path dir = root / random_hex(8);
     if (!make_private_dir(dir))
         return std::nullopt;
-    const std::string name = fit_name(filename);
+    const std::size_t budget = name_budget(dir);
+    if (budget == 0)
+        return std::nullopt;
+    const std::string name = fit_name(filename, budget);
+    if (name.empty())
+        return std::nullopt;
     fs::path file;
     try
     {

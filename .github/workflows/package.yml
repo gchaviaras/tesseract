@@ -275,6 +275,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/macos-appkit-arm64-release/cargo/build
+          key: xcode-26.4.1
           cache-on-failure: true
 
       - name: Check for signing secrets
@@ -340,7 +341,9 @@ jobs:
                        "-DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary"
                        "-DTESSERACT_MAC_NOTARIZE_KEYCHAIN=$KEYCHAIN_PATH")
           fi
-          cmake --preset macos-appkit-arm64-release "-DCMAKE_OSX_SYSROOT=$SDKROOT" "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
+          cmake --preset macos-appkit-arm64-release "-DCMAKE_OSX_SYSROOT=$SDKROOT" "-DCMAKE_EXE_LINKER_FLAGS=-L$SDKROOT/usr/lib" "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
+          # Diagnostic: where does a Command Line Tools path enter the link?
+          grep -rn CommandLineTools build/macos-appkit-arm64-release/build.ninja | cut -c1-300 | head -n 5 || true
 
       - name: Build
         run: cmake --build build/macos-appkit-arm64-release
@@ -471,6 +474,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/macos-appkit-arm64-appstore/cargo/build
+          key: xcode-26.4.1
           cache-on-failure: true
 
       # Certificates go into a throwaway keychain; the profile is written
@@ -618,6 +622,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/macos-appkit-x86_64-release/cargo/build
+          key: xcode-26.4.1
           cache-on-failure: true
 
       - name: Check for signing secrets
@@ -683,7 +688,9 @@ jobs:
                        "-DTESSERACT_MAC_NOTARIZE_PROFILE=tesseract-notary"
                        "-DTESSERACT_MAC_NOTARIZE_KEYCHAIN=$KEYCHAIN_PATH")
           fi
-          cmake --preset macos-appkit-x86_64-release "-DCMAKE_OSX_SYSROOT=$SDKROOT" "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
+          cmake --preset macos-appkit-x86_64-release "-DCMAKE_OSX_SYSROOT=$SDKROOT" "-DCMAKE_EXE_LINKER_FLAGS=-L$SDKROOT/usr/lib" "-DTESSERACT_GITHUB_REPO=${{ github.repository }}" -DTESSERACT_BUILD_TESTS=OFF "${SIGN_ARGS[@]}"
+          # Diagnostic: where does a Command Line Tools path enter the link?
+          grep -rn CommandLineTools build/macos-appkit-x86_64-release/build.ninja | cut -c1-300 | head -n 5 || true
 
       - name: Build
         run: cmake --build build/macos-appkit-x86_64-release

@@ -118,6 +118,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin one Xcode so the compiler, linker and SDK match; the runner
+      # image's default moves with every update (see package.yml).
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_26.4.1.app"
+          echo "DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer" >> "$GITHUB_ENV"
+          # A runner-level SDKROOT would make xcrun (and CMake, cc, rustc)
+          # keep using the Command Line Tools SDK; point it at Xcode's.
+          unset SDKROOT
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=$sdk" >> "$GITHUB_ENV"
+          xcodebuild -version
+          echo "SDKROOT=$sdk"
+
       - name: Install build dependencies
         run: brew install go resvg autoconf automake libtool opus
 
@@ -140,10 +154,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> build/macos-appkit-arm64-release/cargo/build
+          key: xcode-26.4.1
           cache-on-failure: true
 
       - name: Configure (Release, arm64)
-        run: cmake --preset macos-appkit-arm64-release "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
+        run: cmake --preset macos-appkit-arm64-release "-DCMAKE_OSX_SYSROOT=$SDKROOT" "-DCMAKE_EXE_LINKER_FLAGS=-L$SDKROOT/usr/lib" "-DTESSERACT_GITHUB_REPO=${{ github.repository }}"
 
       - name: Build
         run: cmake --build build/macos-appkit-arm64-release

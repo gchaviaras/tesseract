@@ -5,6 +5,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+## v0.9.4 — 2026-10-18
+
 ### Summary
 
 - fix(media): opening a file with a very long name on Windows shortens the name to fit the 260-character path limit (including the Zone.Identifier stream) instead of failing to write it. Windows build, ctest 3393/3393

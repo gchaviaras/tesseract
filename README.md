@@ -45,13 +45,7 @@ The NSIS installer isn't code-signed, so SmartScreen will likely show "Windows p
 
 Download the `.dmg` for your CPU (Apple Silicon or Intel) from the Releases page and drag Tesseract into Applications.
 
-The app isn't signed or notarized, so Gatekeeper will refuse to open it at first ("Tesseract is damaged" or "can't be opened because the developer cannot be verified"). Clear the quarantine flag once and it opens normally:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Tesseract.app
-```
-
-On recent macOS versions, right-click → Open no longer bypasses this, though **System Settings → Privacy & Security → Open Anyway** also works after a first failed launch.
+The DMGs are Developer ID signed and notarized, and need macOS 13 (Ventura) or newer.
 
 ### Building from source
 
@@ -111,7 +105,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - Send, receive, edit, reply, react, and redact
 - Markdown formatting (send and receive), with syntax-highlighted code blocks
 - Custom emoji and reactions (image packs, MSC2545)
-- Threads, with search, and an unread-thread indicator that survives restarts
+- Threads, with search, follow / unfollow (MSC4306), and an unread-thread indicator that survives restarts
 - Pinned messages (pin / unpin, with power-level checks)
 - Choice of message layout: Classic, Bubbles, or IRC (mIRC-style, monospaced with per-person coloring)
 - Mentions with `@` autocomplete and rich pills; `:emoji:` shortcode autocomplete
@@ -154,7 +148,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - Ctrl+K quick switcher with recently-visited strip
 - Ctrl+Tab / Ctrl+Shift+Tab MRU room switcher (Alt-Tab-style: hold Ctrl, tap Tab to cycle recently-visited rooms, release to jump; Escape cancels); recent rooms are remembered per account across restarts
 - Full-text message search across all rooms, including encrypted rooms (Ctrl+Shift+F / ⌘⇧F) — opt-in local index
-- Room search (filter by name)
+- Room search (filter by name), and a room browser with a searchable, remembered server picker
 - Slash commands (/me, /shrug, /slap, /spoiler, /myroomnick, /myroomavatar, /join, /leave, /invite, /gif, /selfie, /location, /poll)
 - Room tags (favorite, low priority)
 - Room creation (name, topic, alias, public/private)
@@ -196,6 +190,7 @@ Come join us in [#tesseract-client:matrix.org](https://matrix.to/#/#tesseract-cl
 - In-flight request indicator in the status bar
 - Low power mode (Auto / On / Off) — pauses background work (backfill, prefetch, cache GC, search indexing) while keeping sync live
 - Light / dark / system themes
+- Server info (software, spec range, supported features, what you may change) under Settings → Server
 - Configurable fonts (base size, UI and monospace families, per-category overrides) and a compact room list, under Settings → Appearance
 - Open images, videos and files in the system's default viewer (opt-in, Settings → Media)
 - Photos are stripped of EXIF/GPS and other metadata on upload, whether sent as an image, a file or in a gallery
@@ -248,6 +243,7 @@ Change proposals where the homeserver advertises support for them:
 - [MSC3916](https://github.com/matrix-org/matrix-spec-proposals/pull/3916) — authenticated media downloads
 - [MSC4230](https://github.com/matrix-org/matrix-spec-proposals/pull/4230) — animated-image detection
 - [MSC3245](https://github.com/matrix-org/matrix-spec-proposals/pull/3245) — voice messages, using the [MSC1767](https://github.com/matrix-org/matrix-spec-proposals/pull/1767) extensible-audio/waveform format
+- [MSC4306](https://github.com/matrix-org/matrix-spec-proposals/pull/4306) — thread subscriptions: replying or being mentioned follows a thread, unfollowed threads show no unread, with a follow bell and a followed-only filter
 - [MSC3440](https://github.com/matrix-org/matrix-spec-proposals/pull/3440) — threads, with [MSC3771](https://github.com/matrix-org/matrix-spec-proposals/pull/3771) threaded read receipts driving the per-thread unread indicator (delivered over sliding sync's [MSC3960](https://github.com/matrix-org/matrix-spec-proposals/pull/3960) receipts extension)
 - [MSC3030](https://github.com/matrix-org/matrix-spec-proposals/pull/3030) — jump-to-date
 - [MSC3266](https://github.com/matrix-org/matrix-spec-proposals/pull/3266) — room / space summaries

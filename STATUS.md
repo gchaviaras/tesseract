@@ -1,6 +1,40 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-13**. 3277 C++ + 1065 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-18**. 3406 C++ + 1159 Rust tests.
+
+> **Thread follow (MSC4306) (2026-10-18, v0.9.4).**
+> Replying in or being mentioned in a thread follows it; unfollowed threads no
+> longer show as unread. The thread panel and thread list get a follow bell and
+> a followed-only filter, and clicking a system notification for a thread reply
+> also opens that thread (main window or pop-out). Windows build.
+
+> **Server info and room browser (2026-10-18, v0.9.4).**
+> The Settings Server tab shows the server's software and version, spec range,
+> upload limit and login methods, which features Tesseract uses are
+> Stable/Experimental/Not supported, and what the account may change. The room
+> browser's server field is a searchable picker that remembers the last eight
+> servers whose directory answered. Windows build.
+
+> **Emoji, links and hover feedback (2026-10-18, v0.9.4).**
+> Emoji picks are also written to Element's `io.element.recent_emoji`, and the
+> picker opens on Frequents and stays open after an insert. Right-clicking a
+> timeline link offers Copy link. Clickable regions show hover feedback and a
+> pointing-hand cursor. Text symbols like ✿ are no longer treated as emoji.
+> Qt6 + GTK4 build.
+
+> **macOS signing and requirements (2026-10-18, v0.9.4).**
+> The DMGs are Developer ID signed and notarized in CI when the signing
+> secrets are set, and the minimum macOS is 13 Ventura (libopus is built for
+> it). A sandboxed Mac App Store build exists behind
+> `TESSERACT_MAC_APP_STORE`; its CI jobs are disabled for now. macOS arm64
+> build.
+
+> **Review hardening and fixes (2026-10-18, v0.9.4).**
+> A whole-app review hardened frame keys, fetches, media and cache writes, call
+> lifecycle, send paths, sync retries and the platform shells. App-wide
+> settings apply to every open main window, switching rooms paints cached
+> history at once, notification clicks raise the right window, and Ctrl+Z works
+> in the Qt6 compose box again. Qt6 build, ctest 3406/3406, cargo 1159.
 
 > **Provisioned default homeserver and smaller additions (2026-10-13, v0.9.3).**
 > The login view's default homeserver can be provisioned: Windows registry

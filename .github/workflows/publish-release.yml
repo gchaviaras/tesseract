@@ -277,7 +277,9 @@ jobs:
   # ---------------------------------------------------------------------------
   appstore:
     name: Mac App Store upload
-    if: github.event_name == 'release' || inputs.appstore
+    # Disabled until the Mac App Store build is ready (see package.yml);
+    # restore `github.event_name == 'release' || inputs.appstore` to re-enable.
+    if: false
     runs-on: macos-latest
     permissions:
       contents: read

@@ -5,6 +5,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- docs(license): added a GPLv3 section 7 additional permission (`LICENSE-EXCEPTION.md`) for Apple App Store distribution; needs consent from the 2 outside contributors before the App Store release. Docs only
+
 ## v0.9.4 — 2026-10-18
 
 ### Summary

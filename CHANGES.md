@@ -5,6 +5,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- feat(ui): in the Bubbles layout, your own messages sit on the left while the thread list, a thread, or the room info panel is open. 4 new ctest cases, not built or run
+
 ## v0.9.4 — 2026-10-18
 
 ### Summary

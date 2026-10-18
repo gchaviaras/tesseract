@@ -3246,14 +3246,15 @@ public:
         const MessageRowData& m = mc.m;
         tk::LayoutCtx& ctx = mc.ctx;
         const bool cont = mc.cont;
+        const bool right = bubble_right_(m);
         const bool own_av = own_avatar_shown_(m);
         const float shp = msgbubble::shaping_width(
-            mc.width, m.is_own, receipt_reserve_width(m, ctx.factory), own_av);
+            mc.width, right, receipt_reserve_width(m, ctx.factory), own_av);
         const float body_h = measure_body_block_height(m, ctx, shp);
         const float chips_h = m.reactions.empty() ? 0.0f : chip_h();
         const float top_pad = cont ? kContPadY : kMsgListPadY;
         const float header_h =
-            (cont || (m.is_own && !own_av)) ? 0.0f : kMsgListAvatarSize;
+            (cont || (right && !own_av)) ? 0.0f : kMsgListAvatarSize;
         float raw_h = top_pad + header_h + 2.0f * msgbubble::kBubblePadY +
                       body_h + chips_h + kMsgListPadY;
         // Not inflated to fit the hover action pill — see measure_classic_row_.
@@ -3263,10 +3264,17 @@ public:
     }
 
     // Bubbles layout: draw the local user's avatar in the right gutter.
-    static bool own_avatar_shown_(const MessageRowData& m)
+    bool own_avatar_shown_(const MessageRowData& m) const
     {
-        return m.is_own &&
+        return bubble_right_(m) &&
                tesseract::Settings::instance().bubbles_show_own_avatar;
+    }
+
+    // Own rows are right-anchored, except while a side panel is open: the
+    // timeline is then narrow and own rows lay out on the left like others'.
+    bool bubble_right_(const MessageRowData& m) const
+    {
+        return m.is_own && !owner_.side_panel_open_;
     }
 
     void render_bubble_row_(const RowPaintCtx& rp)
@@ -3279,13 +3287,14 @@ public:
         paint_row_tints_(rp);
         begin_row_hover_capture_(rp);
 
+        const bool right = bubble_right_(m);
         const bool own_av = own_avatar_shown_(m);
         const float shp = msgbubble::shaping_width(
-            bounds.w, m.is_own, receipt_reserve_width(m, ctx.factory), own_av);
+            bounds.w, right, receipt_reserve_width(m, ctx.factory), own_av);
         tk::LayoutCtx lc{ctx.factory, ctx.theme};
         const float natural_w = body_block_natural_width_(m, lc, shp);
         const msgbubble::Box box =
-            msgbubble::layout(bounds.w, m.is_own, cont, natural_w, own_av);
+            msgbubble::layout(bounds.w, right, cont, natural_w, own_av);
 
         const float col_x = bounds.x + box.content_x;
         const float col_w = box.content_w;
@@ -3297,7 +3306,7 @@ public:
             std::max(0.0f, bounds.x + bounds.w - col_x - kMsgListPadX);
         const float right_edge_base = bounds.x + box.furniture_right_x;
         const float avatar_cx =
-            m.is_own
+            right
                 ? bounds.x + bounds.w - msgbubble::kEdgePadX -
                       msgbubble::kAvatarSize * 0.5f
                 : bounds.x + msgbubble::kEdgePadX + msgbubble::kAvatarSize * 0.5f;
@@ -3313,7 +3322,7 @@ public:
             // The name is drawn at the bubble's content-left but may run the
             // full row width — it is not clipped to the (possibly narrow)
             // hugged bubble.
-            if (m.is_own)
+            if (right)
             {
                 const float name_right =
                     bounds.x + box.bubble_x + box.bubble_w - msgbubble::kBubblePadX;
@@ -3356,7 +3365,7 @@ public:
             paint_reaction_strip_(rp, bounds.x + box.chip_x, cursor);
         paint_read_receipts_(rp, right_edge_base, disc_cy);
         paint_pending_indicator_(rp, right_edge_base, cursor);
-        if (!m.is_own)
+        if (!right)
             paint_hover_timestamp_(rp, avatar_cx);
 
         if (m.is_thread_root && m.thread_reply_count > 0)
@@ -3367,7 +3376,7 @@ public:
             // edge, unlike its left, is always pinned to the row's padding
             // regardless of hugging — anchor the chip there and hug it
             // leftward instead.
-            if (m.is_own)
+            if (right)
             {
                 const float gutter =
                     own_av ? msgbubble::kAvatarSize + msgbubble::kAvatarGap : 0.0f;
@@ -8573,6 +8582,17 @@ void MessageListView::set_dimmed(bool dimmed)
     {
         request_repaint_();
     }
+}
+
+void MessageListView::set_side_panel_open(bool open)
+{
+    if (side_panel_open_ == open)
+        return;
+    side_panel_open_ = open;
+    // Only the Bubbles layout lays rows out differently while a panel is open.
+    if (tesseract::Settings::instance().message_layout ==
+        tesseract::Settings::MessageLayout::Bubbles)
+        on_display_prefs_changed();
 }
 
 void MessageListView::set_highlighted_event(const std::string& event_id)

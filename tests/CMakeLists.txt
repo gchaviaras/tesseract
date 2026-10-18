@@ -236,6 +236,7 @@ add_executable(tesseract_tests
     cpp/test_tk_room_view.cpp
     cpp/test_tk_room_view_thread_callbacks.cpp
     cpp/test_tk_room_view_copy_shortcut.cpp
+    cpp/test_tk_room_view_side_panel_bubbles.cpp
     cpp/test_send_pipeline.cpp
     cpp/test_slash_commands.cpp
     cpp/test_slash_command_controller.cpp

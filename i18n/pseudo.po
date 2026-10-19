@@ -7217,3 +7217,7 @@ msgstr "[Shöw öñly föllöwéd thréàdsxxxxx]"
 #: ui/shared/views/ThreadListView.cpp
 msgid "Show all threads"
 msgstr "[Shöw àll thréàdsxxx]"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Rooms in common"
+msgstr "[Rööms ïñ çömmöñxxx]"

@@ -7329,3 +7329,7 @@ msgstr ""
 #: ui/shared/views/ThreadListView.cpp
 msgid "Show all threads"
 msgstr ""
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Rooms in common"
+msgstr ""

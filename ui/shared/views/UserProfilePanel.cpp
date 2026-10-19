@@ -10,6 +10,9 @@
 #include "tk/theme.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <span>
+#include <utility>
 
 namespace tesseract::views
 {
@@ -20,11 +23,109 @@ namespace {
     constexpr float kExtFieldGap    = 6.0f;
     constexpr float kExtRowGap      = 4.0f;  // vertical gap between ext rows
     constexpr int   kExtValueMaxLines = 4;   // cap on wrapped value lines (bio, etc.)
+
+    constexpr float kTrustIconSz    = 18.0f; // shield beside the display name
+    constexpr float kTrustIconGap   = 6.0f;
+    constexpr float kRoomsHeaderH   = 22.0f;
+    constexpr float kRoomsListMinH  = 120.0f;
+    constexpr float kRoomRowH       = 40.0f;
+    constexpr float kRoomAvatarD    = 28.0f;
+    constexpr float kRoomRowPadX    = 8.0f;
+    constexpr float kRoomAvatarGap  = 10.0f;
+    constexpr float kCardMargin     = 8.0f;  // min gap between card and surface edge
 }
+
+// ── rooms-in-common list ──────────────────────────────────────────────────
+
+class UserProfilePanel::CommonRoomsAdapter : public tk::ListAdapter,
+                                             public tk::ListAdapterAccessibility
+{
+public:
+    explicit CommonRoomsAdapter(UserProfilePanel& owner) : owner_(owner) {}
+
+    std::size_t count() const override { return owner_.common_rooms_.size(); }
+
+    float measure_row_height(std::size_t, tk::LayoutCtx&, float) override
+    {
+        return kRoomRowH;
+    }
+
+    void paint_row(std::size_t index, tk::PaintCtx& ctx, tk::Rect bounds,
+                   bool /*selected*/, bool hovered) override
+    {
+        if (index >= owner_.common_rooms_.size())
+        {
+            return;
+        }
+        const CommonRoom& room = owner_.common_rooms_[index];
+        const std::string name = room.name.empty() ? tk::tr("Unnamed room") : room.name;
+
+        if (hovered)
+        {
+            ctx.canvas.fill_rect(bounds, ctx.theme.palette.sidebar_hover);
+        }
+
+        const tk::Image* avatar = nullptr;
+        if (owner_.image_provider_ && !room.avatar_url.empty())
+        {
+            avatar = owner_.image_provider_(room.avatar_url);
+        }
+        draw_avatar(ctx.canvas, avatar,
+                    {bounds.x + kRoomRowPadX + kRoomAvatarD * 0.5f,
+                     bounds.y + bounds.h * 0.5f},
+                    kRoomAvatarD, name, ctx.theme.palette.avatar_initials_bg,
+                    ctx.theme.palette.avatar_initials_text);
+
+        const float text_x = bounds.x + kRoomRowPadX + kRoomAvatarD + kRoomAvatarGap;
+        tk::TextStyle ns{};
+        ns.role      = tk::FontRole::SidebarName;
+        ns.trim      = tk::TextTrim::Ellipsis;
+        ns.max_width = std::max(0.0f, bounds.x + bounds.w - text_x - kRoomRowPadX);
+        auto lo = ctx.factory.build_text(name, ns);
+        if (lo)
+        {
+            const tk::Size sz = lo->measure();
+            ctx.canvas.draw_text(*lo, {text_x, bounds.y + (bounds.h - sz.h) * 0.5f},
+                                 ctx.theme.palette.text_primary);
+        }
+    }
+
+    tk::Role access_role_for_row(std::size_t index) const override
+    {
+        return index < owner_.common_rooms_.size() ? tk::Role::ListItem : tk::Role::None;
+    }
+    std::string access_name_for_row(std::size_t index) const override
+    {
+        if (index >= owner_.common_rooms_.size())
+        {
+            return {};
+        }
+        const auto& n = owner_.common_rooms_[index].name;
+        return n.empty() ? tk::tr("Unnamed room") : n;
+    }
+    bool access_activate_row(std::size_t index) override
+    {
+        if (index >= owner_.common_rooms_.size())
+        {
+            return false;
+        }
+        if (owner_.on_common_room_clicked)
+        {
+            owner_.on_common_room_clicked(owner_.common_rooms_[index].room_id);
+        }
+        return true;
+    }
+
+private:
+    UserProfilePanel& owner_;
+};
 
 // ── constructor ───────────────────────────────────────────────────────────
 
+UserProfilePanel::~UserProfilePanel() = default;
+
 UserProfilePanel::UserProfilePanel()
+    : common_adapter_(std::make_unique<CommonRoomsAdapter>(*this))
 {
     // Hover ring + pointer cursor + click for the avatar; keyboard/a11y stays
     // with avatar_target_ below.
@@ -56,10 +157,6 @@ UserProfilePanel::UserProfilePanel()
         tk::create_widget<tk::Button>(this, tk::tr("Ignore"), std::function<void()>{},
                                      tk::Button::Variant::Subtle));
 
-    trust_label_ = add_child(tk::create_widget<tk::Label>(this, "", tk::FontRole::Small));
-    trust_label_->set_halign(tk::TextHAlign::Leading);
-    trust_label_->set_trim(tk::TextTrim::Ellipsis);
-    trust_label_->set_visible(false);
     verify_btn_ = add_child(
         tk::create_widget<tk::Button>(this, tk::tr("Verify"), std::function<void()>{},
                                      tk::Button::Variant::Subtle));
@@ -75,6 +172,21 @@ UserProfilePanel::UserProfilePanel()
             on_verify_user(user_id_, display_name_);
         }
     });
+
+    {
+        auto list = tk::create_widget<tk::ListView>(this);
+        list->set_adapter(common_adapter_.get());
+        list->on_row_clicked = [this](int idx)
+        {
+            if (idx >= 0 && static_cast<std::size_t>(idx) < common_rooms_.size() &&
+                on_common_room_clicked)
+            {
+                on_common_room_clicked(common_rooms_[static_cast<std::size_t>(idx)].room_id);
+            }
+        };
+        list->set_visible(false);
+        common_list_ = add_child(std::move(list));
+    }
 
     close_btn_->set_accessible_name(tk::tr("Close"));
     close_btn_->set_on_click([this]() { if (on_close) on_close(); });
@@ -120,6 +232,15 @@ void UserProfilePanel::open(std::string user_id, std::string display_name,
     apply_trust_(false);
     if (on_trust_requested)
         on_trust_requested(user_id_);
+
+    // Drop the previous user's rooms; the shell repopulates async.
+    common_rooms_.clear();
+    common_total_    = 0;
+    common_has_more_ = false;
+    common_list_->set_visible(false);
+    common_list_->invalidate_data();
+    if (on_common_rooms_requested)
+        on_common_rooms_requested(user_id_);
 
     // Tells the shell to re-query rect accessors so the compose textarea +
     // room-search NativeTextField overlays hide while the panel is up.
@@ -183,6 +304,36 @@ void UserProfilePanel::set_extended_profile(const tesseract::ExtendedProfile& pr
     if (on_layout_changed) on_layout_changed();
 }
 
+void UserProfilePanel::set_common_rooms_supported(bool supported)
+{
+    if (common_supported_ == supported)
+    {
+        return;
+    }
+    common_supported_ = supported;
+    if (open_ && on_layout_changed)
+    {
+        on_layout_changed();
+    }
+}
+
+void UserProfilePanel::set_common_rooms(std::vector<CommonRoom> rooms, int total,
+                                        bool has_more)
+{
+    if (!open_)
+    {
+        return;
+    }
+    common_rooms_    = std::move(rooms);
+    common_total_    = total;
+    common_has_more_ = has_more;
+    common_list_->invalidate_data(/*container_may_resize=*/true);
+    if (on_layout_changed)
+    {
+        on_layout_changed();
+    }
+}
+
 void UserProfilePanel::set_trust(tesseract::UserTrust trust, bool can_verify)
 {
     if (!open_) return;
@@ -191,27 +342,47 @@ void UserProfilePanel::set_trust(tesseract::UserTrust trust, bool can_verify)
     if (on_layout_changed) on_layout_changed();
 }
 
+std::string UserProfilePanel::trust_tooltip_text_() const
+{
+    switch (trust_)
+    {
+    case tesseract::UserTrust::Verified:
+        return tk::tr("Verified");
+    case tesseract::UserTrust::VerificationViolation:
+        return tk::tr("Verified digital identity was reset");
+    case tesseract::UserTrust::NotVerified:
+    case tesseract::UserTrust::Unknown:
+        break;
+    }
+    return {};
+}
+
+std::string UserProfilePanel::verify_tooltip_text_() const
+{
+    if (trust_ != tesseract::UserTrust::NotVerified)
+    {
+        return {};
+    }
+    return can_verify_ ? tk::tr("Not verified")
+                       : tk::tr("Not verified \xc2\xb7 confirm this device first");
+}
+
 void UserProfilePanel::apply_trust_(bool can_verify)
 {
     using tesseract::UserTrust;
-    const bool row = trust_row_visible_();
-    trust_label_->set_visible(row);
-    std::string text;
+    can_verify_ = can_verify;
+    name_layout_.reset(); // its width depends on whether the shield is shown
     bool button = false;
     switch (trust_)
     {
     case UserTrust::Verified:
-        text = tk::tr("Verified");
         break;
     case UserTrust::NotVerified:
-        text = can_verify ? tk::tr("Not verified")
-                          : tk::tr("Not verified \xc2\xb7 confirm this device first");
         verify_btn_->set_label(tk::tr("Verify"));
         verify_btn_->set_enabled(can_verify);
         button = true;
         break;
     case UserTrust::VerificationViolation:
-        text = tk::tr("Verified digital identity was reset");
         verify_btn_->set_label(tk::tr("Withdraw verification"));
         verify_btn_->set_enabled(true);
         button = true;
@@ -219,7 +390,6 @@ void UserProfilePanel::apply_trust_(bool can_verify)
     case UserTrust::Unknown:
         break;
     }
-    trust_label_->set_text(text);
     verify_btn_->set_visible(button);
 }
 
@@ -235,7 +405,6 @@ void UserProfilePanel::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     tk::Widget::arrange(lc, bounds);
     backdrop_rect_ = bounds;
 
-    // Card height: header + avatar + spacing + name row + uid row + buttons
     constexpr float kNameH    = 20.0f; // estimated single-line title height
     constexpr float kUidH     = 16.0f; // estimated small-font line height
 
@@ -244,34 +413,38 @@ void UserProfilePanel::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     // correct width/content.
     name_layout_.reset();
     uid_layout_.reset();
+    common_header_layout_.reset();
     pronouns_label_layout_.reset(); pronouns_value_layout_.reset();
     tz_label_layout_.reset();       tz_value_layout_.reset();
     bio_label_layout_.reset();      bio_value_layout_.reset();
     status_label_layout_.reset();   status_value_layout_.reset();
     call_label_layout_.reset();     call_value_layout_.reset();
 
-    // Extended profile fields (MSC4133/MSC4426): measure the real (wrapped)
-    // row heights so the card and buttons below account for multi-line
-    // values (e.g. a long bio) instead of a fixed per-row estimate.
-    const float ext_max_val_w = kCardW - kPadX * 2.0f - kExtLabelW - kExtFieldGap;
+    const float left_x  = kPadX; // card-relative
+    const float right_x = kPadX + kLeftW + kPadX;
+    const float right_w = kCardW - right_x - kPadX;
+
+    // Right column: extended profile fields (MSC4133/MSC4426), measured at
+    // their real wrapped heights, then the rooms-in-common section.
+    const float ext_max_val_w = right_w - kExtLabelW - kExtFieldGap;
     const float ext_section_h = layout_ext_rows_(lc, ext_max_val_w);
+    const bool  common        = common_section_visible_();
+    const float common_top    = kHeaderH + ext_section_h + (ext_section_h > 0.0f ? kPadY : 0.0f);
+    const float right_h       = common ? common_top + kRoomsHeaderH + kRoomsListMinH + kPadY
+                                       : kHeaderH + ext_section_h + kPadY;
 
-    // Trust row: status line, then its action button when there is one.
-    constexpr float kTrustH = 18.0f;
-    const bool  trust_row    = trust_row_visible_();
-    const bool  trust_button = verify_btn_ && verify_btn_->visible();
-    const float trust_section_h =
-        (trust_row ? kTrustH + kPadY * 0.5f : 0.0f) +
-        (trust_button ? kButtonH + kPadY * 0.5f : 0.0f);
-
-    const float card_h = kHeaderH
+    // Left column: avatar, name + shield, MXID, then the buttons.
+    const bool  verify_button = verify_btn_ && verify_btn_->visible();
+    const float left_h = kHeaderH
                        + kAvatarD + kPadY
                        + kNameH   + kPadY * 0.5f
                        + kUidH    + kPadY
-                       + ext_section_h
-                       + trust_section_h
+                       + (verify_button ? kButtonH + kPadY * 0.5f : 0.0f)
                        + kButtonH + kPadY * 0.5f
                        + kButtonH + kPadY;
+
+    const float card_h = std::min(std::max(left_h, right_h),
+                                  std::max(0.0f, bounds.h - kCardMargin * 2.0f));
 
     // Centre the card in the available space.
     const float card_x = bounds.x + (bounds.w - kCardW) * 0.5f;
@@ -286,8 +459,8 @@ void UserProfilePanel::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
                                   card_rect_.y + 4.0f, kCloseSz, kCloseSz});
     }
 
-    // Avatar circle centred horizontally below the header row.
-    const float av_x = card_rect_.x + (kCardW - kAvatarD) * 0.5f;
+    // Avatar circle centred in the left column below the header row.
+    const float av_x = card_rect_.x + left_x + (kLeftW - kAvatarD) * 0.5f;
     const float av_y = card_rect_.y + kHeaderH;
     avatar_rect_     = {av_x, av_y, kAvatarD, kAvatarD};
     const tk::Rect avatar_hit =
@@ -295,28 +468,40 @@ void UserProfilePanel::arrange(tk::LayoutCtx& lc, tk::Rect bounds)
     avatar_target_->arrange(lc, avatar_hit);
     avatar_area_->arrange(lc, avatar_hit);
 
-    // Buttons: full inner width, stacked below text rows (and extended fields).
-    const float btn_x = card_rect_.x + kPadX;
-    const float btn_w = kCardW - kPadX * 2.0f;
-    const float trust_y = av_y + kAvatarD + kPadY
-                        + kNameH + kPadY * 0.5f
-                        + kUidH  + kPadY
-                        + ext_section_h;
-    if (trust_row)
-        trust_label_->arrange(lc, {btn_x, trust_y, btn_w, kTrustH});
-    if (trust_button)
-        verify_btn_->arrange(lc, {btn_x, trust_y + (trust_row ? kTrustH + kPadY * 0.5f : 0.0f),
-                                  btn_w, kButtonH});
-    const float btn_y_dm = trust_y + trust_section_h;
-    const float btn_y_ignore = btn_y_dm + kButtonH + kPadY * 0.5f;
-
+    // Buttons: full left-column width, stacked below the name and MXID.
+    const float btn_x = card_rect_.x + left_x;
+    float btn_y = av_y + kAvatarD + kPadY
+                + kNameH + kPadY * 0.5f
+                + kUidH  + kPadY;
+    if (verify_button)
+    {
+        verify_btn_->arrange(lc, {btn_x, btn_y, kLeftW, kButtonH});
+        btn_y += kButtonH + kPadY * 0.5f;
+    }
     if (dm_btn_)
     {
-        dm_btn_->arrange(lc, {btn_x, btn_y_dm, btn_w, kButtonH});
+        dm_btn_->arrange(lc, {btn_x, btn_y, kLeftW, kButtonH});
     }
+    btn_y += kButtonH + kPadY * 0.5f;
     if (ignore_btn_)
     {
-        ignore_btn_->arrange(lc, {btn_x, btn_y_ignore, btn_w, kButtonH});
+        ignore_btn_->arrange(lc, {btn_x, btn_y, kLeftW, kButtonH});
+    }
+
+    // Rooms in common: header, then a list filling the rest of the column.
+    common_list_->set_visible(common);
+    if (common)
+    {
+        const float col_x = card_rect_.x + right_x;
+        const float hdr_y = card_rect_.y + common_top;
+        common_header_rect_ = {col_x, hdr_y, right_w, kRoomsHeaderH};
+        const float list_y = hdr_y + kRoomsHeaderH;
+        const float list_h = std::max(0.0f, card_rect_.y + card_rect_.h - kPadY - list_y);
+        common_list_->arrange(lc, {col_x, list_y, right_w, list_h});
+    }
+    else
+    {
+        common_header_rect_ = {};
     }
 }
 
@@ -464,26 +649,43 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
     }
     avatar_area_->paint(ctx); // hover ring over the avatar
 
-    // Display name (Title, centred, ellipsis).
+    // Display name (Title, ellipsis) with the trust shield on the same line,
+    // centred in the left column.
     constexpr float kNameH = 20.0f;
     constexpr float kUidH  = 16.0f;
-    const float text_max_w = kCardW - kPadX * 2.0f;
+    const float left_x     = card_rect_.x + kPadX;
     const float name_y     = avatar_rect_.y + kAvatarD + kPadY;
+    const bool  shield     = trust_icon_visible_();
+    const float name_max_w = kLeftW - (shield ? kTrustIconSz + kTrustIconGap : 0.0f);
 
     if (!name_layout_)
     {
         tk::TextStyle st{};
         st.role      = tk::FontRole::Title;
         st.trim      = tk::TextTrim::Ellipsis;
-        st.max_width = text_max_w;
+        st.max_width = name_max_w;
         name_layout_ = ctx.factory.build_text(
             display_name_.empty() ? user_id_ : display_name_, st);
     }
+    trust_icon_rect_ = {};
     if (name_layout_)
     {
         const tk::Size sz = name_layout_->measure();
-        const float tx    = card_rect_.x + (kCardW - sz.w) * 0.5f;
+        const float total_w = sz.w + (shield ? kTrustIconGap + kTrustIconSz : 0.0f);
+        const float tx      = left_x + (kLeftW - total_w) * 0.5f;
         cv.draw_text(*name_layout_, {tx, name_y}, pal.text_primary);
+        if (shield)
+        {
+            trust_icon_rect_ = {tx + sz.w + kTrustIconGap,
+                                name_y + (kNameH - kTrustIconSz) * 0.5f,
+                                kTrustIconSz, kTrustIconSz};
+            const bool ok = trust_ == tesseract::UserTrust::Verified;
+            trust_icon_.draw(cv, ctx.factory,
+                             ok ? std::span<const std::uint8_t>(kShieldCheckSvg)
+                                : std::span<const std::uint8_t>(kShieldAlertSvg),
+                             trust_icon_rect_, kTrustIconSz,
+                             ok ? pal.success : pal.destructive);
+        }
     }
 
     // User ID (Small, centred, ellipsis, muted colour).
@@ -494,21 +696,23 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
         tk::TextStyle st{};
         st.role      = tk::FontRole::Small;
         st.trim      = tk::TextTrim::Ellipsis;
-        st.max_width = text_max_w;
+        st.max_width = kLeftW;
         uid_layout_  = ctx.factory.build_text(user_id_, st);
     }
     if (uid_layout_)
     {
         const tk::Size sz = uid_layout_->measure();
-        const float tx    = card_rect_.x + (kCardW - sz.w) * 0.5f;
+        const float tx    = left_x + (kLeftW - sz.w) * 0.5f;
         cv.draw_text(*uid_layout_, {tx, uid_y}, pal.text_muted);
     }
 
-    // Extended profile fields (MSC4133/MSC4426) — painted as label+value rows
-    // below uid. Geometry (heights, baseline offsets, line-wrap cap) is
-    // computed once in arrange() by layout_ext_rows_() and cached in
+    // Extended profile fields (MSC4133/MSC4426) — label+value rows at the top
+    // of the right column. Geometry (heights, baseline offsets, line-wrap cap)
+    // is computed once in arrange() by layout_ext_rows_() and cached in
     // ext_row_geom_; paint() just draws the cached layouts at those offsets.
-    const float ext_max_val_w = kCardW - kPadX * 2.0f - kExtLabelW - kExtFieldGap;
+    const float right_x       = card_rect_.x + kPadX + kLeftW + kPadX;
+    const float right_w       = card_rect_.x + kCardW - kPadX - right_x;
+    const float ext_max_val_w = right_w - kExtLabelW - kExtFieldGap;
 
     struct ExtRowPaint {
         tk::CachedTextLayout& label_layout;
@@ -522,8 +726,8 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
         { call_label_layout_,    call_value_layout_       },
     };
 
-    float ext_y = uid_y + kUidH + kPadY + kExtFieldPadTop;
-    const float label_x = card_rect_.x + kPadX;
+    float ext_y = card_rect_.y + kHeaderH + kExtFieldPadTop;
+    const float label_x = right_x;
     const float value_x = label_x + kExtLabelW + kExtFieldGap;
 
     pronouns_row_rect_ = {};
@@ -557,6 +761,28 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
         ext_y += geom.h + kExtRowGap;
     }
 
+    // Rooms in common: header, then the list.
+    if (common_section_visible_())
+    {
+        if (!common_header_layout_)
+        {
+            tk::TextStyle st{};
+            st.role      = tk::FontRole::Small;
+            st.trim      = tk::TextTrim::Ellipsis;
+            st.max_width = common_header_rect_.w;
+            common_header_layout_ = ctx.factory.build_text(tk::tr("Rooms in common"), st);
+        }
+        if (common_header_layout_)
+        {
+            const tk::Size sz = common_header_layout_->measure();
+            cv.draw_text(*common_header_layout_,
+                         {common_header_rect_.x,
+                          common_header_rect_.y + (common_header_rect_.h - sz.h) * 0.5f},
+                         pal.text_secondary);
+        }
+        common_list_->paint(ctx);
+    }
+
     // Child buttons.
     if (close_btn_)
     {
@@ -564,13 +790,6 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
         close_icon_.draw(ctx.canvas, ctx.factory, kCloseSvg,
                          close_btn_->bounds(), 16.0f,
                          ctx.theme.palette.text_secondary);
-    }
-    if (trust_label_ && trust_label_->visible())
-    {
-        trust_label_->set_colour(trust_ == tesseract::UserTrust::VerificationViolation
-                                     ? ctx.theme.palette.destructive
-                                     : ctx.theme.palette.text_secondary);
-        trust_label_->paint(ctx);
     }
     if (verify_btn_ && verify_btn_->visible()) verify_btn_->paint(ctx);
     if (dm_btn_)     dm_btn_->paint(ctx);
@@ -655,14 +874,45 @@ bool UserProfilePanel::on_pointer_move(tk::Point local)
         if (host()) host()->hide_tooltip(this);
     }
 
+    // Trust shield tooltip (the shield is the only trust indicator).
+    const bool over_trust = trust_icon_visible_() && rect_contains(trust_icon_rect_, w);
+    if (over_trust && !hover_trust_)
+    {
+        hover_trust_ = true;
+        if (host()) host()->show_tooltip(this, trust_tooltip_text_(), trust_icon_rect_);
+    }
+    else if (!over_trust && hover_trust_)
+    {
+        hover_trust_ = false;
+        if (host()) host()->hide_tooltip(this);
+    }
+
+    // Verify button tooltip: why it is offered / disabled.
+    const bool over_verify = verify_btn_ && verify_btn_->visible() &&
+                             trust_ == tesseract::UserTrust::NotVerified &&
+                             rect_contains(verify_btn_->bounds(), w);
+    if (over_verify && !hover_verify_)
+    {
+        hover_verify_ = true;
+        if (host()) host()->show_tooltip(this, verify_tooltip_text_(), verify_btn_->bounds());
+    }
+    else if (!over_verify && hover_verify_)
+    {
+        hover_verify_ = false;
+        if (host()) host()->hide_tooltip(this);
+    }
+
     return false;
 }
 
 void UserProfilePanel::on_pointer_leave()
 {
     press_backdrop_ = false;
-    if (hover_pronouns_ && host()) host()->hide_tooltip(this);
+    if ((hover_pronouns_ || hover_trust_ || hover_verify_) && host())
+        host()->hide_tooltip(this);
     hover_pronouns_ = false;
+    hover_trust_    = false;
+    hover_verify_   = false;
 }
 
 } // namespace tesseract::views

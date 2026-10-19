@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- feat(ui): the user profile panel is a two-column card (avatar, name, buttons left; profile fields and a scrollable rooms-in-common list right) and shows trust as a shield icon with a tooltip instead of a text label. Windows debug build, ctest 3399/3400 (the failure is a Bubbles layout test, not touched here), not run by eye
 - feat(ui): in the Bubbles layout, your own messages sit on the left while the thread list, a thread, or the room info panel is open. 4 new ctest cases, not built or run
 
 ## v0.9.4 — 2026-10-18

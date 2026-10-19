@@ -6906,3 +6906,7 @@ msgstr "Mostrar solo hilos seguidos"
 #: ui/shared/views/ThreadListView.cpp
 msgid "Show all threads"
 msgstr "Mostrar todos los hilos"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Rooms in common"
+msgstr "Salas en común"

@@ -5,13 +5,16 @@
 #include "tk/controls.h"
 #include "tk/hover_area.h"
 #include "tk/keyboard_target.h"
+#include "tk/list_view.h"
 #include "tk/svg.h"
 #include "tk/widget.h"
 
 #include <array>
 #include <functional>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace tesseract::views
 {
@@ -19,7 +22,7 @@ namespace tesseract::views
 class UserProfilePanel : public tk::Widget
 {
 public:
-    static constexpr float kCardW = 240.0f;
+    static constexpr float kCardW = 480.0f;
 
     enum class DmButtonState { Normal, HasDM, Sending };
 
@@ -28,7 +31,7 @@ public:
     bool        dm_button_enabled() const;
 
     UserProfilePanel();
-    ~UserProfilePanel() override = default;
+    ~UserProfilePanel() override;
 
     void open(std::string user_id, std::string display_name, std::string avatar_url);
     void close();
@@ -61,6 +64,21 @@ public:
     // "Verify" (NotVerified) / "Withdraw verification" (VerificationViolation).
     std::function<void(std::string user_id, std::string display_name)> on_verify_user;
     std::function<void(std::string user_id)> on_withdraw_verification;
+
+    // Rooms shared with the user (MSC2666). The section stays hidden until the
+    // server is known to support it and at least one room has arrived.
+    struct CommonRoom
+    {
+        std::string room_id;
+        std::string name;
+        std::string avatar_url;
+    };
+    void set_common_rooms_supported(bool supported);
+    void set_common_rooms(std::vector<CommonRoom> rooms, int total, bool has_more);
+    const std::vector<CommonRoom>& common_rooms() const { return common_rooms_; }
+    // Fired from open() so the shell can fetch the list and call set_common_rooms().
+    std::function<void(std::string user_id)> on_common_rooms_requested;
+    std::function<void(std::string room_id)> on_common_room_clicked;
 
     // Callbacks wired by shell
     std::function<void(std::string user_id)> on_open_dm;
@@ -101,6 +119,8 @@ public:
             return user_id_;
         return display_name_ + " (" + user_id_ + ")";
     }
+    // The trust shield is canvas-painted, so its meaning is announced here.
+    std::string access_description() const override { return trust_tooltip_text_(); }
 
 private:
     bool open_ = false;
@@ -121,13 +141,40 @@ private:
     tk::Button* dm_btn_     = nullptr;
     tk::Button* ignore_btn_ = nullptr;
 
-    // Trust row: status line + optional action button, hidden until
-    // set_trust() and for users with no cross-signing identity.
-    tk::Label*  trust_label_ = nullptr;
+    // Trust: a shield icon beside the name (Verified / VerificationViolation
+    // only) plus an optional action button, hidden until set_trust() and for
+    // users with no cross-signing identity.
     tk::Button* verify_btn_  = nullptr;
     tesseract::UserTrust trust_ = tesseract::UserTrust::Unknown;
-    bool trust_row_visible_() const { return trust_ != tesseract::UserTrust::Unknown; }
+    bool can_verify_ = false;
+    tk::IconCache trust_icon_;
+    tk::Rect trust_icon_rect_{};
+    bool     hover_trust_  = false;
+    bool     hover_verify_ = false;
+    bool trust_icon_visible_() const
+    {
+        return trust_ == tesseract::UserTrust::Verified ||
+               trust_ == tesseract::UserTrust::VerificationViolation;
+    }
+    std::string trust_tooltip_text_() const;
+    std::string verify_tooltip_text_() const;
     void apply_trust_(bool can_verify);
+
+    // Rooms in common (right column, below the extended fields).
+    class CommonRoomsAdapter;
+    friend class CommonRoomsAdapter;
+    std::vector<CommonRoom> common_rooms_;
+    int  common_total_    = 0;
+    bool common_has_more_ = false;
+    bool common_supported_ = false;
+    bool common_section_visible_() const
+    {
+        return common_supported_ && !common_rooms_.empty();
+    }
+    std::unique_ptr<CommonRoomsAdapter> common_adapter_;
+    tk::ListView* common_list_ = nullptr;
+    tk::CachedTextLayout common_header_layout_;
+    tk::Rect common_header_rect_{};
 
     // Layout rects (world-space, updated each arrange)
     tk::Rect card_rect_{};
@@ -175,6 +222,7 @@ private:
     std::array<RowGeom, 5> ext_row_geom_{};
     float layout_ext_rows_(tk::LayoutCtx& lc, float max_val_w);
 
+    static constexpr float kLeftW      = 200.0f; // left column (avatar, name, buttons)
     static constexpr float kAvatarD    = 160.0f;
     static constexpr float kPadX       = 16.0f;
     static constexpr float kPadY       = 12.0f;

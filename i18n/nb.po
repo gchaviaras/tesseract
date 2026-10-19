@@ -5166,3 +5166,7 @@ msgstr "Vis bare fulgte tråder"
 #: ui/shared/views/ThreadListView.cpp
 msgid "Show all threads"
 msgstr "Vis alle tråder"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Rooms in common"
+msgstr "Felles rom"

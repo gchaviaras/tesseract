@@ -6808,3 +6808,7 @@ msgstr "Afficher uniquement les fils suivis"
 #: ui/shared/views/ThreadListView.cpp
 msgid "Show all threads"
 msgstr "Afficher tous les fils"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Rooms in common"
+msgstr "Salons en commun"

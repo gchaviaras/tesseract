@@ -7383,3 +7383,7 @@ msgstr "Показувати лише відстежувані гілки"
 #: ui/shared/views/ThreadListView.cpp
 msgid "Show all threads"
 msgstr "Показувати всі гілки"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Rooms in common"
+msgstr "Спільні кімнати"

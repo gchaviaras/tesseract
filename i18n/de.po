@@ -6806,3 +6806,7 @@ msgstr "Nur gefolgte Threads anzeigen"
 #: ui/shared/views/ThreadListView.cpp
 msgid "Show all threads"
 msgstr "Alle Threads anzeigen"
+
+#: ui/shared/views/UserProfilePanel.cpp
+msgid "Rooms in common"
+msgstr "Gemeinsame Chats"

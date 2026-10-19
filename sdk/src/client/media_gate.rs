@@ -296,13 +296,6 @@ impl PriorityGate {
         self.inner.lock().active.len()
     }
 
-    /// Number of held slots past the stall deadline (test/diagnostics).
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(super) fn stale_len(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.stale(Instant::now())
-    }
-
     /// Current adaptive concurrency limit (test/diagnostics).
     #[cfg_attr(not(test), allow(dead_code))]
     pub(super) fn dynamic_limit(&self) -> usize {

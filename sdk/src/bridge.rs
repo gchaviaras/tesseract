@@ -155,7 +155,7 @@ pub mod ffi {
     // Shared plain-data types
     // -------------------------------------------------------------------------
 
-    /// Lightweight room descriptor returned by list_rooms().
+    /// Lightweight room descriptor returned by room_info_by_id().
     struct RoomInfo {
         id: String,
         name: String,
@@ -2494,8 +2494,6 @@ pub mod ffi {
         fn in_flight_count(self: &ClientFfi) -> u32;
 
         // ----- Room list -----
-
-        fn list_rooms(self: &ClientFfi) -> Vec<RoomInfo>;
 
         /// `RoomInfo` for one joined room, bypassing the room-list filter that
         /// hides a tombstoned room once its successor is joined. Returns an

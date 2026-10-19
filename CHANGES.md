@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- chore(sdk): removed the unused `list_rooms` FFI method (superseded by push-based room updates plus `room_info_by_id`) and the dead `MediaGate::stale_len` diagnostic helper. cargo build clean, cargo tests 1174/1175 (1 failure unrelated to this change, in URL-preview scheme handling)
 - fix(ui): a URL shown only inside a Markdown code block or inline code span no longer triggers a link-preview card, on send or on receive. Build and user-verified
 - feat(sdk): the profile panel lists the rooms you share with a user via MSC2666 mutual rooms (unstable or spec 1.19 endpoint, detected from the server), loading more as you scroll; room avatars in the list load on demand. cargo tests 1167, Windows build, user-verified Windows
 - feat(ui): the user profile panel is a two-column card (avatar, name, buttons left; profile fields and a scrollable rooms-in-common list right) and shows trust as a shield icon with a tooltip instead of a text label. Windows debug build, ctest 3399/3400 (the failure is a Bubbles layout test, not touched here), not run by eye

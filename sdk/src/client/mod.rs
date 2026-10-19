@@ -4435,12 +4435,6 @@ mod tests {
     }
 
     #[test]
-    fn list_rooms_is_empty_when_not_logged_in() {
-        let c = ClientFfi::new();
-        assert!(c.list_rooms().is_empty());
-    }
-
-    #[test]
     fn list_invites_is_empty_when_not_logged_in() {
         let c = ClientFfi::new();
         assert!(c.list_invites().is_empty());

@@ -47,12 +47,20 @@ struct BubblesLayoutGuard
 {
     tesseract::Settings::MessageLayout prev =
         tesseract::Settings::instance().message_layout;
+    bool prev_own_avatar = tesseract::Settings::instance().bubbles_show_own_avatar;
     BubblesLayoutGuard()
     {
         tesseract::Settings::instance().message_layout =
             tesseract::Settings::MessageLayout::Bubbles;
+        // Defaults to on; with it on a right-aligned own row already has the
+        // avatar header, so its height wouldn't differ from the left layout's.
+        tesseract::Settings::instance().bubbles_show_own_avatar = false;
     }
-    ~BubblesLayoutGuard() { tesseract::Settings::instance().message_layout = prev; }
+    ~BubblesLayoutGuard()
+    {
+        tesseract::Settings::instance().message_layout = prev;
+        tesseract::Settings::instance().bubbles_show_own_avatar = prev_own_avatar;
+    }
 };
 
 void open_room_for_bubbles(RoomView& view)
@@ -111,8 +119,8 @@ TEST_CASE("Bubbles: own row lays out like other users' while a side panel is ope
     open_room_for_bubbles(view);
     view.set_messages({own_text()});
     run_layout(*surface, view);
-    // Right-aligned own rows carry no avatar/name header (own avatar off by
-    // default); on the left they get the header band like everyone else.
+    // Right-aligned own rows carry no avatar/name header (own avatar is off
+    // via the guard); on the left they get the header band like everyone else.
     const float right_h = view.message_list()->row_world_rect(0).h;
 
     view.set_thread_panel(RoomView::ThreadPanelState::List, "");

@@ -137,6 +137,9 @@ struct RlShell : tesseract::test::TestShellBase
     using ShellBase::pending_member_gender_requests_;
     using ShellBase::pending_resolve_requests_;
     using ShellBase::pending_user_profiles_;
+    using ShellBase::pending_mutual_rooms_;
+    using ShellBase::fetch_mutual_rooms_async_;
+    using ShellBase::handle_mutual_rooms_ready_ui_;
     using ShellBase::per_account_rooms_;
     using ShellBase::presence_tracker_;
     using ShellBase::request_member_pronoun_ui_;
@@ -682,4 +685,58 @@ TEST_CASE("pending ?via= hints stay within their cap across many permalinks",
     CHECK(f.s.pending_join_via_.count("!r299:x") == 1);
     CHECK(f.s.pending_join_via_.count("!r" + std::to_string(300 - f.s.kMaxPendingJoinVia) + ":x") == 1);
     CHECK(f.s.pending_join_via_.count("!r0:x") == 0);
+}
+
+TEST_CASE("mutual rooms: resolve against rooms_, skip unknown, page and gate",
+          "[shell][profile][mutual_rooms]")
+{
+    RlFx f;
+    auto rv = tk::create_root_widget<tesseract::views::RoomView>(nullptr);
+    tesseract::RoomInfo info;
+    info.id = "!r";
+    rv->set_room(info);
+    f.s.room_view_ = rv.get();
+    auto* panel = rv->user_profile_panel();
+    REQUIRE(panel != nullptr);
+    panel->open("@u:x", "U", "");
+    f.s.rooms_ = {rl_room("!a"), rl_room("!b")};
+
+    // No server support: nothing requested.
+    f.s.server_info_.supports_mutual_rooms = false;
+    f.s.fetch_mutual_rooms_async_("@u:x", panel, false);
+    CHECK(f.s.pending_mutual_rooms_.empty());
+
+    // Our own profile never asks.
+    f.s.server_info_.supports_mutual_rooms = true;
+    f.s.fetch_mutual_rooms_async_("@me:x", panel, false);
+    CHECK(f.s.pending_mutual_rooms_.empty());
+
+    f.s.fetch_mutual_rooms_async_("@u:x", panel, false);
+    REQUIRE(f.s.pending_mutual_rooms_.size() == 1);
+    auto id = f.s.pending_mutual_rooms_.begin()->first;
+    f.s.handle_mutual_rooms_ready_ui_(
+        id, R"({"joined":["!a","!unknown","!b"],"count":3,"next_batch":"","error":""})");
+    CHECK(f.s.pending_mutual_rooms_.empty());
+    REQUIRE(panel->common_rooms().size() == 2);
+    CHECK(panel->common_rooms()[0].room_id == "!a");
+    CHECK(panel->common_rooms()[0].name == "N!a");
+    CHECK(panel->common_rooms()[1].room_id == "!b");
+
+    // A page with a next_batch is followed (the list is short) and appends.
+    f.s.rooms_.push_back(rl_room("!c"));
+    f.s.fetch_mutual_rooms_async_("@u:x", panel, false);
+    id = f.s.pending_mutual_rooms_.begin()->first;
+    f.s.handle_mutual_rooms_ready_ui_(
+        id, R"({"joined":["!a"],"count":3,"next_batch":"n1","error":""})");
+    REQUIRE(f.s.pending_mutual_rooms_.size() == 1);
+    id = f.s.pending_mutual_rooms_.begin()->first;
+    f.s.handle_mutual_rooms_ready_ui_(
+        id, R"({"joined":["!c"],"count":3,"next_batch":"","error":""})");
+    CHECK(f.s.pending_mutual_rooms_.empty());
+    REQUIRE(panel->common_rooms().size() == 3);
+    CHECK(panel->common_rooms()[2].room_id == "!c");
+
+    // A reply for a request that was dropped, or an error, changes nothing.
+    f.s.handle_mutual_rooms_ready_ui_(424242, R"({"joined":["!a"]})");
+    CHECK(panel->common_rooms().size() == 3);
 }

@@ -1181,6 +1181,22 @@ protected:
     // (user panel case). Absence = own-profile fetch.
     std::unordered_map<std::uint64_t, views::UserProfilePanel*>
         pending_user_profiles_;
+    // request_id → {panel, user} for in-flight get_mutual_rooms_async (MSC2666).
+    struct MutualRoomsRequest
+    {
+        views::UserProfilePanel* panel = nullptr;
+        std::string user_id;
+    };
+    std::unordered_map<std::uint64_t, MutualRoomsRequest> pending_mutual_rooms_;
+    // Paging state per panel: the user whose rooms it lists, the token for the
+    // next page (empty when none) and whether a page is already in flight.
+    struct MutualRoomsPaging
+    {
+        std::string user_id;
+        std::string next_batch;
+        bool in_flight = false;
+    };
+    std::unordered_map<views::UserProfilePanel*, MutualRoomsPaging> mutual_rooms_paging_;
     // request_id → {mxid, gen} for in-flight resolve_user_profile_async.
     std::unordered_map<std::uint64_t, std::pair<std::string, std::uint64_t>>
         pending_resolve_requests_;
@@ -3278,6 +3294,14 @@ protected:
     void handle_profile_field_result_ui_(std::uint64_t request_id,
                                          std::string key, bool ok,
                                          std::string message);
+    // Fetch the first (or, with `next_page`, the next) page of rooms shared with
+    // `user_id` into `panel`. Hides the section for our own user and when the
+    // server lacks MSC2666.
+    void fetch_mutual_rooms_async_(const std::string& user_id,
+                                   views::UserProfilePanel* panel, bool next_page);
+    // Callback from get_mutual_rooms_async: resolve the room ids against rooms_
+    // (unknown ones are skipped) and hand the list to the requesting panel.
+    void handle_mutual_rooms_ready_ui_(std::uint64_t request_id, std::string json);
     // Callback from get_extended_profile_async / resolve_user_profile_async.
     // Dispatches to panel (user panel), resolve map (quick-switcher), or own
     // profile based on which pending map contains request_id.

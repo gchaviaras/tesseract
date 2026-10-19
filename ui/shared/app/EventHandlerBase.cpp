@@ -961,6 +961,17 @@ void EventHandlerBase::on_extended_profile_ready(std::uint64_t request_id,
         });
 }
 
+void EventHandlerBase::on_mutual_rooms_ready(std::uint64_t request_id,
+                                             const std::string& json)
+{
+    shell()->post_to_ui_(
+        [shell = shell(), uid = user_id_, request_id, j = json]() mutable
+        {
+            ShellBase::EventAccountScope scope(*shell, uid);
+            shell->handle_mutual_rooms_ready_ui_(request_id, std::move(j));
+        });
+}
+
 void EventHandlerBase::on_room_directory_search_results(
     std::uint64_t request_id, const std::vector<RoomDirectoryEntry>& entries,
     bool reached_end)

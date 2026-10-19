@@ -66,9 +66,14 @@ public:
         }
 
         const tk::Image* avatar = nullptr;
-        if (owner_.image_provider_ && !room.avatar_url.empty())
+        if (owner_.common_avatar_provider_ && !room.avatar_url.empty())
         {
-            avatar = owner_.image_provider_(room.avatar_url);
+            avatar = owner_.common_avatar_provider_(room.avatar_url);
+            if (!avatar && owner_.on_common_room_avatar_needed &&
+                owner_.common_avatar_requested_.insert(room.room_id).second)
+            {
+                owner_.on_common_room_avatar_needed(room.room_id);
+            }
         }
         draw_avatar(ctx.canvas, avatar,
                     {bounds.x + kRoomRowPadX + kRoomAvatarD * 0.5f,
@@ -184,6 +189,13 @@ UserProfilePanel::UserProfilePanel()
                 on_common_room_clicked(common_rooms_[static_cast<std::size_t>(idx)].room_id);
             }
         };
+        list->on_near_bottom = [this]()
+        {
+            if (common_has_more_ && on_common_rooms_near_end)
+            {
+                on_common_rooms_near_end();
+            }
+        };
         list->set_visible(false);
         common_list_ = add_child(std::move(list));
     }
@@ -235,6 +247,7 @@ void UserProfilePanel::open(std::string user_id, std::string display_name,
 
     // Drop the previous user's rooms; the shell repopulates async.
     common_rooms_.clear();
+    common_avatar_requested_.clear();
     common_total_    = 0;
     common_has_more_ = false;
     common_list_->set_visible(false);

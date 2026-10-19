@@ -326,3 +326,20 @@ TEST_CASE("gallery_caption_or_fallback keeps a typed caption and counts items ot
     CHECK(gallery_caption_or_fallback("", 3) == "Sent 3 items");
     CHECK(gallery_caption_or_fallback("", 1) == "Sent 1 item");
 }
+
+TEST_CASE("parse_mutual_rooms_json reads a page and reports errors", "[shell_helpers][mutual_rooms]")
+{
+    auto p = sh::parse_mutual_rooms_json(
+        R"({"joined":["!a:x","!b:x"],"count":7,"next_batch":"tok","error":""})");
+    CHECK(p.error.empty());
+    CHECK(p.joined == std::vector<std::string>{"!a:x", "!b:x"});
+    CHECK(p.count == 7);
+    CHECK(p.next_batch == "tok");
+
+    p = sh::parse_mutual_rooms_json(R"({"joined":[],"count":0,"next_batch":"","error":"boom"})");
+    CHECK(p.error == "boom");
+    CHECK(p.joined.empty());
+
+    CHECK_FALSE(sh::parse_mutual_rooms_json("not json").error.empty());
+    CHECK_FALSE(sh::parse_mutual_rooms_json("").error.empty());
+}

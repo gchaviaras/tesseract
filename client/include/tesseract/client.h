@@ -1947,6 +1947,13 @@ public:
     void get_extended_profile_async(std::uint64_t request_id,
                                     const std::string& user_id);
 
+    /// Fetch one page of the rooms shared with `user_id` (MSC2666). `from` is the
+    /// previous page's `next_batch` (empty for the first page). Result delivered
+    /// via IEventHandler::on_mutual_rooms_ready. Does not pin a thread.
+    void get_mutual_rooms_async(std::uint64_t request_id,
+                                const std::string& user_id,
+                                const std::string& from = "");
+
     /// Async counterpart of `resolve_user_profile`. Result delivered via
     /// IEventHandler::on_extended_profile_ready. Does not pin a thread.
     void resolve_user_profile_async(std::uint64_t request_id,

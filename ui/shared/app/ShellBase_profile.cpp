@@ -94,6 +94,33 @@ void ShellBase::setup_dm_callbacks()
             fetch_user_extended_profile_async_(user_id, panel);
         };
 
+        panel->on_common_rooms_requested = [this, panel](std::string user_id)
+        {
+            fetch_mutual_rooms_async_(user_id, panel, false);
+        };
+        panel->on_common_rooms_near_end = [this, panel]()
+        {
+            fetch_mutual_rooms_async_(panel->user_id(), panel, true);
+        };
+        // Row avatars use the shared thumbnail cache + lazy fetch, like the
+        // forward picker; `image_provider_` above is the full-res lightbox cache.
+        panel->set_common_room_avatar_provider(
+            [this](const std::string& mxc) -> const tk::Image* { return avatar_image_(mxc); });
+        panel->on_common_room_avatar_needed = [this](std::string room_id)
+        {
+            auto room = std::find_if(rooms_.begin(), rooms_.end(),
+                                     [&room_id](const RoomInfo& r) { return r.id == room_id; });
+            if (room != rooms_.end())
+            {
+                ensure_room_avatar_(*room);
+            }
+        };
+        panel->on_common_room_clicked = [this](std::string room_id)
+        {
+            if (room_view_) room_view_->close_user_profile();
+            navigate_to_room_(room_id);
+        };
+
         // The panel shows the avatar much larger than every other avatar
         // context (room list, message senders), so it needs the actual
         // source image rather than the shared small thumbnail — reuse the
@@ -353,6 +380,109 @@ void ShellBase::fetch_user_extended_profile_async_(const std::string& user_id,
     auto req_id = next_request_id_++;
     pending_user_profiles_[req_id] = panel;
     client_->get_extended_profile_async(req_id, user_id);
+}
+
+void ShellBase::fetch_mutual_rooms_async_(const std::string& user_id,
+                                          views::UserProfilePanel* panel, bool next_page)
+{
+    if (!panel)
+    {
+        return;
+    }
+    if (!client_ || user_id.empty() || user_id == my_user_id_ ||
+        !server_info_.supports_mutual_rooms)
+    {
+        mutual_rooms_paging_.erase(panel);
+        panel->set_common_rooms_supported(false);
+        return;
+    }
+
+    auto& paging = mutual_rooms_paging_[panel];
+    std::string from;
+    if (next_page)
+    {
+        if (paging.user_id != user_id || paging.in_flight || paging.next_batch.empty())
+        {
+            return;
+        }
+        from = paging.next_batch;
+    }
+    else
+    {
+        // A fresh open: forget the previous user's cursor. A page still in
+        // flight for them is dropped on arrival (user mismatch).
+        paging = MutualRoomsPaging{};
+        paging.user_id = user_id;
+    }
+    paging.in_flight = true;
+    panel->set_common_rooms_supported(true);
+    auto req_id = next_request_id_++;
+    pending_mutual_rooms_[req_id] = MutualRoomsRequest{panel, user_id};
+    client_->get_mutual_rooms_async(req_id, user_id, from);
+}
+
+void ShellBase::handle_mutual_rooms_ready_ui_(std::uint64_t request_id, std::string json)
+{
+    auto it = pending_mutual_rooms_.find(request_id);
+    if (it == pending_mutual_rooms_.end())
+    {
+        return;
+    }
+    const MutualRoomsRequest req = std::move(it->second);
+    pending_mutual_rooms_.erase(it);
+
+    auto pg = mutual_rooms_paging_.find(req.panel);
+    if (pg == mutual_rooms_paging_.end() || pg->second.user_id != req.user_id)
+    {
+        return; // the panel moved on to another user
+    }
+    auto& paging = pg->second;
+    paging.in_flight = false;
+    if (!req.panel->is_open() || req.panel->user_id() != req.user_id)
+    {
+        return;
+    }
+
+    const auto page = shell_helpers::parse_mutual_rooms_json(json);
+    if (!page.error.empty())
+    {
+        paging.next_batch.clear();
+        return;
+    }
+    paging.next_batch = page.next_batch;
+
+    // Page N+1 appends to what the panel already lists.
+    auto list = req.panel->common_rooms();
+    std::unordered_set<std::string> seen;
+    for (const auto& r : list)
+    {
+        seen.insert(r.room_id);
+    }
+    for (const auto& id : page.joined)
+    {
+        if (!seen.insert(id).second)
+        {
+            continue;
+        }
+        auto room = std::find_if(rooms_.begin(), rooms_.end(),
+                                 [&id](const RoomInfo& r) { return r.id == id; });
+        if (room == rooms_.end())
+        {
+            continue; // not a room we show (left, or not synced yet)
+        }
+        list.push_back({room->id, room->name, room->effective_avatar_url()});
+    }
+    req.panel->set_common_rooms(std::move(list), page.count,
+                                !paging.next_batch.empty());
+
+    // Unknown ids can leave the list too short to scroll, so the near-end hook
+    // would never fire: keep pulling pages until it fills or the server is done.
+    constexpr std::size_t kMinRowsBeforeScrolling = 12;
+    if (!paging.next_batch.empty() &&
+        req.panel->common_rooms().size() < kMinRowsBeforeScrolling)
+    {
+        fetch_mutual_rooms_async_(req.user_id, req.panel, true);
+    }
 }
 
 /// Resolve user_id's grammatical-gender pronoun word for gendered
@@ -789,6 +919,8 @@ void ShellBase::invalidate_known_users_()
     user_resolve_gen_.fetch_add(1);
     pending_resolve_requests_.clear();
     pending_user_profiles_.clear();
+    pending_mutual_rooms_.clear();
+    mutual_rooms_paging_.clear();
 }
 
 uint64_t ShellBase::compute_dock_notification_count_() const

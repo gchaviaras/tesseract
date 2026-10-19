@@ -1034,6 +1034,7 @@ struct ServerInfo
     std::string default_room_version;        ///< e.g. "10"; empty when absent
     bool profile_fields_stable     = false;  ///< MSC4133 advertised under its stable key
     bool supports_invite_reason    = false;  ///< server advertises MSC4491 invite reasons
+    bool supports_mutual_rooms     = false;  ///< server supports MSC2666 mutual rooms (unstable or stable)
     std::string server_name;                 ///< e.g. "Synapse"; empty when the federation version endpoint is unreachable
     std::string server_version;              ///< e.g. "1.120.0"; empty when unknown
     uint64_t upload_size_limit     = 0;      ///< max upload bytes from the media config; 0 when unknown

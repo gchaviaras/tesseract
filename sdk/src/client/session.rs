@@ -10,6 +10,7 @@ use matrix_sdk::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::mutual_rooms::{mutual_rooms_mode_for, MUTUAL_ROOMS_NONE};
 use super::{err, oauth_err, ok, ClientFfi};
 use crate::ffi::{OAuthBegin, OAuthWaitStep, OpResult, ServerInfoFfi, SpecVersionFfi};
 use crate::oauth;
@@ -163,6 +164,7 @@ fn server_info_unavailable() -> ServerInfoFfi {
         default_room_version: String::new(),
         profile_fields_stable: false,
         supports_invite_reason: false,
+        supports_mutual_rooms: false,
         server_name: String::new(),
         server_version: String::new(),
         upload_size_limit: 0,
@@ -227,6 +229,7 @@ async fn build_server_info(
     http: reqwest::Client,
     prefix_slot: std::sync::Arc<std::sync::RwLock<Option<String>>>,
     invite_reason_slot: std::sync::Arc<std::sync::RwLock<bool>>,
+    mutual_rooms_slot: std::sync::Arc<std::sync::atomic::AtomicU8>,
     preview_url_slot: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> ServerInfoFfi {
     let base = {
@@ -315,6 +318,9 @@ async fn build_server_info(
     };
     *invite_reason_slot.write().unwrap() = supports_invite_reason;
 
+    let mutual_rooms_mode = mutual_rooms_mode_for(has_feature, &spec_versions);
+    mutual_rooms_slot.store(mutual_rooms_mode, Ordering::Relaxed);
+
     let caps: serde_json::Value = match caps_resp {
         Ok(r) => r.json().await.unwrap_or(serde_json::Value::Null),
         Err(_) => serde_json::Value::Null,
@@ -359,6 +365,7 @@ async fn build_server_info(
         default_room_version: default_room_ver,
         profile_fields_stable: supports_msc4133_stable,
         supports_invite_reason,
+        supports_mutual_rooms: mutual_rooms_mode != MUTUAL_ROOMS_NONE,
         server_name,
         server_version,
         upload_size_limit,
@@ -662,6 +669,7 @@ impl ClientFfi {
         let http = self.http_client.clone();
         let prefix_slot = self.profile_fields_prefix.clone();
         let invite_reason_slot = self.supports_invite_reason.clone();
+        let mutual_rooms_slot = self.mutual_rooms_mode.clone();
         let preview_url_slot = self.homeserver_preview_url_enabled.clone();
 
         self.rt.block_on(build_server_info(
@@ -669,6 +677,7 @@ impl ClientFfi {
             http,
             prefix_slot,
             invite_reason_slot,
+            mutual_rooms_slot,
             preview_url_slot,
         ))
     }
@@ -689,6 +698,7 @@ impl ClientFfi {
         let http = self.http_client.clone();
         let prefix_slot = self.profile_fields_prefix.clone();
         let invite_reason_slot = self.supports_invite_reason.clone();
+        let mutual_rooms_slot = self.mutual_rooms_mode.clone();
         let preview_url_slot = self.homeserver_preview_url_enabled.clone();
 
         self.rt.spawn(async move {
@@ -697,6 +707,7 @@ impl ClientFfi {
                 http,
                 prefix_slot,
                 invite_reason_slot,
+                mutual_rooms_slot,
                 preview_url_slot,
             )
             .await;

@@ -523,6 +523,7 @@ TEST_CASE("remaining callbacks are safe on an idle shell", "[event_handler_base]
     f.h.on_upload_progress(99, 1, 2);
     f.h.on_profile_field_result(99, "k", false, "x");
     f.h.on_extended_profile_ready(99, "{}");
+    f.h.on_mutual_rooms_ready(99, "{}");
     f.h.on_backup_progress(tesseract::BackupProgress{});
     f.h.on_enable_recovery_progress(1, "", 0, 0);
     f.h.on_crypto_reset_result(false, "x");

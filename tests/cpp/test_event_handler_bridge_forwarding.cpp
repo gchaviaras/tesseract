@@ -215,6 +215,10 @@ struct FwdRecorder : tesseract::IEventHandler
     {
         log.push_back("ext:" + n(id) + ":" + j);
     }
+    void on_mutual_rooms_ready(std::uint64_t id, const std::string& j) override
+    {
+        log.push_back("mutual:" + n(id) + ":" + j);
+    }
     void on_account_prefs_updated(const std::string& j) override
     {
         log.push_back("prefs:" + j);
@@ -400,6 +404,7 @@ TEST_CASE("bridge forwards request/response completions", "[bridge][forwarding]"
     f.bridge.on_upload_progress(16, 5, 50);
     f.bridge.on_profile_field_result(17, "status", true, "ok");
     f.bridge.on_extended_profile_ready(18, "{e}");
+    f.bridge.on_mutual_rooms_ready(19, "{m}");
     CHECK(f.rec.log ==
           std::vector<std::string>{
               "chunk:1:3:2:99", "preview:2:{p}", "giffail:3:gf", "fwddone:4",
@@ -407,7 +412,7 @@ TEST_CASE("bridge forwards request/response completions", "[bridge][forwarding]"
               "rpo:9:{o}", "searchfail:10:sf", "dirfail:11:df", "pag:12101:p",
               "mvpag:13" + std::string("01") + ":42:mv", "action:141:!joined:m",
               "upload:150:um", "uprog:16:5/50", "field:17:status1:ok",
-              "ext:18:{e}"});
+              "ext:18:{e}", "mutual:19:{m}"});
 }
 
 TEST_CASE("bridge converts the room security state", "[bridge][forwarding]")

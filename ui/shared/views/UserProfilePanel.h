@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace tesseract::views
@@ -79,6 +80,14 @@ public:
     // Fired from open() so the shell can fetch the list and call set_common_rooms().
     std::function<void(std::string user_id)> on_common_rooms_requested;
     std::function<void(std::string room_id)> on_common_room_clicked;
+    // Fired (once per approach) when the list is scrolled near its end and
+    // `has_more` was set, so the shell can append the next page.
+    std::function<void()> on_common_rooms_near_end;
+    // Small (thumbnail) avatars for the list rows, separate from the full-res
+    // provider the big avatar uses. Fired from paint once per room per open()
+    // when a row's avatar isn't loaded yet, so the shell can fetch it.
+    void set_common_room_avatar_provider(ImageProvider p) { common_avatar_provider_ = std::move(p); }
+    std::function<void(std::string room_id)> on_common_room_avatar_needed;
 
     // Callbacks wired by shell
     std::function<void(std::string user_id)> on_open_dm;
@@ -164,6 +173,8 @@ private:
     class CommonRoomsAdapter;
     friend class CommonRoomsAdapter;
     std::vector<CommonRoom> common_rooms_;
+    ImageProvider common_avatar_provider_;
+    std::unordered_set<std::string> common_avatar_requested_; // room ids, per open()
     int  common_total_    = 0;
     bool common_has_more_ = false;
     bool common_supported_ = false;

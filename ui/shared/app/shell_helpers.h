@@ -35,6 +35,17 @@ std::pair<bool, bool> compute_tray_unread(
     const std::unordered_map<std::string, std::vector<RoomInfo>>& by_account);
 bool account_has_unread(const std::vector<RoomInfo>& rooms);
 
+// One page of an MSC2666 mutual-rooms reply, parsed from the SDK's JSON
+// `{joined, count, next_batch, error}`. Malformed input yields an `error`.
+struct MutualRoomsPage
+{
+    std::vector<std::string> joined;
+    int count = 0;  ///< total shared rooms the server reports
+    std::string next_batch;
+    std::string error;
+};
+MutualRoomsPage parse_mutual_rooms_json(const std::string& json);
+
 // Room id of the existing DM with user_id, or empty.
 std::string find_existing_dm(const std::vector<RoomInfo>& rooms,
                              const std::string& user_id);

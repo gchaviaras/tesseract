@@ -2713,6 +2713,14 @@ void Client::get_extended_profile_async(std::uint64_t request_id,
     impl_->ffi->get_extended_profile_async(request_id, user_id);
 }
 
+void Client::get_mutual_rooms_async(std::uint64_t request_id,
+                                    const std::string& user_id,
+                                    const std::string& from)
+{
+    SH_FFI;
+    impl_->ffi->get_mutual_rooms_async(request_id, user_id, from);
+}
+
 void Client::resolve_user_profile_async(std::uint64_t request_id,
                                         const std::string& user_id)
 {

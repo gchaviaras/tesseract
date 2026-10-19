@@ -214,3 +214,29 @@ TEST_CASE("UserProfilePanel: common rooms hook",
     CHECK(requested == "@bob:example.org");
     CHECK(panel.common_rooms().empty());
 }
+
+TEST_CASE("UserProfilePanel: common room avatars are requested once while unloaded",
+          "[tk][view][user_profile_panel]")
+{
+    TkUserProfilePanelStage st;
+    UserProfilePanel panel;
+    std::vector<std::string> needed;
+    panel.on_common_room_avatar_needed = [&](std::string id) { needed.push_back(std::move(id)); };
+    panel.set_common_room_avatar_provider([](const std::string&) -> const tk::Image* { return nullptr; });
+    panel.open("@alice:example.org", "Alice", "");
+    panel.set_common_rooms_supported(true);
+    panel.set_common_rooms({{"!a:example.org", "A", "mxc://example.org/a"},
+                            {"!b:example.org", "B", ""}},
+                           2, false);
+
+    st.run(panel, {0, 0, 600, 500});
+    st.run(panel, {0, 0, 600, 500});
+    // Only the room with an avatar URL asks, and only once across repaints.
+    CHECK(needed == std::vector<std::string>{"!a:example.org"});
+
+    // A fresh open() re-arms the request.
+    panel.open("@bob:example.org", "Bob", "");
+    panel.set_common_rooms({{"!a:example.org", "A", "mxc://example.org/a"}}, 1, false);
+    st.run(panel, {0, 0, 600, 500});
+    CHECK(needed.size() == 2);
+}

@@ -29,6 +29,7 @@ mod media_queue;
 mod notifications;
 mod pins;
 mod polls;
+mod mutual_rooms;
 mod profile_fields;
 mod qr_grant;
 mod recovery;
@@ -1009,6 +1010,10 @@ pub struct ClientFfi {
     /// `false` = fall back to create-then-follow-up-invite (room_list.rs /
     /// account.rs).
     pub(super) supports_invite_reason: std::sync::Arc<std::sync::RwLock<bool>>,
+    /// MSC2666 mutual-rooms support, populated by `get_server_info`:
+    /// `MUTUAL_ROOMS_NONE` / `_UNSTABLE` / `_STABLE`. Picks the request type
+    /// `get_mutual_rooms_async` sends.
+    pub(super) mutual_rooms_mode: std::sync::Arc<std::sync::atomic::AtomicU8>,
     /// Active MatrixRTC call session, or `None` when not in a call.
     /// Owned here so `rtc_push_video_frame_i420` can reach it without a
     /// separate handle.
@@ -1416,6 +1421,7 @@ impl ClientFfi {
             ))),
             profile_fields_prefix: std::sync::Arc::new(std::sync::RwLock::new(None)),
             supports_invite_reason: std::sync::Arc::new(std::sync::RwLock::new(false)),
+            mutual_rooms_mode: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)),
             active_rtc_call: None,
             rt: tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
@@ -1486,6 +1492,7 @@ impl ClientFfi {
             msc2545_legacy_compat: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             profile_fields_prefix: std::sync::Arc::new(std::sync::RwLock::new(None)),
             supports_invite_reason: std::sync::Arc::new(std::sync::RwLock::new(false)),
+            mutual_rooms_mode: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)),
             active_rtc_call: None,
             rt: tokio::runtime::Builder::new_multi_thread()
                 .enable_all()

@@ -447,6 +447,7 @@ inline ServerInfo from_ffi(const tesseract_ffi::ServerInfoFfi& s)
     out.default_room_version    = std::string(s.default_room_version);
     out.profile_fields_stable   = s.profile_fields_stable;
     out.supports_invite_reason  = s.supports_invite_reason;
+    out.supports_mutual_rooms   = s.supports_mutual_rooms;
     out.server_name             = std::string(s.server_name);
     out.server_version          = std::string(s.server_version);
     out.upload_size_limit       = s.upload_size_limit;

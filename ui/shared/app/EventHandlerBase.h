@@ -166,6 +166,8 @@ public:
                                  const std::string& message) override;
     void on_extended_profile_ready(std::uint64_t request_id,
                                    const std::string& profile_json) override;
+    void on_mutual_rooms_ready(std::uint64_t request_id,
+                               const std::string& json) override;
     void on_rooms_updated(const std::vector<RoomInfo>& rooms) override;
     void on_invites_updated(const std::vector<InviteInfo>& invites) override;
     void on_my_knocks_updated(const std::vector<KnockedRoomInfo>& knocks) override;

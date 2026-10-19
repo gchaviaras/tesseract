@@ -3,6 +3,8 @@
 #include "tk/i18n.h"
 #include "views/map_tiles.h"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
@@ -17,6 +19,40 @@
 
 namespace tesseract::shell_helpers
 {
+
+MutualRoomsPage parse_mutual_rooms_json(const std::string& json)
+{
+    MutualRoomsPage page;
+    const auto j = nlohmann::json::parse(json, nullptr, /*allow_exceptions=*/false);
+    if (!j.is_object())
+    {
+        page.error = "invalid response";
+        return page;
+    }
+    if (const auto e = j.find("error"); e != j.end() && e->is_string())
+    {
+        page.error = e->get<std::string>();
+    }
+    if (const auto b = j.find("next_batch"); b != j.end() && b->is_string())
+    {
+        page.next_batch = b->get<std::string>();
+    }
+    if (const auto c = j.find("count"); c != j.end() && c->is_number_integer())
+    {
+        page.count = c->get<int>();
+    }
+    if (const auto a = j.find("joined"); a != j.end() && a->is_array())
+    {
+        for (const auto& id : *a)
+        {
+            if (id.is_string())
+            {
+                page.joined.push_back(id.get<std::string>());
+            }
+        }
+    }
+    return page;
+}
 
 std::string gallery_caption_or_fallback(const std::string& caption, std::size_t item_count)
 {

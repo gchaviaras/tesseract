@@ -627,6 +627,14 @@ public:
     {
     }
 
+    /// Fired when an async `Client::get_mutual_rooms_async` page completes.
+    /// `json` is `{"joined":[room ids],"count":N,"next_batch":"","error":""}`;
+    /// a non-empty `error` means the request failed.
+    virtual void on_mutual_rooms_ready(std::uint64_t /*request_id*/,
+                                       const std::string& /*json*/)
+    {
+    }
+
     // ------------------------------------------------------------------
     // MatrixRTC voice/video call events
     // Default no-ops; EventHandlerBase overrides them.

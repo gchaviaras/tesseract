@@ -1437,6 +1437,8 @@ pub mod ffi {
         profile_fields_stable: bool,
         /// Server advertises MSC4491 invite reasons.
         supports_invite_reason: bool,
+        /// Server supports MSC2666 mutual rooms (unstable or stable endpoint).
+        supports_mutual_rooms: bool,
         /// Server software from `/_matrix/federation/v1/version`; both empty
         /// when the endpoint is unreachable.
         server_name: String,
@@ -2083,6 +2085,11 @@ pub mod ffi {
             request_id: u64,
             profile_json: &str,
         );
+
+        /// Fired when an async `get_mutual_rooms_async` page completes.
+        /// `json` is `{"joined":[room ids],"count":N,"next_batch":"","error":""}`;
+        /// a non-empty `error` means the request failed.
+        fn on_mutual_rooms_ready(self: &EventHandlerBridge, request_id: u64, json: &str);
 
         // --- MatrixRTC call event callbacks ---
 
@@ -4187,6 +4194,11 @@ pub mod ffi {
         /// `on_extended_profile_ready(request_id, profile_json)` on
         /// completion. Does not pin a C++ worker thread.
         fn get_extended_profile_async(self: &ClientFfi, request_id: u64, user_id: &str);
+
+        /// Fetch one page of the rooms shared with `user_id` (MSC2666) and fire
+        /// `on_mutual_rooms_ready(request_id, json)`. `from` is the previous
+        /// page's `next_batch` (empty for the first). Does not pin a thread.
+        fn get_mutual_rooms_async(self: &ClientFfi, request_id: u64, user_id: &str, from: &str);
 
         /// Async counterpart of `resolve_user_profile`. Delegates to
         /// `get_extended_profile_async` and fires the same callback.

@@ -894,6 +894,16 @@ void EventHandlerBridge::on_extended_profile_ready(std::uint64_t request_id,
           });
 }
 
+void EventHandlerBridge::on_mutual_rooms_ready(std::uint64_t request_id,
+                                               rust::Str json) const
+{
+    with_handler("on_mutual_rooms_ready", slot_,
+          [&](tesseract::IEventHandler* handler_)
+          {
+              handler_->on_mutual_rooms_ready(request_id, std::string(json));
+          });
+}
+
 void EventHandlerBridge::on_account_prefs_updated(rust::Str json) const
 {
     with_handler("on_account_prefs_updated", slot_,

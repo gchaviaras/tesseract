@@ -590,6 +590,7 @@ pub mod ffi {
         pub default_room_version: String,
         pub profile_fields_stable: bool,
         pub supports_invite_reason: bool,
+        pub supports_mutual_rooms: bool,
         pub server_name: String,
         pub server_version: String,
         pub upload_size_limit: u64,

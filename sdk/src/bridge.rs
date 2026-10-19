@@ -109,6 +109,10 @@ pub fn find_url_spans(text: &str) -> Vec<ffi::UrlSpan> {
     super::text_utils::find_url_spans(text)
 }
 
+pub fn find_preview_url_spans(text: &str) -> Vec<ffi::UrlSpan> {
+    super::text_utils::find_preview_url_spans(text)
+}
+
 /// Classify whether `text` (expected to be the entire trimmed composed
 /// message body) is a Google Maps / OpenStreetMap URL. See `MapsLinkResult`.
 pub fn classify_maps_link(text: &str) -> ffi::MapsLinkResult {
@@ -2253,6 +2257,12 @@ pub mod ffi {
         /// Returns byte-offset spans sorted by `start`.  Used by the C++
         /// autolinker to build clickable TextSpan lists from plain-text bodies.
         fn find_url_spans(text: &str) -> Vec<UrlSpan>;
+
+        /// Like `find_url_spans`, but excludes spans inside a Markdown code
+        /// region (fenced block or inline code span) — a URL shown as code
+        /// was not meant as a link to preview. Used by the C++ legacy
+        /// URL-preview fallback (`first_url_from_plain`).
+        fn find_preview_url_spans(text: &str) -> Vec<UrlSpan>;
 
         // ----- Maps link detection -----
 

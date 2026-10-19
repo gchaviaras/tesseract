@@ -34,18 +34,17 @@ pub(super) const MAX_PREVIEWS_PER_MESSAGE: usize = 3;
 
 /// Candidate URLs for bundled previews in a message `body`: http(s) links as
 /// detected by `linkify` (same detection as `text_utils::find_url_spans`),
-/// verbatim so each `matched_url` is a substring of the body (receivers drop
-/// previews whose `matched_url` isn't), de-duplicated, capped at
+/// excluding any URL that appears only inside a Markdown code region (fenced
+/// block or inline code span, via `text_utils::find_preview_url_spans`) — a
+/// URL shown as code was not meant as a link to preview. Kept verbatim so
+/// each `matched_url` is a substring of the body (receivers drop previews
+/// whose `matched_url` isn't), de-duplicated, capped at
 /// `MAX_PREVIEWS_PER_MESSAGE`. `matrix.to` permalinks are skipped — they're
 /// rendered as pills, never as preview cards.
 pub(super) fn preview_candidate_urls(body: &str) -> Vec<String> {
-    use linkify::{LinkFinder, LinkKind};
     let mut out: Vec<String> = Vec::new();
-    for link in LinkFinder::new().links(body) {
-        if link.kind() != &LinkKind::Url {
-            continue;
-        }
-        let s = link.as_str();
+    for span in crate::text_utils::find_preview_url_spans(body) {
+        let s = span.url.as_str();
         let Ok(parsed) = url::Url::parse(s) else {
             continue;
         };
@@ -467,6 +466,18 @@ mod tests {
                     https://matrix.to/#/@alice:example.org";
         assert!(preview_candidate_urls(body).is_empty());
         assert!(preview_candidate_urls("no links here").is_empty());
+    }
+
+    #[test]
+    fn candidate_urls_skip_fenced_and_inline_code() {
+        let fenced = "see\n```\nhttp://example.com\n```\nthanks";
+        assert!(preview_candidate_urls(fenced).is_empty());
+
+        let inline = "try `http://example.com` sometime";
+        assert!(preview_candidate_urls(inline).is_empty());
+
+        let mixed = "see https://example.org but not ```\nhttp://example.com\n```";
+        assert_eq!(preview_candidate_urls(mixed), vec!["https://example.org"]);
     }
 
     #[test]

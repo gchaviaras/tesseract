@@ -53,6 +53,122 @@ pub fn find_url_spans(text: &str) -> Vec<UrlSpan> {
     spans
 }
 
+/// Like [`find_url_spans`], but drops any span that falls inside a Markdown
+/// code region — a fenced code block (` ``` `/`~~~`, ≥3 backticks/tildes) or
+/// an inline code span (matching backtick runs). Used for URL-preview
+/// candidate selection, where a URL shown as code (a log line, an example, a
+/// config snippet) was not meant as a link to preview.
+///
+/// Plain autolinking of message bodies into clickable text
+/// (`find_url_spans`'s other caller) is unaffected — a bare backtick run in a
+/// plain-text (non-Markdown) message isn't a code span there, so narrowing
+/// that path too would be a separate, broader behavior change.
+pub fn find_preview_url_spans(text: &str) -> Vec<UrlSpan> {
+    let code_regions = code_regions(text);
+    find_url_spans(text)
+        .into_iter()
+        .filter(|s| !code_regions.iter().any(|r| s.start >= r.0 && s.end <= r.1))
+        .collect()
+}
+
+/// Byte ranges of `text` that are Markdown code regions (fenced blocks and
+/// inline code spans), as `(start, end)` pairs.
+fn code_regions(text: &str) -> Vec<(usize, usize)> {
+    let mut regions = Vec::new();
+
+    // ── Fenced code blocks ──────────────────────────────────────────────────
+    // Scan line by line; a fence line is one whose first non-space run is
+    // ≥3 backticks or ≥3 tildes. A block runs from the fence line's start to
+    // the matching closing fence (same char, length ≥ opening), or to the end
+    // of `text` if unterminated.
+    let mut fence: Option<(u8, usize)> = None; // (fence_char, fence_len)
+    let mut fence_start = 0usize;
+    let mut pos = 0usize;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        let indent = line.len() - trimmed.len();
+        let fence_char = trimmed.as_bytes().first().copied();
+        let run_len = match fence_char {
+            Some(c @ (b'`' | b'~')) => trimmed.bytes().take_while(|&b| b == c).count(),
+            _ => 0,
+        };
+
+        match fence {
+            None => {
+                if run_len >= 3 && indent < 4 {
+                    fence = Some((fence_char.unwrap(), run_len));
+                    fence_start = pos;
+                }
+            }
+            Some((c, len)) => {
+                if fence_char == Some(c) && run_len >= len && indent < 4 {
+                    regions.push((fence_start, pos + line.len()));
+                    fence = None;
+                }
+            }
+        }
+
+        pos += line.len();
+    }
+    if fence.is_some() {
+        // Unterminated fence: excludes the rest of the text.
+        regions.push((fence_start, text.len()));
+    }
+
+    // ── Inline code spans ────────────────────────────────────────────────────
+    // Skip scanning inside fenced blocks already found above.
+    let bytes = text.as_bytes();
+    let n = bytes.len();
+    let mut i = 0;
+    while i < n {
+        if regions.iter().any(|r| i >= r.0 && i < r.1) {
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b'`' {
+            let open_start = i;
+            let open_len = {
+                let mut j = i;
+                while j < n && bytes[j] == b'`' {
+                    j += 1;
+                }
+                j - i
+            };
+            let mut j = open_start + open_len;
+            let mut found_close = None;
+            while j < n {
+                if bytes[j] == b'`' {
+                    let close_start = j;
+                    let mut k = j;
+                    while k < n && bytes[k] == b'`' {
+                        k += 1;
+                    }
+                    let close_len = k - close_start;
+                    if close_len == open_len {
+                        found_close = Some(k);
+                        break;
+                    }
+                    j = k;
+                } else {
+                    j += 1;
+                }
+            }
+            if let Some(end) = found_close {
+                regions.push((open_start, end));
+                i = end;
+                continue;
+            }
+            // No matching close: not a code span, just literal backticks.
+            i = open_start + open_len;
+            continue;
+        }
+        i += 1;
+    }
+
+    regions.sort_by_key(|r| r.0);
+    regions
+}
+
 // ── matrix: URI scanner ───────────────────────────────────────────────────────
 
 const MATRIX_SCHEME: &str = "matrix:";
@@ -205,6 +321,60 @@ mod tests {
         assert_eq!(s[0].url, "https://example.org");
         assert_eq!(s[1].url, "matrix:u/alice:example.org");
         assert!(s[0].start < s[1].start);
+    }
+}
+
+#[cfg(test)]
+mod preview_span_tests {
+    use super::*;
+
+    fn preview_urls(text: &str) -> Vec<&str> {
+        find_preview_url_spans(text)
+            .iter()
+            .map(|s| &text[s.start..s.end])
+            .collect()
+    }
+
+    #[test]
+    fn url_in_fenced_block_excluded() {
+        let text = "see\n```\nhttp://example.com\n```\nthanks";
+        assert!(preview_urls(text).is_empty());
+    }
+
+    #[test]
+    fn url_in_tilde_fenced_block_excluded() {
+        let text = "see\n~~~\nhttp://example.com\n~~~\nthanks";
+        assert!(preview_urls(text).is_empty());
+    }
+
+    #[test]
+    fn url_in_inline_code_excluded() {
+        let text = "try `http://example.com` sometime";
+        assert!(preview_urls(text).is_empty());
+    }
+
+    #[test]
+    fn url_outside_code_region_kept() {
+        let text = "see http://example.org now";
+        assert_eq!(preview_urls(text), vec!["http://example.org"]);
+    }
+
+    #[test]
+    fn unterminated_fence_excludes_rest_of_text() {
+        let text = "intro\n```\nhttp://example.com\nmore http://example.org";
+        assert!(preview_urls(text).is_empty());
+    }
+
+    #[test]
+    fn mixed_code_and_prose_keeps_only_prose_url() {
+        let text = "see https://example.org but not ```\nhttp://example.com\n```";
+        assert_eq!(preview_urls(text), vec!["https://example.org"]);
+    }
+
+    #[test]
+    fn matrix_uri_in_fenced_block_excluded() {
+        let text = "```\nmatrix:u/alice:example.org\n```";
+        assert!(preview_urls(text).is_empty());
     }
 }
 

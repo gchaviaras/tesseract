@@ -22,4 +22,10 @@ struct UrlSpan
 /// Returns an empty vector when `text` contains no linkable URI.
 std::vector<UrlSpan> find_url_spans(std::string_view text);
 
+/// Like `find_url_spans`, but excludes spans inside a Markdown code region
+/// (fenced block or inline code span) — a URL shown as code was not meant
+/// as a link to preview. Used for URL-preview candidate selection, not for
+/// autolinking plain-text bodies into clickable links.
+std::vector<UrlSpan> find_preview_url_spans(std::string_view text);
+
 } // namespace tesseract

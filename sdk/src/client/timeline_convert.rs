@@ -342,9 +342,13 @@ fn is_http_url(s: &str) -> bool {
 /// content (`com.beeper.linkpreviews` / `m.url_previews`) into the FFI shape.
 ///
 /// An entry is kept only when it has a `matched_url` that appears verbatim in
-/// `body` — the MSC's recommended receiver-side guard against a sender
-/// attaching a preview card for a URL that isn't in the visible text. Entries
-/// with no `matched_url`, or one not in `body`, are dropped. Entries that carry
+/// `body` as a real link span — not merely as a substring, so a URL that only
+/// occurs inside a Markdown code region (fenced block or inline code span) in
+/// `body` doesn't qualify, matching the sender-side exclusion in
+/// `url_preview_gen::preview_candidate_urls`. This is the MSC's recommended
+/// receiver-side guard against a sender attaching a preview card for a URL
+/// that isn't meant as a link in the visible text. Entries with no
+/// `matched_url`, or one that doesn't qualify, are dropped. Entries that carry
 /// only a `matched_url` (no title/description/image) are kept as-is; the C++
 /// side recognises them as "ask the homeserver to preview this URL instead".
 ///
@@ -358,11 +362,13 @@ fn map_bundled_url_previews(
     use matrix_sdk::ruma::events::room::message::PreviewImageSource;
     use matrix_sdk::ruma::events::room::MediaSource;
 
+    let preview_spans = crate::text_utils::find_preview_url_spans(body);
+
     previews
         .iter()
         .filter_map(|p| {
             let matched_url = p.matched_url.clone()?;
-            if !body.contains(&matched_url) {
+            if !preview_spans.iter().any(|s| s.url == matched_url) {
                 return None;
             }
             if !is_http_url(&matched_url) {
@@ -2386,6 +2392,20 @@ mod bundled_url_preview_tests {
             }]
         }));
         assert!(map_bundled_url_previews(&previews, "nothing to see here").is_empty());
+    }
+
+    #[test]
+    fn entry_with_matched_url_only_in_code_span_is_filtered() {
+        let body = "see\n```\nhttps://matrix.org\n```\nthanks";
+        let previews = previews_from(serde_json::json!({
+            "msgtype": "m.text",
+            "body": body,
+            "m.url_previews": [{
+                "matrix:matched_url": "https://matrix.org",
+                "og:title": "Matrix.org"
+            }]
+        }));
+        assert!(map_bundled_url_previews(&previews, body).is_empty());
     }
 
     #[test]

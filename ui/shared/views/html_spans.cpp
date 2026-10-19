@@ -1136,15 +1136,32 @@ static bool is_matrix_to_url(const std::string& url)
 std::string first_url_from_html(std::string_view html)
 {
     // Walk the HTML looking for the first <a href="http(s)://..."> tag that
-    // is not a matrix.to permalink.
+    // is not a matrix.to permalink and is not nested inside <pre>/<code> (a
+    // URL shown as code was not meant as a link to preview). Tesseract's own
+    // Markdown renderer never emits an <a> inside code, but a formatted_body
+    // from another client legally could.
     const char* p = html.data();
     const char* end = p + html.size();
+    int code_depth = 0;
     while (p < end)
     {
         if (*p == '<')
         {
             Tag tag = parse_tag(p, end);
-            if (!tag.href.empty() && !is_matrix_to_url(tag.href))
+            if (tag.name == "pre" || tag.name == "code")
+            {
+                if (tag.closing)
+                {
+                    if (code_depth > 0)
+                        --code_depth;
+                }
+                else
+                {
+                    ++code_depth;
+                }
+                continue;
+            }
+            if (code_depth == 0 && !tag.href.empty() && !is_matrix_to_url(tag.href))
             {
                 return tag.href;
             }
@@ -1159,7 +1176,7 @@ std::string first_url_from_html(std::string_view html)
 
 std::string first_url_from_plain(std::string_view text)
 {
-    for (const auto& s : tesseract::find_url_spans(text))
+    for (const auto& s : tesseract::find_preview_url_spans(text))
     {
         if (!is_matrix_to_url(s.url))
             return s.url;

@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- fix(ui): the user profile panel no longer stretches non-square avatars; `draw_avatar` centre-crops them to a square (the panel draws the full-resolution original, not the pre-cropped thumbnail). Linux release build, ctest 3433/3433, user-verified
 - chore(sdk): removed the unused `list_rooms` FFI method (superseded by push-based room updates plus `room_info_by_id`) and the dead `MediaGate::stale_len` diagnostic helper. cargo build clean, cargo tests 1174/1175 (1 failure unrelated to this change, in URL-preview scheme handling)
 - fix(ui): a URL shown only inside a Markdown code block or inline code span no longer triggers a link-preview card, on send or on receive. Build and user-verified
 - feat(sdk): the profile panel lists the rooms you share with a user via MSC2666 mutual rooms (unstable or spec 1.19 endpoint, detected from the server), loading more as you scroll; room avatars in the list load on demand. cargo tests 1167, Windows build, user-verified Windows

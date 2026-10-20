@@ -683,7 +683,10 @@ public:
         return false;
     }
 
-    // Circular clip + centre-fit, for avatars. Diameter is logical pixels.
+    // Circular clip, for avatars. The image is drawn into the diameter square
+    // (stretched, not cropped), so callers must pass a square image or go
+    // through draw_avatar (views/media_utils.h), which crops. Diameter is
+    // logical pixels.
     virtual void draw_circle_image(const Image&, Point centre,
                                    float diameter) = 0;
 

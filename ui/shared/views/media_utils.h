@@ -45,10 +45,11 @@ inline bool rect_contains(const tk::Rect& r, tk::Point p)
 }
 
 // Draw a circular avatar into the disc centred at `centre` with the given
-// `diameter`. When `img` is non-null it is centre-fit and clipped to the
-// circle (exactly as `Canvas::draw_circle_image`); otherwise an initials
-// disc is drawn from `initials_name` with the supplied background/foreground
-// colours (exactly as `Canvas::draw_initials_circle`; pass
+// `diameter`. When `img` is non-null it is clipped to the circle: square
+// images go through `Canvas::draw_circle_image`, non-square ones are
+// centre-cropped to a square here (the canvas would stretch them); otherwise
+// an initials disc is drawn from `initials_name` with the supplied
+// background/foreground colours (exactly as `Canvas::draw_initials_circle`; pass
 // tk::AvatarText::Literal to draw a glyph like "#" as-is).
 //
 // Image resolution stays at the call site because it diverges widely
@@ -63,7 +64,23 @@ inline void draw_avatar(tk::Canvas& canvas, const tk::Image* img,
 {
     if (img)
     {
-        canvas.draw_circle_image(*img, centre, diameter);
+        const int w = img->width();
+        const int h = img->height();
+        if (w == h || w <= 0 || h <= 0)
+        {
+            canvas.draw_circle_image(*img, centre, diameter);
+        }
+        else
+        {
+            const float s = static_cast<float>(std::min(w, h));
+            const tk::Rect src{(static_cast<float>(w) - s) / 2.0f,
+                               (static_cast<float>(h) - s) / 2.0f, s, s};
+            const tk::Rect dst{centre.x - diameter * 0.5f,
+                               centre.y - diameter * 0.5f, diameter, diameter};
+            canvas.push_clip_rounded_rect(dst, diameter * 0.5f);
+            canvas.draw_image_subregion(*img, src, dst);
+            canvas.pop_clip();
+        }
     }
     else
     {

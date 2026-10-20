@@ -37,9 +37,7 @@ Drop `--user` to install system-wide. If you'd rather not add a remote, each rel
 ### Windows
 
 - [Microsoft Store](https://apps.microsoft.com/detail/9nz8v8tcnvjw), or
-- the NSIS installer (`.exe`) from the Releases page.
-
-The NSIS installer isn't code-signed, so SmartScreen will likely show "Windows protected your PC". Click **More info**, then **Run anyway**. The Store version is signed and doesn't have this problem.
+- the signed NSIS installer (`.exe`) from the Releases page.
 
 ### macOS
 

@@ -459,14 +459,16 @@ void MediaViewerOverlay::paint_nav_(tk::PaintCtx& ctx)
     auto& cv = ctx.canvas;
     const tk::Color tint = tk::Color::rgba(255, 255, 255, 220);
 
-    cv.push_clip_rounded_rect(prev_btn_->bounds(), kNavBtnSize * 0.5f);
-    prev_btn_->paint(ctx);
-    cv.pop_clip();
+    {
+        tk::ClipScope clip(cv, prev_btn_->bounds(), kNavBtnSize * 0.5f);
+        prev_btn_->paint(ctx);
+    }
     draw_icon_(ctx, prev_btn_->bounds(), kNavIconPx, prev_icon_, kChevronLeftSvg, tint);
 
-    cv.push_clip_rounded_rect(next_btn_->bounds(), kNavBtnSize * 0.5f);
-    next_btn_->paint(ctx);
-    cv.pop_clip();
+    {
+        tk::ClipScope clip(cv, next_btn_->bounds(), kNavBtnSize * 0.5f);
+        next_btn_->paint(ctx);
+    }
     draw_icon_(ctx, next_btn_->bounds(), kNavIconPx, next_icon_, kChevronRightSvg, tint);
 
     // Counter pill, top-left (mirrors the chrome cluster top-right).

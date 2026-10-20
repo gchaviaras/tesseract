@@ -342,9 +342,8 @@ void VideoViewerPage::paint_content(tk::PaintCtx& ctx)
 
     if (display)
     {
-        cv.push_clip_rounded_rect(video_rect_, 4.0f);
+        tk::ClipScope clip(cv, video_rect_, 4.0f);
         cv.draw_image(*display, video_rect_);
-        cv.pop_clip();
     }
     else
     {

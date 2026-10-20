@@ -224,63 +224,64 @@ void SideTabView::paint_before_children(PaintCtx& ctx)
     // Clip tab-button painting to the sidebar column so a scrolled-off top
     // tab never draws past the sidebar's own bounds (e.g. over the content
     // pane or the window edge).
-    ctx.canvas.push_clip_rect(sidebar);
-
-    auto button_y = [&](int i) -> float {
-        const int slot = visible_slot_(i);
-        if (!tabs_[i].bottom)
-        {
-            return bounds_.y + static_cast<float>(slot) * kTabHeight - scroll_y_;
-        }
-        // Bottom group: lay out from the bottom of the sidebar upwards.
-        // Never scrolls — always pinned to the bottom of the column.
-        const float group_top =
-            bounds_.y + bounds_.h - static_cast<float>(n_vis_bot) * kTabHeight;
-        return group_top + static_cast<float>(slot) * kTabHeight;
-    };
-
-    for (int i = 0; i < n_total; ++i)
     {
-        auto& t = tabs_[i];
-        if (!t.visible)
+        ClipScope clip(ctx.canvas, sidebar);
+
+        auto button_y = [&](int i) -> float {
+            const int slot = visible_slot_(i);
+            if (!tabs_[i].bottom)
+            {
+                return bounds_.y + static_cast<float>(slot) * kTabHeight - scroll_y_;
+            }
+            // Bottom group: lay out from the bottom of the sidebar upwards.
+            // Never scrolls — always pinned to the bottom of the column.
+            const float group_top =
+                bounds_.y + bounds_.h - static_cast<float>(n_vis_bot) * kTabHeight;
+            return group_top + static_cast<float>(slot) * kTabHeight;
+        };
+
+        for (int i = 0; i < n_total; ++i)
         {
-            continue;
+            auto& t = tabs_[i];
+            if (!t.visible)
+            {
+                continue;
+            }
+
+            Rect btn{btn_x,
+                     button_y(i) + kTabVPad * 0.5f,
+                     btn_w, kTabHeight - kTabVPad};
+
+            // Choose fill colour based on state.
+            Color fill = Color::rgba(0, 0, 0, 0); // transparent default
+            if (i == selected_idx_)
+            {
+                fill = pal.sidebar_selected;
+            }
+            else if (t.hovered)
+            {
+                fill = pal.sidebar_hover;
+            }
+
+            if (fill.a > 0)
+            {
+                ctx.canvas.fill_rounded_rect(btn, kTabRadius, fill);
+            }
+
+            // Draw label text.
+            ensure_layout_(ctx, i, label_w);
+            if (t.layout)
+            {
+                Size ts = t.layout->measure();
+                float tx = btn.x + kTabHPad;
+                float ty = btn.y + (btn.h - ts.h) * 0.5f;
+                Color tc =
+                    (i == selected_idx_) ? pal.text_primary : pal.text_secondary;
+                ctx.canvas.draw_text(*t.layout, {tx, ty}, tc);
+            }
         }
 
-        Rect btn{btn_x,
-                 button_y(i) + kTabVPad * 0.5f,
-                 btn_w, kTabHeight - kTabVPad};
-
-        // Choose fill colour based on state.
-        Color fill = Color::rgba(0, 0, 0, 0); // transparent default
-        if (i == selected_idx_)
-        {
-            fill = pal.sidebar_selected;
-        }
-        else if (t.hovered)
-        {
-            fill = pal.sidebar_hover;
-        }
-
-        if (fill.a > 0)
-        {
-            ctx.canvas.fill_rounded_rect(btn, kTabRadius, fill);
-        }
-
-        // Draw label text.
-        ensure_layout_(ctx, i, label_w);
-        if (t.layout)
-        {
-            Size ts = t.layout->measure();
-            float tx = btn.x + kTabHPad;
-            float ty = btn.y + (btn.h - ts.h) * 0.5f;
-            Color tc =
-                (i == selected_idx_) ? pal.text_primary : pal.text_secondary;
-            ctx.canvas.draw_text(*t.layout, {tx, ty}, tc);
-        }
     }
-
-    ctx.canvas.pop_clip();
 
     // Lightweight scrollbar thumb over the sidebar's inner right edge when
     // the top tab group overflows the space left for it.

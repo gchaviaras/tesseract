@@ -790,46 +790,46 @@ void ListView::paint(PaintCtx& ctx)
 
     ensure_measured(ctx);
 
-    ctx.canvas.push_clip_rect(bounds_);
-
-    // Find the first row whose end is past the viewport top.
-    float viewport_bot = scroll_y_ + bounds_.h;
-    std::size_t first = first_visible_row_();
-
-    // Snapshot the canvas clip once (after push_clip_rect above). For partial
-    // repaints such as animated-image ticks the clip is a small rect around the
-    // GIF; skipping rows that fall entirely outside it avoids all the per-row
-    // work (build_text, span iteration, image lookups) that QPainter would
-    // otherwise silently discard at pixel-write time.
-    const Rect clip = ctx.canvas.clip_rect();
-
-    // Bound by row_offsets_ (size = count+1 as of the last rebuild), not the
-    // live adapter count: if rows were appended without invalidate_data()
-    // since the last rebuild, the two diverge and row_offsets_[i+1] would be
-    // out of bounds. The next layout pass reconciles them.
-    std::size_t row_limit = row_offsets_.empty() ? 0 : row_offsets_.size() - 1;
-    std::size_t paint_end = std::min(adapter_->count(), row_limit);
-    for (std::size_t i = first; i < paint_end; ++i)
     {
-        float row_top = row_offsets_[i];
-        float row_bottom = row_offsets_[i + 1];
-        if (row_top >= viewport_bot)
-        {
-            break;
-        }
-        Rect row_bounds{bounds_.x,
-                        bounds_.y + content_top_pad_() + (row_top - scroll_y_),
-                        bounds_.w, row_bottom - row_top};
-        if (row_bounds.bottom() <= clip.y || row_bounds.y >= clip.bottom())
-        {
-            continue;
-        }
-        bool selected = (static_cast<int>(i) == selected_index_);
-        bool hovered = (static_cast<int>(i) == hovered_index_);
-        adapter_->paint_row(i, ctx, row_bounds, selected, hovered);
-    }
+        ClipScope list_clip(ctx.canvas, bounds_);
 
-    ctx.canvas.pop_clip();
+        // Find the first row whose end is past the viewport top.
+        float viewport_bot = scroll_y_ + bounds_.h;
+        std::size_t first = first_visible_row_();
+
+        // Snapshot the canvas clip once (after push_clip_rect above). For partial
+        // repaints such as animated-image ticks the clip is a small rect around the
+        // GIF; skipping rows that fall entirely outside it avoids all the per-row
+        // work (build_text, span iteration, image lookups) that QPainter would
+        // otherwise silently discard at pixel-write time.
+        const Rect clip = ctx.canvas.clip_rect();
+
+        // Bound by row_offsets_ (size = count+1 as of the last rebuild), not the
+        // live adapter count: if rows were appended without invalidate_data()
+        // since the last rebuild, the two diverge and row_offsets_[i+1] would be
+        // out of bounds. The next layout pass reconciles them.
+        std::size_t row_limit = row_offsets_.empty() ? 0 : row_offsets_.size() - 1;
+        std::size_t paint_end = std::min(adapter_->count(), row_limit);
+        for (std::size_t i = first; i < paint_end; ++i)
+        {
+            float row_top = row_offsets_[i];
+            float row_bottom = row_offsets_[i + 1];
+            if (row_top >= viewport_bot)
+            {
+                break;
+            }
+            Rect row_bounds{bounds_.x,
+                            bounds_.y + content_top_pad_() + (row_top - scroll_y_),
+                            bounds_.w, row_bottom - row_top};
+            if (row_bounds.bottom() <= clip.y || row_bounds.y >= clip.bottom())
+            {
+                continue;
+            }
+            bool selected = (static_cast<int>(i) == selected_index_);
+            bool hovered = (static_cast<int>(i) == hovered_index_);
+            adapter_->paint_row(i, ctx, row_bounds, selected, hovered);
+        }
+    }
 
     // Scrollbar overlay — only if content overflows the viewport.
     paint_scrollbar(ctx);
@@ -1188,41 +1188,41 @@ void GridView::paint(PaintCtx& ctx)
         return;
     }
 
-    ctx.canvas.push_clip_rect(bounds_);
-
-    int c = cols(bounds_.w);
-    float cw = col_w(bounds_.w, c);
-    int total = static_cast<int>(adapter_->count());
-    float row_h = cell_h_ + v_spacing_;
-    float origin_x = bounds_.x + padding_.left;
-    float origin_y = bounds_.y + padding_.top - scroll_y_;
-
-    auto [first_idx, last_idx] = visible_range();
-    if (last_idx >= first_idx && c > 0)
     {
-        int first_row = first_idx / c;
-        int last_row = last_idx / c;
-        for (int row = first_row; row <= last_row; ++row)
+        ClipScope clip(ctx.canvas, bounds_);
+
+        int c = cols(bounds_.w);
+        float cw = col_w(bounds_.w, c);
+        int total = static_cast<int>(adapter_->count());
+        float row_h = cell_h_ + v_spacing_;
+        float origin_x = bounds_.x + padding_.left;
+        float origin_y = bounds_.y + padding_.top - scroll_y_;
+
+        auto [first_idx, last_idx] = visible_range();
+        if (last_idx >= first_idx && c > 0)
         {
-            float row_top = origin_y + row * row_h;
-            for (int col = 0; col < c; ++col)
+            int first_row = first_idx / c;
+            int last_row = last_idx / c;
+            for (int row = first_row; row <= last_row; ++row)
             {
-                int idx = row * c + col;
-                if (idx >= total)
+                float row_top = origin_y + row * row_h;
+                for (int col = 0; col < c; ++col)
                 {
-                    break;
+                    int idx = row * c + col;
+                    if (idx >= total)
+                    {
+                        break;
+                    }
+                    Rect cell_bounds{origin_x + col * (cw + h_spacing_), row_top,
+                                     cw, cell_h_};
+                    bool selected = (idx == selected_index_);
+                    bool hovered = (idx == hovered_index_);
+                    adapter_->paint_cell(static_cast<std::size_t>(idx), ctx,
+                                         cell_bounds, selected, hovered);
                 }
-                Rect cell_bounds{origin_x + col * (cw + h_spacing_), row_top,
-                                 cw, cell_h_};
-                bool selected = (idx == selected_index_);
-                bool hovered = (idx == hovered_index_);
-                adapter_->paint_cell(static_cast<std::size_t>(idx), ctx,
-                                     cell_bounds, selected, hovered);
             }
         }
     }
-
-    ctx.canvas.pop_clip();
 
     // Scrollbar overlay — only when content overflows the viewport.
     paint_scrollbar(ctx);

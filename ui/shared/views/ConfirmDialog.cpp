@@ -288,11 +288,10 @@ void ConfirmDialog::paint_before_children(tk::PaintCtx& ctx)
         {
             const float field_h =
                 (opts_.reason_field && reason_field_) ? kTitleGap + kFieldH : 0.0f;
-            cv.push_clip_rect({card_rect_.x, card_rect_.y,
-                               card_rect_.w,
-                               card_rect_.h - kCardPad - kBtnH - kBodyGap - field_h});
+            tk::ClipScope clip(cv, {card_rect_.x, card_rect_.y,
+                                         card_rect_.w,
+                                         card_rect_.h - kCardPad - kBtnH - kBodyGap - field_h});
             cv.draw_text(*body_layout_, {text_x, y}, pal.text_secondary);
-            cv.pop_clip();
         }
     }
 

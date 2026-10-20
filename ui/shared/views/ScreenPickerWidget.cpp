@@ -171,63 +171,63 @@ void ScreenPickerWidget::paint_before_children(tk::PaintCtx& ctx)
             t.image.reset();
     }
 
-    ctx.canvas.push_clip_rect(grid_rect_);
-
-    for (std::size_t i = 0; i < sources_.size(); ++i)
     {
-        // Apply scroll offset to the stored (unscrolled) tile position.
-        tk::Rect r = tile_rects_[i];
-        r.y -= scroll_y_;
-        if (i < tile_targets_.size())
-            tile_targets_[i]->set_target_rect(r);
+        tk::ClipScope clip(ctx.canvas, grid_rect_);
 
-        // Skip tiles entirely outside the viewport.
-        if (r.y + r.h <= grid_rect_.y || r.y >= grid_rect_.y + grid_rect_.h)
-            continue;
-
-        const bool hov = (static_cast<int>(i) == hovered_idx_);
-
-        ctx.canvas.fill_rect(r, hov ? kTileHov : kTileNorm);
-
-        TileThumb& thumb = thumbs_[i];
-        if (thumb.w > 0 && thumb.h > 0)
+        for (std::size_t i = 0; i < sources_.size(); ++i)
         {
-            if (!thumb.image && !thumb.rgba.empty())
-            {
-                thumb.image = ctx.factory.create_image_rgba(
-                    thumb.rgba.data(), static_cast<int>(thumb.w), static_cast<int>(thumb.h));
-            }
-            if (thumb.image)
-            {
-                // Centre-fit preserving aspect ratio, same math as CameraWidget's preview.
-                const float img_w = static_cast<float>(thumb.w);
-                const float img_h = static_cast<float>(thumb.h);
-                const float scale = std::min(r.w / img_w, r.h / img_h);
-                const float dw = img_w * scale;
-                const float dh = img_h * scale;
-                const tk::Rect fit{r.x + (r.w - dw) * 0.5f, r.y + (r.h - dh) * 0.5f, dw, dh};
-                ctx.canvas.draw_image(*thumb.image, fit);
-            }
-        }
+            // Apply scroll offset to the stored (unscrolled) tile position.
+            tk::Rect r = tile_rects_[i];
+            r.y -= scroll_y_;
+            if (i < tile_targets_.size())
+                tile_targets_[i]->set_target_rect(r);
 
-        ctx.canvas.stroke_rect(r, hov ? kTileBdH : kTileBdN, 1.5f);
+            // Skip tiles entirely outside the viewport.
+            if (r.y + r.h <= grid_rect_.y || r.y >= grid_rect_.y + grid_rect_.h)
+                continue;
 
-        const std::string& label = sources_[i].is_window
-            ? sources_[i].display_name
-            : std::string(tk::tr("Screen"));
-        tk::TextStyle ts{};
-        ts.role      = tk::FontRole::Body;
-        ts.trim      = tk::TextTrim::Ellipsis;
-        ts.max_width = r.w - 16.0f;
-        auto lbl = ctx.factory.build_text(label, ts);
-        if (lbl)
-        {
-            const tk::Size sz = lbl->measure();
-            ctx.canvas.draw_text(*lbl, {r.x + 8.0f, r.y + r.h - sz.h - 8.0f}, kTextLabel);
+            const bool hov = (static_cast<int>(i) == hovered_idx_);
+
+            ctx.canvas.fill_rect(r, hov ? kTileHov : kTileNorm);
+
+            TileThumb& thumb = thumbs_[i];
+            if (thumb.w > 0 && thumb.h > 0)
+            {
+                if (!thumb.image && !thumb.rgba.empty())
+                {
+                    thumb.image = ctx.factory.create_image_rgba(
+                        thumb.rgba.data(), static_cast<int>(thumb.w), static_cast<int>(thumb.h));
+                }
+                if (thumb.image)
+                {
+                    // Centre-fit preserving aspect ratio, same math as CameraWidget's preview.
+                    const float img_w = static_cast<float>(thumb.w);
+                    const float img_h = static_cast<float>(thumb.h);
+                    const float scale = std::min(r.w / img_w, r.h / img_h);
+                    const float dw = img_w * scale;
+                    const float dh = img_h * scale;
+                    const tk::Rect fit{r.x + (r.w - dw) * 0.5f, r.y + (r.h - dh) * 0.5f, dw, dh};
+                    ctx.canvas.draw_image(*thumb.image, fit);
+                }
+            }
+
+            ctx.canvas.stroke_rect(r, hov ? kTileBdH : kTileBdN, 1.5f);
+
+            const std::string& label = sources_[i].is_window
+                ? sources_[i].display_name
+                : std::string(tk::tr("Screen"));
+            tk::TextStyle ts{};
+            ts.role      = tk::FontRole::Body;
+            ts.trim      = tk::TextTrim::Ellipsis;
+            ts.max_width = r.w - 16.0f;
+            auto lbl = ctx.factory.build_text(label, ts);
+            if (lbl)
+            {
+                const tk::Size sz = lbl->measure();
+                ctx.canvas.draw_text(*lbl, {r.x + 8.0f, r.y + r.h - sz.h - 8.0f}, kTextLabel);
+            }
         }
     }
-
-    ctx.canvas.pop_clip();
     paint_scrollbar(ctx);
 }
 

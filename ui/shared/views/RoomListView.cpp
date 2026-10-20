@@ -942,10 +942,9 @@ private:
             float name_y =
                 bounds.y +
                 (name_band.h - cache.name_layout->measure().h) * 0.5f;
-            ctx.canvas.push_clip_rect(name_band);
+            tk::ClipScope clip(ctx.canvas, name_band);
             ctx.canvas.draw_text(*cache.name_layout, {text_x, name_y},
                                  ctx.theme.palette.text_primary);
-            ctx.canvas.pop_clip();
         }
 
         if (has_preview)
@@ -986,10 +985,9 @@ private:
                         0.5f +
                     preview_metrics_layout_->ascent();
                 const float prev_y = baseline_y - cache.preview_layout->ascent();
-                ctx.canvas.push_clip_rect(preview_area);
+                tk::ClipScope clip(ctx.canvas, preview_area);
                 ctx.canvas.draw_text(*cache.preview_layout, {text_x, prev_y},
                                      ctx.theme.palette.text_secondary);
-                ctx.canvas.pop_clip();
             }
 
             if (thumb)
@@ -1203,11 +1201,10 @@ private:
                 // Selection here is otherwise color-fill-only, at a
                 // deliberately subtle contrast — mirror paint_room()'s
                 // accent left bar so it isn't the sole cue.
-                ctx.canvas.push_clip_rounded_rect(highlight, tesseract::visual::kRadiusSM);
+                tk::ClipScope clip(ctx.canvas, highlight, tesseract::visual::kRadiusSM);
                 ctx.canvas.fill_rect(
                     {highlight.x, highlight.y, kActiveBarW, highlight.h},
                     ctx.theme.palette.accent);
-                ctx.canvas.pop_clip();
             }
         }
 
@@ -1294,10 +1291,9 @@ private:
             float name_y =
                 bounds.y +
                 (name_band.h - cache.name_layout->measure().h) * 0.5f;
-            ctx.canvas.push_clip_rect(name_band);
+            tk::ClipScope clip(ctx.canvas, name_band);
             ctx.canvas.draw_text(*cache.name_layout, {text_x, name_y},
                                  ctx.theme.palette.text_primary);
-            ctx.canvas.pop_clip();
         }
         if (cache.preview_layout && !owner_.compact_)
         {
@@ -1325,11 +1321,10 @@ private:
             ctx.canvas.fill_rounded_rect(highlight, tesseract::visual::kRadiusSM, fill);
             if (selected)
             {
-                ctx.canvas.push_clip_rounded_rect(highlight, tesseract::visual::kRadiusSM);
+                tk::ClipScope clip(ctx.canvas, highlight, tesseract::visual::kRadiusSM);
                 ctx.canvas.fill_rect(
                     {highlight.x, highlight.y, kActiveBarW, highlight.h},
                     ctx.theme.palette.accent);
-                ctx.canvas.pop_clip();
             }
         }
 
@@ -1393,10 +1388,9 @@ private:
             float name_y =
                 bounds.y +
                 (name_band.h - cache.name_layout->measure().h) * 0.5f;
-            ctx.canvas.push_clip_rect(name_band);
+            tk::ClipScope clip(ctx.canvas, name_band);
             ctx.canvas.draw_text(*cache.name_layout, {text_x, name_y},
                                  ctx.theme.palette.text_primary);
-            ctx.canvas.pop_clip();
         }
         if (cache.preview_layout && !owner_.compact_)
         {
@@ -1426,11 +1420,10 @@ private:
                 selected ? pal.sidebar_selected : pal.sidebar_hover);
             if (selected)
             {
-                ctx.canvas.push_clip_rounded_rect(highlight, tesseract::visual::kRadiusSM);
+                tk::ClipScope clip(ctx.canvas, highlight, tesseract::visual::kRadiusSM);
                 ctx.canvas.fill_rect(
                     {highlight.x, highlight.y, kActiveBarW, highlight.h},
                     pal.accent);
-                ctx.canvas.pop_clip();
             }
         }
 
@@ -1507,10 +1500,9 @@ private:
                                        owner_.compact_ ? bounds.h : bounds.h * 0.5f};
             float name_y = bounds.y +
                            (name_band.h - cache.name_layout->measure().h) * 0.5f;
-            ctx.canvas.push_clip_rect(name_band);
+            tk::ClipScope clip(ctx.canvas, name_band);
             ctx.canvas.draw_text(*cache.name_layout, {text_x, name_y},
                                  pal.text_primary.with_alpha(kAlpha));
-            ctx.canvas.pop_clip();
         }
         if (cache.preview_layout && !owner_.compact_)
         {
@@ -2924,11 +2916,10 @@ void RoomListView::paint_after_children(tk::PaintCtx& ctx)
         const float list_top = bounds_.y + search_header_h();
         tk::Rect    area{bounds_.x, list_top, bounds_.w,
                       std::max(0.0f, bounds_.h - search_header_h())};
-        ctx.canvas.push_clip_rect(area);
+        tk::ClipScope clip(ctx.canvas, area);
         tk::Rect sb{bounds_.x, s.world_y, bounds_.w, room_list_header_h()};
         adapter_->paint_row(static_cast<std::size_t>(s.header_item), ctx, sb,
                             false, sticky_hovered_);
-        ctx.canvas.pop_clip();
     }
 }
 

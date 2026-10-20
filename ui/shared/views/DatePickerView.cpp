@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstring>
 #include <iterator>
+#include <optional>
 #include <sstream>
 
 namespace tesseract::views
@@ -173,11 +174,12 @@ void DatePickerView::paint_overlay(tk::PaintCtx& ctx)
     {
         if (auto* h = host()) h->request_repaint();
     }
+    std::optional<tk::OpacityScope> fade;
     if (revealing)
     {
-        c.push_opacity(reveal_t);
+        fade.emplace(c, reveal_t);
     }
-    c.push_clip_rect(bounds_);
+    tk::ClipScope clip(c, bounds_);
 
     // ── card background + border ──────────────────────────────────────────────
     c.fill_rounded_rect(bounds_, kCardRadius, pal.chrome_bg);
@@ -354,12 +356,6 @@ void DatePickerView::paint_overlay(tk::PaintCtx& ctx)
 
     if (kbd_active_)
         paint_keyboard_focus_(ctx);
-
-    c.pop_clip();
-    if (revealing)
-    {
-        c.pop_opacity();
-    }
 }
 
 void DatePickerView::paint_keyboard_focus_(tk::PaintCtx& ctx)

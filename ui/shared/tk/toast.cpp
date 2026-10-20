@@ -2,6 +2,7 @@
 
 #include "theme.h"
 
+#include <optional>
 #include <utility>
 
 namespace tk
@@ -46,17 +47,14 @@ void Toast::paint_overlay(PaintCtx& ctx, Rect surface_bounds)
 
     const float t = reveal_.step(kToastRevealMs);
     const bool revealing = t < 1.0f;
+    std::optional<OpacityScope> fade;
     if (revealing)
     {
-        ctx.canvas.push_opacity(t);
+        fade.emplace(ctx.canvas, t);
     }
     ctx.canvas.fill_rounded_rect(pill_rect, kRadius, ctx.theme.palette.text_primary);
     ctx.canvas.draw_text(*layout_, {pill_x + kPadX, pill_y + kPadY},
                          ctx.theme.palette.bg);
-    if (revealing)
-    {
-        ctx.canvas.pop_opacity();
-    }
 }
 
 } // namespace tk

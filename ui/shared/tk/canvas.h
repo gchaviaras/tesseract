@@ -739,4 +739,42 @@ protected:
                                        AvatarText text) = 0;
 };
 
+// RAII for Canvas clip pushes: pushes in the constructor and calls pop_clip()
+// in the destructor, so a clip can't outlive its scope or leak past an early
+// return.
+class [[nodiscard]] ClipScope
+{
+public:
+    ClipScope(Canvas& canvas, Rect rect) : canvas_(canvas)
+    {
+        canvas_.push_clip_rect(rect);
+    }
+    ClipScope(Canvas& canvas, Rect rect, float radius) : canvas_(canvas)
+    {
+        canvas_.push_clip_rounded_rect(rect, radius);
+    }
+    ~ClipScope() { canvas_.pop_clip(); }
+    ClipScope(const ClipScope&) = delete;
+    ClipScope& operator=(const ClipScope&) = delete;
+
+private:
+    Canvas& canvas_;
+};
+
+// Same for push_opacity() / pop_opacity().
+class [[nodiscard]] OpacityScope
+{
+public:
+    OpacityScope(Canvas& canvas, float alpha) : canvas_(canvas)
+    {
+        canvas_.push_opacity(alpha);
+    }
+    ~OpacityScope() { canvas_.pop_opacity(); }
+    OpacityScope(const OpacityScope&) = delete;
+    OpacityScope& operator=(const OpacityScope&) = delete;
+
+private:
+    Canvas& canvas_;
+};
+
 } // namespace tk

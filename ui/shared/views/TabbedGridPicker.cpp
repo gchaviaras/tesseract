@@ -164,7 +164,7 @@ public:
         float tab_w = std::max(owner_.tab_slot_min(),
                                bounds_.w / static_cast<float>(total));
         int active = owner_.active_tab_index();
-        ctx.canvas.push_clip_rect(bounds_);
+        tk::ClipScope clip(ctx.canvas, bounds_);
         for (int i = 0; i < total; ++i)
         {
             tk::Rect tab{bounds_.x + i * tab_w - scroll_offset_, bounds_.y,
@@ -192,7 +192,6 @@ public:
 
             owner_.paint_tab_content(i, ctx, tab);
         }
-        ctx.canvas.pop_clip();
     }
 
     bool on_pointer_down(tk::Point local) override

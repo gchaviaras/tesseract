@@ -232,9 +232,10 @@ void ImageViewerPage::paint_content(tk::PaintCtx& ctx)
     if (img)
     {
         is_loading_ = false;
-        cv.push_clip_rounded_rect(image_rect_, 4.0f);
-        cv.draw_image(*img, image_rect_);
-        cv.pop_clip();
+        {
+            tk::ClipScope clip(cv, image_rect_, 4.0f);
+            cv.draw_image(*img, image_rect_);
+        }
         if (ctx.anim_damage)
         {
             ctx.anim_damage->note_image(tk::CacheKey::media(drawn_key), image_rect_);

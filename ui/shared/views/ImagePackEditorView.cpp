@@ -515,47 +515,48 @@ void ImagePackSectionList::paint(tk::PaintCtx& ctx)
         return;
 
     const auto layout = compute_layout_(bounds_.w);
-    ctx.canvas.push_clip_rect(bounds_);
-    const tk::Point origin{bounds_.x, bounds_.y - scroll_y_};
-
-    for (std::size_t i = 0; i < layout.size(); ++i)
     {
-        const auto& sec = layout[i];
-        if (origin.y + sec.top + sec.height <= bounds_.y ||
-            origin.y + sec.top >= bounds_.y + bounds_.h)
-            continue;
+        tk::ClipScope clip(ctx.canvas, bounds_);
+        const tk::Point origin{bounds_.x, bounds_.y - scroll_y_};
 
-        const bool active = active_pack_index_ && *active_pack_index_ == i;
-        const bool hdr_remove_hovered =
-            hovered_header_remove_ && *hovered_header_remove_ == i;
-        paint_header_(ctx, i, sec, origin, active, hdr_remove_hovered);
-
-        if (native_drag_hover_pack_ && *native_drag_hover_pack_ == i)
+        for (std::size_t i = 0; i < layout.size(); ++i)
         {
-            tk::paint_native_drag_hover_highlight(
-                ctx, {origin.x, origin.y + sec.top, bounds_.w, sec.height});
-        }
+            const auto& sec = layout[i];
+            if (origin.y + sec.top + sec.height <= bounds_.y ||
+                origin.y + sec.top >= bounds_.y + bounds_.h)
+                continue;
 
-        const auto& images = (*packs_)[i].images;
-        for (std::size_t t = 0; t < sec.tiles.size(); ++t)
-        {
-            if (t < images.size())
+            const bool active = active_pack_index_ && *active_pack_index_ == i;
+            const bool hdr_remove_hovered =
+                hovered_header_remove_ && *hovered_header_remove_ == i;
+            paint_header_(ctx, i, sec, origin, active, hdr_remove_hovered);
+
+            if (native_drag_hover_pack_ && *native_drag_hover_pack_ == i)
             {
-                const bool hovered =
-                    can_edit_ && hovered_tile_ && hovered_tile_->first == i &&
-                    hovered_tile_->second == t;
-                const bool is_editing =
-                    editing_ && editing_->first == i && editing_->second == t;
-                paint_tile_shared_(ctx, images[t], sec.tiles[t], origin, hovered,
-                                   is_editing);
+                tk::paint_native_drag_hover_highlight(
+                    ctx, {origin.x, origin.y + sec.top, bounds_.w, sec.height});
             }
-            else
+
+            const auto& images = (*packs_)[i].images;
+            for (std::size_t t = 0; t < sec.tiles.size(); ++t)
             {
-                paint_hint_tile_shared_(ctx, sec.tiles[t], origin);
+                if (t < images.size())
+                {
+                    const bool hovered =
+                        can_edit_ && hovered_tile_ && hovered_tile_->first == i &&
+                        hovered_tile_->second == t;
+                    const bool is_editing =
+                        editing_ && editing_->first == i && editing_->second == t;
+                    paint_tile_shared_(ctx, images[t], sec.tiles[t], origin, hovered,
+                                       is_editing);
+                }
+                else
+                {
+                    paint_hint_tile_shared_(ctx, sec.tiles[t], origin);
+                }
             }
         }
     }
-    ctx.canvas.pop_clip();
     paint_scrollbar(ctx);
 }
 

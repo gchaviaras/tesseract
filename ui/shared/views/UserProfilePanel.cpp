@@ -766,10 +766,11 @@ void UserProfilePanel::paint(tk::PaintCtx& ctx)
 
         // Clip to the (possibly wrap-capped) row height so any lines beyond
         // kExtValueMaxLines are silently cut, same as RoomInfoPanel's topic.
-        cv.push_clip_rect({value_x, ext_y, ext_max_val_w, geom.h});
-        cv.draw_text(*row.value_layout, {value_x, ext_y + geom.value_dy},
-                     pal.text_primary);
-        cv.pop_clip();
+        {
+            tk::ClipScope clip(cv, {value_x, ext_y, ext_max_val_w, geom.h});
+            cv.draw_text(*row.value_layout, {value_x, ext_y + geom.value_dy},
+                         pal.text_primary);
+        }
 
         ext_y += geom.h + kExtRowGap;
     }

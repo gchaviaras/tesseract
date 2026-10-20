@@ -21,7 +21,7 @@ void LocationMapPanner::paint(const MessageRowData& m, tk::PaintCtx& ctx,
     record_geom(m.event_id, map_rect);
 
     // Round corners on the map card.
-    ctx.canvas.push_clip_rounded_rect(map_rect, 8.0f);
+    tk::ClipScope clip(ctx.canvas, map_rect, 8.0f);
 
     const auto& vp = m.map_viewport;
     tk::Point vp_px = lat_lon_to_world_px(vp.lat, vp.lon, vp.zoom);
@@ -159,7 +159,6 @@ void LocationMapPanner::paint(const MessageRowData& m, tk::PaintCtx& ctx,
         }
     }
 
-    ctx.canvas.pop_clip();
 }
 
 } // namespace tesseract::views

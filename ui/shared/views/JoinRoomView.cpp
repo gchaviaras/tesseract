@@ -639,9 +639,10 @@ void JoinRoomView::paint(tk::PaintCtx& ctx)
                 // card's bottom border instead of being cleanly cut off.
                 const float clipped_h =
                     std::min(topic_layout_->measure().h, kJoinRoomTopicMaxH);
-                ctx.canvas.push_clip_rect({cx, topic_y, topic_w, clipped_h});
-                ctx.canvas.draw_text(*topic_layout_, {cx, topic_y}, pal.text_secondary);
-                ctx.canvas.pop_clip();
+                {
+                    tk::ClipScope clip(ctx.canvas, {cx, topic_y, topic_w, clipped_h});
+                    ctx.canvas.draw_text(*topic_layout_, {cx, topic_y}, pal.text_secondary);
+                }
                 topic_rect_ = {cx, topic_y, topic_layout_->measure().w, clipped_h};
                 if (topic_target_)
                 {

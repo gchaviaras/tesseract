@@ -327,7 +327,7 @@ void KnockRequestsPanel::paint(tk::PaintCtx& ctx)
 
     const float scroll_top = panel_rect_.y + kHeaderH;
     const float viewport_h = std::max(0.0f, panel_rect_.h - kHeaderH);
-    cv.push_clip_rect({px, scroll_top, kPanelW, viewport_h});
+    tk::ClipScope clip(cv, {px, scroll_top, kPanelW, viewport_h});
 
     if (rows_.empty())
     {
@@ -353,7 +353,6 @@ void KnockRequestsPanel::paint(tk::PaintCtx& ctx)
         }
     }
 
-    cv.pop_clip();
 }
 
 bool KnockRequestsPanel::on_pointer_down(tk::Point local)

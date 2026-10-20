@@ -3,6 +3,7 @@
 #include "theme.h"
 
 #include <algorithm>
+#include <optional>
 
 namespace tk
 {
@@ -62,19 +63,16 @@ void Tooltip::paint_overlay(PaintCtx& ctx, Rect surface_bounds)
 
     const float t = reveal_.step(kRevealMs);
     const bool revealing = t < 1.0f;
+    std::optional<OpacityScope> fade;
     if (revealing)
     {
-        ctx.canvas.push_opacity(t);
+        fade.emplace(ctx.canvas, t);
     }
     ctx.canvas.fill_rounded_rect(bg, kRadius, ctx.theme.palette.chrome_bg);
     ctx.canvas.stroke_rounded_rect(bg, kRadius, ctx.theme.palette.popup_border,
                                    1.0f);
     ctx.canvas.draw_text(*layout_, {bg.x + kPad, bg.y + kPad},
                           ctx.theme.palette.text_primary);
-    if (revealing)
-    {
-        ctx.canvas.pop_opacity();
-    }
 }
 
 } // namespace tk

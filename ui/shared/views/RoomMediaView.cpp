@@ -794,7 +794,7 @@ void RoomMediaView::paint_cell_(tk::PaintCtx& ctx, tk::Rect cell,
     auto& cv        = ctx.canvas;
     const auto& pal = ctx.theme.palette;
 
-    cv.push_clip_rect(cell);
+    tk::ClipScope clip(cv, cell);
     cv.fill_rect(cell, pal.subtle_hover);
 
     const std::string key =
@@ -836,7 +836,6 @@ void RoomMediaView::paint_cell_(tk::PaintCtx& ctx, tk::Rect cell,
         }
     }
 
-    cv.pop_clip();
 }
 
 } // namespace tesseract::views

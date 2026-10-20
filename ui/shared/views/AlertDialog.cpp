@@ -162,11 +162,10 @@ void AlertDialog::paint_before_children(tk::PaintCtx& ctx)
         }
         if (body_layout_)
         {
-            cv.push_clip_rect({card_rect_.x, card_rect_.y,
-                               card_rect_.w,
-                               card_rect_.h - kCardPad - kBtnH - kBodyGap});
+            tk::ClipScope clip(cv, {card_rect_.x, card_rect_.y,
+                                         card_rect_.w,
+                                         card_rect_.h - kCardPad - kBtnH - kBodyGap});
             cv.draw_text(*body_layout_, {text_x, y}, pal.text_secondary);
-            cv.pop_clip();
         }
     }
 

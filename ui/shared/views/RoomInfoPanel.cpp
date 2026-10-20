@@ -904,7 +904,7 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
         // topic_rect_ is sized to the wrapped topic up to kTopicMaxLines lines
         // (see measure_topic_height_); clip to it so a longer topic is cut at
         // the cap (the full text is then available via the hover tooltip).
-        ctx.canvas.push_clip_rect(topic_rect_w);
+        tk::ClipScope clip(ctx.canvas, topic_rect_w);
         if (topic_layout_)
         {
             cv.draw_text(*topic_layout_,
@@ -924,7 +924,6 @@ void RoomInfoPanelBody::paint_before_children(tk::PaintCtx& ctx)
                              pal.text_muted);
             }
         }
-        ctx.canvas.pop_clip();
     }
     else if (topic_field_ && topic_field_->visible())
     {

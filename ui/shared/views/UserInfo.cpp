@@ -245,9 +245,8 @@ void UserInfo::paint(tk::PaintCtx& ctx)
         ctx.canvas.fill_rounded_rect(r, kHoverRadius, bg);
         if (active_indicator_)
         {
-            ctx.canvas.push_clip_rounded_rect(r, kHoverRadius);
+            tk::ClipScope clip(ctx.canvas, r, kHoverRadius);
             ctx.canvas.fill_rect({r.x, r.y, kActiveBarW, r.h}, theme.palette.accent);
-            ctx.canvas.pop_clip();
         }
     }
 

@@ -230,7 +230,7 @@ void TabBar::paint_before_children(PaintCtx& ctx)
     c.fill_rect({bounds_.x, bounds_.y + bounds_.h - 1.f, bounds_.w, 1.f},
                 pal.separator);
 
-    c.push_clip_rect(bounds_);
+    ClipScope clip(c, bounds_);
 
     const bool show_close = (static_cast<int>(items_.size()) > 1);
 
@@ -297,7 +297,6 @@ void TabBar::paint_before_children(PaintCtx& ctx)
         }
     }
 
-    c.pop_clip();
 }
 
 // ── Pointer events ─────────────────────────────────────────────────────────

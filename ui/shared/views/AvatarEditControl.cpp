@@ -142,9 +142,10 @@ void AvatarEditControl::paint(tk::PaintCtx& ctx, tk::Point world_origin,
 
     if (busy_)
     {
-        ctx.canvas.push_clip_rounded_rect(disc_rect, radius);
-        ctx.canvas.fill_rect(disc_rect, tk::Color::rgba(0, 0, 0, 160));
-        ctx.canvas.pop_clip();
+        {
+            tk::ClipScope clip(ctx.canvas, disc_rect, radius);
+            ctx.canvas.fill_rect(disc_rect, tk::Color::rgba(0, 0, 0, 160));
+        }
         tk::TextStyle st;
         st.role = tk::FontRole::Title;
         auto lay = ctx.factory.build_text("\xe2\x80\xa6", st);
@@ -158,9 +159,10 @@ void AvatarEditControl::paint(tk::PaintCtx& ctx, tk::Point world_origin,
     }
     else if (hovered_)
     {
-        ctx.canvas.push_clip_rounded_rect(disc_rect, radius);
-        ctx.canvas.fill_rect(disc_rect, tk::Color::rgba(0, 0, 0, 128));
-        ctx.canvas.pop_clip();
+        {
+            tk::ClipScope clip(ctx.canvas, disc_rect, radius);
+            ctx.canvas.fill_rect(disc_rect, tk::Color::rgba(0, 0, 0, 128));
+        }
         tk::TextStyle st;
         st.role = tk::FontRole::Title;
         auto lay = ctx.factory.build_text("+", st);

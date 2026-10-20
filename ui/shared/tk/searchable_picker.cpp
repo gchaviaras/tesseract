@@ -118,42 +118,43 @@ public:
         const int first = std::max(0, static_cast<int>(scroll_y_ / row_h_));
         const int last =
             std::min(count, static_cast<int>((scroll_y_ + bounds_.h) / row_h_) + 1);
-        ctx.canvas.push_clip_rounded_rect(bounds_, kRadius);
-        for (int i = first; i < last; ++i)
         {
-            const float ry = bounds_.y + row_h_ * static_cast<float>(i) - scroll_y_;
-            const Rect row{bounds_.x, ry, bounds_.w, row_h_};
-
-            if (i == hovered_)
-                ctx.canvas.fill_rect(row, pal.subtle_hover);
-
-            auto& layout = row_layouts_[static_cast<std::size_t>(i)];
-            if (!layout && label_provider)
+            ClipScope clip(ctx.canvas, bounds_, kRadius);
+            for (int i = first; i < last; ++i)
             {
-                TextStyle st{};
-                st.role      = FontRole::Body;
-                st.halign    = TextHAlign::Leading;
-                st.trim      = TextTrim::Ellipsis;
-                st.max_width = row.w - 16.0f;
-                layout = ctx.factory.build_text(
-                    label_provider(entries_[static_cast<std::size_t>(i)]), st);
+                const float ry = bounds_.y + row_h_ * static_cast<float>(i) - scroll_y_;
+                const Rect row{bounds_.x, ry, bounds_.w, row_h_};
+
+                if (i == hovered_)
+                    ctx.canvas.fill_rect(row, pal.subtle_hover);
+
+                auto& layout = row_layouts_[static_cast<std::size_t>(i)];
+                if (!layout && label_provider)
+                {
+                    TextStyle st{};
+                    st.role      = FontRole::Body;
+                    st.halign    = TextHAlign::Leading;
+                    st.trim      = TextTrim::Ellipsis;
+                    st.max_width = row.w - 16.0f;
+                    layout = ctx.factory.build_text(
+                        label_provider(entries_[static_cast<std::size_t>(i)]), st);
+                }
+                if (layout)
+                {
+                    const Size sz = layout->measure();
+                    const float ty = ry + (row_h_ - sz.h) * 0.5f;
+                    ctx.canvas.draw_text(*layout, {row.x + 8.0f, ty}, pal.text_primary);
+                }
             }
-            if (layout)
+            // Thin scrollbar thumb while there is more than fits.
+            if (max_scroll_() > 0.0f)
             {
-                const Size sz = layout->measure();
-                const float ty = ry + (row_h_ - sz.h) * 0.5f;
-                ctx.canvas.draw_text(*layout, {row.x + 8.0f, ty}, pal.text_primary);
+                const Rect t = thumb_rect_();
+                ctx.canvas.fill_rounded_rect(
+                    {t.x + t.w - kThumbW - 3.0f, t.y, kThumbW, t.h}, kThumbW * 0.5f,
+                    dragging_thumb_ ? pal.text_muted : pal.border_strong);
             }
         }
-        // Thin scrollbar thumb while there is more than fits.
-        if (max_scroll_() > 0.0f)
-        {
-            const Rect t = thumb_rect_();
-            ctx.canvas.fill_rounded_rect(
-                {t.x + t.w - kThumbW - 3.0f, t.y, kThumbW, t.h}, kThumbW * 0.5f,
-                dragging_thumb_ ? pal.text_muted : pal.border_strong);
-        }
-        ctx.canvas.pop_clip();
         ctx.canvas.stroke_rounded_rect(bounds_, kRadius, pal.popup_border, 1.0f);
     }
 

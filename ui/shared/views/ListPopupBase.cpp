@@ -29,41 +29,41 @@ void ListPopupBase::paint(tk::PaintCtx& ctx)
     // Opaque background base — prevents transparent bleed-through on hover rows.
     ctx.canvas.fill_rect(bounds_, pal.bg);
 
-    ctx.canvas.push_clip_rect(bounds_);
-
-    int first = std::max(0, (int)(scroll_y_ / rh));
-    int last  = std::min(total, (int)std::ceil((scroll_y_ + bounds_.h) / rh));
-
-    for (int i = first; i < last; ++i)
     {
-        tk::Rect row{bounds_.x, bounds_.y + float(i) * rh - scroll_y_, bounds_.w,
-                    rh};
+        tk::ClipScope clip(ctx.canvas, bounds_);
 
-        bool selected = (i == selected_index_);
-        bool hovered  = (i == hovered_index_);
+        int first = std::max(0, (int)(scroll_y_ / rh));
+        int last  = std::min(total, (int)std::ceil((scroll_y_ + bounds_.h) / rh));
 
-        // Background: selected > hovered > normal (normal == pal.bg already).
-        if (selected)
+        for (int i = first; i < last; ++i)
         {
-            ctx.canvas.fill_rect(row, pal.sidebar_selected);
-        }
-        else if (hovered)
-        {
-            ctx.canvas.fill_rect(row, pal.subtle_hover);
-        }
+            tk::Rect row{bounds_.x, bounds_.y + float(i) * rh - scroll_y_, bounds_.w,
+                        rh};
 
-        paint_row(ctx, row, std::size_t(i), selected, hovered);
+            bool selected = (i == selected_index_);
+            bool hovered  = (i == hovered_index_);
 
-        // Row separator (except after the last actual row — it may not be
-        // the last one drawn, when the list is taller than the viewport).
-        if (i < total - 1)
-        {
-            tk::Rect sep{row.x, row.y + row.h - 1.0f, row.w, 1.0f};
-            ctx.canvas.fill_rect(sep, pal.separator);
+            // Background: selected > hovered > normal (normal == pal.bg already).
+            if (selected)
+            {
+                ctx.canvas.fill_rect(row, pal.sidebar_selected);
+            }
+            else if (hovered)
+            {
+                ctx.canvas.fill_rect(row, pal.subtle_hover);
+            }
+
+            paint_row(ctx, row, std::size_t(i), selected, hovered);
+
+            // Row separator (except after the last actual row — it may not be
+            // the last one drawn, when the list is taller than the viewport).
+            if (i < total - 1)
+            {
+                tk::Rect sep{row.x, row.y + row.h - 1.0f, row.w, 1.0f};
+                ctx.canvas.fill_rect(sep, pal.separator);
+            }
         }
     }
-
-    ctx.canvas.pop_clip();
 
     // Scrollbar overlay — only drawn when content overflows the viewport.
     paint_scrollbar(ctx);

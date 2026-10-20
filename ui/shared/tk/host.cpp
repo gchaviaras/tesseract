@@ -409,9 +409,8 @@ void Host::paint_drag_overlay(PaintCtx& ctx, Rect /*surface_bounds*/)
     Rect dst{cursor.x - visual.hotspot.x, cursor.y - visual.hotspot.y,
               static_cast<float>(visual.image->width()),
               static_cast<float>(visual.image->height())};
-    ctx.canvas.push_opacity(visual.opacity);
+    OpacityScope fade(ctx.canvas, visual.opacity);
     ctx.canvas.draw_image(*visual.image, dst);
-    ctx.canvas.pop_opacity();
 }
 
 void Host::dispatch_pointer_leave()

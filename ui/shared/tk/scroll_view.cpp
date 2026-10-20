@@ -41,9 +41,10 @@ void ScrollView::paint(PaintCtx& ctx)
 {
     if (!child_)
         return;
-    ctx.canvas.push_clip_rect(bounds_);
-    child_->paint(ctx);
-    ctx.canvas.pop_clip();
+    {
+        ClipScope clip(ctx.canvas, bounds_);
+        child_->paint(ctx);
+    }
     paint_scrollbar(ctx);
 }
 

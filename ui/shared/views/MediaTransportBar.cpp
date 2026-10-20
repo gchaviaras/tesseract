@@ -151,9 +151,10 @@ void MediaTransportBar::paint(tk::PaintCtx& ctx, const State& s)
     const tk::Rect play_bounds = play_btn_->bounds();
     play_btn_->set_icon(s.playing ? std::span<const std::uint8_t>{} : kPlaySvg,
                         kTbPlayBtnD * 0.5f);
-    cv.push_clip_rounded_rect(play_bounds, kTbPlayBtnD * 0.5f);
-    play_btn_->paint(ctx);
-    cv.pop_clip();
+    {
+        tk::ClipScope clip(cv, play_bounds, kTbPlayBtnD * 0.5f);
+        play_btn_->paint(ctx);
+    }
     if (s.playing)
     {
         const float bar_w = 3.0f;
@@ -168,9 +169,10 @@ void MediaTransportBar::paint(tk::PaintCtx& ctx, const State& s)
     if (speed_btn_)
     {
         const tk::Rect speed_bounds = speed_btn_->bounds();
-        cv.push_clip_rounded_rect(speed_bounds, kTbSpeedPillH * 0.5f);
-        speed_btn_->paint(ctx);
-        cv.pop_clip();
+        {
+            tk::ClipScope clip(cv, speed_bounds, kTbSpeedPillH * 0.5f);
+            speed_btn_->paint(ctx);
+        }
 
         char rate_buf[8];
         const char* rate_plain; // plain "x" for the accessible name, not the

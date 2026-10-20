@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- chore(ui): new `tk::ClipScope` / `tk::OpacityScope` RAII guards pop canvas clips and opacity on scope exit; the hand-paired push/pop calls across `ui/shared` and the GTK host now use them, except clips that span `paint_before_children`/`paint_after_children` (RoomInfoPanel, SettingsPage, KnownPacksList). Linux release build, ctest 3433/3433, user-verified
 - fix(ui): the user profile panel no longer stretches non-square avatars; `draw_avatar` centre-crops them to a square (the panel draws the full-resolution original, not the pre-cropped thumbnail). Linux release build, ctest 3433/3433, user-verified
 - chore(sdk): removed the unused `list_rooms` FFI method (superseded by push-based room updates plus `room_info_by_id`) and the dead `MediaGate::stale_len` diagnostic helper. cargo build clean, cargo tests 1174/1175 (1 failure unrelated to this change, in URL-preview scheme handling)
 - fix(ui): a URL shown only inside a Markdown code block or inline code span no longer triggers a link-preview card, on send or on receive. Build and user-verified

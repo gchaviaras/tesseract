@@ -182,55 +182,56 @@ void GifPopup::paint(tk::PaintCtx& ctx)
 
     // Clip the cell row to the scrollable viewport so overflowing / partially
     // scrolled cells don't paint over the side padding, border or attribution.
-    ctx.canvas.push_clip_rect(
-        {bounds_.x + kPad, bounds_.y + kPad,
-         std::max(0.0f, bounds_.w - 2.0f * kPad), kCellH});
-    for (int i = 0; i < n; ++i)
     {
-        tk::Rect cell = cell_rect(i);
-        const bool sel = (i == selected_index_);
-        const bool hov = (i == hovered_index_);
-
-        // Cell backing — selected/hovered tint shows through transparent PNGs
-        // and fills the letterbox bars around landscape GIFs.
-        ctx.canvas.fill_rect(cell, sel ? pal.sidebar_selected
-                                       : hov ? pal.subtle_hover
-                                             : pal.chrome_bg);
-
-        const tk::Image* img =
-            image_provider_ ? image_provider_(results_[std::size_t(i)])
-                            : nullptr;
-        if (img)
+        tk::ClipScope clip(ctx.canvas,
+                             {bounds_.x + kPad, bounds_.y + kPad,
+                              std::max(0.0f, bounds_.w - 2.0f * kPad), kCellH});
+        for (int i = 0; i < n; ++i)
         {
-            float iw = static_cast<float>(img->width());
-            float ih = static_cast<float>(img->height());
-            if (iw > 0.0f && ih > 0.0f)
+            tk::Rect cell = cell_rect(i);
+            const bool sel = (i == selected_index_);
+            const bool hov = (i == hovered_index_);
+
+            // Cell backing — selected/hovered tint shows through transparent PNGs
+            // and fills the letterbox bars around landscape GIFs.
+            ctx.canvas.fill_rect(cell, sel ? pal.sidebar_selected
+                                           : hov ? pal.subtle_hover
+                                                 : pal.chrome_bg);
+
+            const tk::Image* img =
+                image_provider_ ? image_provider_(results_[std::size_t(i)])
+                                : nullptr;
+            if (img)
             {
-                float sc = std::min(cell.w / iw, cell.h / ih);
-                float dw = iw * sc, dh = ih * sc;
-                ctx.canvas.draw_image(*img, {cell.x + (cell.w - dw) * 0.5f,
-                                             cell.y + (cell.h - dh) * 0.5f, dw,
-                                             dh});
+                float iw = static_cast<float>(img->width());
+                float ih = static_cast<float>(img->height());
+                if (iw > 0.0f && ih > 0.0f)
+                {
+                    float sc = std::min(cell.w / iw, cell.h / ih);
+                    float dw = iw * sc, dh = ih * sc;
+                    ctx.canvas.draw_image(*img, {cell.x + (cell.w - dw) * 0.5f,
+                                                 cell.y + (cell.h - dh) * 0.5f, dw,
+                                                 dh});
+                }
+                if (ctx.anim_damage)
+                    ctx.anim_damage->note_image(
+                        tk::CacheKey::media(results_[std::size_t(i)].strip_url),
+                        cell);
             }
-            if (ctx.anim_damage)
-                ctx.anim_damage->note_image(
-                    tk::CacheKey::media(results_[std::size_t(i)].strip_url),
-                    cell);
-        }
 
-        // Selection border.
-        if (sel)
-        {
-            const float t = 2.0f;
-            ctx.canvas.fill_rect({cell.x, cell.y, cell.w, t}, pal.accent);
-            ctx.canvas.fill_rect({cell.x, cell.y + cell.h - t, cell.w, t},
-                                 pal.accent);
-            ctx.canvas.fill_rect({cell.x, cell.y, t, cell.h}, pal.accent);
-            ctx.canvas.fill_rect({cell.x + cell.w - t, cell.y, t, cell.h},
-                                 pal.accent);
+            // Selection border.
+            if (sel)
+            {
+                const float t = 2.0f;
+                ctx.canvas.fill_rect({cell.x, cell.y, cell.w, t}, pal.accent);
+                ctx.canvas.fill_rect({cell.x, cell.y + cell.h - t, cell.w, t},
+                                     pal.accent);
+                ctx.canvas.fill_rect({cell.x, cell.y, t, cell.h}, pal.accent);
+                ctx.canvas.fill_rect({cell.x + cell.w - t, cell.y, t, cell.h},
+                                     pal.accent);
+            }
         }
     }
-    ctx.canvas.pop_clip();
 
     // Attribution — required by the provider's ToS. Bottom-right, secondary.
     {

@@ -2814,9 +2814,8 @@ public:
         const float ox = ov.visible.x - ov.world.x;
         const float oy = ov.visible.y - ov.world.y;
         Rect local_full{-ox, -oy, ov.world.w, ov.world.h};
-        canvas->push_clip_rounded_rect(local_full, 8.0f);
+        ClipScope clip(*canvas, local_full, 8.0f);
         canvas->draw_image(*frame, local_full);
-        canvas->pop_clip();
     }
 
     bool pointer_ctrl_held() const override

@@ -644,9 +644,8 @@ void ForwardRoomPicker::paint(tk::PaintCtx& ctx)
 
     if (list_ && list_->visible())
     {
-        ctx.canvas.push_clip_rounded_rect(card_rect_, 10.0f);
+        tk::ClipScope clip(ctx.canvas, card_rect_, 10.0f);
         list_->paint(ctx);
-        ctx.canvas.pop_clip();
     }
 }
 

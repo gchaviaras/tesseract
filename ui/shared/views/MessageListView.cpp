@@ -5677,9 +5677,8 @@ private:
                 float dh = ih * s;
                 tk::Rect fit{img_rect.x,
                              img_rect.y + (img_rect.h - dh) * 0.5f, dw, dh};
-                ctx.canvas.push_clip_rounded_rect(img_rect, 4.0f);
+                tk::ClipScope clip(ctx.canvas, img_rect, 4.0f);
                 ctx.canvas.draw_image(*img, fit);
-                ctx.canvas.pop_clip();
             }
             else
             {
@@ -6649,7 +6648,7 @@ private:
         const float th = sec.height;
         auto snap      = [](float v) { return std::round(v); };
 
-        ctx.canvas.push_clip_rect({ox, oy, tw, th});
+        tk::ClipScope clip(ctx.canvas, {ox, oy, tw, th});
 
         // Header-row tint (behind everything).
         if (sec.header_rows > 0 &&
@@ -6715,7 +6714,6 @@ private:
             paint_span_images(cb.spans, *cb.layout, ctx, cox, coy);
         }
 
-        ctx.canvas.pop_clip();
     }
 
     // Paint a text message body — uses rich text when formatted_body is
@@ -6879,9 +6877,8 @@ private:
         }
         if (bh_img)
         {
-            ctx.canvas.push_clip_rounded_rect(dst, 8.0f);
+            tk::ClipScope clip(ctx.canvas, dst, 8.0f);
             ctx.canvas.draw_image(*bh_img, dst);
-            ctx.canvas.pop_clip();
         }
         else
         {
@@ -6911,13 +6908,12 @@ private:
         ph = std::min(ph, dst.h);
         tk::Rect pill{dst.x + (dst.w - pw) * 0.5f, dst.y + (dst.h - ph) * 0.5f,
                       pw, ph};
-        ctx.canvas.push_clip_rounded_rect(dst, 8.0f);
+        tk::ClipScope clip(ctx.canvas, dst, 8.0f);
         ctx.canvas.fill_rounded_rect(pill, ph * 0.5f, ctx.theme.palette.accent);
         ctx.canvas.draw_text(*lo,
                              {pill.x + (pw - lsz.w) * 0.5f,
                               pill.y + (ph - lsz.h) * 0.5f},
                              ctx.theme.palette.text_on_accent);
-        ctx.canvas.pop_clip();
     }
 
     void paint_inline_media(const MessageRowData& m, tk::PaintCtx& ctx,
@@ -6948,9 +6944,10 @@ private:
         }
         if (img)
         {
-            ctx.canvas.push_clip_rounded_rect(dst, 8.0f);
-            ctx.canvas.draw_image(*img, dst);
-            ctx.canvas.pop_clip();
+            {
+                tk::ClipScope clip(ctx.canvas, dst, 8.0f);
+                ctx.canvas.draw_image(*img, dst);
+            }
             if (ctx.anim_damage)
             {
                 ctx.anim_damage->note_image(tk::CacheKey::media(display_key), dst);
@@ -6966,9 +6963,8 @@ private:
             }
             if (bh_img)
             {
-                ctx.canvas.push_clip_rounded_rect(dst, 8.0f);
+                tk::ClipScope clip(ctx.canvas, dst, 8.0f);
                 ctx.canvas.draw_image(*bh_img, dst);
-                ctx.canvas.pop_clip();
             }
             else
             {
@@ -6992,88 +6988,89 @@ private:
         const auto& pal = ctx.theme.palette;
         using ItemKind = MessageRowData::GalleryItemRow::Kind;
 
-        cv.push_clip_rounded_rect(cell, 6.0f);
-        cv.fill_rounded_rect(cell, 6.0f, pal.chrome_bg);
+        {
+            tk::ClipScope clip(cv, cell, 6.0f);
+            cv.fill_rounded_rect(cell, 6.0f, pal.chrome_bg);
 
-        const auto* look = item.thumbnail ? item.thumbnail.get() : item.source.get();
-        const std::string key = look ? look->fetch_token() : std::string{};
-        const tk::Image* img = (owner_.image_provider_ && !key.empty())
-                                    ? owner_.image_provider_(key, m.event_id == owner_.hovered_media_event_id_)
-                                    : nullptr;
-        if (img && img->width() > 0 && img->height() > 0)
-        {
-            tk::Size fitted =
-                fit_media(static_cast<float>(img->width()),
-                         static_cast<float>(img->height()), cell.w, cell.h);
-            tk::Rect dst{cell.x + (cell.w - fitted.w) * 0.5f,
-                        cell.y + (cell.h - fitted.h) * 0.5f, fitted.w,
-                        fitted.h};
-            cv.draw_image(*img, dst);
-        }
-        else
-        {
-            cv.stroke_rounded_rect(cell, 6.0f, pal.border, 1.0f);
-        }
+            const auto* look = item.thumbnail ? item.thumbnail.get() : item.source.get();
+            const std::string key = look ? look->fetch_token() : std::string{};
+            const tk::Image* img = (owner_.image_provider_ && !key.empty())
+                                        ? owner_.image_provider_(key, m.event_id == owner_.hovered_media_event_id_)
+                                        : nullptr;
+            if (img && img->width() > 0 && img->height() > 0)
+            {
+                tk::Size fitted =
+                    fit_media(static_cast<float>(img->width()),
+                             static_cast<float>(img->height()), cell.w, cell.h);
+                tk::Rect dst{cell.x + (cell.w - fitted.w) * 0.5f,
+                            cell.y + (cell.h - fitted.h) * 0.5f, fitted.w,
+                            fitted.h};
+                cv.draw_image(*img, dst);
+            }
+            else
+            {
+                cv.stroke_rounded_rect(cell, 6.0f, pal.border, 1.0f);
+            }
 
-        if (item.kind == ItemKind::Video)
-        {
-            tk::TextStyle st{};
-            st.role = tk::FontRole::Title;
-            auto glyph = ctx.factory.build_text("\xE2\x96\xB6", st); // ▶
-            if (glyph)
+            if (item.kind == ItemKind::Video)
             {
-                tk::Size sz = glyph->measure();
-                tk::Rect badge{cell.x + (cell.w - sz.w) * 0.5f - 8.0f,
-                              cell.y + (cell.h - sz.h) * 0.5f - 4.0f,
-                              sz.w + 16.0f, sz.h + 8.0f};
-                cv.fill_rounded_rect(badge, 6.0f, tk::Color{0, 0, 0, 140});
-                cv.draw_text(*glyph,
-                            {cell.x + (cell.w - sz.w) * 0.5f,
-                             cell.y + (cell.h - sz.h) * 0.5f},
-                            tk::Color{255, 255, 255, 255});
+                tk::TextStyle st{};
+                st.role = tk::FontRole::Title;
+                auto glyph = ctx.factory.build_text("\xE2\x96\xB6", st); // ▶
+                if (glyph)
+                {
+                    tk::Size sz = glyph->measure();
+                    tk::Rect badge{cell.x + (cell.w - sz.w) * 0.5f - 8.0f,
+                                  cell.y + (cell.h - sz.h) * 0.5f - 4.0f,
+                                  sz.w + 16.0f, sz.h + 8.0f};
+                    cv.fill_rounded_rect(badge, 6.0f, tk::Color{0, 0, 0, 140});
+                    cv.draw_text(*glyph,
+                                {cell.x + (cell.w - sz.w) * 0.5f,
+                                 cell.y + (cell.h - sz.h) * 0.5f},
+                                tk::Color{255, 255, 255, 255});
+                }
+            }
+            else if (!img)
+            {
+                // File/audio items (or an image/video whose thumbnail hasn't
+                // arrived yet) have no thumbnail to paint — a short glyph label
+                // beats an empty tile.
+                tk::TextStyle st{};
+                st.role = tk::FontRole::Small;
+                std::string label = (item.kind == ItemKind::Audio) ? tk::tr("Audio")
+                                                                    : tk::tr("File");
+                auto lo = ctx.factory.build_text(label, st);
+                if (lo)
+                {
+                    tk::Size sz = lo->measure();
+                    cv.draw_text(*lo,
+                                {cell.x + (cell.w - sz.w) * 0.5f,
+                                 cell.y + (cell.h - sz.h) * 0.5f},
+                                pal.text_muted);
+                }
+            }
+            if (index + 1 == m.gallery_painted_count() &&
+                m.gallery_total > m.gallery_painted_count())
+            {
+                // Items beyond the render cap: dim the last cell and say how many
+                // more there are.
+                cv.fill_rounded_rect(cell, 6.0f, tk::Color{0, 0, 0, 150});
+                tk::TextStyle st{};
+                st.role = tk::FontRole::Title;
+                auto lo = ctx.factory.build_text(
+                    tk::trf(tk::tr("+{0}"),
+                            {std::to_string(m.gallery_total - m.gallery_painted_count())}),
+                    st);
+                if (lo)
+                {
+                    tk::Size sz = lo->measure();
+                    cv.draw_text(*lo,
+                                {cell.x + (cell.w - sz.w) * 0.5f,
+                                 cell.y + (cell.h - sz.h) * 0.5f},
+                                tk::Color{255, 255, 255, 255});
+                }
             }
         }
-        else if (!img)
-        {
-            // File/audio items (or an image/video whose thumbnail hasn't
-            // arrived yet) have no thumbnail to paint — a short glyph label
-            // beats an empty tile.
-            tk::TextStyle st{};
-            st.role = tk::FontRole::Small;
-            std::string label = (item.kind == ItemKind::Audio) ? tk::tr("Audio")
-                                                                : tk::tr("File");
-            auto lo = ctx.factory.build_text(label, st);
-            if (lo)
-            {
-                tk::Size sz = lo->measure();
-                cv.draw_text(*lo,
-                            {cell.x + (cell.w - sz.w) * 0.5f,
-                             cell.y + (cell.h - sz.h) * 0.5f},
-                            pal.text_muted);
-            }
-        }
-        if (index + 1 == m.gallery_painted_count() &&
-            m.gallery_total > m.gallery_painted_count())
-        {
-            // Items beyond the render cap: dim the last cell and say how many
-            // more there are.
-            cv.fill_rounded_rect(cell, 6.0f, tk::Color{0, 0, 0, 150});
-            tk::TextStyle st{};
-            st.role = tk::FontRole::Title;
-            auto lo = ctx.factory.build_text(
-                tk::trf(tk::tr("+{0}"),
-                        {std::to_string(m.gallery_total - m.gallery_painted_count())}),
-                st);
-            if (lo)
-            {
-                tk::Size sz = lo->measure();
-                cv.draw_text(*lo,
-                            {cell.x + (cell.w - sz.w) * 0.5f,
-                             cell.y + (cell.h - sz.h) * 0.5f},
-                            tk::Color{255, 255, 255, 255});
-            }
-        }
-        cv.pop_clip();
 
         if (!m.event_id.empty())
         {
@@ -7206,15 +7203,13 @@ private:
         bool has_visual = true;
         if (live_frame)
         {
-            ctx.canvas.push_clip_rounded_rect(dst, 8.0f);
+            tk::ClipScope clip(ctx.canvas, dst, 8.0f);
             ctx.canvas.draw_image(*live_frame, dst);
-            ctx.canvas.pop_clip();
         }
         else if (thumb)
         {
-            ctx.canvas.push_clip_rounded_rect(dst, 8.0f);
+            tk::ClipScope clip(ctx.canvas, dst, 8.0f);
             ctx.canvas.draw_image(*thumb, dst);
-            ctx.canvas.pop_clip();
         }
         else
         {
@@ -7226,9 +7221,8 @@ private:
             }
             if (bh_img)
             {
-                ctx.canvas.push_clip_rounded_rect(dst, 8.0f);
+                tk::ClipScope clip(ctx.canvas, dst, 8.0f);
                 ctx.canvas.draw_image(*bh_img, dst);
-                ctx.canvas.pop_clip();
             }
             else
             {
@@ -7764,9 +7758,8 @@ struct UnreadPillWidget : tk::Widget
             tk::Rect clip = part == Part::Jump
                                 ? tk::Rect{bounds_.x, bounds_.y, split - bounds_.x, bounds_.h}
                                 : tk::Rect{split, bounds_.y, kUnreadPillCloseW, bounds_.h};
-            ctx.canvas.push_clip_rect(clip);
+            tk::ClipScope part_clip(ctx.canvas, clip);
             ctx.canvas.fill_rounded_rect(bounds_, r, c);
-            ctx.canvas.pop_clip();
         };
         if (pressed_ != Part::None)
             tint_part(pressed_, pal.subtle_pressed);
@@ -12172,9 +12165,8 @@ void MessageListView::paint(tk::PaintCtx& ctx)
         const float spinner_cy = date_badge.show
             ? bounds_.y + kDateBadgeTopInset + kDateBadgeH + kDateBadgeSpinnerGap
             : bounds_.y + 20.0f;
-        ctx.canvas.push_clip_rect(bounds_);
+        tk::ClipScope clip(ctx.canvas, bounds_);
         draw_pagination_spinner_(ctx, spinner_cy);
-        ctx.canvas.pop_clip();
     }
 
     // Focused-thread dim. Painted above rows / below scroll-pill + hover
@@ -12306,7 +12298,7 @@ void MessageListView::paint(tk::PaintCtx& ctx)
     // scroll-to-bottom pill below also paints this late.
     if (date_badge.show)
     {
-        ctx.canvas.push_clip_rect(bounds());
+        tk::ClipScope clip(ctx.canvas, bounds());
         tk::TextStyle st{};
         st.role = tk::FontRole::Small;
         st.wrap = false;
@@ -12326,7 +12318,6 @@ void MessageListView::paint(tk::PaintCtx& ctx)
                                   pill.y + (pill.h - sz.h) * 0.5f},
                                  ctx.theme.palette.text_primary);
         }
-        ctx.canvas.pop_clip();
     }
     else
     {

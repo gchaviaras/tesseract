@@ -414,10 +414,11 @@ void ComboButton::paint_before_children(PaintCtx& ctx)
     const Color chevron_fill =
         cb_zone_fill(variant_, ctx.theme, enabled_, chevron_hovered_ || expanded_, chevron_pressed_);
 
-    ctx.canvas.push_clip_rounded_rect(bounds_, kCBBtnRadius);
-    ctx.canvas.fill_rounded_rect(bounds_, kCBBtnRadius, main_fill);
-    ctx.canvas.fill_rect(chevron_rect_, chevron_fill);
-    ctx.canvas.pop_clip();
+    {
+        ClipScope clip(ctx.canvas, bounds_, kCBBtnRadius);
+        ctx.canvas.fill_rounded_rect(bounds_, kCBBtnRadius, main_fill);
+        ctx.canvas.fill_rect(chevron_rect_, chevron_fill);
+    }
     ctx.canvas.stroke_rounded_rect(bounds_, kCBBtnRadius, pal.border);
 
     // Divider between the two zones.

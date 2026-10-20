@@ -268,39 +268,44 @@ void MediaOverlayBase::paint_chrome_buttons_(tk::PaintCtx& ctx)
 
     // × close button. Button's own fill (via FillOverride) draws the full
     // resting/hover/pressed pill; the clip only shapes it into a circle.
-    cv.push_clip_rounded_rect(close_btn_->bounds(), kCloseBtnS * 0.5f);
-    close_btn_->paint(ctx);
-    cv.pop_clip();
+    {
+        tk::ClipScope clip(cv, close_btn_->bounds(), kCloseBtnS * 0.5f);
+        close_btn_->paint(ctx);
+    }
     draw_icon_(ctx, close_btn_->bounds(), kMediaOverlayBtnIconPx, close_icon_, kCloseSvg, icon_tint);
 
     // ⬇ save button
-    cv.push_clip_rounded_rect(save_btn_->bounds(), kCloseBtnS * 0.5f);
-    save_btn_->paint(ctx);
-    cv.pop_clip();
+    {
+        tk::ClipScope clip(cv, save_btn_->bounds(), kCloseBtnS * 0.5f);
+        save_btn_->paint(ctx);
+    }
     draw_icon_(ctx, save_btn_->bounds(), kMediaOverlayBtnIconPx, save_icon_, kDownloadSvg, icon_tint);
 
     // ⧉ copy-to-clipboard button (image overlay only)
     if (wants_copy_button_())
     {
-        cv.push_clip_rounded_rect(copy_btn_->bounds(), kCloseBtnS * 0.5f);
-        copy_btn_->paint(ctx);
-        cv.pop_clip();
+        {
+            tk::ClipScope clip(cv, copy_btn_->bounds(), kCloseBtnS * 0.5f);
+            copy_btn_->paint(ctx);
+        }
         draw_icon_(ctx, copy_btn_->bounds(), kMediaOverlayBtnIconPx, copy_icon_, kCopySvg, icon_tint);
     }
 
     // ↗ open in the system's default app
     if (wants_external_button_())
     {
-        cv.push_clip_rounded_rect(external_btn_->bounds(), kCloseBtnS * 0.5f);
-        external_btn_->paint(ctx);
-        cv.pop_clip();
+        {
+            tk::ClipScope clip(cv, external_btn_->bounds(), kCloseBtnS * 0.5f);
+            external_btn_->paint(ctx);
+        }
         draw_icon_(ctx, external_btn_->bounds(), kMediaOverlayBtnIconPx, external_icon_, kOpenInTabSvg, icon_tint);
     }
 
     // ⤢ / ⤡ full-screen toggle
-    cv.push_clip_rounded_rect(fullscreen_btn_->bounds(), kCloseBtnS * 0.5f);
-    fullscreen_btn_->paint(ctx);
-    cv.pop_clip();
+    {
+        tk::ClipScope clip(cv, fullscreen_btn_->bounds(), kCloseBtnS * 0.5f);
+        fullscreen_btn_->paint(ctx);
+    }
     const std::span<const std::uint8_t> fs_svg =
         fullscreen_ ? std::span<const std::uint8_t>{kMinimizeSvg}
                     : std::span<const std::uint8_t>{kExpandSvg};

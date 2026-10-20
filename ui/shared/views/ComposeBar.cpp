@@ -921,54 +921,55 @@ void ComposeBar::paint_gallery_chips_(tk::PaintCtx& ctx) const
         const tk::Rect& cell = chip_rects_[i];
 
         ctx.canvas.fill_rounded_rect(cell, 6.0f, card_bg(ctx.theme));
-        ctx.canvas.push_clip_rounded_rect(cell, 6.0f);
-        if (pa.preview)
         {
-            tk::Size fitted = fit_media(
-                static_cast<float>(pa.preview->width()),
-                static_cast<float>(pa.preview->height()), cell.w, cell.h);
-            tk::Rect dst{cell.x + (cell.w - fitted.w) * 0.5f,
-                        cell.y + (cell.h - fitted.h) * 0.5f, fitted.w, fitted.h};
-            ctx.canvas.draw_image(*pa.preview, dst);
-        }
-        else
-        {
-            // File/audio (no thumbnail) or an image/video whose decode
-            // hasn't landed yet — a short kind glyph beats an empty cell.
-            std::string glyph =
-                pa.kind == PendingAttachment::Kind::Audio ? tk::tr("Audio")
-                : pa.kind == PendingAttachment::Kind::File ? tk::tr("File")
-                                                            : "…";
-            tk::TextStyle st{};
-            st.role = tk::FontRole::Small;
-            if (auto lo = ctx.factory.build_text(glyph, st))
+            tk::ClipScope clip(ctx.canvas, cell, 6.0f);
+            if (pa.preview)
             {
-                tk::Size sz = lo->measure();
-                ctx.canvas.draw_text(
-                    *lo,
-                    {cell.x + (cell.w - sz.w) * 0.5f, cell.y + (cell.h - sz.h) * 0.5f},
-                    ctx.theme.palette.text_muted);
+                tk::Size fitted = fit_media(
+                    static_cast<float>(pa.preview->width()),
+                    static_cast<float>(pa.preview->height()), cell.w, cell.h);
+                tk::Rect dst{cell.x + (cell.w - fitted.w) * 0.5f,
+                            cell.y + (cell.h - fitted.h) * 0.5f, fitted.w, fitted.h};
+                ctx.canvas.draw_image(*pa.preview, dst);
+            }
+            else
+            {
+                // File/audio (no thumbnail) or an image/video whose decode
+                // hasn't landed yet — a short kind glyph beats an empty cell.
+                std::string glyph =
+                    pa.kind == PendingAttachment::Kind::Audio ? tk::tr("Audio")
+                    : pa.kind == PendingAttachment::Kind::File ? tk::tr("File")
+                                                                : "…";
+                tk::TextStyle st{};
+                st.role = tk::FontRole::Small;
+                if (auto lo = ctx.factory.build_text(glyph, st))
+                {
+                    tk::Size sz = lo->measure();
+                    ctx.canvas.draw_text(
+                        *lo,
+                        {cell.x + (cell.w - sz.w) * 0.5f, cell.y + (cell.h - sz.h) * 0.5f},
+                        ctx.theme.palette.text_muted);
+                }
+            }
+            if (pa.kind == PendingAttachment::Kind::Video)
+            {
+                tk::TextStyle ts{};
+                ts.role = tk::FontRole::Small;
+                if (auto lo = ctx.factory.build_text("\xe2\x96\xb6", ts)) // ▶
+                {
+                    tk::Size sz = lo->measure();
+                    tk::Rect badge{cell.x + (cell.w - sz.w) * 0.5f - 6.0f,
+                                  cell.y + (cell.h - sz.h) * 0.5f - 3.0f,
+                                  sz.w + 12.0f, sz.h + 6.0f};
+                    ctx.canvas.fill_rounded_rect(badge, 5.0f,
+                                                 tk::Color::rgba(0, 0, 0, 140));
+                    ctx.canvas.draw_text(*lo,
+                                         {cell.x + (cell.w - sz.w) * 0.5f,
+                                          cell.y + (cell.h - sz.h) * 0.5f},
+                                         tk::Color::rgba(255, 255, 255, 220));
+                }
             }
         }
-        if (pa.kind == PendingAttachment::Kind::Video)
-        {
-            tk::TextStyle ts{};
-            ts.role = tk::FontRole::Small;
-            if (auto lo = ctx.factory.build_text("\xe2\x96\xb6", ts)) // ▶
-            {
-                tk::Size sz = lo->measure();
-                tk::Rect badge{cell.x + (cell.w - sz.w) * 0.5f - 6.0f,
-                              cell.y + (cell.h - sz.h) * 0.5f - 3.0f,
-                              sz.w + 12.0f, sz.h + 6.0f};
-                ctx.canvas.fill_rounded_rect(badge, 5.0f,
-                                             tk::Color::rgba(0, 0, 0, 140));
-                ctx.canvas.draw_text(*lo,
-                                     {cell.x + (cell.w - sz.w) * 0.5f,
-                                      cell.y + (cell.h - sz.h) * 0.5f},
-                                     tk::Color::rgba(255, 255, 255, 220));
-            }
-        }
-        ctx.canvas.pop_clip();
 
         // Per-chip × remove badge, top-right corner (a real Button).
         if (i < chip_remove_btns_.size() && chip_remove_btns_[i]->visible())
@@ -1494,11 +1495,12 @@ void ComposeBar::paint(tk::PaintCtx& ctx)
         constexpr float kEditPadY = 5.0f;
 
         ctx.canvas.fill_rounded_rect(edit_band_rect_, 6.0f, card_bg(ctx.theme));
-        ctx.canvas.push_clip_rounded_rect(edit_band_rect_, 6.0f);
-        ctx.canvas.fill_rect(
-            {edit_band_rect_.x, edit_band_rect_.y, kAccentW, edit_band_rect_.h},
-            ctx.theme.palette.accent);
-        ctx.canvas.pop_clip();
+        {
+            tk::ClipScope clip(ctx.canvas, edit_band_rect_, 6.0f);
+            ctx.canvas.fill_rect(
+                {edit_band_rect_.x, edit_band_rect_.y, kAccentW, edit_band_rect_.h},
+                ctx.theme.palette.accent);
+        }
 
         float text_x = edit_band_rect_.x + kAccentW + kEditPadX;
 
@@ -1527,11 +1529,12 @@ void ComposeBar::paint(tk::PaintCtx& ctx)
 
         ctx.canvas.fill_rounded_rect(reply_band_rect_, 6.0f,
                                      card_bg(ctx.theme));
-        ctx.canvas.push_clip_rounded_rect(reply_band_rect_, 6.0f);
-        ctx.canvas.fill_rect({reply_band_rect_.x, reply_band_rect_.y, kAccentW,
-                              reply_band_rect_.h},
-                             ctx.theme.palette.accent);
-        ctx.canvas.pop_clip();
+        {
+            tk::ClipScope clip(ctx.canvas, reply_band_rect_, 6.0f);
+            ctx.canvas.fill_rect({reply_band_rect_.x, reply_band_rect_.y, kAccentW,
+                                  reply_band_rect_.h},
+                                 ctx.theme.palette.accent);
+        }
 
         float text_x = reply_band_rect_.x + kAccentW + kReplyPadX;
         // Keep text clear of the trailing "×" cancel button.
@@ -1625,9 +1628,8 @@ void ComposeBar::paint(tk::PaintCtx& ctx)
         // (see arrange()), but clip to the card here too so a future geometry
         // miscalculation can't paint the native-captured image over the
         // border again — mirrors edit_band_rect_/reply_band_rect_ above.
-        ctx.canvas.push_clip_rounded_rect(compose_card_rect_, kComposeCardRadius);
+        tk::ClipScope clip(ctx.canvas, compose_card_rect_, kComposeCardRadius);
         text_area_->paint(ctx);
-        ctx.canvas.pop_clip();
     }
     if (emoji_btn_ && !recording_)
     {
@@ -1719,10 +1721,9 @@ void ComposeBar::paint(tk::PaintCtx& ctx)
                      : std::nullopt);
         if (on_image)
         {
-            ctx.canvas.push_clip_rounded_rect(remove_btn_rect_,
-                                              kRemoveBtnSide * 0.5f);
+            tk::ClipScope clip(ctx.canvas, remove_btn_rect_,
+                                     kRemoveBtnSide * 0.5f);
             remove_btn_->paint(ctx);
-            ctx.canvas.pop_clip();
         }
         else
         {

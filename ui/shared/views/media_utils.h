@@ -77,9 +77,8 @@ inline void draw_avatar(tk::Canvas& canvas, const tk::Image* img,
                                (static_cast<float>(h) - s) / 2.0f, s, s};
             const tk::Rect dst{centre.x - diameter * 0.5f,
                                centre.y - diameter * 0.5f, diameter, diameter};
-            canvas.push_clip_rounded_rect(dst, diameter * 0.5f);
+            tk::ClipScope clip(canvas, dst, diameter * 0.5f);
             canvas.draw_image_subregion(*img, src, dst);
-            canvas.pop_clip();
         }
     }
     else

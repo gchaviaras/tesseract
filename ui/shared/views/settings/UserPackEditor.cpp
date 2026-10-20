@@ -395,30 +395,31 @@ void UserPackEditor::paint(tk::PaintCtx& ctx)
     step_kinetic();
 
     const auto layout = layout_tile_row_(bounds_.w, images_.size() + 1, 0.0f);
-    ctx.canvas.push_clip_rect(bounds_);
-    const tk::Point origin{bounds_.x, bounds_.y - scroll_y_};
-
-    for (std::size_t t = 0; t < layout.size(); ++t)
     {
-        const auto& r = layout[t];
-        if (origin.y + r.y + kTileSize <= bounds_.y || origin.y + r.y >= bounds_.y + bounds_.h)
-            continue;
-        if (t < images_.size())
+        tk::ClipScope clip(ctx.canvas, bounds_);
+        const tk::Point origin{bounds_.x, bounds_.y - scroll_y_};
+
+        for (std::size_t t = 0; t < layout.size(); ++t)
         {
-            const bool hovered = hovered_tile_ && *hovered_tile_ == t;
-            const bool is_editing = editing_ && *editing_ == t;
-            paint_tile_shared_(ctx, images_[t], r, origin, hovered, is_editing);
+            const auto& r = layout[t];
+            if (origin.y + r.y + kTileSize <= bounds_.y || origin.y + r.y >= bounds_.y + bounds_.h)
+                continue;
+            if (t < images_.size())
+            {
+                const bool hovered = hovered_tile_ && *hovered_tile_ == t;
+                const bool is_editing = editing_ && *editing_ == t;
+                paint_tile_shared_(ctx, images_[t], r, origin, hovered, is_editing);
+            }
+            else
+            {
+                paint_hint_tile_shared_(ctx, r, origin);
+            }
         }
-        else
-        {
-            paint_hint_tile_shared_(ctx, r, origin);
-        }
+        if (editing_ && shortcode_field_ && shortcode_field_->visible())
+            shortcode_field_->paint(ctx);
+        if (native_drag_hover_)
+            tk::paint_native_drag_hover_highlight(ctx, bounds_);
     }
-    if (editing_ && shortcode_field_ && shortcode_field_->visible())
-        shortcode_field_->paint(ctx);
-    if (native_drag_hover_)
-        tk::paint_native_drag_hover_highlight(ctx, bounds_);
-    ctx.canvas.pop_clip();
     paint_scrollbar(ctx);
 }
 

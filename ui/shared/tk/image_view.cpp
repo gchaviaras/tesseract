@@ -97,9 +97,8 @@ void ImageView::paint_before_children(PaintCtx& ctx)
     Rect dst = fit_rect(container, content, mode_, {bounds_.x, bounds_.y});
     if (mode_ == ContentMode::Cover)
     {
-        ctx.canvas.push_clip_rect(bounds_);
+        ClipScope clip(ctx.canvas, bounds_);
         ctx.canvas.draw_image(*image_, dst);
-        ctx.canvas.pop_clip();
     }
     else
     {

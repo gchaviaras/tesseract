@@ -73,12 +73,13 @@ void BrandView::paint_before_children(tk::PaintCtx& ctx)
                                bounds_.y + bounds_.h * 0.5f};
 
         const auto edges = tk::tesseract_wireframe_edges(phase, center, radius);
-        ctx.canvas.push_opacity(kWireframeOpacity);
-        for (const auto& e : edges)
         {
-            ctx.canvas.draw_line(e.a, e.b, pal.text_muted, 1.0f);
+            tk::OpacityScope fade(ctx.canvas, kWireframeOpacity);
+            for (const auto& e : edges)
+            {
+                ctx.canvas.draw_line(e.a, e.b, pal.text_muted, 1.0f);
+            }
         }
-        ctx.canvas.pop_opacity();
 
         if (!wireframe_repaint_pending_ && host() && visible_in_tree())
         {

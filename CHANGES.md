@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- docs(license): added a GPLv3 section 7 additional permission (`LICENSE-EXCEPTION.md`) for Apple App Store distribution. Docs only
 - feat(ui): clicking the target avatar on a join/leave/invite/kick/ban line (a lone event, an expanded group's member, or a line of a non-expandable group) opens that user's profile panel, also exposed as a "View profile" accessibility action; collapsed expandable summaries still expand on click, and the IRC layout draws no avatars. Linux debug build, ctest 3435/3435, user-verified
 - chore(ui): new `tk::ClipScope` / `tk::OpacityScope` RAII guards pop canvas clips and opacity on scope exit; the hand-paired push/pop calls across `ui/shared` and the GTK host now use them, except clips that span `paint_before_children`/`paint_after_children` (RoomInfoPanel, SettingsPage, KnownPacksList). Linux release build, ctest 3433/3433, user-verified
 - fix(ui): the user profile panel no longer stretches non-square avatars; `draw_avatar` centre-crops them to a square (the panel draws the full-resolution original, not the pre-cropped thumbnail). Linux release build, ctest 3433/3433, user-verified

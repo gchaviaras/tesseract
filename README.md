@@ -358,7 +358,9 @@ The screenshot fixture's user avatars are generated from [Lorelei](https://www.f
 
 ## License
 
-Tesseract is licensed under the [GNU General Public License v3](./LICENSE)
+Tesseract is licensed under the [GNU General Public License v3](./LICENSE),
+with an [additional permission](./LICENSE-EXCEPTION.md) (GPLv3 section 7) for
+distribution through the Apple App Store.
 
 ---
 

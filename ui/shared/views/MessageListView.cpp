@@ -967,6 +967,9 @@ constexpr float kTimelineStartH = 20.0f;
 // messages" button when the room replaced an older one.
 constexpr float kPredecessorLinkH = 28.0f;
 constexpr float kPinnedEventH   = 24.0f;  // m.room.pinned_events state row
+// Diameter of the target avatar on a single membership line. Shared by paint
+// and membership_avatar_hit so they can't drift apart.
+constexpr float kMembershipAvatarD = 18.0f;
 constexpr float kTypingRowH = 20.0f;
 
 // Floating date badge — rounded pill fixed to the top-center of the
@@ -1413,6 +1416,14 @@ std::string membership_target_label(const MessageRowData& m)
 
 } // namespace
 
+bool membership_avatar_hit(tk::Rect row_rect, tk::Point world)
+{
+    const float r  = kMembershipAvatarD * 0.5f;
+    const float dx = world.x - (row_rect.x + kMsgListPadX + r);
+    const float dy = world.y - (row_rect.y + kPinnedEventH * 0.5f);
+    return dx * dx + dy * dy <= r * r;
+}
+
 // One collapsed-summary line: the phrase for every row of `run`. People are
 // counted once however many rows they have (John changing his avatar twice
 // reads "John changed their avatar", not "John and John …"). A line about a
@@ -1517,6 +1528,9 @@ public:
 
     // Message body renders in the platform monospace face.
     virtual bool monospace_body() const { return false; }
+
+    // Membership rows draw the target user's avatar (clickable → profile).
+    virtual bool membership_avatars() const { return true; }
 
     // "[HH:MM] <nick> " spans baked onto the front of a flat single-section
     // body so wrapped lines fall flush-left (mIRC). Empty = no prefix.
@@ -1752,6 +1766,38 @@ public:
         return !membership_group_expandable(start) ||
                !owner_.membership_groups_.is_expanded(
                    owner_.messages_[start].event_id);
+    }
+
+    // Whether Membership row `index` is actually painted (a group start, or a
+    // member of an expanded group) — mirrors the dispatch in paint.
+    bool membership_row_painted(std::size_t index) const
+    {
+        if (is_membership_group_start(index))
+            return true;
+        return owner_.membership_groups_.is_expanded(
+            owner_.messages_[membership_group_start_of(index)].event_id);
+    }
+    // The rows (indices into messages_) whose target avatar painted row
+    // `index` shows as clickable, one per painted line in top-to-bottom
+    // order: the row itself for a single line, one per action for the
+    // summary of a non-expandable group (each of its lines is exactly one
+    // event). An expandable collapsed summary has none — a click there
+    // expands it — and so does any row on a renderer without avatars.
+    std::vector<std::size_t> membership_avatar_rows(std::size_t index) const
+    {
+        if (!row_renderer_->membership_avatars() ||
+            !membership_row_painted(index))
+            return {};
+        if (!is_membership_group_start(index) ||
+            !membership_group_collapsed(index))
+            return {index};
+        if (membership_group_expandable(index))
+            return {};
+        std::vector<std::size_t> rows;
+        for (const auto& run :
+             membership_group_actions(index, membership_group_end(index)))
+            rows.push_back(run.rows.front());
+        return rows;
     }
 
     std::size_t count() const override
@@ -3735,6 +3781,31 @@ public:
             return out;
 
         const MessageRowData& m = owner_.messages_[index];
+        if (m.kind == MessageRowData::Kind::Membership)
+        {
+            // Lines with a clickable target avatar; expandable summaries
+            // expand instead.
+            MessageListView* v = &owner_;
+            for (std::size_t r : membership_avatar_rows(index))
+            {
+                const MessageRowData& t = owner_.messages_[r];
+                if (t.membership_target_user_id.empty())
+                    continue;
+                out.push_back(action_node_(
+                    tk::trf(tk::tr("View profile of {0}"),
+                            {membership_target_label(t)}),
+                    [v, uid = t.membership_target_user_id,
+                     name = t.membership_target_name,
+                     av = t.membership_target_avatar_url]
+                    {
+                        if (!v->on_sender_clicked)
+                            return false;
+                        v->on_sender_clicked(uid, name, av);
+                        return true;
+                    }));
+            }
+            return out;
+        }
         if (is_virtual_event(m.kind))
             return out;
         using Kind = MessageRowData::Kind;
@@ -4640,7 +4711,7 @@ private:
         if (row_renderer_->paint_membership_line(m, ctx, bounds, *this))
             return;
 
-        constexpr float kAvatarD = 18.0f;
+        constexpr float kAvatarD = kMembershipAvatarD;
         constexpr float kGap = 6.0f;
         const float cy = bounds.y + kPinnedEventH * 0.5f;
 
@@ -4724,7 +4795,7 @@ private:
                                         tk::PaintCtx& ctx, tk::Rect bounds) const
     {
         const auto& msgs = owner_.messages_;
-        constexpr float kAvatarD = 18.0f;
+        constexpr float kAvatarD = kMembershipAvatarD;
         constexpr float kStride = 12.0f;
         constexpr std::size_t kCap = 3;
         const std::size_t total = run.rows.size();
@@ -7497,6 +7568,7 @@ public:
 
     // ── Layout traits ───────────────────────────────────────────────────
     bool monospace_body() const override { return true; }
+    bool membership_avatars() const override { return false; }
 
     std::vector<tk::TextSpan>
     body_prefix_spans(const MessageRowData& m, bool dark) const override
@@ -11030,6 +11102,25 @@ bool MessageListView::on_pointer_down(tk::Point local)
             const auto& m = messages_[row];
             if (m.kind == MessageRowData::Kind::Membership)
             {
+                // A click on a line's target avatar opens that user's
+                // profile, same as a message sender's avatar.
+                const tk::Point world{local.x + bounds().x, local.y + bounds().y};
+                tk::Rect line = row_world_rect(row_at);
+                line.h = kPinnedEventH;
+                for (std::size_t r : adapter_->membership_avatar_rows(row))
+                {
+                    const auto& t = messages_[r];
+                    if (!t.membership_target_user_id.empty() &&
+                        membership_avatar_hit(line, world))
+                    {
+                        press_sender_ = true;
+                        press_sender_user_id_ = t.membership_target_user_id;
+                        press_sender_display_name_ = t.membership_target_name;
+                        press_sender_avatar_url_ = t.membership_target_avatar_url;
+                        return true;
+                    }
+                    line.y += kPinnedEventH;
+                }
                 std::size_t start = adapter_->membership_group_start_of(row);
                 // Groups whose collapsed summary already shows every event
                 // (one per action) have nothing to expand; leave the click

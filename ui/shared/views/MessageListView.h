@@ -400,6 +400,10 @@ bool membership_group_expandable(const std::vector<MessageRowData>& msgs,
 // ban / kick-and-ban), e.g. "Bob was removed by Alice. Reason: spam". Other
 // actions, and rows without a reason, pass through unchanged.
 std::string with_membership_reason(std::string phrase, const MessageRowData& m);
+// Whether `world` is over the target avatar of a membership line drawn at
+// `row_rect` (a single line, or one line of a non-expandable group's summary;
+// for summary lines the first avatar sits at the same spot).
+bool membership_avatar_hit(tk::Rect row_rect, tk::Point world);
 // The collapsed-summary line for `run` (people counted once, however many rows).
 std::string membership_run_phrase(const std::vector<MessageRowData>& msgs,
                                   const MembershipActionRun& run);

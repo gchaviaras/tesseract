@@ -7,6 +7,7 @@
 using tesseract::MembershipAction;
 using tesseract::views::is_membership_group_start;
 using tesseract::views::MembershipGroupExpander;
+using tesseract::views::membership_avatar_hit;
 using tesseract::views::membership_group_actions;
 using tesseract::views::membership_group_end;
 using tesseract::views::membership_group_expandable;
@@ -342,4 +343,19 @@ TEST_CASE("membership_run_phrase counts each person once", "[message_list][membe
         MembershipActionRun run{MembershipAction::Kicked, {0}};
         CHECK(membership_run_phrase(msgs, run).find("Reason: spam") != std::string::npos);
     }
+}
+
+TEST_CASE("membership_avatar_hit tests the single-line target avatar",
+          "[message_list][membership]")
+{
+    // Avatar centre: x = row.x + 12 (pad) + 9, y = row.y + 12 (half line).
+    const tk::Rect rect{10.0f, 100.0f, 400.0f, 24.0f};
+    const float cx = 10.0f + 12.0f + 9.0f;
+    const float cy = 100.0f + 12.0f;
+
+    CHECK(membership_avatar_hit(rect, {cx, cy}));
+    CHECK(membership_avatar_hit(rect, {cx + 8.0f, cy}));
+    CHECK_FALSE(membership_avatar_hit(rect, {cx + 12.0f, cy}));
+    CHECK_FALSE(membership_avatar_hit(rect, {cx, cy + 30.0f}));
+    CHECK_FALSE(membership_avatar_hit(rect, {cx + 150.0f, cy}));
 }

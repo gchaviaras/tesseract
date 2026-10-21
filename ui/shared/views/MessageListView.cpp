@@ -2012,7 +2012,7 @@ public:
                        : 0.0f;
         }
         return row_renderer_->measure(
-            {*this, m, ctx, index, width, is_cont(index)});
+            {*this, m, ctx, index, owner_.column_for_(width).w, is_cont(index)});
     }
 
     // Historical message-row height math. ClassicRowRenderer::measure
@@ -2079,6 +2079,10 @@ public:
         // Keep row_renderer_ current before any helper (including the
         // virtual-row system-line painters) consults it.
         sync_row_renderer_();
+        // Everything but a day separator lays out inside the content column.
+        if (index >= owner_.messages_.size() ||
+            owner_.messages_[index].kind != MessageRowData::Kind::DaySeparator)
+            bounds = owner_.column_rect_(bounds);
         if (is_typing_index(index))
         {
             paint_typing_row(ctx, bounds);
@@ -10252,6 +10256,37 @@ void MessageListView::on_display_prefs_changed()
         request_repaint_();
 }
 
+void MessageListView::set_content_column_enabled(bool enabled)
+{
+    if (content_column_enabled_ == enabled)
+        return;
+    content_column_enabled_ = enabled;
+    on_display_prefs_changed();
+}
+
+TimelineColumn MessageListView::column_for_(float row_w) const
+{
+    const auto& s = tesseract::Settings::instance();
+    if (!content_column_enabled_ || s.message_layout == tesseract::Settings::MessageLayout::Irc)
+        return {0.0f, row_w};
+    return timeline_column(row_w, s.timeline_column_pct, s.timeline_column_anchor);
+}
+
+tk::Rect MessageListView::column_rect_(tk::Rect row) const
+{
+    const TimelineColumn c = column_for_(row.w);
+    return {row.x + c.x, row.y, c.w, row.h};
+}
+
+tk::Rect MessageListView::content_row_rect_(int idx) const
+{
+    const tk::Rect full = row_world_rect(idx);
+    if (idx >= 0 && static_cast<std::size_t>(idx) < messages_.size() &&
+        messages_[static_cast<std::size_t>(idx)].kind == MessageRowData::Kind::DaySeparator)
+        return full;
+    return column_rect_(full);
+}
+
 float MessageListView::sender_name_max_w_for_test(std::size_t index) const
 {
     return adapter_->sender_name_max_w_for_test(index);
@@ -11053,7 +11088,7 @@ bool MessageListView::on_pointer_down(tk::Point local)
                 const bool is_virtual = is_virtual_event(m.kind);
                 if (!is_virtual && !adapter_->is_cont(ri) && !m.sender.empty())
                 {
-                    const tk::Rect rb = row_world_rect(ri_int);
+                    const tk::Rect rb = content_row_rect_(ri_int);
                     if (rb.w > 0)
                     {
                         const tk::Rect avatar_rect{rb.x + kMsgListPadX, rb.y + kMsgListPadY,
@@ -11105,7 +11140,7 @@ bool MessageListView::on_pointer_down(tk::Point local)
                 // A click on a line's target avatar opens that user's
                 // profile, same as a message sender's avatar.
                 const tk::Point world{local.x + bounds().x, local.y + bounds().y};
-                tk::Rect line = row_world_rect(row_at);
+                tk::Rect line = content_row_rect_(row_at);
                 line.h = kPinnedEventH;
                 for (std::size_t r : adapter_->membership_avatar_rows(row))
                 {
@@ -12276,8 +12311,7 @@ void MessageListView::paint(tk::PaintCtx& ctx)
             {
                 if (messages_[i].event_id != highlighted_event_id_)
                     continue;
-                const tk::Rect r =
-                    tk::ListView::row_world_rect(static_cast<int>(i));
+                const tk::Rect r = content_row_rect_(static_cast<int>(i));
                 // Clip the row rect into the list bounds so a partially
                 // scrolled row punches only its visible slice.
                 const float x0 = std::max(B.x, r.x);
@@ -12346,8 +12380,7 @@ void MessageListView::paint(tk::PaintCtx& ctx)
             if (messages_[i].event_id != highlighted_event_id_)
                 continue;
             const tk::Rect B = bounds();
-            const tk::Rect r =
-                tk::ListView::row_world_rect(static_cast<int>(i));
+            const tk::Rect r = content_row_rect_(static_cast<int>(i));
             const float x0 = std::max(B.x, r.x);
             const float y0 = std::max(B.y, r.y);
             const float x1 = std::min(B.right(), r.right());
@@ -12468,7 +12501,7 @@ void MessageListView::paint(tk::PaintCtx& ctx)
             {
                 if (messages_[i].kind != MessageRowData::Kind::TimelineStart)
                     continue;
-                const tk::Rect row = row_world_rect(static_cast<int>(i));
+                const tk::Rect row = content_row_rect_(static_cast<int>(i));
                 const tk::Rect v = bounds();
                 const tk::Rect slot{row.x, row.y + kTimelineStartH, row.w,
                                     kPredecessorLinkH};
@@ -12880,7 +12913,7 @@ std::vector<std::string> MessageListView::keyboard_part_names() const
 tk::Rect MessageListView::anchor_for_event_(const std::string& event_id) const
 {
     const int idx = message_index_of(event_id);
-    tk::Rect r = idx >= 0 ? row_world_rect(idx) : tk::Rect{};
+    tk::Rect r = idx >= 0 ? content_row_rect_(idx) : tk::Rect{};
     const float top = std::max(r.y, bounds_.y);
     const float bottom = std::min(r.y + r.h, bounds_.y + bounds_.h);
     if (r.w <= 0.0f || bottom <= top)
@@ -13071,7 +13104,7 @@ void MessageListView::paint_own_focus_ring(tk::PaintCtx& ctx)
         tk::Widget::paint_own_focus_ring(ctx);
         return;
     }
-    tk::Rect r = row_world_rect(sel);
+    tk::Rect r = content_row_rect_(sel);
     const float top = std::max(r.y, bounds_.y) + 1.0f;
     const float bottom = std::min(r.y + r.h, bounds_.y + bounds_.h) - 1.0f;
     if (bottom <= top)

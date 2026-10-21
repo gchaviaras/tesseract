@@ -11,6 +11,7 @@
 #include "tk/combobox.h"
 #include "tk/controls.h"
 #include "tk/radio.h"
+#include "tk/slider.h"
 
 #include <functional>
 
@@ -29,6 +30,9 @@ public:
     ~AppearanceSection() override;
 
 private:
+    // Readout text and enabled state of the timeline column controls.
+    void refresh_column_controls_();
+
     tk::RadioGroup*  picker_             = nullptr;
     tk::ComboBox*    accent_combo_       = nullptr;
     tk::CheckButton* group_unread_cb_    = nullptr;
@@ -43,6 +47,9 @@ private:
     MessageLayoutPreview* message_layout_preview_ = nullptr;
     tk::VBox*        layout_options_bubbles_    = nullptr; // per-layout options: Bubbles
     tk::CheckButton* bubbles_own_avatar_cb_     = nullptr;
+    tk::Slider*      column_width_slider_       = nullptr;
+    tk::Label*       column_width_value_        = nullptr;
+    tk::ComboBox*    column_anchor_combo_       = nullptr;
     tk::RadioGroup*       room_list_density_group_ = nullptr;
     RoomListPreview*      room_list_preview_       = nullptr;
     FontsEditor*          fonts_editor_            = nullptr;

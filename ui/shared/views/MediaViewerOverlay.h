@@ -182,6 +182,7 @@ private:
     const tk::Image* host_image(const std::string& key) const override;
     tk::Button* host_add_icon_button() override;
     tk::Button* host_add_label_button(std::string label) override;
+    tk::Slider* host_add_slider() override;
     void host_playback_started() override;
 
     // Deactivate the current page (if any), bump the token, activate the page

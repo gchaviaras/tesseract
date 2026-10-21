@@ -425,15 +425,8 @@ void VideoViewerPage::paint_controls(tk::PaintCtx& ctx)
 bool VideoViewerPage::on_content_pointer_down(tk::Point w, tk::Point local)
 {
     (void)local;
-    // Only reached when the transport bar's buttons (real Button children)
-    // declined the press first — see Widget::dispatch_pointer_down.
-    if (!hide_controls_ && host_.host_chrome_shown())
-    {
-        if (bar_.on_pointer_down(w, transport_state_()))
-        {
-            return true;
-        }
-    }
+    // Only reached when the transport bar's buttons and scrub slider (real
+    // children) declined the press first — see Widget::dispatch_pointer_down.
     const bool bar_shown = !hide_controls_ && host_.host_chrome_shown();
     if (rect_contains(video_rect_, w) || (bar_shown && bar_.contains(w)))
     {
@@ -442,23 +435,6 @@ bool VideoViewerPage::on_content_pointer_down(tk::Point w, tk::Point local)
         return true;
     }
     return false;
-}
-
-bool VideoViewerPage::on_content_pointer_up(tk::Point /*w*/, tk::Point /*local*/,
-                                            bool /*inside_self*/)
-{
-    return bar_.on_pointer_up();
-}
-
-void VideoViewerPage::on_pointer_drag(tk::Point local)
-{
-    if (bar_.scrubbing())
-    {
-        // The bar's geometry is in world (root-surface) coordinates — see
-        // MediaOverlayBase::handle_pointer_down_'s identical local->world
-        // conversion for on_content_pointer_down_'s `w`.
-        bar_.on_drag(local.x + host_.host_bounds().x, transport_state_());
-    }
 }
 
 MediaTransportBar::State VideoViewerPage::transport_state_() const

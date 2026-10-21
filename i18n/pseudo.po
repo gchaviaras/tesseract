@@ -7282,3 +7282,27 @@ msgstr "[Wébsïtéx]"
 #: ui/shared/views/ServerBrowserOverlay.cpp
 msgid "{0} · Established"
 msgstr "[{0} · Éstàblïshédxxx]"
+
+#: ui/shared/views/MediaTransportBar.cpp
+msgid "Seek"
+msgstr "[Séékx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Timeline width"
+msgstr "[Tïmélïñé wïdthxx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Timeline position"
+msgstr "[Tïmélïñé pösïtïöñxxx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Left"
+msgstr "[Léftx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Centered"
+msgstr "[Çéñtérédx]"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "{0}%"
+msgstr "[{0}%x]"

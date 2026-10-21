@@ -54,6 +54,7 @@ NSAccessibilityRole to_ns_role(tk::Role r)
     case tk::Role::MenuItem:    return NSAccessibilityMenuItemRole;
     case tk::Role::Group:       return NSAccessibilityGroupRole;
     case tk::Role::ProgressBar: return NSAccessibilityProgressIndicatorRole;
+    case tk::Role::Slider:      return NSAccessibilitySliderRole;
     case tk::Role::None:        return NSAccessibilityGroupRole;
     }
     return NSAccessibilityGroupRole;
@@ -423,6 +424,13 @@ private:
     default:
         return nil;
     }
+}
+
+- (void)setAccessibilityValue:(id)value
+{
+    const tk::AccessNode* n = self.tkNode;
+    if (n && [value isKindOfClass:[NSNumber class]])
+        tk::set_node_value(*n, [(NSNumber*)value doubleValue]);
 }
 
 - (BOOL)isAccessibilityEnabled

@@ -5232,3 +5232,27 @@ msgstr "Nettsted"
 #: ui/shared/views/ServerBrowserOverlay.cpp
 msgid "{0} · Established"
 msgstr "{0} · Etablert"
+
+#: ui/shared/views/MediaTransportBar.cpp
+msgid "Seek"
+msgstr "Avspillingsposisjon"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Timeline width"
+msgstr "Bredde på tidslinjen"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Timeline position"
+msgstr "Plassering av tidslinjen"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Left"
+msgstr "Venstre"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Centered"
+msgstr "Sentrert"
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "{0}%"
+msgstr "{0} %"

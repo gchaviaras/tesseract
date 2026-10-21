@@ -68,6 +68,7 @@ GtkAccessibleRole to_gtk_role(tk::Role r)
     case tk::Role::MenuItem:    return GTK_ACCESSIBLE_ROLE_MENU_ITEM;
     case tk::Role::Group:       return GTK_ACCESSIBLE_ROLE_GROUP;
     case tk::Role::ProgressBar: return GTK_ACCESSIBLE_ROLE_PROGRESS_BAR;
+    case tk::Role::Slider:      return GTK_ACCESSIBLE_ROLE_SLIDER;
     case tk::Role::None:        return GTK_ACCESSIBLE_ROLE_GENERIC;
     }
     return GTK_ACCESSIBLE_ROLE_GENERIC;

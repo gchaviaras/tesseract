@@ -234,6 +234,26 @@ TEST_CASE("sender status, layout and density changes relayout",
     st.room_list_density = RD::Normal;
 }
 
+TEST_CASE("timeline column width and anchor changes relayout",
+          "[shell][settings_handlers]")
+{
+    tesseract::test::SettingsGuard guard;
+    SettingsShell s;
+    auto& st = Settings::instance();
+    using K = tesseract::views::SettingKey;
+
+    st.timeline_column_pct = 60;
+    changed(s, K::TimelineColumnWidth);
+    CHECK(s.relayouts == 1);
+
+    st.timeline_column_anchor = Settings::TimelineColumnAnchor::Center;
+    changed(s, K::TimelineColumnAnchor);
+    CHECK(s.relayouts == 2);
+
+    st.timeline_column_pct = 50;
+    st.timeline_column_anchor = Settings::TimelineColumnAnchor::Left;
+}
+
 TEST_CASE("presence toggle persists and resolves polling", "[shell][settings_handlers]")
 {
     tesseract::test::SettingsGuard guard;

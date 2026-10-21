@@ -113,6 +113,7 @@ QAccessible::Role to_qaccessible_role(tk::Role r)
     case tk::Role::MenuItem:    return QAccessible::MenuItem;
     case tk::Role::Group:       return QAccessible::Grouping;
     case tk::Role::ProgressBar: return QAccessible::ProgressBar;
+    case tk::Role::Slider:      return QAccessible::Slider;
     case tk::Role::None:        return QAccessible::Client;
     }
     return QAccessible::Client;
@@ -628,13 +629,20 @@ public:
     }
 #endif
 
-    // ---- QAccessibleValueInterface (Role::ProgressBar) ----
+    // ---- QAccessibleValueInterface (Role::ProgressBar, Role::Slider) ----
     QVariant currentValue() const override
     {
         const AccessNode* n = node();
         return n ? QVariant(n->value.now) : QVariant();
     }
-    void setCurrentValue(const QVariant&) override {}
+    void setCurrentValue(const QVariant& v) override
+    {
+        const AccessNode* n = node();
+        bool ok = false;
+        const double d = v.toDouble(&ok);
+        if (n && ok)
+            tk::set_node_value(*n, d);
+    }
     QVariant maximumValue() const override
     {
         const AccessNode* n = node();

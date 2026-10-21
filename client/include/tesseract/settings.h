@@ -81,6 +81,22 @@ public:
     // bubbles (right gutter, first row of a run). Default on.
     bool bubbles_show_own_avatar = true;
 
+    // ── Timeline content column ─────────────────────────────────────
+    // Width of the column message rows lay out in, as a percentage of the
+    // room timeline (clamped 30..100; 100 = the whole width, the default), and where it
+    // sits when narrower than the timeline: beside the room list (Left) or
+    // centred. Classic and Bubbles only; IRC always uses the full width.
+    // Live-applied.
+    enum class TimelineColumnAnchor
+    {
+        Left,
+        Center
+    };
+    static constexpr int kTimelineColumnMinPct = 30;
+    static constexpr int kTimelineColumnMaxPct = 100;
+    int timeline_column_pct = 100;
+    TimelineColumnAnchor timeline_column_anchor = TimelineColumnAnchor::Left;
+
     // ── Room list density ───────────────────────────────────────────
     // Normal  → avatar, name and last-message preview per row (default).
     // Compact → name only, with an avatar the height of the name text.

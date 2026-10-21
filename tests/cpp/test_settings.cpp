@@ -887,3 +887,62 @@ TEST_CASE("split_proxy_credentials separates the userinfo", "[settings][proxy]")
     CHECK(join_proxy_credentials("http://h:1", "").empty() == false);
     CHECK(join_proxy_credentials("garbage", "u:p") == "garbage");
 }
+
+TEST_CASE("Settings timeline column defaults to the full width, left-anchored")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("column_defaults");
+    auto& s = tesseract::Settings::instance();
+    s.timeline_column_pct = 77;
+    s.timeline_column_anchor = tesseract::Settings::TimelineColumnAnchor::Center;
+    write_file(dir / "app_settings.json", R"({"theme":"dark"})");
+    s.load_from_disk(dir);
+    CHECK(s.timeline_column_pct == 100);
+    CHECK(s.timeline_column_anchor == tesseract::Settings::TimelineColumnAnchor::Left);
+    fs::remove_all(dir);
+}
+
+TEST_CASE("Settings timeline column round-trips")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("column_roundtrip");
+    auto& s = tesseract::Settings::instance();
+    s.timeline_column_pct = 65;
+    s.timeline_column_anchor = tesseract::Settings::TimelineColumnAnchor::Center;
+    s.save_to_disk(dir);
+    s.timeline_column_pct = 100;
+    s.timeline_column_anchor = tesseract::Settings::TimelineColumnAnchor::Left;
+    s.load_from_disk(dir);
+    CHECK(s.timeline_column_pct == 65);
+    CHECK(s.timeline_column_anchor == tesseract::Settings::TimelineColumnAnchor::Center);
+    s.timeline_column_pct = 100;
+    s.timeline_column_anchor = tesseract::Settings::TimelineColumnAnchor::Left;
+    fs::remove_all(dir);
+}
+
+TEST_CASE("Settings timeline column clamps and sanitizes bad values")
+{
+    reset_settings();
+    auto dir = make_tmp_dir("column_bad");
+    auto& s = tesseract::Settings::instance();
+    const struct { const char* json; int pct; } cases[] = {
+        {R"({"timeline_column_pct":0})", 30},
+        {R"({"timeline_column_pct":500})", 100},
+        {R"({"timeline_column_pct":"x"})", 100},
+        {R"({"timeline_column_pct":42.7})", 100},
+    };
+    for (const auto& c : cases)
+    {
+        write_file(dir / "app_settings.json", c.json);
+        s.timeline_column_pct = 99;
+        s.load_from_disk(dir);
+        INFO(c.json);
+        CHECK(s.timeline_column_pct == c.pct);
+    }
+    write_file(dir / "app_settings.json", R"({"timeline_column_anchor":"weird"})");
+    s.timeline_column_anchor = tesseract::Settings::TimelineColumnAnchor::Center;
+    s.load_from_disk(dir);
+    CHECK(s.timeline_column_anchor == tesseract::Settings::TimelineColumnAnchor::Left);
+    s.timeline_column_pct = 100;
+    fs::remove_all(dir);
+}

@@ -183,6 +183,66 @@ AppearanceSection::AppearanceSection(SettingBinder& binder)
         }
         binder.bind_custom(refresh_layout);
 
+        // Timeline content column: width slider with a live readout, and
+        // where the column sits. Classic and Bubbles only.
+        {
+            using A = tesseract::Settings::TimelineColumnAnchor;
+            layout_group->add_widget(tk::create_widget<tk::Label>(
+                this, tk::tr("Timeline width")));
+
+            auto width_row = tk::create_widget<tk::HBox>(this);
+            width_row->set_spacing(kLayoutRowGap);
+            width_row->set_cross(tk::Cross::Center);
+
+            auto slider = tk::create_widget<tk::Slider>(
+                this, static_cast<double>(S::kTimelineColumnMinPct),
+                static_cast<double>(S::kTimelineColumnMaxPct), 1.0);
+            slider->set_page_step(10.0);
+            slider->set_value(static_cast<double>(s.timeline_column_pct));
+            slider->set_accessible_name(tk::tr("Timeline width"));
+            slider->set_layout_hints({.fill_main = true});
+            column_width_slider_ = width_row->add_child(std::move(slider));
+
+            auto readout = tk::create_widget<tk::Label>(
+                this, std::string{}, tk::FontRole::Small);
+            column_width_value_ = width_row->add_child(std::move(readout));
+            layout_group->add_widget(std::move(width_row));
+
+            binder.bind(column_width_slider_, &S::timeline_column_pct,
+                        SettingKey::TimelineColumnWidth);
+            {
+                auto bound = column_width_slider_->on_changed;
+                column_width_slider_->on_changed = [this, bound](double v)
+                {
+                    if (bound) bound(v);
+                    refresh_column_controls_();
+                };
+            }
+
+            layout_group->add_widget(tk::create_widget<tk::Label>(
+                this, tk::tr("Timeline position")));
+            auto anchor = tk::create_widget<tk::ComboBox>(this);
+            anchor->set_options({
+                {tk::tr("Left"), "left"},
+                {tk::tr("Centered"), "center"},
+            });
+            column_anchor_combo_ = layout_group->add_widget(std::move(anchor));
+            binder.bind<A>(column_anchor_combo_, &S::timeline_column_anchor,
+                           SettingKey::TimelineColumnAnchor,
+                           {{A::Left, "left"}, {A::Center, "center"}});
+
+            // Follows the layout combo too: IRC has no column to size.
+            binder.bind_custom([this] { refresh_column_controls_(); });
+            refresh_column_controls_();
+            auto layout_bound = message_layout_combo_->on_changed;
+            message_layout_combo_->on_changed =
+                [layout_bound, this](std::string v)
+            {
+                if (layout_bound) layout_bound(v);
+                refresh_column_controls_();
+            };
+        }
+
         // Room list density: radio group + description on the left, live
         // preview on the right.
         layout_group->add_widget(tk::create_widget<tk::Label>(
@@ -315,6 +375,19 @@ AppearanceSection::AppearanceSection(SettingBinder& binder)
         binder.bind(show_sender_status_cb_, &S::show_sender_status_in_timeline,
                     SettingKey::ShowSenderStatus);
     }
+}
+
+void AppearanceSection::refresh_column_controls_()
+{
+    const auto& st = tesseract::Settings::instance();
+    const bool usable = st.message_layout != tesseract::Settings::MessageLayout::Irc;
+    if (column_width_slider_)
+        column_width_slider_->set_enabled(usable);
+    if (column_anchor_combo_)
+        column_anchor_combo_->set_enabled(usable);
+    if (column_width_value_)
+        column_width_value_->set_text(
+            tk::trf(tk::tr("{0}%"), {std::to_string(st.timeline_column_pct)}));
 }
 
 AppearanceSection::~AppearanceSection() = default;

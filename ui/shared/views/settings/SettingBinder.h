@@ -16,8 +16,11 @@
 #include "tk/combobox.h"
 #include "tk/controls.h"
 #include "tk/radio.h"
+#include "tk/slider.h"
 
+#include <cmath>
 #include <functional>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -43,6 +46,8 @@ enum class SettingKey
     AnimateAvatars,
     MessageLayout,
     BubblesOwnAvatar,
+    TimelineColumnWidth,
+    TimelineColumnAnchor,
     RoomListDensity,
     Fonts,
     Notifications,
@@ -105,6 +110,33 @@ public:
         sb->on_change = [this, field, key, local = std::move(local)](bool v)
         { commit_(field, v, key, local); };
         loaders_.push_back([sb, field] { sb->set_checked(settings_().*field); });
+    }
+
+    // Integer slider: the pointer/keyboard value is rounded into the field
+    // live, but the change is reported (saved, applied) once on release so a
+    // drag does not write the settings file at every step.
+    void bind(tk::Slider* slider, Member<int> field, SettingKey key)
+    {
+        auto dirty = std::make_shared<bool>(false);
+        slider->on_changed = [dirty, field](double v)
+        {
+            auto& s = settings_();
+            const int nv = static_cast<int>(std::lround(v));
+            if (s.*field != nv)
+            {
+                s.*field = nv;
+                *dirty = true;
+            }
+        };
+        slider->on_committed = [this, dirty, key](double)
+        {
+            if (!*dirty)
+                return;
+            *dirty = false;
+            changed(key);
+        };
+        loaders_.push_back([slider, field]
+                           { slider->set_value(static_cast<double>(settings_().*field)); });
     }
 
     // Combo / radio mapped through an id table. An id missing from the table

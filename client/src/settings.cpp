@@ -306,6 +306,14 @@ void Settings::load_from_disk(const std::filesystem::path& config_dir)
                          : (layout == "irc")   ? MessageLayout::Irc
                                                : MessageLayout::Classic;
         bubbles_show_own_avatar = j.value("bubbles_show_own_avatar", true);
+        timeline_column_pct = 100;
+        if (auto it = j.find("timeline_column_pct"); it != j.end() && it->is_number_integer())
+            timeline_column_pct = std::clamp(it->get<int>(), kTimelineColumnMinPct,
+                                             kTimelineColumnMaxPct);
+        timeline_column_anchor =
+            j.value("timeline_column_anchor", std::string("left")) == "center"
+                ? TimelineColumnAnchor::Center
+                : TimelineColumnAnchor::Left;
         room_list_density =
             j.value("room_list_density", std::string("normal")) == "compact"
                 ? RoomListDensity::Compact
@@ -461,6 +469,9 @@ void Settings::save_to_disk(const std::filesystem::path& config_dir) const
         : message_layout == MessageLayout::Irc   ? "irc"
                                                  : "classic";
     j["bubbles_show_own_avatar"] = bubbles_show_own_avatar;
+    j["timeline_column_pct"] = timeline_column_pct;
+    j["timeline_column_anchor"] =
+        timeline_column_anchor == TimelineColumnAnchor::Center ? "center" : "left";
     j["room_list_density"] =
         room_list_density == RoomListDensity::Compact ? "compact" : "normal";
 

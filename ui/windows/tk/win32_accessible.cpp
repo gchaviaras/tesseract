@@ -54,6 +54,7 @@ CONTROLTYPEID to_uia_control_type(tk::Role r)
     case tk::Role::MenuItem:    return UIA_MenuItemControlTypeId;
     case tk::Role::Group:       return UIA_GroupControlTypeId;
     case tk::Role::ProgressBar: return UIA_ProgressBarControlTypeId;
+    case tk::Role::Slider:      return UIA_SliderControlTypeId;
     case tk::Role::None:        return UIA_PaneControlTypeId;
     }
     return UIA_PaneControlTypeId;
@@ -920,10 +921,13 @@ public:
         return S_OK;
     }
 
-    // ---- IRangeValueProvider (Role::ProgressBar; read-only) ----
-    HRESULT STDMETHODCALLTYPE SetValue(double) override
+    // ---- IRangeValueProvider (Role::ProgressBar read-only, Role::Slider settable) ----
+    HRESULT STDMETHODCALLTYPE SetValue(double v) override
     {
-        return UIA_E_ELEMENTNOTENABLED;
+        const tk::AccessNode* n = node();
+        if (!n || n->role != tk::Role::Slider || !tk::set_node_value(*n, v))
+            return UIA_E_ELEMENTNOTENABLED;
+        return S_OK;
     }
     HRESULT STDMETHODCALLTYPE get_Value(double* pRetVal) override
     {
@@ -937,7 +941,10 @@ public:
     {
         if (!pRetVal)
             return E_POINTER;
-        *pRetVal = TRUE;
+        const tk::AccessNode* n = node();
+        *pRetVal = (n && n->role == tk::Role::Slider && n->widget && n->widget->enabled())
+                       ? FALSE
+                       : TRUE;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE get_Maximum(double* pRetVal) override

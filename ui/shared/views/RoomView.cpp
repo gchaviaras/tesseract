@@ -94,6 +94,7 @@ RoomView::RoomView()
 
     auto msg = std::make_unique<MessageListView>();
     message_list_ = add_child(std::move(msg));
+    message_list_->set_content_column_enabled(true);
 
     // Added immediately after message_list_ so it dispatches BEFORE the
     // message list (children walk reverse in dispatch_pointer_*), capturing

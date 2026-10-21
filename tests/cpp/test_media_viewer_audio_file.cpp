@@ -6,6 +6,7 @@
 #include "fake_media_players.h"
 #include "media_viewer_test_items.h"
 #include "tk/canvas.h"
+#include "tk/slider.h"
 #include "tk/theme.h"
 #include "tk_test_surface.h"
 #include "views/MediaViewerOverlay.h"
@@ -425,4 +426,27 @@ TEST_CASE("media_save_spec for files falls back filename, caption, then 'downloa
     CHECK(spec.suggested_name == "r.pdf");
     CHECK(spec.filter_name.empty());
     CHECK(spec.patterns.empty());
+}
+
+TEST_CASE("audio page: pressing the scrub slider seeks the player", "[mediaviewer][audio]")
+{
+    AudioFx f;
+    f.overlay.open(audio_item());
+    f.overlay.load_audio_bytes(f.overlay.load_token(), {1, 2, 3});
+    f.st.run(f.overlay);
+
+    std::vector<Slider*> sliders;
+    for (const auto& c : f.overlay.children())
+        if (auto* s = dynamic_cast<Slider*>(c.get()); s && s->visible())
+            sliders.push_back(s); // the video page owns a hidden one too
+    REQUIRE(sliders.size() == 1);
+
+    const Rect r = sliders[0]->bounds();
+    const Point p{r.x + r.w * 0.5f, r.y + r.h * 0.5f};
+    Widget* claimed = f.overlay.dispatch_pointer_down(p);
+    CHECK(claimed == sliders[0]);
+    CHECK(f.fake->seek_count == 1);
+    CHECK(f.fake->last_seek > 4500);
+    CHECK(f.fake->last_seek < 5500); // ~half of the fake player's 10000 ms
+    claimed->on_pointer_up(claimed->world_to_local(p), true);
 }

@@ -4,6 +4,7 @@
 
 #include "tk/canvas.h"
 #include "tk/controls.h"
+#include "tk/slider.h"
 #include "tk/widget.h"
 
 #include <functional>
@@ -37,6 +38,9 @@ public:
     virtual tk::Button* host_add_icon_button() = 0;
     // Create a labelled (Primary variant) tk::Button child of the overlay.
     virtual tk::Button* host_add_label_button(std::string label) = 0;
+    // Create a tk::Slider child of the overlay (range 0..1) for a transport
+    // bar's scrub track.
+    virtual tk::Slider* host_add_slider() = 0;
     // The page's player actually started producing sound / frames (after a load
     // or a resume). The overlay forwards it as on_playback_started.
     virtual void host_playback_started() = 0;

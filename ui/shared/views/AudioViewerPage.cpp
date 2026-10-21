@@ -399,26 +399,8 @@ void AudioViewerPage::paint_controls(tk::PaintCtx& ctx)
 
 bool AudioViewerPage::on_content_pointer_down(tk::Point w, tk::Point /*local*/)
 {
-    if (controls_available_() && host_.host_chrome_shown() &&
-        bar_.on_pointer_down(w, transport_state_()))
-    {
-        return true;
-    }
     // Anywhere on the card is "inside the player": not an outside-tap dismiss.
     return rect_contains(card_, w);
-}
-
-bool AudioViewerPage::on_content_pointer_up(tk::Point, tk::Point, bool)
-{
-    return bar_.on_pointer_up();
-}
-
-void AudioViewerPage::on_pointer_drag(tk::Point local)
-{
-    if (bar_.scrubbing())
-    {
-        bar_.on_drag(local.x + host_.host_bounds().x, transport_state_());
-    }
 }
 
 bool AudioViewerPage::on_key(const tk::KeyEvent& e)

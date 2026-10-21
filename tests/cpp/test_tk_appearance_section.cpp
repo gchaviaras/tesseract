@@ -90,7 +90,7 @@ TEST_CASE("AppearanceSection combos map to settings enums",
 {
     AsStage s;
     auto combos = vt::find_all<tk::ComboBox>(*s.sec);
-    REQUIRE(combos.size() == 3); // accent, message layout, inactive period
+    REQUIRE(combos.size() == 4); // accent, message layout, timeline position, inactive period
 
     auto& st = Settings::instance();
     std::vector<Settings::ThemeAccent> accents;
@@ -116,7 +116,11 @@ TEST_CASE("AppearanceSection combos map to settings enums",
                          Settings::MessageLayout::Bubbles, Settings::MessageLayout::Irc,
                          Settings::MessageLayout::Classic});
 
-    combos[2]->on_changed("90");
+    combos[2]->on_changed("center");
+    CHECK(st.timeline_column_anchor == Settings::TimelineColumnAnchor::Center);
+    combos[2]->on_changed("left");
+
+    combos[3]->on_changed("90");
     CHECK(st.inactive_room_threshold_days == 90);
 
     st.theme_accent = Settings::ThemeAccent::Violet;
@@ -125,7 +129,8 @@ TEST_CASE("AppearanceSection combos map to settings enums",
     s.binder.reload();
     CHECK(combos[0]->selected_value() == "violet");
     CHECK(combos[1]->selected_value() == "irc");
-    CHECK(combos[2]->selected_value() == "30");
+    CHECK(combos[2]->selected_value() == "left");
+    CHECK(combos[3]->selected_value() == "30");
     s.run();
 }
 

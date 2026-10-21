@@ -257,6 +257,7 @@ enum class Role
     MenuItem,
     Group,
     ProgressBar,
+    Slider,
 };
 
 // Dynamic accessible state, read fresh each time the tree is walked (see
@@ -277,7 +278,7 @@ struct AccessState
     bool disabled = false;
 };
 
-// Numeric value for range-shaped nodes (Role::ProgressBar). `present`
+// Numeric value for range-shaped nodes (Role::ProgressBar, Role::Slider). `present`
 // false means "no value" — the default for every other role.
 struct AccessValue
 {
@@ -741,6 +742,13 @@ public:
     virtual AccessValue access_value() const
     {
         return {};
+    }
+    // Assistive-technology request to set this range-shaped widget's value
+    // (Role::Slider). Returns true if the value was applied; the default is
+    // read-only.
+    virtual bool access_set_value(double /*value*/)
+    {
+        return false;
     }
     // True while this widget is a modal surface (an open dialog). When any
     // visible widget reports this, build_access_tree exposes only that

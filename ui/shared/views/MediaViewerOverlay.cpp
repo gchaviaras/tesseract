@@ -386,6 +386,11 @@ tk::Button* MediaViewerOverlay::host_add_label_button(std::string label)
     return add_child(std::move(btn));
 }
 
+tk::Slider* MediaViewerOverlay::host_add_slider()
+{
+    return add_child(tk::create_widget<tk::Slider>(this, 0.0, 1.0, 0.001));
+}
+
 void MediaViewerOverlay::host_playback_started()
 {
     if (on_playback_started)

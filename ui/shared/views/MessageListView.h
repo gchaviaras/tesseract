@@ -28,6 +28,7 @@
 #include "views/PollCardDisplay.h"
 #include "views/UrlPreviewCardDisplay.h"
 #include "views/TimelineVideoPlaylist.h"
+#include "views/timeline_column.h"
 #include "views/map_tiles.h"
 
 #include <algorithm>
@@ -1261,6 +1262,13 @@ public:
     // caller must also schedule a surface repaint.
     void on_display_prefs_changed();
 
+    // Lay this list's rows out in the user's content column (Settings
+    // timeline_column_pct / timeline_column_anchor) instead of the full width.
+    // Off by default: only the room timeline opts in; thread panels and the
+    // Settings preview stay full width. The IRC layout never uses the column.
+    void set_content_column_enabled(bool enabled);
+    bool content_column_enabled() const { return content_column_enabled_; }
+
     // A font change reshapes every row: same flush as a layout change.
     void on_fonts_changed() override { on_display_prefs_changed(); }
 
@@ -1647,6 +1655,15 @@ private:
     // World rect for keyboard-opened popups anchored on a message row,
     // clamped to the viewport.
     tk::Rect anchor_for_event_(const std::string& event_id) const;
+
+    // The content column for a row `row_w` wide (identity when disabled or in
+    // the IRC layout), `row` narrowed to it, and a row's world rect narrowed
+    // to it — day separators keep the full width. Paint, measure and every
+    // row hit-test go through these so they cannot drift apart.
+    tesseract::views::TimelineColumn column_for_(float row_w) const;
+    tk::Rect column_rect_(tk::Rect row) const;
+    tk::Rect content_row_rect_(int idx) const;
+    bool content_column_enabled_ = false;
     bool kbd_open_more_();
     void kbd_toggle_membership_group_(int idx);
     std::string pending_scroll_event_id_;

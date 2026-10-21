@@ -336,6 +336,13 @@ AccessNode build_access_tree(Widget* root)
     return top;
 }
 
+bool set_node_value(const AccessNode& node, double value)
+{
+    if (!node.widget || node.row_index != -1)
+        return false;
+    return node.widget->access_set_value(value);
+}
+
 bool invoke_default_action(const AccessNode& node)
 {
     // A subtree node (reaction toggle, row action button, …) carries its own

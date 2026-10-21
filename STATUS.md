@@ -1,6 +1,15 @@
 # Tesseract — Implemented Features
 
-Snapshot of every feature that has landed on `main`. Last updated **2026-10-18**. 3406 C++ + 1159 Rust tests.
+Snapshot of every feature that has landed on `main`. Last updated **2026-10-21**. 3482 C++ + 1159 Rust tests.
+
+> **Timeline content column (2026-10-21).**
+> Room timelines lay their rows out in a column that is a percentage of the
+> window (100% by default, so nothing changes until you narrow it; the column
+> then sits beside the room list), so join/leave lines, room events and
+> messages stay together in wide windows. Settings → Appearance sets
+> the width with a new slider and whether the column is left or centered; thread
+> panels and the IRC layout keep the full width. The media scrub bar uses the
+> same slider. Qt6 + GTK4 build, ctest 3482/3482.
 
 > **Thread follow (MSC4306) (2026-10-18, v0.9.4).**
 > Replying in or being mentioned in a thread follows it; unfollowed threads no

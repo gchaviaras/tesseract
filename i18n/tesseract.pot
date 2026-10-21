@@ -7438,3 +7438,27 @@ msgstr ""
 #: client/src/emoji.cpp:191
 msgid "Flags"
 msgstr ""
+
+#: ui/shared/views/MediaTransportBar.cpp
+msgid "Seek"
+msgstr ""
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Timeline width"
+msgstr ""
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Timeline position"
+msgstr ""
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Left"
+msgstr ""
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "Centered"
+msgstr ""
+
+#: ui/shared/views/settings/AppearanceSection.cpp
+msgid "{0}%"
+msgstr ""

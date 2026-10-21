@@ -6,6 +6,7 @@
 #include "views/settings/NetworkSection.h"
 #include "views/settings/SettingBinder.h"
 #include "tk/combobox.h"
+#include "tk/slider.h"
 #include "tk/text_field.h"
 #include "views/settings/UserPackEditor.h"
 #include "tk/controls.h"
@@ -447,4 +448,133 @@ TEST_CASE("NetworkSection: the Restart button is hidden when the change applies 
     CHECK(section.restart_row_visible());
     section.set_restart_pending(false);
     CHECK_FALSE(section.restart_row_visible());
+}
+
+namespace
+{
+
+void collect_widgets_of(tk::Widget& root, std::vector<tk::Slider*>& sliders,
+                        std::vector<tk::ComboBox*>& combos, std::vector<tk::Label*>& labels)
+{
+    for (auto& c : root.children())
+    {
+        if (auto* s = dynamic_cast<tk::Slider*>(c.get()))
+            sliders.push_back(s);
+        if (auto* b = dynamic_cast<tk::ComboBox*>(c.get()))
+            combos.push_back(b);
+        if (auto* l = dynamic_cast<tk::Label*>(c.get()))
+            labels.push_back(l);
+        collect_widgets_of(*c, sliders, combos, labels);
+    }
+}
+
+struct ColumnSettingsGuard
+{
+    tesseract::Settings& s = tesseract::Settings::instance();
+    int pct = s.timeline_column_pct;
+    tesseract::Settings::TimelineColumnAnchor anchor = s.timeline_column_anchor;
+    tesseract::Settings::MessageLayout layout = s.message_layout;
+    ~ColumnSettingsGuard()
+    {
+        s.timeline_column_pct = pct;
+        s.timeline_column_anchor = anchor;
+        s.message_layout = layout;
+    }
+};
+
+} // namespace
+
+TEST_CASE("AppearanceSection: the timeline width slider persists and reads out a percentage",
+          "[settings-view]")
+{
+    ColumnSettingsGuard guard;
+    auto& st = tesseract::Settings::instance();
+    st.timeline_column_pct = 50;
+    st.message_layout = tesseract::Settings::MessageLayout::Classic;
+
+    tesseract::views::SettingBinder binder;
+    tesseract::views::AppearanceSection section(binder);
+    std::vector<tk::Slider*> sliders;
+    std::vector<tk::ComboBox*> combos;
+    std::vector<tk::Label*> labels;
+    collect_widgets_of(section, sliders, combos, labels);
+    binder.reload();
+    REQUIRE(sliders.size() == 1);
+    tk::Slider* slider = sliders[0];
+    CHECK(slider->access_value().min == 30.0);
+    CHECK(slider->access_value().max == 100.0);
+    CHECK(slider->value() == 50.0);
+
+    auto readout = [&]() -> std::string
+    {
+        for (auto* l : labels)
+            if (l->access_name().ends_with("%"))
+                return l->access_name();
+        return {};
+    };
+    CHECK(readout() == "50%");
+
+    std::vector<tesseract::views::SettingKey> fired;
+    binder.on_changed = [&](tesseract::views::SettingKey k) { fired.push_back(k); };
+    slider->on_changed(72.0); // live while dragging: value + readout, no save yet
+    CHECK(st.timeline_column_pct == 72);
+    CHECK(fired.empty());
+    CHECK(readout() == "72%");
+    slider->on_committed(72.0);
+    REQUIRE(fired.size() == 1);
+    CHECK(fired[0] == tesseract::views::SettingKey::TimelineColumnWidth);
+}
+
+TEST_CASE("AppearanceSection: the timeline position choice writes the anchor",
+          "[settings-view]")
+{
+    ColumnSettingsGuard guard;
+    auto& st = tesseract::Settings::instance();
+    st.timeline_column_anchor = tesseract::Settings::TimelineColumnAnchor::Left;
+
+    tesseract::views::SettingBinder binder;
+    tesseract::views::AppearanceSection section(binder);
+    std::vector<tk::Slider*> sliders;
+    std::vector<tk::ComboBox*> combos;
+    std::vector<tk::Label*> labels;
+    collect_widgets_of(section, sliders, combos, labels);
+    binder.reload();
+    tk::ComboBox* anchor = nullptr;
+    for (auto* c : combos)
+        if (c->selected_value() == "left" || c->selected_value() == "center")
+            anchor = c;
+    REQUIRE(anchor != nullptr);
+    CHECK(anchor->selected_value() == "left");
+
+    std::vector<tesseract::views::SettingKey> fired;
+    binder.on_changed = [&](tesseract::views::SettingKey k) { fired.push_back(k); };
+    anchor->on_changed("center");
+    CHECK(st.timeline_column_anchor == tesseract::Settings::TimelineColumnAnchor::Center);
+    REQUIRE(fired.size() == 1);
+    CHECK(fired[0] == tesseract::views::SettingKey::TimelineColumnAnchor);
+}
+
+TEST_CASE("AppearanceSection: the timeline column controls are disabled under the IRC layout",
+          "[settings-view]")
+{
+    ColumnSettingsGuard guard;
+    auto& st = tesseract::Settings::instance();
+    st.message_layout = tesseract::Settings::MessageLayout::Classic;
+
+    tesseract::views::SettingBinder binder;
+    tesseract::views::AppearanceSection section(binder);
+    std::vector<tk::Slider*> sliders;
+    std::vector<tk::ComboBox*> combos;
+    std::vector<tk::Label*> labels;
+    collect_widgets_of(section, sliders, combos, labels);
+    REQUIRE(sliders.size() == 1);
+    CHECK(sliders[0]->enabled());
+
+    st.message_layout = tesseract::Settings::MessageLayout::Irc;
+    binder.reload();
+    CHECK_FALSE(sliders[0]->enabled());
+
+    st.message_layout = tesseract::Settings::MessageLayout::Bubbles;
+    binder.reload();
+    CHECK(sliders[0]->enabled());
 }

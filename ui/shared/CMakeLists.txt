@@ -130,6 +130,7 @@ set(_tk_sources
     tk/controls.cpp
     tk/radio.h
     tk/radio.cpp
+    tk/slider.cpp
     tk/group_box.h
     tk/group_box.cpp
     tk/badge_flow.h

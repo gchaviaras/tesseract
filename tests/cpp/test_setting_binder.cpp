@@ -124,3 +124,39 @@ TEST_CASE("SettingBinder: string combo and custom loader", "[setting_binder]")
     b.changed(SettingKey::Proxy);
     CHECK(last == SettingKey::Proxy);
 }
+
+TEST_CASE("SettingBinder: slider writes an int field and reloads silently",
+          "[setting_binder]")
+{
+    struct ColumnGuard
+    {
+        Settings& s = Settings::instance();
+        int pct = s.timeline_column_pct;
+        ~ColumnGuard() { s.timeline_column_pct = pct; }
+    } guard;
+    vt::Stage st;
+    auto slider = tk::create_root_widget<tk::Slider>(&st.host, 30.0, 100.0, 1.0);
+    SettingBinder b;
+    int fires = 0;
+    SettingKey last{};
+    b.on_changed = [&](SettingKey k) { ++fires; last = k; };
+    b.bind(slider.get(), &Settings::timeline_column_pct, SettingKey::TimelineColumnWidth);
+
+    Settings::instance().timeline_column_pct = 50;
+    // A drag writes the field live but reports (save + relayout) only on release.
+    slider->on_changed(60.0);
+    slider->on_changed(64.0);
+    CHECK(Settings::instance().timeline_column_pct == 64);
+    CHECK(fires == 0);
+    slider->on_committed(64.0);
+    CHECK(fires == 1);
+    CHECK(last == SettingKey::TimelineColumnWidth);
+
+    slider->on_committed(64.0); // nothing changed since: no second report
+    CHECK(fires == 1);
+
+    Settings::instance().timeline_column_pct = 80;
+    b.reload();
+    CHECK(slider->value() == 80.0);
+    CHECK(fires == 1);
+}

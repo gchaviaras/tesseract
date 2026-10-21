@@ -1,6 +1,7 @@
 #include "EmojiPicker.h"
 
 #include "SkinTonePopover.h"
+#include "tk/emoji_segmentation.h"
 #include "tk/emoji_support.h"
 #include "tk/i18n.h"
 #include "tk/text_util.h"
@@ -178,7 +179,20 @@ void EmojiPicker::refresh_frequents()
     frequents_glyphs_.clear();
     if (client_)
     {
-        frequents_glyphs_ = client_->recent_emoji_top(32);
+        // Reactions can be arbitrary text (bots send "👍 ok"); those stay in
+        // the synced list but aren't offered here. Over-fetch so filtered
+        // entries don't shrink the grid.
+        for (auto& glyph : client_->recent_emoji_top(64))
+        {
+            if (!glyph.empty() && tk::is_emoji_only(glyph) &&
+                std::none_of(glyph.begin(), glyph.end(),
+                             [](unsigned char c) { return std::isspace(c); }))
+            {
+                frequents_glyphs_.push_back(std::move(glyph));
+            }
+        }
+        if (frequents_glyphs_.size() > 32)
+            frequents_glyphs_.resize(32);
     }
     if (page_ == Page::Frequents)
     {

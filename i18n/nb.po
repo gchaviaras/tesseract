@@ -3446,9 +3446,6 @@ msgstr "Bannlyst av {0}"
 msgid "Unban"
 msgstr "Opphev bannlysing"
 
-msgid "Unban (you don't have permission to lift this ban)"
-msgstr "Opphev bannlysing (du har ikke tillatelse til å oppheve denne bannlysingen)"
-
 msgid "Banned users"
 msgstr "Bannlyste brukere"
 

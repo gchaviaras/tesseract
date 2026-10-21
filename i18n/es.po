@@ -3035,10 +3035,6 @@ msgstr "No hay usuarios baneados"
 msgid "Unban"
 msgstr "Desbanear"
 
-#: ui/shared/views/settings/RoomModerationSection.cpp:62
-msgid "Unban (you don't have permission to lift this ban)"
-msgstr "Desbanear (no tienes permiso para retirar este baneo)"
-
 #: ui/shared/views/settings/RoomModerationSection.cpp:51
 #, c++-format
 msgid "Banned by {0}"

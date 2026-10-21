@@ -54,13 +54,14 @@ protected:
         }
         add_child(std::move(text));
 
-        auto btn = tk::create_widget<tk::Button>(this, tk::tr("Unban"), std::move(on_unban),
-                                                 tk::Button::Variant::Subtle);
-        btn->set_enabled(m.can_unban && !pending);
-        if (!m.can_unban)
-            btn->set_accessible_name(
-                tk::tr("Unban (you don't have permission to lift this ban)"));
-        unban_btn_ = add_child(std::move(btn));
+        // No permission → no button at all (rather than a dead, disabled one).
+        if (m.can_unban)
+        {
+            auto btn = tk::create_widget<tk::Button>(this, tk::tr("Unban"), std::move(on_unban),
+                                                     tk::Button::Variant::Subtle);
+            btn->set_enabled(!pending);
+            unban_btn_ = add_child(std::move(btn));
+        }
     }
     TK_WIDGET_FACTORY_FRIEND(BannedRow)
 

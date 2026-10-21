@@ -5226,10 +5226,6 @@ msgstr "Заблокував(-ла): {0}"
 msgid "Unban"
 msgstr "Зняти блокування"
 
-#: ui/shared/views/settings/RoomModerationSection.cpp:62
-msgid "Unban (you don't have permission to lift this ban)"
-msgstr "Зняти блокування (у вас немає дозволу скасувати це блокування)"
-
 #: ui/shared/views/settings/RoomModerationSection.cpp:73
 msgid "Banned users"
 msgstr "Заблоковані користувачі"

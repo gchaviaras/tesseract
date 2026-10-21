@@ -5679,10 +5679,6 @@ msgstr ""
 msgid "Unban"
 msgstr ""
 
-#: ui/shared/views/settings/RoomModerationSection.cpp:62
-msgid "Unban (you don't have permission to lift this ban)"
-msgstr ""
-
 #: ui/shared/views/settings/RoomModerationSection.cpp:73
 msgid "Banned users"
 msgstr ""

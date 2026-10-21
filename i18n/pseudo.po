@@ -5563,10 +5563,6 @@ msgstr "[Bàññéd by {0}xx]"
 msgid "Unban"
 msgstr "[Ùñbàñx]"
 
-#: ui/shared/views/settings/RoomModerationSection.cpp:62
-msgid "Unban (you don't have permission to lift this ban)"
-msgstr "[Ùñbàñ (yöù döñ't hàvé pérmïssïöñ tö lïft thïs bàñ)xxxxxxxxxx]"
-
 #: ui/shared/views/settings/RoomModerationSection.cpp:73
 msgid "Banned users"
 msgstr "[Bàññéd ùsérsxx]"

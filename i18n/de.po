@@ -2938,10 +2938,6 @@ msgstr "Keine gesperrten Nutzer"
 msgid "Unban"
 msgstr "Entsperren"
 
-#: ui/shared/views/settings/RoomModerationSection.cpp:62
-msgid "Unban (you don't have permission to lift this ban)"
-msgstr "Entsperren (du hast keine Berechtigung, diese Sperre aufzuheben)"
-
 #: ui/shared/views/settings/RoomModerationSection.cpp:51
 msgid "Banned by {0}"
 msgstr "Gesperrt von {0}"

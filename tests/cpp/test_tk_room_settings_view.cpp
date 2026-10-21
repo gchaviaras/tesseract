@@ -1039,7 +1039,7 @@ TEST_CASE("RoomModerationSection: rows replace the empty label and Unban fires t
     CHECK(mod->banned_members().size() == 2);
     st.run(*view, {0, 0, 800, 600});
 
-    // Row 1 (no permission) is disabled.
+    // Row 1 (no permission) has no Unban button at all.
     CHECK_FALSE(mod->click_unban_for_test(1));
     REQUIRE(mod->click_unban_for_test(0));
     CHECK(room == "!room:example.org");

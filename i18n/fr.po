@@ -2938,10 +2938,6 @@ msgstr "Aucun utilisateur banni"
 msgid "Unban"
 msgstr "Révoquer le bannissement"
 
-#: ui/shared/views/settings/RoomModerationSection.cpp:62
-msgid "Unban (you don't have permission to lift this ban)"
-msgstr "Révoquer le bannissement (vous n'avez pas l'autorisation de lever ce bannissement)"
-
 #: ui/shared/views/settings/RoomModerationSection.cpp:51
 msgid "Banned by {0}"
 msgstr "Banni par {0}"

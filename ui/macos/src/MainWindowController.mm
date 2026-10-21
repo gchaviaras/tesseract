@@ -5404,6 +5404,7 @@ private:
 
     _loginView = [[LoginView alloc] init];
     _loginView.delegate = self;
+    [_loginView setTheme:_shell->current_theme_];
     _loginView.translatesAutoresizingMaskIntoConstraints = NO;
     _loginView.hidden = YES;
     // Route the homeserver-discovery debounce through MacShell's drain so a

@@ -94,6 +94,13 @@ void TextField::ensure_native_()
     pending_ = PendingState{};
 }
 
+void TextField::on_theme_changed(const Theme& t)
+{
+    // Default text colour follows the palette; backends that don't draw
+    // from the OS theme (Qt) would otherwise keep their own default.
+    set_text_color(t.palette.text_primary);
+}
+
 void TextField::on_fonts_changed()
 {
     if (field_) field_->set_font_role(role());

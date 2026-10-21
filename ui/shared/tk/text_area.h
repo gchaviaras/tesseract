@@ -56,6 +56,7 @@ public:
     void set_accessible_name(std::string name);
     void set_text_color(Color c);
     void on_fonts_changed() override;
+    void on_theme_changed(const Theme& t) override;
     void set_font_role(FontRole role);
 
     // Last value passed to set_visible() — matches

@@ -2108,6 +2108,7 @@ void MainWindow::ensureLoginView_()
     if (loginView_)
         return;
     loginView_ = new LoginView(contentStack_);
+    loginView_->set_theme(current_theme_);
     contentStack_->addWidget(loginView_);
     // Route the homeserver-discovery debounce through the shell's worker
     // drain so a blocked discover_homeserver call can't outlive ~LoginView

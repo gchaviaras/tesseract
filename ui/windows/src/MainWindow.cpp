@@ -3892,6 +3892,7 @@ void MainWindow::ensure_login_view_()
     if (login_view_)
         return;
     login_view_ = std::make_unique<LoginView>(hInst_, hwnd_);
+    login_view_->set_theme(current_theme_);
     // Route the homeserver-discovery debounce through the shell's worker
     // drain so a blocked discover_homeserver call can't outlive ~LoginView
     // and corrupt the heap (mirrors the SettingsController wiring below).

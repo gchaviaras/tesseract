@@ -134,7 +134,11 @@ std::string nsstr(NSString* s)
 - (void)setTheme:(const tk::Theme&)t
 {
     if (_surface)
+    {
         _surface->set_theme(t);
+        if (auto* r = _surface->root())
+            r->apply_theme(t);
+    }
 }
 
 - (void)setMode:(tesseract::views::LoginView::Mode)mode

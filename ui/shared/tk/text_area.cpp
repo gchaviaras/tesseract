@@ -138,6 +138,13 @@ void TextArea::set_text_color(Color c)
     else pending_.text_color = c;
 }
 
+void TextArea::on_theme_changed(const Theme& t)
+{
+    // Default text colour follows the palette; backends that don't draw
+    // from the OS theme (Qt) would otherwise keep their own default.
+    set_text_color(t.palette.text_primary);
+}
+
 void TextArea::on_fonts_changed()
 {
     if (area_) area_->set_font_role(font_role_.value_or(FontRole::Body));

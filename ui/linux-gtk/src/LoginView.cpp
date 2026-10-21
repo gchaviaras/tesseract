@@ -55,7 +55,11 @@ void LoginView::set_client(tesseract::Client* c)
 void LoginView::set_theme(const tk::Theme& t)
 {
     if (surface_)
+    {
         surface_->set_theme(t);
+        if (auto* r = surface_->root())
+            r->apply_theme(t);
+    }
 }
 
 void LoginView::set_mode(tesseract::views::LoginView::Mode m)

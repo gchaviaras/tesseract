@@ -533,8 +533,10 @@ bool ComboBox::on_wheel(Point /*local*/, float /*dx*/, float dy, bool /*is_touch
     const int delta = dy > 0.0f ? 1 : -1;
     const int next = std::clamp((current < 0 ? 0 : current) + delta, 0,
                                 static_cast<int>(options_.size()) - 1);
+    // At the first/last option the wheel is still ours: consuming it keeps the
+    // page behind from scrolling while the pointer rests on the combobox.
     if (next == current)
-        return false;
+        return true;
 
     commit_(static_cast<std::size_t>(next));
     return true;

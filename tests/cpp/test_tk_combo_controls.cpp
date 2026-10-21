@@ -181,10 +181,10 @@ TEST_CASE("ComboBox wheel over the closed button cycles the selection",
     cb->on_changed = [&](std::string v) { seen.push_back(v); };
 
     CHECK_FALSE(cb->on_wheel({5, 5}, 0, 0));
-    CHECK_FALSE(cb->on_wheel({5, 5}, 0, -1)); // already first: clamped, no-op
+    CHECK(cb->on_wheel({5, 5}, 0, -1)); // already first: consumed, selection unchanged
     CHECK(cb->on_wheel({5, 5}, 0, 1));
     CHECK(cb->on_wheel({5, 5}, 0, 1));
-    CHECK_FALSE(cb->on_wheel({5, 5}, 0, 1)); // already last
+    CHECK(cb->on_wheel({5, 5}, 0, 1)); // already last: consumed, selection unchanged
     CHECK(seen == std::vector<std::string>{"2", "3"});
 
     // While expanded the wheel is not handled.

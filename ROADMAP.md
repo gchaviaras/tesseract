@@ -38,6 +38,13 @@ and in-progress work, as a single backlog ordered by priority/urgency.
   then GTK4, Narrator/NVDA, VoiceOver). Phase 5's keyboard-only audit is
   done (2026-10-04) bar a live keyboard-only walkthrough per platform; the
   high-contrast theme and reduce-motion still need their own plan.
+- **Qt6: multi-line native text areas still paint on screen.** `NavLineEdit`
+  now paints only while captured via `render()`, because `WA_DontShowOnScreen`
+  does nothing for a child widget; `QtNativeTextArea` (composer and other
+  multi-line fields) has the same leak, so it is drawn natively under its
+  canvas copy. The fix is the same idea, but painting happens in the scroll
+  area's viewport and its scrollbars are separate child widgets that would
+  also need suppressing.
 - **Animated avatars: bound their memory.** Animated avatars live in the
   shared 64 MB `anim_cache_` (stickers, GIFs, pickers). Decoding is capped only
   by `kAnimDecodeMaxFrames` (200 frames × ~25 KB at 80×80 ≈ 5 MB per avatar),

@@ -1,0 +1,237 @@
+/// Community homeserver list (servers.joinmatrix.org) for the login view's
+/// server browser.
+///
+/// The list is fetched over HTTPS, parsed defensively (every field optional),
+/// and cached on disk so the browser still works offline. Only servers that
+/// advertise sliding sync are kept, since Tesseract can't sync without it.
+use std::path::Path;
+use std::time::{Duration, SystemTime};
+
+use serde::Deserialize;
+
+const LIST_URL: &str = "https://servers.joinmatrix.org/servers.json";
+const MAX_BODY_BYTES: usize = 1024 * 1024;
+const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct RawEntry {
+    name: Option<String>,
+    client_domain: Option<String>,
+    homepage: Option<String>,
+    description: Option<String>,
+    staff_jur: Option<String>,
+    languages: Vec<String>,
+    software: Option<String>,
+    reg_method: Option<String>,
+    reg_link: Option<String>,
+    rules: Option<String>,
+    privacy: Option<String>,
+    longstanding: Option<bool>,
+    online_status: Option<u8>,
+    sliding_sync: Option<bool>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct RawList {
+    public_servers: Vec<RawEntry>,
+    private_servers: Vec<RawEntry>,
+}
+
+/// Keeps only absolute `https://` URLs; the strings end up opened in the
+/// system browser, so anything else (javascript:, file:, http:) is dropped.
+fn https_only(url: Option<String>) -> String {
+    match url {
+        Some(u) if u.trim().starts_with("https://") => u.trim().to_owned(),
+        _ => String::new(),
+    }
+}
+
+/// `client_domain` is shown and typed into the homeserver field, so reject
+/// anything that isn't a plain host[:port].
+fn valid_domain(d: &str) -> bool {
+    !d.is_empty()
+        && d.len() <= 255
+        && d.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':'))
+}
+
+fn convert(raw: RawEntry, is_public: bool) -> Option<crate::ffi::ServerListEntryFfi> {
+    // `false` and "unknown" both drop out: no sliding sync, no usable server.
+    if raw.sliding_sync != Some(true) {
+        return None;
+    }
+    let client_domain = raw.client_domain?.trim().to_owned();
+    if !valid_domain(&client_domain) {
+        return None;
+    }
+    Some(crate::ffi::ServerListEntryFfi {
+        name: raw.name.unwrap_or_else(|| client_domain.clone()),
+        client_domain,
+        homepage: https_only(raw.homepage),
+        description: raw.description.unwrap_or_default(),
+        jurisdiction: raw.staff_jur.unwrap_or_default(),
+        languages: raw.languages,
+        software: raw.software.unwrap_or_default(),
+        reg_method: raw.reg_method.unwrap_or_default(),
+        reg_link: https_only(raw.reg_link),
+        rules: https_only(raw.rules),
+        privacy: https_only(raw.privacy),
+        longstanding: raw.longstanding.unwrap_or(false),
+        online: raw.online_status.map_or(true, |s| s == 2),
+        is_public,
+    })
+}
+
+/// Parses the servers.json body. Garbage input yields an empty list.
+pub fn parse_server_list(json: &str) -> Vec<crate::ffi::ServerListEntryFfi> {
+    let Ok(raw) = serde_json::from_str::<RawList>(json) else {
+        return Vec::new();
+    };
+    let public = raw.public_servers.into_iter().filter_map(|e| convert(e, true));
+    let private = raw.private_servers.into_iter().filter_map(|e| convert(e, false));
+    public.chain(private).collect()
+}
+
+async fn fetch_server_list(http: &reqwest::Client, version: &str) -> Option<String> {
+    let response = http
+        .get(LIST_URL)
+        .header("User-Agent", format!("Tesseract/{}", version))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    if response
+        .content_length()
+        .is_some_and(|n| n > MAX_BODY_BYTES as u64)
+    {
+        return None;
+    }
+    let bytes = response.bytes().await.ok()?;
+    if bytes.len() > MAX_BODY_BYTES {
+        return None;
+    }
+    String::from_utf8(bytes.to_vec()).ok()
+}
+
+fn read_cache(path: &Path) -> Option<(String, bool)> {
+    let body = std::fs::read_to_string(path).ok()?;
+    let fresh = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| SystemTime::now().duration_since(t).ok())
+        .is_some_and(|age| age < CACHE_TTL);
+    Some((body, fresh))
+}
+
+fn write_cache(path: &Path, body: &str) {
+    let tmp = path.with_extension("json.tmp");
+    if std::fs::write(&tmp, body).is_ok() && std::fs::rename(&tmp, path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+}
+
+#[cfg(not(test))]
+impl super::ClientFfi {
+    pub fn load_server_list(&self, cache_path: &str) -> crate::ffi::ServerListFfi {
+        let path = Path::new(cache_path);
+        let cached = read_cache(path);
+        if let Some((body, true)) = &cached {
+            let entries = parse_server_list(body);
+            if !entries.is_empty() {
+                return crate::ffi::ServerListFfi { entries, ok: true, from_cache: true };
+            }
+        }
+        let http = self.http_client.clone();
+        let version = env!("CARGO_PKG_VERSION");
+        if let Some(body) = self.rt.block_on(fetch_server_list(&http, version)) {
+            let entries = parse_server_list(&body);
+            if !entries.is_empty() {
+                write_cache(path, &body);
+                return crate::ffi::ServerListFfi { entries, ok: true, from_cache: false };
+            }
+        }
+        // Fetch failed: a stale cache beats nothing.
+        if let Some((body, _)) = cached {
+            let entries = parse_server_list(&body);
+            if !entries.is_empty() {
+                return crate::ffi::ServerListFfi { entries, ok: true, from_cache: true };
+            }
+        }
+        crate::ffi::ServerListFfi { entries: Vec::new(), ok: false, from_cache: false }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE: &str = r#"{
+      "public_servers": [
+        {"name":"a.example","client_domain":"matrix.a.example","homepage":"https://a.example",
+         "description":"A","staff_jur":"Germany","languages":["English"],"software":"Synapse",
+         "reg_method":"In-house Element","reg_link":"javascript:alert(1)","rules":"http://a.example/r",
+         "privacy":"https://a.example/p","longstanding":true,"online_status":2,"sliding_sync":true},
+        {"name":"nosync","client_domain":"nosync.example","sliding_sync":false},
+        {"name":"unknown","client_domain":"unknown.example","sliding_sync":null},
+        {"name":"missing","client_domain":"missing.example"}
+      ],
+      "private_servers": [
+        {"name":"b.example","client_domain":"b.example:8448","sliding_sync":true,"online_status":0,
+         "unexpected_field":{"x":1}},
+        {"name":"nodomain","sliding_sync":true},
+        {"name":"evil","client_domain":"bad host/<x>","sliding_sync":true}
+      ]
+    }"#;
+
+    #[test]
+    fn keeps_only_sliding_sync_servers() {
+        let list = parse_server_list(SAMPLE);
+        let names: Vec<_> = list.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["a.example", "b.example"]);
+    }
+
+    #[test]
+    fn public_flag_and_fields() {
+        let list = parse_server_list(SAMPLE);
+        assert!(list[0].is_public);
+        assert!(!list[1].is_public);
+        assert_eq!(list[0].client_domain, "matrix.a.example");
+        assert_eq!(list[0].jurisdiction, "Germany");
+        assert!(list[0].longstanding);
+        assert!(list[0].online);
+        assert!(!list[1].online);
+    }
+
+    #[test]
+    fn non_https_links_dropped() {
+        let list = parse_server_list(SAMPLE);
+        assert_eq!(list[0].homepage, "https://a.example");
+        assert_eq!(list[0].reg_link, "");
+        assert_eq!(list[0].rules, "");
+        assert_eq!(list[0].privacy, "https://a.example/p");
+    }
+
+    #[test]
+    fn garbage_yields_empty() {
+        assert!(parse_server_list("not json").is_empty());
+        assert!(parse_server_list("[]").is_empty());
+        assert!(parse_server_list("{}").is_empty());
+    }
+
+    #[test]
+    fn cache_round_trip_is_fresh() {
+        let dir = std::env::temp_dir().join(format!("tess-sl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("server_list.json");
+        write_cache(&path, SAMPLE);
+        let (body, fresh) = read_cache(&path).unwrap();
+        assert_eq!(body, SAMPLE);
+        assert!(fresh);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

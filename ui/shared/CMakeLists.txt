@@ -365,6 +365,8 @@ set(_tk_sources
     views/ConfirmDialog.cpp
     views/KeyboardShortcutsOverlay.h
     views/KeyboardShortcutsOverlay.cpp
+    views/ServerBrowserOverlay.h
+    views/ServerBrowserOverlay.cpp
     views/shortcut_registry.h
     views/shortcut_registry.cpp
     views/ExportHistoryDialog.h

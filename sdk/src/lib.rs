@@ -371,6 +371,31 @@ pub mod ffi {
     }
 
     #[derive(Debug, PartialEq, Default)]
+    pub struct ServerListEntryFfi {
+        pub name: String,
+        pub client_domain: String,
+        pub homepage: String,
+        pub description: String,
+        pub jurisdiction: String,
+        pub languages: Vec<String>,
+        pub software: String,
+        pub reg_method: String,
+        pub reg_link: String,
+        pub rules: String,
+        pub privacy: String,
+        pub longstanding: bool,
+        pub online: bool,
+        pub is_public: bool,
+    }
+
+    #[derive(Debug, PartialEq, Default)]
+    pub struct ServerListFfi {
+        pub entries: Vec<ServerListEntryFfi>,
+        pub ok: bool,
+        pub from_cache: bool,
+    }
+
+    #[derive(Debug, PartialEq, Default)]
     pub struct PaginateResult {
         pub ok: bool,
         pub message: String,

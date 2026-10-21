@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <random>
 #include <thread>
 
 #include <tesseract/client.h>
@@ -41,7 +42,8 @@ constexpr const char* kBuiltinDefaultHomeserver = "matrix.org";
 
 LoginView::LoginView()
     : default_homeserver_(tesseract::provisioned_default_homeserver().value_or(
-          kBuiltinDefaultHomeserver))
+          kBuiltinDefaultHomeserver)),
+      provisioned_(tesseract::provisioned_default_homeserver().has_value())
 {
     rebuild_tree();
 }
@@ -114,8 +116,8 @@ void LoginView::rebuild_tree()
             host()->show_tooltip(
                 hs_help_btn_,
                 tk::tr("Your homeserver is where your account lives — similar to "
-                       "choosing an email provider. Not sure? matrix.org is a good "
-                       "default and works with anyone on Matrix."),
+                       "choosing an email provider. Not sure? Use \"Find a server\" "
+                       "to browse some. Any server works with anyone on Matrix."),
                 hs_help_btn_->bounds());
     });
     hs_help_btn_->set_on_hover_leave([this]
@@ -127,6 +129,13 @@ void LoginView::rebuild_tree()
     title_lbl_           = card->add_child(std::move(title));
     hs_input_label_      = card->add_child(std::move(hs_input_label));
     card->add_child(std::move(hs_field_row));
+
+    auto find_server = tk::create_widget<tk::Button>(
+        this, tk::tr("Find a server"), std::function<void()>{}, tk::Button::Variant::Link);
+    find_server->set_on_click([this] { open_server_browser(); });
+    find_server->set_visible(!provisioned_);
+    find_server_btn_ = card->add_child(std::move(find_server));
+
     discovery_error_lbl_ = card->add_child(std::move(discovery_error));
     sign_in_btn_         = card->add_child(std::move(sign_in));
 
@@ -184,7 +193,7 @@ void LoginView::rebuild_tree()
         this, tk::tr("New here? Create an account"), std::function<void()>{},
         tk::Button::Variant::Subtle);
     register_link->set_min_size({0, kButtonHeight});
-    register_link->set_on_click([this] { start_oauth_(true); });
+    register_link->set_on_click([this] { on_register_clicked_(); });
     register_link->set_visible(false);
     register_link_ = card->add_child(std::move(register_link));
 
@@ -205,6 +214,49 @@ void LoginView::rebuild_tree()
         });
     settings_btn_ = add_child(std::move(settings));
     update_settings_visibility_();
+
+    auto browser = tk::create_widget<ServerBrowserOverlay>(this);
+    browser->on_layout_changed = [this]
+    {
+        // The homeserver field is a native control and would draw above the
+        // overlay, so hide it while the browser is open (see
+        // KeyboardShortcutsOverlay).
+        if (hs_field_ && server_browser_)
+        {
+            if (server_browser_->is_open())
+            {
+                if (hs_field_->visible())
+                {
+                    hs_field_->set_visible(false);
+                    hs_field_hidden_by_browser_ = true;
+                }
+            }
+            else if (hs_field_hidden_by_browser_)
+            {
+                hs_field_hidden_by_browser_ = false;
+                hs_field_->set_visible(true);
+            }
+        }
+        if (relayout_)
+            relayout_();
+    };
+    browser->on_pick = [this](const std::string& domain)
+    {
+        if (!hs_field_)
+            return;
+        hs_field_->set_text(domain);
+        hs_changed_(domain); // native controls don't all report programmatic edits
+        hs_field_->set_focused(true);
+    };
+    browser->on_open_url = [this](const std::string& url)
+    {
+        if (open_browser_)
+            open_browser_(url);
+        else
+            tesseract::Client::open_in_browser(url);
+    };
+    browser->on_retry = [this] { load_server_list_(); };
+    server_browser_ = add_child(std::move(browser));
 
     auto alert_dlg = std::make_unique<AlertDialog>();
     alert_dlg->on_layout_changed = [this] { if (relayout_) relayout_(); };
@@ -232,6 +284,8 @@ void LoginView::set_state(State s)
     cancel_btn_->set_visible(mode_ == Mode::AddAccount || s == State::Waiting);
     if (register_link_)
         register_link_->set_visible(s == State::Form && registration_supported_);
+    if (find_server_btn_)
+        find_server_btn_->set_visible(!provisioned_ && s == State::Form);
 #ifdef TESSERACT_LEGACY_LOGIN_ENABLED
     update_form_visibility_();
 #endif
@@ -343,6 +397,82 @@ void LoginView::finish_init()
     hs_field_->set_on_changed(
         [this](const std::string& text) { hs_changed_(text); });
     hs_changed_("");
+    if (!provisioned_)
+        load_server_list_();
+}
+
+void LoginView::on_register_clicked_()
+{
+    if (!provisioned_ && hs_field_ && tesseract::text::trim(hs_field_->text()).empty())
+    {
+        open_server_browser();
+        return;
+    }
+    start_oauth_(true);
+}
+
+void LoginView::open_server_browser()
+{
+    if (!server_browser_ || provisioned_)
+        return;
+    if (server_browser_->state() != ServerBrowserOverlay::State::Ready)
+        load_server_list_();
+    server_browser_->open();
+}
+
+void LoginView::load_server_list_()
+{
+    auto* snap = client_;
+    if (!snap || !server_browser_)
+        return;
+    if (server_list_loading_)
+        return;
+    server_list_loading_ = true;
+    server_browser_->set_state(ServerBrowserOverlay::State::Loading);
+    const uint32_t gen = ++server_list_gen_;
+    auto body = [this, gen, snap]
+    {
+        auto list = snap->load_server_list();
+        if (gen != server_list_gen_.load() || !post_to_ui_)
+            return;
+        post_to_ui_(
+            [this, gen, list = std::move(list)]
+            {
+                if (gen != server_list_gen_.load())
+                    return;
+                server_list_loading_ = false;
+                apply_server_list_(list);
+            });
+    };
+    if (run_async_)
+        run_async_(std::move(body));
+    else
+        std::thread(std::move(body)).detach();
+}
+
+void LoginView::apply_server_list_(const tesseract::Client::ServerList& list)
+{
+    if (!server_browser_)
+        return;
+    if (!list.ok)
+    {
+        server_browser_->set_state(ServerBrowserOverlay::State::Failed);
+        return;
+    }
+    auto entries = list.entries;
+    // matrix.org isn't on the community list; offer it as one choice among many.
+    ServerBrowserOverlay::Entry mx;
+    mx.name = "matrix.org";
+    mx.client_domain = "matrix.org";
+    mx.homepage = "https://matrix.org";
+    mx.description = tk::tr("Run by the Matrix.org Foundation. The largest public server.");
+    mx.software = "Synapse";
+    mx.longstanding = true;
+    mx.is_public = true;
+    entries.push_back(std::move(mx));
+    std::mt19937 rng{std::random_device{}()};
+    server_browser_->set_servers(
+        ServerBrowserOverlay::arrange_for_display(std::move(entries), rng));
 }
 
 #ifdef TESSERACT_LEGACY_LOGIN_ENABLED
@@ -388,6 +518,7 @@ void LoginView::set_client(tesseract::Client* c)
 void LoginView::shutdown()
 {
     ++discovery_gen_;
+    ++server_list_gen_;
     ++registration_gen_;
     cancelled_.store(true);
     if (client_)
@@ -825,6 +956,8 @@ void LoginView::update_form_visibility_()
     if (hs_input_label_) hs_input_label_->set_visible(oauth_form_visible);
     if (hs_field_)       hs_field_->set_visible(oauth_form_visible);
     if (hs_help_btn_)    hs_help_btn_->set_visible(oauth_form_visible);
+    if (find_server_btn_)
+        find_server_btn_->set_visible(!provisioned_ && oauth_form_visible);
     if (discovery_icon_lbl_)
         discovery_icon_lbl_->set_visible(oauth_form_visible &&
                                     discovery_state_ != DiscoveryState::Idle);
@@ -1015,6 +1148,7 @@ void LoginView::arrange(tk::LayoutCtx& ctx, tk::Rect bounds)
                   kSettingsBtnSize});
     }
 
+    if (server_browser_) server_browser_->arrange(ctx, bounds);
     if (alert_) alert_->arrange(ctx, bounds);
 }
 

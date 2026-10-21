@@ -7,6 +7,7 @@
 // the host before calling finish_init().
 
 #include "AlertDialog.h"
+#include "ServerBrowserOverlay.h"
 #include "tk/canvas.h"
 #include "tk/controls.h"
 #include "tk/host.h"
@@ -214,6 +215,43 @@ public:
         on_cancel_done_ = std::move(fn);
     }
 
+    /// Opens the "Find a server" browser (loading the community list first if
+    /// it hasn't arrived yet).
+    void open_server_browser();
+    ServerBrowserOverlay* server_browser() const
+    {
+        return server_browser_;
+    }
+    /// Whether the "Find a server" affordance is offered at all: not when the
+    /// deployment provisions a default homeserver.
+    bool server_browser_available() const
+    {
+        return !provisioned_;
+    }
+    // Test helper: the community list's answer (as load_server_list_'s worker
+    // posts it).
+    void simulate_server_list_result(const tesseract::Client::ServerList& list)
+    {
+        apply_server_list_(list);
+    }
+    tk::TextField* homeserver_field() const
+    {
+        return hs_field_;
+    }
+    tk::Button* find_server_button() const
+    {
+        return find_server_btn_;
+    }
+    tk::Button* register_button() const
+    {
+        return register_link_;
+    }
+    // Test helper: click "Create an account".
+    void simulate_register_click()
+    {
+        on_register_clicked_();
+    }
+
     /// Sets placeholder/initial text on the (already-constructed, tree-owned)
     /// homeserver field and wires it to the OAuth controller. Must be called
     /// after all set_* above.
@@ -294,6 +332,11 @@ private:
     void apply_discovery_result_(bool ok, const std::string& base_url_or_error,
                                  bool supports_password);
     void start_oauth_(bool register_account);
+    // "Create an account": with an empty field (and no provisioned server)
+    // there is no server to register on yet, so offer the browser instead.
+    void on_register_clicked_();
+    void load_server_list_();
+    void apply_server_list_(const tesseract::Client::ServerList& list);
     void probe_registration_support_(const std::string& base_url);
     void probe_oauth_support_(const std::string& base_url);
     void update_oauth_availability_(bool available);
@@ -340,6 +383,15 @@ private:
 
     // Alert overlay (owned via add_child, raw pointer borrowed back)
     AlertDialog* alert_          = nullptr;
+    // "Find a server" browser, added before alert_ so alerts paint above it.
+    ServerBrowserOverlay* server_browser_ = nullptr;
+    tk::Button*           find_server_btn_ = nullptr;
+    // A deployment-provisioned default homeserver replaces the picker.
+    bool                  provisioned_ = false;
+    bool                  server_list_loading_ = false;
+    // hs_field_ was visible when the browser opened and is restored on close.
+    bool                  hs_field_hidden_by_browser_ = false;
+    std::atomic<uint32_t> server_list_gen_{0};
 
     // Borrowed widget pointers (owned by card_)
     tk::VBox*      card_            = nullptr;

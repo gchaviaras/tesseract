@@ -5,6 +5,8 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- feat(ui): the login view's "Find a server" opens a browser of homeservers from the community list (servers.joinmatrix.org, sliding-sync servers only, cached for a day) instead of steering new users to matrix.org; "Create an account" with an empty field opens it too, while an empty field still signs in to matrix.org. Linux release build, ctest 3443/3443, cargo 5 new tests, user-verified on Qt6
+- fix(ui): on Qt6 a native line edit was painted into the window under its canvas copy (`WA_DontShowOnScreen` only applies to top-level windows), so it showed through anything drawn over the field and darkened translucent placeholders; `NavLineEdit` now paints only while being captured. Multi-line text areas are unchanged. Linux release build, user-verified
 - docs(license): added a GPLv3 section 7 additional permission (`LICENSE-EXCEPTION.md`) for Apple App Store distribution. Docs only
 - feat(ui): clicking the target avatar on a join/leave/invite/kick/ban line (a lone event, an expanded group's member, or a line of a non-expandable group) opens that user's profile panel, also exposed as a "View profile" accessibility action; collapsed expandable summaries still expand on click, and the IRC layout draws no avatars. Linux debug build, ctest 3435/3435, user-verified
 - chore(ui): new `tk::ClipScope` / `tk::OpacityScope` RAII guards pop canvas clips and opacity on scope exit; the hand-paired push/pop calls across `ui/shared` and the GTK host now use them, except clips that span `paint_before_children`/`paint_after_children` (RoomInfoPanel, SettingsPage, KnownPacksList). Linux release build, ctest 3433/3433, user-verified

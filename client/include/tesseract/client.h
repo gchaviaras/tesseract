@@ -1307,6 +1307,39 @@ public:
     UpdateResult check_for_update(const std::string& repo,
                                   const std::string& current_version);
 
+    /// One homeserver from the community list (servers.joinmatrix.org).
+    /// Link fields are `https://` URLs or empty. Only servers that support
+    /// sliding sync are ever returned.
+    struct ServerListEntry
+    {
+        std::string name;
+        std::string client_domain; ///< what goes in the homeserver field
+        std::string homepage;
+        std::string description;
+        std::string jurisdiction;
+        std::vector<std::string> languages;
+        std::string software;
+        std::string reg_method; ///< empty when the list doesn't say
+        std::string reg_link;
+        std::string rules;
+        std::string privacy;
+        bool longstanding = false;
+        bool online = true;
+        bool is_public = true; ///< open registration (vs. invite/community only)
+    };
+
+    struct ServerList
+    {
+        std::vector<ServerListEntry> entries;
+        bool ok = false;         ///< false: no fetch and no usable cache
+        bool from_cache = false;
+    };
+
+    /// Load the community homeserver list: disk cache if under 24 h old, else a
+    /// fresh fetch, else a stale cache. Blocks the calling thread — call from a
+    /// worker pool thread, never the UI thread.
+    ServerList load_server_list();
+
     /// Check the AUR RPC API for a newer version of `pkgname` than `current_version`.
     /// Blocks the calling thread — call from a worker pool thread, never the UI thread.
     /// Returns `has_update == false` on any network error or when already up-to-date.

@@ -1980,8 +1980,9 @@ msgstr "?"
 msgid "Sign in"
 msgstr "Logg inn"
 
-msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? matrix.org is a good default and works with anyone on Matrix."
-msgstr "Hjemmetjeneren din er der kontoen din ligger – omtrent som å velge e-postleverandør. Usikker? matrix.org er et godt utgangspunkt og fungerer med alle på Matrix."
+#: ui/shared/views/LoginView.cpp
+msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? Use \"Find a server\" to browse some. Any server works with anyone on Matrix."
+msgstr "Hjemmeserveren din er stedet kontoen din ligger — som å velge en e-postleverandør. Usikker? Bruk «Finn en server» for å bla gjennom noen. Alle servere fungerer sammen med alle andre på Matrix."
 
 msgid "Sign in with password"
 msgstr "Logg inn med passord"
@@ -5170,3 +5171,67 @@ msgstr "Vis alle tråder"
 #: ui/shared/views/UserProfilePanel.cpp
 msgid "Rooms in common"
 msgstr "Felles rom"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Couldn't load the server list. Check your connection and try again."
+msgstr "Kunne ikke laste serverlisten. Sjekk tilkoblingen din og prøv igjen."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Currently unreachable"
+msgstr "Utilgjengelig for øyeblikket"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Find a server"
+msgstr "Finn en server"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Invite or community only"
+msgstr "Kun på invitasjon eller for fellesskapet"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Loading servers…"
+msgstr "Laster servere…"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "No servers match your search."
+msgstr "Ingen servere samsvarer med søket ditt."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Open registration"
+msgstr "Åpen registrering"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Open registration only"
+msgstr "Kun åpen registrering"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Rules"
+msgstr "Regler"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Run by the Matrix.org Foundation. The largest public server."
+msgstr "Drevet av Matrix.org Foundation. Den største offentlige serveren."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Search servers"
+msgstr "Søk etter servere"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Search servers…"
+msgstr "Søk etter servere…"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Sign up"
+msgstr "Registrer deg"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Use this server"
+msgstr "Bruk denne serveren"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Website"
+msgstr "Nettsted"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "{0} · Established"
+msgstr "{0} · Etablert"

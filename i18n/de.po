@@ -618,8 +618,9 @@ msgid "?"
 msgstr "?"
 
 #: ui/shared/views/LoginView.cpp:116
-msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? matrix.org is a good default and works with anyone on Matrix."
-msgstr "Dein Homeserver ist der Ort, an dem dein Konto liegt – ähnlich wie bei der Wahl eines E-Mail-Anbieters. Nicht sicher? matrix.org ist eine gute Standardwahl und funktioniert mit allen auf Matrix."
+#: ui/shared/views/LoginView.cpp
+msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? Use \"Find a server\" to browse some. Any server works with anyone on Matrix."
+msgstr "Dein Heimserver ist der Ort, an dem dein Konto liegt — ähnlich wie die Wahl eines E-Mail-Anbieters. Unsicher? Wähle über „Server finden“ einen aus. Jeder Server funktioniert mit allen anderen in Matrix."
 
 #: ui/shared/views/LoginView.cpp:340
 msgid "matrix.org"
@@ -6810,3 +6811,67 @@ msgstr "Alle Threads anzeigen"
 #: ui/shared/views/UserProfilePanel.cpp
 msgid "Rooms in common"
 msgstr "Gemeinsame Chats"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Couldn't load the server list. Check your connection and try again."
+msgstr "Die Serverliste konnte nicht geladen werden. Überprüfe deine Verbindung und versuche es erneut."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Currently unreachable"
+msgstr "Derzeit nicht erreichbar"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Find a server"
+msgstr "Server finden"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Invite or community only"
+msgstr "Nur auf Einladung oder für die Community"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Loading servers…"
+msgstr "Server werden geladen…"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "No servers match your search."
+msgstr "Keine Server passen zu deiner Suche."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Open registration"
+msgstr "Offene Registrierung"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Open registration only"
+msgstr "Nur offene Registrierung"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Rules"
+msgstr "Regeln"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Run by the Matrix.org Foundation. The largest public server."
+msgstr "Betrieben von der Matrix.org Foundation. Der größte öffentliche Server."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Search servers"
+msgstr "Server suchen"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Search servers…"
+msgstr "Server suchen…"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Sign up"
+msgstr "Registrieren"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Use this server"
+msgstr "Diesen Server verwenden"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Website"
+msgstr "Website"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "{0} · Established"
+msgstr "{0} · Etabliert"

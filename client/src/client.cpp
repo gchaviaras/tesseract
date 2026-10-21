@@ -2,6 +2,7 @@
 #include "tesseract/utf8.h"
 #include "tesseract/event_handler_bridge.h"
 #include "tesseract/markdown.h"
+#include "tesseract/paths.h"
 #include "tesseract/settings.h"
 #include "detached_launch.h"
 
@@ -1737,6 +1738,38 @@ Client::UpdateResult Client::check_for_update(const std::string& repo,
     SH_FFI;
     auto r = impl_->ffi->check_for_update(repo, current_version);
     return { r.has_update, std::string(r.version), std::string(r.url) };
+}
+
+Client::ServerList Client::load_server_list()
+{
+    SH_FFI;
+    const auto cache = (tesseract::cache_dir() / "server_list.json").string();
+    auto r = impl_->ffi->load_server_list(cache);
+    ServerList out;
+    out.ok = r.ok;
+    out.from_cache = r.from_cache;
+    out.entries.reserve(r.entries.size());
+    for (const auto& e : r.entries)
+    {
+        ServerListEntry s;
+        s.name = std::string(e.name);
+        s.client_domain = std::string(e.client_domain);
+        s.homepage = std::string(e.homepage);
+        s.description = std::string(e.description);
+        s.jurisdiction = std::string(e.jurisdiction);
+        for (const auto& l : e.languages)
+            s.languages.emplace_back(std::string(l));
+        s.software = std::string(e.software);
+        s.reg_method = std::string(e.reg_method);
+        s.reg_link = std::string(e.reg_link);
+        s.rules = std::string(e.rules);
+        s.privacy = std::string(e.privacy);
+        s.longstanding = e.longstanding;
+        s.online = e.online;
+        s.is_public = e.is_public;
+        out.entries.push_back(std::move(s));
+    }
+    return out;
 }
 
 Client::UpdateResult Client::check_for_aur_update(const std::string& pkgname,

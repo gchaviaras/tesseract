@@ -3173,8 +3173,9 @@ msgid "Sign in"
 msgstr "[Sïgñ ïñx]"
 
 #: ui/shared/views/LoginView.cpp:116
-msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? matrix.org is a good default and works with anyone on Matrix."
-msgstr "[Yöùr hömésérvér ïs whéré yöùr àççöùñt lïvés — sïmïlàr tö çhöösïñg àñ émàïl prövïdér. Ñöt sùré? màtrïx.örg ïs à gööd défàùlt àñd wörks wïth àñyöñé öñ Màtrïx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
+#: ui/shared/views/LoginView.cpp
+msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? Use \"Find a server\" to browse some. Any server works with anyone on Matrix."
+msgstr "[Yöùr hömésérvér ïs whéré yöùr àççöùñt lïvés — sïmïlàr tö çhöösïñg àñ émàïl prövïdér. Ñöt sùré? Ùsé \"Fïñd à sérvér\" tö bröwsé sömé. Àñy sérvér wörks wïth àñyöñé öñ Màtrïx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]"
 
 #: ui/shared/views/LoginView.cpp:137
 msgid "Sign in with password"
@@ -7221,3 +7222,67 @@ msgstr "[Shöw àll thréàdsxxx]"
 #: ui/shared/views/UserProfilePanel.cpp
 msgid "Rooms in common"
 msgstr "[Rööms ïñ çömmöñxxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Couldn't load the server list. Check your connection and try again."
+msgstr "[Çöùldñ't löàd thé sérvér lïst. Çhéçk yöùr çöññéçtïöñ àñd try àgàïñ.xxxxxxxxxxxxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Currently unreachable"
+msgstr "[Çùrréñtly ùñréàçhàbléxxxx]"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Find a server"
+msgstr "[Fïñd à sérvérxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Invite or community only"
+msgstr "[Ïñvïté ör çömmùñïty öñlyxxxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Loading servers…"
+msgstr "[Löàdïñg sérvérs…xxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "No servers match your search."
+msgstr "[Ñö sérvérs màtçh yöùr séàrçh.xxxxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Open registration"
+msgstr "[Öpéñ régïstràtïöñxxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Open registration only"
+msgstr "[Öpéñ régïstràtïöñ öñlyxxxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Rules"
+msgstr "[Rùlésx]"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Run by the Matrix.org Foundation. The largest public server."
+msgstr "[Rùñ by thé Màtrïx.örg Föùñdàtïöñ. Thé làrgést pùblïç sérvér.xxxxxxxxxxxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Search servers"
+msgstr "[Séàrçh sérvérsxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Search servers…"
+msgstr "[Séàrçh sérvérs…xxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Sign up"
+msgstr "[Sïgñ ùpx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Use this server"
+msgstr "[Ùsé thïs sérvérxxx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Website"
+msgstr "[Wébsïtéx]"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "{0} · Established"
+msgstr "[{0} · Éstàblïshédxxx]"

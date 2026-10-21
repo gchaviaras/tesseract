@@ -7387,3 +7387,71 @@ msgstr "Показувати всі гілки"
 #: ui/shared/views/UserProfilePanel.cpp
 msgid "Rooms in common"
 msgstr "Спільні кімнати"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Your homeserver is where your account lives — similar to choosing an email provider. Not sure? Use \"Find a server\" to browse some. Any server works with anyone on Matrix."
+msgstr "Ваш домашній сервер — це місце, де зберігається ваш обліковий запис, схоже на вибір поштового провайдера. Не знаєте, що обрати? Скористайтеся «Знайти сервер», щоб переглянути кілька. Будь-який сервер працює з усіма в Matrix."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Couldn't load the server list. Check your connection and try again."
+msgstr "Не вдалося завантажити список серверів. Перевірте з'єднання та спробуйте ще раз."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Currently unreachable"
+msgstr "Наразі недоступний"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Find a server"
+msgstr "Знайти сервер"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Invite or community only"
+msgstr "Лише за запрошенням або для спільноти"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Loading servers…"
+msgstr "Завантаження серверів…"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "No servers match your search."
+msgstr "Жоден сервер не відповідає вашому пошуку."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Open registration"
+msgstr "Відкрита реєстрація"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Open registration only"
+msgstr "Лише відкрита реєстрація"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Rules"
+msgstr "Правила"
+
+#: ui/shared/views/LoginView.cpp
+msgid "Run by the Matrix.org Foundation. The largest public server."
+msgstr "Підтримується Matrix.org Foundation. Найбільший публічний сервер."
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Search servers"
+msgstr "Пошук серверів"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Search servers…"
+msgstr "Пошук серверів…"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Sign up"
+msgstr "Зареєструватися"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Use this server"
+msgstr "Використати цей сервер"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "Website"
+msgstr "Вебсайт"
+
+#: ui/shared/views/ServerBrowserOverlay.cpp
+msgid "{0} · Established"
+msgstr "{0} · Усталений"

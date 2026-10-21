@@ -54,6 +54,7 @@ mod sync;
 mod tags;
 pub(crate) mod text_code;
 pub(crate) use text_code::{text_code, text_code_arg, user_text};
+mod server_list;
 mod thread;
 mod timeline;
 mod timeline_convert;

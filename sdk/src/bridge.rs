@@ -818,6 +818,34 @@ pub mod ffi {
         url: String,
     }
 
+    /// One homeserver from the community list (servers.joinmatrix.org).
+    /// Link fields are `https://` URLs or empty; only sliding-sync servers
+    /// are ever returned.
+    struct ServerListEntryFfi {
+        name: String,
+        client_domain: String,
+        homepage: String,
+        description: String,
+        jurisdiction: String,
+        languages: Vec<String>,
+        software: String,
+        reg_method: String,
+        reg_link: String,
+        rules: String,
+        privacy: String,
+        longstanding: bool,
+        online: bool,
+        is_public: bool,
+    }
+
+    /// Result of `load_server_list`. `ok` is false when there was neither a
+    /// fresh fetch nor a usable cache; `from_cache` marks a cached answer.
+    struct ServerListFfi {
+        entries: Vec<ServerListEntryFfi>,
+        ok: bool,
+        from_cache: bool,
+    }
+
     /// Outcome of a back-pagination or forward-pagination call.
     /// `reached_start` is `true` when matrix-sdk-ui reports the timeline has
     /// no further history to load (the room's first event has been seen). UIs
@@ -3633,6 +3661,12 @@ pub mod ffi {
         /// worker, never from the UI thread). Returns `UpdateResult::has_update ==
         /// false` on any network error, rate limit, or when already up-to-date.
         fn check_for_update(self: &ClientFfi, repo: &str, current_version: &str) -> UpdateResult;
+
+        /// Load the community homeserver list: the on-disk cache at
+        /// `cache_path` if under 24 h old, else a fresh fetch (written back to
+        /// the cache), else a stale cache. Blocks the calling thread (call from
+        /// a worker, never from the UI thread).
+        fn load_server_list(self: &ClientFfi, cache_path: &str) -> ServerListFfi;
 
         /// Check the AUR RPC API for a newer version of `pkgname` than
         /// `current_version`. Blocks the calling thread (call from a worker,

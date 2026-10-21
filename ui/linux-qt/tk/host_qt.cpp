@@ -155,6 +155,9 @@ public:
     // and must not be clobbered. Used internally to drive the caret-blink
     // re-render timer.
     std::function<void(bool)> on_focus_changed_internal_;
+    // Set by QtNativeTextField::refresh_image() around render(); outside a
+    // capture the edit paints nothing (see QtNativeTextField's constructor).
+    bool capturing_ = false;
 
 protected:
     // Qt's own QWidget::event() intercepts Key_Tab/Key_Backtab for its
@@ -223,6 +226,12 @@ protected:
             }
         }
         QLineEdit::keyPressEvent(e);
+    }
+
+    void paintEvent(QPaintEvent* e) override
+    {
+        if (capturing_)
+            QLineEdit::paintEvent(e);
     }
 
     void focusInEvent(QFocusEvent* e) override
@@ -375,13 +384,17 @@ public:
         // Canvas-drawn-text spike (see NativeTextField::rendered_image()'s
         // doc comment in host.h): never let edit_ composite on screen
         // directly — tk::TextField::paint() draws rendered_image() instead.
-        // WA_DontShowOnScreen only suppresses the native paint/blit; edit_
-        // keeps a real geometry (set_rect() below) and can still become the
-        // real Qt keyboard-focus widget, so IME candidate-window placement
-        // (which reads geometry via inputMethodQuery) and typing both still
-        // route to it normally — see qgraphicsproxywidget.cpp's setWidget(),
-        // which uses the exact same WA_DontShowOnScreen + show() recipe to
-        // host a real QWidget inside a QGraphicsScene.
+        // WA_DontShowOnScreen alone does not do that for a child widget: Qt
+        // only honors it for top-level windows (QWidgetRepaintManager::flush,
+        // show_sys), while a visible child is painted into its parent's
+        // backing store regardless (QWidgetPrivate::paintSiblingsRecursive
+        // only checks isHidden()). So NavLineEdit::paintEvent draws nothing
+        // unless refresh_image() is capturing it via render(). edit_ stays a
+        // real, visible, focusable, geometry-bearing widget (IME placement
+        // reads its geometry via inputMethodQuery), and nothing of it ever
+        // reaches the window — otherwise a translucent placeholder drawn both
+        // natively and by the canvas reads darker, and the native copy shows
+        // through anything drawn over the field.
         edit_->setAttribute(Qt::WA_DontShowOnScreen, true);
         // Caret is canvas-owned from here on (see caret_rect()/
         // caret_blink_visible() below) — zero the native caret width so Qt
@@ -777,7 +790,9 @@ private:
         img.setDevicePixelRatio(dpr);
         img.fill(has_bg_ ? bg_color_ : Qt::transparent);
         QPainter p(&img);
+        edit_->capturing_ = true;
         edit_->render(&p);
+        edit_->capturing_ = false;
         p.end();
         rendering_ = false;
         cached_image_ = make_image(std::move(img));

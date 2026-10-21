@@ -38,6 +38,22 @@ Widget* Host::dispatch_right_click(Point world)
 void Host::dispatch_pointer_down(Point world)
 {
     fire_user_activity_();
+    // A press while the scrolled view is still coasting only stops it: the
+    // content under the pointer is moving, so activating whatever slid there
+    // would be an accident. The matching release is swallowed too.
+    if (Widget* latched = live_wheel_latch_target_(world))
+    {
+        const bool coasting = latched->wheel_motion_active();
+        wheel_latch_.reset();
+        if (coasting)
+        {
+            latched->stop_wheel_motion();
+            swallow_pointer_up_ = true;
+            request_repaint();
+            return;
+        }
+    }
+    wheel_latch_.reset();
     cancel_tooltip_(); // any click anywhere dismisses an active/pending tooltip
     focus_visible_ = false; // mouse navigation doesn't need a focus ring
     Widget* root = input_root_();
@@ -120,6 +136,11 @@ void Host::dispatch_pointer_down(Point world)
 
 void Host::dispatch_pointer_up(Point world)
 {
+    if (swallow_pointer_up_)
+    {
+        swallow_pointer_up_ = false;
+        return;
+    }
     if (active_drag_)
     {
         Widget* target = active_drag_->current_target.lock().get();
@@ -151,6 +172,13 @@ void Host::dispatch_pointer_up(Point world)
 
 void Host::dispatch_pointer_move(Point world)
 {
+    if (wheel_latch_)
+    {
+        const float dx = world.x - wheel_latch_->anchor.x;
+        const float dy = world.y - wheel_latch_->anchor.y;
+        if (dx * dx + dy * dy > kWheelLatchMoveSlop * kWheelLatchMoveSlop)
+            wheel_latch_.reset();
+    }
     Widget* root = input_root_();
     if (!root)
     {
@@ -321,17 +349,76 @@ void Host::end_hover_feedback_(CursorShape want)
     }
 }
 
+Widget* Host::live_wheel_latch_target_(Point world)
+{
+    if (!wheel_latch_)
+        return nullptr;
+    Widget* t = wheel_latch_->target.lock().get();
+    bool live = t && t->visible() && t->enabled();
+    if (live)
+    {
+        // A popup under the pointer owns the wheel; a latch from outside it
+        // must not reach through.
+        if (auto p = popup_.lock(); p && p->contains_world(world))
+        {
+            live = false;
+            for (Widget* w = t; w; w = w->parent())
+            {
+                if (w == p.get())
+                {
+                    live = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (!live)
+    {
+        wheel_latch_.reset();
+        return nullptr;
+    }
+    return t;
+}
+
 bool Host::dispatch_wheel(Point world, float dx, float dy, bool is_touchpad)
 {
     Widget* root = input_root_();
     if (!root)
         return false;
+    const auto now = wheel_clock_now_();
+
+    // Mid-gesture: the widget that took the gesture keeps it, even when it
+    // has nothing left to give (a scroller pinned at its bound must not hand
+    // the rest of the gesture to whatever slid under the pointer).
+    if (Widget* latched = live_wheel_latch_target_(world))
+    {
+        if (now - wheel_latch_->last < kWheelLatchQuiet ||
+            latched->wheel_motion_active())
+        {
+            wheel_latch_->anchor = world;
+            wheel_latch_->last = now;
+            latched->on_wheel(latched->world_to_local(world), dx, dy, is_touchpad);
+            return true;
+        }
+        wheel_latch_.reset();
+    }
+
+    wheel_consumer_ = nullptr;
+    bool consumed = false;
     if (auto p = popup_.lock(); p && p->contains_world(world))
         // Recursive dispatch (see dispatch_pointer_down's comment above) so
         // a scroll over e.g. TabbedGridPicker's grid reaches the grid's own
         // wheel handling, not just the popup's own on_wheel.
-        return p->dispatch_wheel(world, dx, dy, is_touchpad);
-    return root->dispatch_wheel(world, dx, dy, is_touchpad);
+        consumed = p->dispatch_wheel(world, dx, dy, is_touchpad);
+    else
+        consumed = root->dispatch_wheel(world, dx, dy, is_touchpad);
+
+    if (consumed && wheel_consumer_)
+        wheel_latch_ = WheelLatch{track(wheel_consumer_), world, now};
+    else
+        wheel_latch_.reset();
+    wheel_consumer_ = nullptr;
+    return consumed;
 }
 
 Widget* Host::dispatch_file_drop(Point world, FileDropPayload& payload)
@@ -415,6 +502,8 @@ void Host::paint_drag_overlay(PaintCtx& ctx, Rect /*surface_bounds*/)
 
 void Host::dispatch_pointer_leave()
 {
+    wheel_latch_.reset();
+    swallow_pointer_up_ = false;
     // A drag in progress is cancelled by the pointer leaving the surface
     // entirely (no OS-level drag to hand off to, per design). cancel_drag()
     // already resets pressed_widget_, so the pressed-widget cleanup below
@@ -616,6 +705,7 @@ bool Host::advance_focus_(bool forward)
 bool Host::dispatch_key_down(const KeyEvent& event)
 {
     fire_user_activity_();
+    wheel_latch_.reset(); // keyboard input starts a fresh gesture
     // Any key other than the Tab that may re-show one (advance_focus_)
     // dismisses a tooltip — e.g. Enter activating a Tab-focused icon
     // button shouldn't leave its focus tooltip floating over what opens.

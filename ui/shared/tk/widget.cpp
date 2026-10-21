@@ -573,7 +573,10 @@ bool Widget::dispatch_wheel(Point world, float dx, float dy, bool is_touchpad)
         }
     }
     Point local{world.x - bounds_.x, world.y - bounds_.y};
-    return on_wheel(local, dx, dy, is_touchpad);
+    const bool consumed = on_wheel(local, dx, dy, is_touchpad);
+    if (consumed && host_)
+        host_->note_wheel_consumer_(this);
+    return consumed;
 }
 
 Widget* Widget::hit_test(Point world)

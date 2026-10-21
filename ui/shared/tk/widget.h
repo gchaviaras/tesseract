@@ -482,6 +482,19 @@ public:
         return false;
     }
 
+    // Wheel latching (see Host::dispatch_wheel): true while this widget is
+    // still coasting from a wheel gesture (kinetic fling), so the host keeps
+    // routing wheel events to it past the quiet gap and lets a press stop the
+    // motion instead of activating whatever slid under the pointer.
+    virtual bool wheel_motion_active() const
+    {
+        return false;
+    }
+    // Stops that coast immediately. Only called while wheel_motion_active().
+    virtual void stop_wheel_motion()
+    {
+    }
+
     // Pointer-down. Return true to claim ownership of the subsequent
     // pointer_up. The host remembers the claimer so a release outside
     // the widget still routes back to it (with inside_self=false).

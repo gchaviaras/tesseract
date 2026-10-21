@@ -25,6 +25,7 @@
 
 #include <tesseract/mentions.h> // tesseract::MentionSeg
 
+#include <chrono>
 #include <cstdint>
 #include <cstddef>
 #include <functional>
@@ -726,6 +727,8 @@ public:
     // queue_for_deletion() below — it's the only external caller, so this
     // stays a narrow grant rather than a public API.
     friend class RootWidget;
+    // Widget::dispatch_wheel reports which widget consumed a wheel event.
+    friend class Widget;
 
     // Schedule a repaint of the entire root widget. Cheap to call
     // multiple times — the host coalesces.
@@ -1406,6 +1409,36 @@ protected:
 
     // Tracked pointer state, shared by the dispatch_pointer_* state machine.
     std::weak_ptr<Widget> pressed_widget_;      // captured on pointer-down
+
+    // Wheel latch: the widget that consumed the current scroll gesture keeps
+    // receiving its wheel events even when content slides another wheel
+    // consumer (a combobox, an inner list) under the stationary pointer.
+    // Ends after a quiet gap with no momentum in flight, or when the pointer
+    // moves. See dispatch_wheel().
+    struct WheelLatch
+    {
+        std::weak_ptr<Widget> target;
+        Point anchor{};
+        std::chrono::steady_clock::time_point last;
+    };
+    std::optional<WheelLatch> wheel_latch_;
+    Widget* wheel_consumer_ = nullptr; // set by note_wheel_consumer_ during one dispatch
+    bool swallow_pointer_up_ = false;  // the press that stopped a coast
+    static constexpr std::chrono::milliseconds kWheelLatchQuiet{400};
+    static constexpr float kWheelLatchMoveSlop = 4.0f;
+    // Overridable so tests can drive the quiet-gap timer.
+    virtual std::chrono::steady_clock::time_point wheel_clock_now_() const
+    {
+        return std::chrono::steady_clock::now();
+    }
+    void note_wheel_consumer_(Widget* w)
+    {
+        if (!wheel_consumer_)
+            wheel_consumer_ = w; // deepest consumer is reported first
+    }
+    // The latched widget if the latch is still live, else nullptr (and the
+    // latch is cleared).
+    Widget* live_wheel_latch_target_(Point world);
     std::weak_ptr<Widget> hover_feedback_;      // hoverable widget currently showing hover (see Widget::set_hoverable)
     CursorShape applied_cursor_ = CursorShape::Default; // last cursor handed to apply_cursor_()
     std::weak_ptr<Widget> hovered_widget_;      // widget currently under the pointer

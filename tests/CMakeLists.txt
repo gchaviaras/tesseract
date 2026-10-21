@@ -266,6 +266,7 @@ add_executable(tesseract_tests
     cpp/test_tk_combo_controls.cpp
     cpp/test_tk_radio.cpp
     cpp/test_tk_slider.cpp
+    cpp/test_tk_wheel_latch.cpp
     cpp/test_tk_message_list_column.cpp
     cpp/test_timeline_column.cpp
     cpp/test_media_transport_bar.cpp

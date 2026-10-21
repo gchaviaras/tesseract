@@ -55,6 +55,12 @@ std::string find_existing_dm(const std::vector<RoomInfo>& rooms,
 // it is "Sent N items" in the sender's language.
 std::string gallery_caption_or_fallback(const std::string& caption, std::size_t item_count);
 
+// Server name of a `#alias:server` room alias as a one-element `via` list;
+// empty for anything else (room ids, malformed input). A room reached through
+// its alias is joined by the resolved room id, which may carry no usable server
+// part (room v12), so the alias's server is the only route to remember.
+std::vector<std::string> alias_server_via(const std::string& alias);
+
 // "A is typing…" / "A and B are typing…" / "A, B and N others are typing…".
 std::string format_typing_text(const std::vector<std::string>& names);
 

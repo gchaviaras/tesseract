@@ -5,6 +5,7 @@ Tagged releases summarize all changes since the previous tag.
 
 ## Unreleased
 
+- fix(ui): joining a room found by `#alias:server` in the Join a Room dialog now routes through the alias's server; the join used the resolved room id, whose own server part may be missing (room v12). Linux release build, 1 new ctest case
 - fix(ui): a scroll gesture keeps the wheel with the view that took it, so a combobox or inner list sliding under a stationary pointer no longer grabs the rest of the gesture (or changes its value); it ends after 400 ms without wheel events and no momentum, or when the pointer moves. A click during a coast only stops it. Shared in `tk::Host`, all backends. Linux release build, 3491 test cases pass, user-verified Qt6
 - feat(ui): the room timeline lays its rows out in a content column (default 100%, i.e. unchanged; narrower sits beside the room list), so join/leave lines, room events and messages stay together in wide windows; Settings → Appearance sets the width (30–100%) and left/centered position. Not used in thread panels or the IRC layout. Linux release build, ctest 3482/3482
 - feat(ui): new `tk::Slider` widget (keyboard, pointer drag, accessibility role on all four a11y bridges); the media viewer's scrub bar is rebuilt on it. Linux release build, ctest 3482/3482

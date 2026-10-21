@@ -343,3 +343,15 @@ TEST_CASE("parse_mutual_rooms_json reads a page and reports errors", "[shell_hel
     CHECK_FALSE(sh::parse_mutual_rooms_json("not json").error.empty());
     CHECK_FALSE(sh::parse_mutual_rooms_json("").error.empty());
 }
+
+TEST_CASE("alias_server_via yields the alias's server and nothing for other ids", "[shell][helpers]")
+{
+    CHECK(sh::alias_server_via("#room:server.org") == std::vector<std::string>{"server.org"});
+    CHECK(sh::alias_server_via("  #room:server.org \n") == std::vector<std::string>{"server.org"});
+    CHECK(sh::alias_server_via("#room:server.org:8448") ==
+          std::vector<std::string>{"server.org:8448"});
+    CHECK(sh::alias_server_via("!id:server.org").empty());
+    CHECK(sh::alias_server_via("#nocolon").empty());
+    CHECK(sh::alias_server_via("#room:").empty());
+    CHECK(sh::alias_server_via("").empty());
+}

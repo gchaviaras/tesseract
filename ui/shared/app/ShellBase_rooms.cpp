@@ -1,4 +1,5 @@
 #include "app/ShellBase.h"
+#include "app/shell_helpers.h"
 #include "app/SlashCommands.h"
 #include "app/UploadDraft.h"
 #include "app/UnreadPrefetch.h"
@@ -708,6 +709,10 @@ void ShellBase::lookup_room_command_(const std::string& room_id_or_alias)
     if (auto it = pending_join_via_.find(room_id_or_alias);
         it != pending_join_via_.end())
         via = it->second;
+    // An alias resolves to a room id the Join button then joins by; the alias's
+    // server is the one route we know to it, so carry it over below.
+    if (via.empty())
+        via = shell_helpers::alias_server_via(room_id_or_alias);
     run_async_(
         [this, sess, room_id_or_alias, via, gen]()
         {

@@ -167,6 +167,20 @@ std::string find_existing_dm(const std::vector<RoomInfo>& rooms,
     return {};
 }
 
+std::vector<std::string> alias_server_via(const std::string& alias)
+{
+    const auto first = alias.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos || alias[first] != '#')
+        return {};
+    const auto colon = alias.find(':', first);
+    if (colon == std::string::npos)
+        return {};
+    const auto last = alias.find_last_not_of(" \t\r\n");
+    if (last <= colon)
+        return {};
+    return {alias.substr(colon + 1, last - colon)};
+}
+
 std::string format_typing_text(const std::vector<std::string>& names)
 {
     if (names.empty())

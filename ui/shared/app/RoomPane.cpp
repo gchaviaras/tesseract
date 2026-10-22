@@ -1150,6 +1150,12 @@ void RoomPane::wire_room_view_()
     // half, scoped to this pane's own room/messages.
     rv->on_visible_range_changed = [this](const std::vector<std::string>&)
     {
+        // Same reason as ShellBase::on_visible_rows_changed_: without a client
+        // nothing can be fetched, so don't record the rows as prepped.
+        if (!shell_ || !shell_->client_)
+        {
+            return;
+        }
         if (!room_view_ || !room_view_->message_list())
         {
             return;

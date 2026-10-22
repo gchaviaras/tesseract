@@ -1088,13 +1088,11 @@ void ShellBase::ensure_blurhash_image_(const std::string& event_id,
 
 void ShellBase::ensure_row_media_(const Event& ev, bool fetch_avatars)
 {
-    // No signed-in client, nothing to fetch from: screenshot mode never
-    // logs in, and a logged-out window can briefly keep rows on screen.
-    // Every path below ends in client_->fetch_media_async, so without this
-    // the first paint of a row with uncached media (a voice clip, whose
-    // audio is fetched eagerly rather than on click) dereferences null.
-    if (!client_)
-        return;
+    // Client-independent work runs even without a session: the disk-cache
+    // prune and the waveform store are one-shot process state, and the
+    // BlurHash placeholder is decoded locally. Screenshot mode never logs in
+    // and a logged-out window can briefly keep rows on screen, so keeping
+    // this above the client check lets those placeholders still render.
     if (!media_disk_cache_pruned_)
     {
         media_disk_cache_pruned_ = true;
@@ -1110,6 +1108,47 @@ void ShellBase::ensure_row_media_(const Event& ev, bool fetch_avatars)
         tesseract::init_waveform_cache(
             (tesseract::cache_dir() / "waveforms.db").string());
     }
+
+    // MSC2448: decode and cache the BlurHash placeholder for the media types
+    // that carry one. Not gated by the preview config and not fetched.
+    {
+        std::string bh;
+        int bw = 0, bh_dim = 0;
+        if (ev.type == EventType::Image)
+        {
+            const auto& img = static_cast<const ImageEvent&>(ev);
+            bh = img.blurhash;
+            bw = static_cast<int>(img.width);
+            bh_dim = static_cast<int>(img.height);
+        }
+        else if (ev.type == EventType::Sticker)
+        {
+            const auto& s = static_cast<const StickerEvent&>(ev);
+            bh = s.blurhash;
+            bw = static_cast<int>(s.width);
+            bh_dim = static_cast<int>(s.height);
+        }
+        else if (ev.type == EventType::Video)
+        {
+            const auto& vid = static_cast<const VideoEvent&>(ev);
+            bh = vid.blurhash;
+            bw = static_cast<int>(vid.width);
+            bh_dim = static_cast<int>(vid.height);
+        }
+        if (!bh.empty())
+        {
+            ensure_blurhash_image_(ev.event_id, bh, bw, bh_dim);
+        }
+    }
+
+    // No signed-in client, nothing to fetch from: screenshot mode never logs
+    // in, and a logged-out window can briefly keep rows on screen. The
+    // voice/audio arms below call client_->fetch_media_async directly, so
+    // without this the first paint of a row with uncached media (a voice
+    // clip, whose audio is fetched eagerly rather than on click) dereferences
+    // null. The pipeline-backed fetches tolerate a null client on their own.
+    if (!client_)
+        return;
     // MSC4278: gate media (image/sticker/video thumbnails + URL previews)
     // behind the media-preview config. A suppressed item is not fetched until
     // the user reveals it individually. Sender avatars, reactions, voice/audio,
@@ -1293,37 +1332,6 @@ void ShellBase::ensure_row_media_(const Event& ev, bool fetch_avatars)
         }
     }
 
-    // MSC2448: decode and cache BlurHash placeholder for media types.
-    {
-        std::string bh;
-        int bw = 0, bh_dim = 0;
-        if (ev.type == EventType::Image)
-        {
-            const auto& img = static_cast<const ImageEvent&>(ev);
-            bh = img.blurhash;
-            bw = static_cast<int>(img.width);
-            bh_dim = static_cast<int>(img.height);
-        }
-        else if (ev.type == EventType::Sticker)
-        {
-            const auto& s = static_cast<const StickerEvent&>(ev);
-            bh = s.blurhash;
-            bw = static_cast<int>(s.width);
-            bh_dim = static_cast<int>(s.height);
-        }
-        else if (ev.type == EventType::Video)
-        {
-            const auto& vid = static_cast<const VideoEvent&>(ev);
-            bh = vid.blurhash;
-            bw = static_cast<int>(vid.width);
-            bh_dim = static_cast<int>(vid.height);
-        }
-        if (!bh.empty())
-        {
-            ensure_blurhash_image_(ev.event_id, bh, bw, bh_dim);
-        }
-    }
-
     if (preview && (ev.type == EventType::Text || ev.type == EventType::Unhandled))
     {
         if (ev.bundled_url_previews_present)
@@ -1363,8 +1371,16 @@ void ShellBase::ensure_row_media_(const views::MessageRowData& row,
 {
     using Kind = views::MessageRowData::Kind;
 
-    // Same no-client guard as the Event overload above: without a signed-in
-    // client no fetch can run. The paint-driven caller
+    // The BlurHash placeholder is decoded locally, so keep it when there is
+    // no session (screenshot mode never logs in; a logged-out window can keep
+    // rows on screen briefly).
+    if (!row.blurhash.empty())
+        ensure_blurhash_image_(row.event_id, row.blurhash,
+                               row.media_w, row.media_h);
+
+    // Same no-client guard as the Event overload above: every fetch below
+    // needs a signed-in client (the voice/audio arms call
+    // client_->fetch_media_async directly). The paint-driven caller
     // (on_visible_rows_changed_) already guards its prioritize block this
     // way, so this only extends that protection to the fetch itself.
     if (!client_)
@@ -1508,10 +1524,6 @@ void ShellBase::ensure_row_media_(const views::MessageRowData& row,
                                 MediaKind::Reaction);
     }
 
-    if (!row.blurhash.empty())
-        ensure_blurhash_image_(row.event_id, row.blurhash,
-                               row.media_w, row.media_h);
-
     if (preview &&
         (row.kind == Kind::Text || row.kind == Kind::Notice ||
          row.kind == Kind::Emote || row.kind == Kind::Unhandled))
@@ -1583,6 +1595,11 @@ void ShellBase::on_visible_rows_changed_(const std::vector<std::string>& keys)
     auto* ml = room_view_->message_list();
     auto [first, last] = ml->visible_range();
     if (first < 0)
+        return;
+    // Nothing can be fetched without a client, so do not record these rows as
+    // prepped: the set is only cleared on a room switch, and a client that
+    // attaches without one would leave their media unfetched.
+    if (!client_)
         return;
     const auto& msgs = ml->messages();
     for (int i = first; i <= last && i < static_cast<int>(msgs.size()); ++i)

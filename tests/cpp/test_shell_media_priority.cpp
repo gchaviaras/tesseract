@@ -43,7 +43,9 @@ struct PriorityShell : tesseract::test::TestShellBase
     using ShellBase::ensure_row_media_;
     using ShellBase::handle_media_ready_ui_;
     using ShellBase::media_key_to_req_;
+    using ShellBase::pending_media_;
     using ShellBase::resolve_visible_request_ids_;
+    using ShellBase::voice_prefetched_;
 };
 
 // A no-op bytes sink for begin_media_req_.
@@ -132,5 +134,27 @@ TEST_CASE("ensure_row_media_ with no signed-in client starts no fetch",
     // Empty waveform exercises the waveform arm as well as the audio arm.
     s.ensure_row_media_(row, /*fetch_avatars=*/true);
 
-    CHECK(s.media_key_to_req_.empty());
+    // The voice arm registers itself in pending_media_ and voice_prefetched_
+    // before it reaches fetch_media_async, so both would be populated if the
+    // guard were removed.
+    CHECK(s.pending_media_.empty());
+    CHECK(s.voice_prefetched_.empty());
+}
+
+TEST_CASE("ensure_row_media_ (Event) with no signed-in client starts no fetch",
+          "[shell][media-priority]")
+{
+    // The prefetch window calls this overload while building rows, which is
+    // the other path that reached client_->fetch_media_async with null.
+    PriorityShell s;
+    REQUIRE(s.client_ == nullptr);
+
+    tesseract::VoiceEvent ev;
+    ev.event_id = "$voice";
+    ev.source   = tesseract::MediaSource::plain("fixture://voice");
+
+    s.ensure_row_media_(ev, /*fetch_avatars=*/true);
+
+    CHECK(s.pending_media_.empty());
+    CHECK(s.voice_prefetched_.empty());
 }

@@ -31,10 +31,12 @@ jobs:
       # webrtc-sys compiles its Linux desktop-capturer sources against the
       # glib/gobject/gio headers, which it locates through pkg-config; the
       # runner image has neither the .pc files nor the headers by default.
+      # gettext provides xgettext, which the catalog check runs to extract
+      # the translatable strings from the UI sources.
       - name: Install build dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y pkg-config libglib2.0-dev
+          sudo apt-get install -y pkg-config libglib2.0-dev gettext
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable

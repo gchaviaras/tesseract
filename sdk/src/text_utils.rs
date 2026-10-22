@@ -29,8 +29,7 @@ pub fn find_url_spans(text: &str) -> Vec<UrlSpan> {
     let finder = LinkFinder::new();
     for link in finder.links(text) {
         let s = link.as_str();
-        if link.kind() == &LinkKind::Url && (s.starts_with("https://") || s.starts_with("http://"))
-        {
+        if link.kind() == &LinkKind::Url && has_http_scheme(s) {
             spans.push(UrlSpan {
                 start: link.start(),
                 end: link.end(),
@@ -51,6 +50,17 @@ pub fn find_url_spans(text: &str) -> Vec<UrlSpan> {
     });
 
     spans
+}
+
+/// True when `s` opens with an http or https scheme.
+///
+/// RFC 3986 makes the scheme case-insensitive and `linkify` hands back the
+/// text exactly as written, so `HTTPS://example.org` has to pass this the
+/// same way `https://example.org` does; a case-sensitive prefix test would
+/// make such a URL neither autolink nor keep its bundled preview.
+fn has_http_scheme(s: &str) -> bool {
+    s.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://"))
+        || s.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("http://"))
 }
 
 /// Like [`find_url_spans`], but drops any span that falls inside a Markdown
@@ -265,6 +275,13 @@ mod tests {
         let s = find_url_spans("https://example.org/path");
         assert_eq!(s.len(), 1);
         assert_eq!(s[0].url, "https://example.org/path");
+    }
+
+    #[test]
+    fn uppercase_scheme_url_detected() {
+        let s = find_url_spans("HTTPS://example.org/path");
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].url, "HTTPS://example.org/path");
     }
 
     #[test]

@@ -112,6 +112,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin one Xcode so the compiler, linker and SDK match; the runner
+      # image's default moves with every update (see compile-check.yml).
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_26.4.1.app"
+          echo "DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer" >> "$GITHUB_ENV"
+          # A runner-level SDKROOT would make xcrun (and CMake, cc, rustc)
+          # keep using the Command Line Tools SDK; point it at Xcode's.
+          unset SDKROOT
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDKROOT=$sdk" >> "$GITHUB_ENV"
+          xcodebuild -version
+          echo "SDKROOT=$sdk"
+
       # coreutils provides gtimeout for the capture step.
       - name: Install build dependencies
         run: brew install resvg opus coreutils
@@ -138,6 +152,8 @@ jobs:
       - name: Configure screenshot-only build
         run: >-
           cmake --preset macos-appkit-arm64-release
+          "-DCMAKE_OSX_SYSROOT=$SDKROOT"
+          "-DCMAKE_EXE_LINKER_FLAGS=-L$SDKROOT/usr/lib"
           -DTESSERACT_BUILD_TESTS=OFF
           -DTESSERACT_ENABLE_SCREENSHOT_MODE=ON
 

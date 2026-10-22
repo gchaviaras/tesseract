@@ -278,6 +278,13 @@ mod tests {
     }
 
     #[test]
+    fn uppercase_scheme_url_detected() {
+        let s = find_url_spans("HTTPS://example.org/path");
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].url, "HTTPS://example.org/path");
+    }
+
+    #[test]
     fn http_url_in_sentence() {
         let s = spans("see http://example.org now");
         assert_eq!(s, vec![(4, 22, "http://example.org")]);

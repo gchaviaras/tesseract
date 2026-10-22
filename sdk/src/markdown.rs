@@ -25,7 +25,16 @@ const OPTIONS: Options = Options::ENABLE_TABLES.union(Options::ENABLE_STRIKETHRO
 // ---------------------------------------------------------------------------
 
 fn is_safe_url(url: &str) -> bool {
-    url.is_empty() || url.starts_with("https://") || url.starts_with("http://")
+    // The scheme is case-insensitive (RFC 3986, 3.1), and linkify accepts it
+    // that way too, so `HTTPS://` has to pass here as well or a Markdown link
+    // loses its target while the same URL written bare is autolinked.
+    url.is_empty()
+        || url
+            .get(..8)
+            .is_some_and(|p| p.eq_ignore_ascii_case("https://"))
+        || url
+            .get(..7)
+            .is_some_and(|p| p.eq_ignore_ascii_case("http://"))
 }
 
 fn is_block_tag(tag: &Tag<'_>) -> bool {
@@ -313,6 +322,20 @@ mod tests {
     fn safe_link_passes_through() {
         let html = to_html("[click](https://example.com)");
         assert!(html.contains("href=\"https://example.com\""));
+    }
+
+    #[test]
+    fn uppercase_scheme_link_passes_through() {
+        let html = to_html("[click](HTTPS://example.com/Path)");
+        assert!(html.contains("href=\"HTTPS://example.com/Path\""));
+    }
+
+    #[test]
+    fn uppercase_javascript_link_stripped() {
+        let html = to_html("[evil](JAVASCRIPT:alert(1))");
+        assert!(!html.contains("href="));
+        assert!(!html.contains("JAVASCRIPT:"));
+        assert!(html.contains("evil"));
     }
 
     #[test]
